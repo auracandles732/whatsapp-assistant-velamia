@@ -90,9 +90,13 @@ app.get('/health', (_req: Request, res: Response) => {
 // ---------- Acceso al CRM ----------
 
 app.post('/api/login', (req: Request, res: Response) => {
-  const { password } = req.body;
+  if (!process.env.CRM_PASSWORD) {
+    return res.status(503).json({
+      error: 'Falta configurar la variable CRM_PASSWORD en el servidor'
+    });
+  }
 
-  if (!password || !isPasswordValid(password)) {
+  if (!isPasswordValid(req.body.password || '')) {
     return res.status(401).json({ error: 'Contraseña incorrecta' });
   }
 
