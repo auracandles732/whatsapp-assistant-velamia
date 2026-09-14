@@ -87,9 +87,10 @@ export async function handleWebhookMessage(message: any, changes: any) {
       content: msg.content.replace(/^https?:\/\/\S+\n?/, '')
     }));
 
-    // Generar respuesta con IA (con el catálogo real de productos)
+    // Generar respuesta con IA (con el catálogo real de productos y el prompt personalizado)
     const catalog = await getAllProducts();
-    const { response: aiResponse } = await generateResponse(conversationHistory, aiContent, catalog);
+    const customPrompt = await getConfig('system_prompt');
+    const { response: aiResponse } = await generateResponse(conversationHistory, aiContent, catalog, customPrompt);
     console.log(`🤖 Respuesta IA generada`);
 
     // Enviar respuesta al cliente

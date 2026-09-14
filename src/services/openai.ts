@@ -74,9 +74,11 @@ interface CatalogProduct {
   category: string;
 }
 
-function buildSystemPrompt(catalog?: CatalogProduct[]) {
+function buildSystemPrompt(catalog?: CatalogProduct[], customPrompt?: string) {
+  const base = customPrompt && customPrompt.trim() ? customPrompt : BASE_SYSTEM_PROMPT;
+
   if (!catalog || catalog.length === 0) {
-    return BASE_SYSTEM_PROMPT + `\n\nNota: el catálogo de productos aún no ha sido cargado. Si el cliente pregunta por productos específicos, indícale amablemente que un asesor le enviará el catálogo en breve.`;
+    return base + `\n\nNota: el catálogo de productos aún no ha sido cargado. Si el cliente pregunta por productos específicos, indícale amablemente que un asesor le enviará el catálogo en breve.`;
   }
 
   const byCategory: { [key: string]: CatalogProduct[] } = {};
@@ -89,10 +91,10 @@ function buildSystemPrompt(catalog?: CatalogProduct[]) {
     .map(([cat, items]) => `${cat}:\n` + items.map(i => `  - ${i.name}: $${i.price} por docena`).join('\n'))
     .join('\n\n');
 
-  return BASE_SYSTEM_PROMPT + `\n\nCATÁLOGO ACTUAL DE VELAMIA (precios por docena):\n\n${catalogText}`;
+  return base + `\n\nCATÁLOGO ACTUAL DE VELAMIA (precios por docena):\n\n${catalogText}`;
 }
 
-export async function generateResponse(conversationHistory: Message[], userMessage: string, catalog?: CatalogProduct[]) {
+export async function generateResponse(conversationHistory: Message[], userMessage: string, catalog?: CatalogProduct[], customPrompt?: string) {
   try {
     const messages: Message[] = [
       ...conversationHistory,
@@ -102,7 +104,7 @@ export async function generateResponse(conversationHistory: Message[], userMessa
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: buildSystemPrompt(catalog) },
+        { role: 'system', content: buildSystemPrompt(catalog, customPrompt) },
         ...messages
       ],
       temperature: 0.7,

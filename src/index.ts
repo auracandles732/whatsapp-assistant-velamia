@@ -228,6 +228,26 @@ app.delete('/api/products/:id', verifyCrmKey, async (req: Request, res: Response
   }
 });
 
+// CRM: leer/guardar el system prompt personalizado del bot
+app.get('/api/system-prompt', verifyCrmKey, async (req: Request, res: Response) => {
+  try {
+    const prompt = await getConfig('system_prompt');
+    res.json({ prompt: prompt || '' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/system-prompt', verifyCrmKey, async (req: Request, res: Response) => {
+  try {
+    const { prompt } = req.body;
+    await setConfig('system_prompt', prompt || '');
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 404
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Ruta no encontrada' });
