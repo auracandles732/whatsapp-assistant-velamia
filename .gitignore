@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env.local
+.env.production
+.env
+data/
+*.db
+*.db-journal
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+coverage/
+.next/
+out/
