@@ -1,5 +1,14 @@
 import { v4 as uuidv4 } from 'uuid';
-import { runQuery, getQuery, allQuery } from '../db.js';
+import {
+  getConversation,
+  createConversation,
+  getConversationHistory,
+  saveMessage,
+  updateConversation,
+  createQuotation,
+  createOrder,
+  getOrdersByConversation
+} from '../db.js';
 import { sendTextMessage } from '../services/whatsapp.js';
 import { generateResponse, analyzeUserIntent } from '../services/openai.js';
 
@@ -13,36 +22,16 @@ export async function handleWebhookMessage(message: any, changes: any) {
     console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
 
     // Obtener o crear conversación
-    let conversation = await getQuery('conversations', { phone_number: phoneNumber });
+    let conversation = await getConversation(phoneNumber);
 
     if (!conversation) {
-      const conversationId = uuidv4();
-      await runQuery('conversations', {
-        id: conversationId,
-        phone_number: phoneNumber,
-        status: 'active',
-        last_message_time: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-      conversation = { id: conversationId, phone_number: phoneNumber };
+      conversation = await createConversation(phoneNumber);
     }
 
     const conversationId = conversation.id;
 
-    // Guardar mensaje recibido
-    await runQuery('messages', {
-      id: messageId,
-      conversation_id: conversationId,
-      sender: 'customer',
-      type: messageType,
-      content: JSON.stringify(message),
-      timestamp: new Date(timestamp * 1000).toISOString()
-    });
-
-    // Procesar diferentes tipos de mensajes
+    // Extraer contenido del mensaje
     let userContent = '';
-
     if (messageType === 'text') {
       userContent = message.text.body;
     } else if (messageType === 'image') {
@@ -53,147 +42,107 @@ export async function handleWebhookMessage(message: any, changes: any) {
       userContent = `[Mensaje tipo: ${messageType}]`;
     }
 
-    // Analizar intención del usuario
+    // Guardar mensaje recibido
+    await saveMessage(conversationId, 'customer', messageType, userContent);
+
+    // Analizar intención
     const intent = await analyzeUserIntent(userContent);
+    console.log(`🎯 Intención detectada: ${intent.intent}`);
 
-    // Obtener historial de conversación (últimos 5 mensajes)
-    const history = await allQuery('messages', { conversation_id: conversationId }, 5);
-
-    const conversationHistory = history.reverse().map((msg: any) => {
-      let content = msg.content;
-      try {
-        const parsed = JSON.parse(content);
-        content = parsed.text?.body || parsed.caption || JSON.stringify(parsed);
-      } catch (e) {
-        // ya es string
-      }
-      return {
-        role: msg.sender === 'customer' ? 'user' : 'assistant',
-        content
-      };
-    });
+    // Obtener historial de conversación
+    const history = await getConversationHistory(conversationId, 5);
+    const conversationHistory = history.map((msg: any) => ({
+      role: msg.sender === 'customer' ? 'user' : 'assistant',
+      content: msg.content
+    }));
 
     // Generar respuesta con IA
-    const { response: aiResponse } = await generateResponse(
-      conversationHistory,
-      userContent
-    );
+    const { response: aiResponse } = await generateResponse(conversationHistory, userContent);
+    console.log(`🤖 Respuesta IA generada`);
 
-    console.log(`🤖 Respuesta IA: ${aiResponse.substring(0, 100)}...`);
-
-    // Procesar acciones según intención
+    // Procesar según intención detectada
     if (intent.intent === 'quotation') {
-      await handleQuotationRequest(conversationId, phoneNumber, userContent);
+      await handleQuotationIntent(conversationId, phoneNumber, userContent);
     } else if (intent.intent === 'order') {
-      await handleOrderRequest(conversationId, phoneNumber, userContent);
-    } else if (intent.intent === 'payment') {
-      await handlePaymentRequest(conversationId, phoneNumber, userContent);
+      await handleOrderIntent(conversationId, phoneNumber, userContent);
     } else if (intent.intent === 'delivery_status') {
-      await handleDeliveryStatus(conversationId, phoneNumber);
+      await handleDeliveryStatusIntent(conversationId, phoneNumber);
     }
 
-    // Enviar respuesta de IA
+    // Enviar respuesta al cliente
     await sendTextMessage(phoneNumber, aiResponse);
 
-    // Guardar respuesta de IA
-    await runQuery('messages', {
-      id: uuidv4(),
-      conversation_id: conversationId,
-      sender: 'bot',
-      type: 'text',
-      content: aiResponse,
-      timestamp: new Date().toISOString()
-    });
+    // Guardar respuesta de IA en historial
+    await saveMessage(conversationId, 'bot', 'text', aiResponse);
 
-    // Actualizar último mensaje
-    await runQuery('conversations',
-      {
-        last_message_time: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      'update',
-      { id: conversationId }
-    );
+    // Actualizar última actividad de conversación
+    await updateConversation(conversationId, { status: 'active' });
 
   } catch (error) {
-    console.error('Error en handleWebhookMessage:', error);
+    console.error('❌ Error en handleWebhookMessage:', error);
   }
 }
 
-async function handleQuotationRequest(conversationId: string, phoneNumber: string, message: string) {
+async function handleQuotationIntent(conversationId: string, phoneNumber: string, message: string) {
   try {
     console.log('📋 Procesando solicitud de cotización...');
 
-    const quotationId = uuidv4();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 3);
 
-    await runQuery('quotations', {
-      id: quotationId,
-      conversation_id: conversationId,
-      customer_phone: phoneNumber,
-      products: JSON.stringify([{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }]),
-      total_amount: 25.00,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      expires_at: expiresAt.toISOString()
-    });
+    const products = [{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }];
+    const totalAmount = 25.00;
 
-    const quotationMessage = `✅ Cotización generada: ID ${quotationId.substring(0, 8)}\nVálida hasta: ${expiresAt.toLocaleDateString('es-EC')}\nTotal: $25.00`;
+    const quotation = await createQuotation(conversationId, phoneNumber, products, totalAmount);
+
+    const quotationMessage = `✅ *Cotización generada*\n\nID: ${quotation.id.substring(0, 8).toUpperCase()}\nTotal: $${totalAmount.toFixed(2)}\nVálida hasta: ${expiresAt.toLocaleDateString('es-EC')}\n\n¿Te gustaría confirmar?`;
+
     await sendTextMessage(phoneNumber, quotationMessage);
   } catch (error) {
-    console.error('Error en handleQuotationRequest:', error);
+    console.error('❌ Error en handleQuotationIntent:', error);
   }
 }
 
-async function handleOrderRequest(conversationId: string, phoneNumber: string, message: string) {
+async function handleOrderIntent(conversationId: string, phoneNumber: string, message: string) {
   try {
     console.log('🛍️ Procesando solicitud de pedido...');
 
-    const orderId = uuidv4();
+    const products = [{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }];
+    const totalAmount = 25.00;
 
-    await runQuery('orders', {
-      id: orderId,
-      conversation_id: conversationId,
-      customer_phone: phoneNumber,
-      products: JSON.stringify([{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }]),
-      total_amount: 25.00,
-      status: 'pending',
-      created_at: new Date().toISOString()
-    });
+    const order = await createOrder(conversationId, phoneNumber, 'Cliente', products, totalAmount);
 
-    const orderMessage = `🎉 Pedido registrado: ID ${orderId.substring(0, 8)}\nNuestro equipo se pondrá en contacto para confirmar detalles de entrega.`;
+    const orderMessage = `🎉 *Pedido registrado*\n\nID: ${order.id.substring(0, 8).toUpperCase()}\nTotal: $${totalAmount.toFixed(2)}\n\nNuestro equipo se pondrá en contacto para confirmar detalles de entrega. ¡Gracias por tu compra!`;
+
     await sendTextMessage(phoneNumber, orderMessage);
   } catch (error) {
-    console.error('Error en handleOrderRequest:', error);
+    console.error('❌ Error en handleOrderIntent:', error);
   }
 }
 
-async function handlePaymentRequest(conversationId: string, phoneNumber: string, message: string) {
-  try {
-    console.log('💳 Procesando solicitud de pago...');
-
-    const paymentMessage = `💳 Opciones de pago:\n1. Transferencia bancaria\n2. Tarjeta de crédito/débito\n3. PayPal\n4. Contra-entrega (si disponible)\n\n¿Cuál prefieres?`;
-    await sendTextMessage(phoneNumber, paymentMessage);
-  } catch (error) {
-    console.error('Error en handlePaymentRequest:', error);
-  }
-}
-
-async function handleDeliveryStatus(conversationId: string, phoneNumber: string) {
+async function handleDeliveryStatusIntent(conversationId: string, phoneNumber: string) {
   try {
     console.log('📦 Buscando estado de entrega...');
 
-    const orders = await allQuery('orders', { conversation_id: conversationId }, 1);
+    const orders = await getOrdersByConversation(conversationId);
 
     if (orders && orders.length > 0) {
-      const order = orders[0];
-      const statusMessage = `📦 Estado de tu pedido ${order.id.substring(0, 8)}:\nEstado: ${order.status}\nCreado: ${new Date(order.created_at).toLocaleDateString('es-EC')}\n\n¿Necesitas más información?`;
+      const lastOrder = orders[0];
+      const statusMap: { [key: string]: string } = {
+        pending: '⏳ Pendiente',
+        confirmed: '✅ Confirmado',
+        shipped: '📦 En camino',
+        delivered: '🎉 Entregado',
+        cancelled: '❌ Cancelado'
+      };
+
+      const statusMessage = `📦 *Estado de tu pedido*\n\nID: ${lastOrder.id.substring(0, 8).toUpperCase()}\nEstado: ${statusMap[lastOrder.status] || lastOrder.status}\nFecha: ${new Date(lastOrder.created_at).toLocaleDateString('es-EC')}\n\n¿Necesitas más información?`;
+
       await sendTextMessage(phoneNumber, statusMessage);
     } else {
       await sendTextMessage(phoneNumber, 'No encontré pedidos asociados a este número. ¿Quieres hacer uno nuevo?');
     }
   } catch (error) {
-    console.error('Error en handleDeliveryStatus:', error);
+    console.error('❌ Error en handleDeliveryStatusIntent:', error);
   }
 }
