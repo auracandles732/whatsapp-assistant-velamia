@@ -281,7 +281,7 @@
 
         // Configuración de Supabase (solo lectura de datos)
         const SUPABASE_URL = 'https://yhaiprlfpmugohmzpzcq.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloYWlwcmxmcG11Z29obXpwemNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYzMjY3NTUsImV4cCI6MjA0MTkwMjc1NX0.yg-VQ0QRfbLCJLNYczjZZT5W0ChS8-T7p0ZP5-6k7m4';
+        const SUPABASE_KEY = 'sb_publishable_0qYx-odpKqBHpDNZWGyNbg_-luUJY4J';
 
         // Backend real (envía mensajes de WhatsApp de verdad)
         const API_URL = 'https://whatsapp-assistant-velamia.onrender.com';
@@ -394,20 +394,17 @@
 
             async function loadStats() {
                 try {
-                    const convRes = await fetch(`${SUPABASE_URL}/rest/v1/conversations?select=count()`, {
-                        headers: { 'apikey': SUPABASE_KEY }
-                    });
-                    const ordersRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=total_amount`, {
+                    const ordersRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=total_amount,status`, {
                         headers: { 'apikey': SUPABASE_KEY }
                     });
 
                     const orders = await ordersRes.json();
-                    const revenue = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+                    const revenue = Array.isArray(orders) ? orders.reduce((sum, o) => sum + (o.total_amount || 0), 0) : 0;
 
                     setStats({
                         total: conversations.length,
                         active: conversations.filter(c => c.status === 'active').length,
-                        orders: orders.length,
+                        orders: Array.isArray(orders) ? orders.length : 0,
                         revenue: revenue
                     });
                 } catch (err) {
