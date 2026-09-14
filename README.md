@@ -9,7 +9,7 @@ Asistente inteligente de ventas para VELAMIA, automatiza conversaciones en Whats
 ✅ Gestiona pedidos y seguimientos
 ✅ Envía fotos y mensajes interactivos
 ✅ Cierra ventas completamente automatizado
-✅ Base de datos local (SQLite) sin dependencias externas
+✅ Base de datos PostgreSQL en Supabase (backups automáticos)
 
 ## 📋 Requisitos previos
 

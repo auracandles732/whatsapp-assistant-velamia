@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { runQuery, getQuery, allQuery } from '../db.js';
-import { sendTextMessage, sendImageMessage } from '../services/whatsapp.js';
-import { generateResponse, analyzeUserIntent, generateQuotation, generateFollowUp } from '../services/openai.js';
+import { sendTextMessage } from '../services/whatsapp.js';
+import { generateResponse, analyzeUserIntent } from '../services/openai.js';
 
 export async function handleWebhookMessage(message: any, changes: any) {
   try {
@@ -13,29 +13,32 @@ export async function handleWebhookMessage(message: any, changes: any) {
     console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
 
     // Obtener o crear conversación
-    let conversation = await getQuery(
-      'SELECT * FROM conversations WHERE phone_number = ?',
-      [phoneNumber]
-    );
+    let conversation = await getQuery('conversations', { phone_number: phoneNumber });
 
     if (!conversation) {
       const conversationId = uuidv4();
-      await runQuery(
-        `INSERT INTO conversations (id, phone_number, status, last_message_time, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [conversationId, phoneNumber, 'active', new Date().toISOString(), new Date().toISOString(), new Date().toISOString()]
-      );
+      await runQuery('conversations', {
+        id: conversationId,
+        phone_number: phoneNumber,
+        status: 'active',
+        last_message_time: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
       conversation = { id: conversationId, phone_number: phoneNumber };
     }
 
     const conversationId = conversation.id;
 
     // Guardar mensaje recibido
-    await runQuery(
-      `INSERT INTO messages (id, conversation_id, sender, type, content, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [messageId, conversationId, 'customer', messageType, JSON.stringify(message), new Date(timestamp * 1000).toISOString()]
-    );
+    await runQuery('messages', {
+      id: messageId,
+      conversation_id: conversationId,
+      sender: 'customer',
+      type: messageType,
+      content: JSON.stringify(message),
+      timestamp: new Date(timestamp * 1000).toISOString()
+    });
 
     // Procesar diferentes tipos de mensajes
     let userContent = '';
@@ -54,12 +57,7 @@ export async function handleWebhookMessage(message: any, changes: any) {
     const intent = await analyzeUserIntent(userContent);
 
     // Obtener historial de conversación (últimos 5 mensajes)
-    const history = await allQuery(
-      `SELECT sender, content FROM messages
-       WHERE conversation_id = ?
-       ORDER BY timestamp DESC LIMIT 5`,
-      [conversationId]
-    );
+    const history = await allQuery('messages', { conversation_id: conversationId }, 5);
 
     const conversationHistory = history.reverse().map((msg: any) => {
       let content = msg.content;
@@ -98,16 +96,23 @@ export async function handleWebhookMessage(message: any, changes: any) {
     await sendTextMessage(phoneNumber, aiResponse);
 
     // Guardar respuesta de IA
-    await runQuery(
-      `INSERT INTO messages (id, conversation_id, sender, type, content, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), conversationId, 'bot', 'text', aiResponse, new Date().toISOString()]
-    );
+    await runQuery('messages', {
+      id: uuidv4(),
+      conversation_id: conversationId,
+      sender: 'bot',
+      type: 'text',
+      content: aiResponse,
+      timestamp: new Date().toISOString()
+    });
 
     // Actualizar último mensaje
-    await runQuery(
-      `UPDATE conversations SET last_message_time = ?, updated_at = ? WHERE id = ?`,
-      [new Date().toISOString(), new Date().toISOString(), conversationId]
+    await runQuery('conversations',
+      {
+        last_message_time: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      'update',
+      { id: conversationId }
     );
 
   } catch (error) {
@@ -119,26 +124,20 @@ async function handleQuotationRequest(conversationId: string, phoneNumber: strin
   try {
     console.log('📋 Procesando solicitud de cotización...');
 
-    // Aquí iría lógica para extraer productos del mensaje
-    // Por ahora, crear una cotización de ejemplo
     const quotationId = uuidv4();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 3);
 
-    await runQuery(
-      `INSERT INTO quotations (id, conversation_id, customer_phone, products, total_amount, status, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        quotationId,
-        conversationId,
-        phoneNumber,
-        JSON.stringify([{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }]),
-        25.00,
-        'pending',
-        new Date().toISOString(),
-        expiresAt.toISOString()
-      ]
-    );
+    await runQuery('quotations', {
+      id: quotationId,
+      conversation_id: conversationId,
+      customer_phone: phoneNumber,
+      products: JSON.stringify([{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }]),
+      total_amount: 25.00,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      expires_at: expiresAt.toISOString()
+    });
 
     const quotationMessage = `✅ Cotización generada: ID ${quotationId.substring(0, 8)}\nVálida hasta: ${expiresAt.toLocaleDateString('es-EC')}\nTotal: $25.00`;
     await sendTextMessage(phoneNumber, quotationMessage);
@@ -153,19 +152,15 @@ async function handleOrderRequest(conversationId: string, phoneNumber: string, m
 
     const orderId = uuidv4();
 
-    await runQuery(
-      `INSERT INTO orders (id, conversation_id, customer_phone, products, total_amount, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        orderId,
-        conversationId,
-        phoneNumber,
-        JSON.stringify([{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }]),
-        25.00,
-        'pending',
-        new Date().toISOString()
-      ]
-    );
+    await runQuery('orders', {
+      id: orderId,
+      conversation_id: conversationId,
+      customer_phone: phoneNumber,
+      products: JSON.stringify([{ name: 'Vela Aromática Premium', price: 25.00, quantity: 1 }]),
+      total_amount: 25.00,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    });
 
     const orderMessage = `🎉 Pedido registrado: ID ${orderId.substring(0, 8)}\nNuestro equipo se pondrá en contacto para confirmar detalles de entrega.`;
     await sendTextMessage(phoneNumber, orderMessage);
@@ -189,12 +184,10 @@ async function handleDeliveryStatus(conversationId: string, phoneNumber: string)
   try {
     console.log('📦 Buscando estado de entrega...');
 
-    const order = await getQuery(
-      `SELECT * FROM orders WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1`,
-      [conversationId]
-    );
+    const orders = await allQuery('orders', { conversation_id: conversationId }, 1);
 
-    if (order) {
+    if (orders && orders.length > 0) {
+      const order = orders[0];
       const statusMessage = `📦 Estado de tu pedido ${order.id.substring(0, 8)}:\nEstado: ${order.status}\nCreado: ${new Date(order.created_at).toLocaleDateString('es-EC')}\n\n¿Necesitas más información?`;
       await sendTextMessage(phoneNumber, statusMessage);
     } else {
