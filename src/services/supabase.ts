@@ -388,6 +388,27 @@ export async function updateProductStock(productId: string, newStock: number) {
   return data;
 }
 
+export async function updateProduct(productId: string, updates: { name?: string; price?: number; category?: string; image_url?: string; description?: string }) {
+  const { data, error } = await supabase
+    .from('products')
+    .update(updates)
+    .eq('id', productId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error actualizando producto: ${error.message}`);
+  return data;
+}
+
+export async function deleteProduct(productId: string) {
+  const { error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', productId);
+
+  if (error) throw new Error(`Error eliminando producto: ${error.message}`);
+}
+
 export async function decreaseProductStock(productId: string, quantity: number) {
   const product = await getProduct(productId);
   if (!product) throw new Error('Producto no encontrado');

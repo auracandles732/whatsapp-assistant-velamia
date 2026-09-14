@@ -110,6 +110,191 @@
             color: #6b2c2c;
         }
 
+        .nav-tabs {
+            display: flex;
+            gap: 6px;
+            padding: 0 28px;
+            background: var(--crema);
+            border-bottom: 1px solid var(--rosa-palo-suave);
+        }
+
+        .nav-tab {
+            padding: 12px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--texto-suave);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            color: var(--terracota);
+        }
+
+        .nav-tab.active {
+            color: var(--terracota);
+            border-bottom-color: var(--terracota);
+        }
+
+        .catalog-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 28px;
+        }
+
+        .catalog-form {
+            background: var(--crema);
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 14px;
+            padding: 22px;
+            margin-bottom: 24px;
+            display: grid;
+            grid-template-columns: 140px 1fr 1fr 1fr auto;
+            gap: 14px;
+            align-items: end;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-field label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--texto-suave);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-field input, .form-field select {
+            padding: 10px 12px;
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            background: var(--beige-claro);
+            color: var(--texto);
+        }
+
+        .form-field input:focus, .form-field select:focus {
+            outline: none;
+            border-color: var(--terracota);
+        }
+
+        .photo-upload {
+            width: 90px;
+            height: 90px;
+            border: 2px dashed var(--rosa-palo);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            overflow: hidden;
+            background: var(--beige-claro);
+            font-size: 22px;
+            color: var(--rosa-palo);
+        }
+
+        .photo-upload img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .btn-add-product {
+            background: var(--terracota);
+            color: white;
+            padding: 11px 22px;
+            height: fit-content;
+        }
+
+        .btn-add-product:hover {
+            background: var(--terracota-dark);
+        }
+
+        .catalog-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 18px;
+        }
+
+        .product-card {
+            background: var(--crema);
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 14px;
+            overflow: hidden;
+            transition: box-shadow 0.2s;
+        }
+
+        .product-card:hover {
+            box-shadow: 0 4px 16px rgba(185, 107, 79, 0.15);
+        }
+
+        .product-card .photo {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            background: var(--rosa-palo-suave);
+        }
+
+        .product-card .info {
+            padding: 14px;
+        }
+
+        .product-card .category-tag {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--terracota);
+            background: var(--rosa-palo-suave);
+            padding: 3px 10px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .product-card h4 {
+            font-size: 14px;
+            margin-bottom: 6px;
+            color: var(--texto);
+        }
+
+        .product-card .price {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--terracota);
+        }
+
+        .product-card .price small {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--texto-suave);
+        }
+
+        .btn-delete-product {
+            width: 100%;
+            margin-top: 10px;
+            background: transparent;
+            border: 1px solid #e39a9a;
+            color: #b45050;
+            padding: 6px;
+            font-size: 12px;
+        }
+
+        .btn-delete-product:hover {
+            background: #f5dcdc;
+        }
+
+        .empty-catalog {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--texto-suave);
+        }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -351,6 +536,8 @@
             .stats { grid-template-columns: repeat(2, 1fr); }
             .conversations-list { width: 220px; }
             .header-brand img { height: 32px; }
+            .catalog-form { grid-template-columns: 1fr; }
+            .photo-upload { width: 70px; height: 70px; }
         }
     </style>
 </head>
@@ -376,17 +563,96 @@
             const [botEnabled, setBotEnabled] = useState(true);
             const [stats, setStats] = useState({ total: 0, active: 0, orders: 0, revenue: 0 });
             const [loading, setLoading] = useState(true);
+            const [activeTab, setActiveTab] = useState('conversaciones');
+            const [products, setProducts] = useState([]);
+            const [newProduct, setNewProduct] = useState({ name: '', price: '', category: '', photoBase64: '', photoPreview: '' });
+            const [savingProduct, setSavingProduct] = useState(false);
 
             useEffect(() => {
                 loadConversations();
                 loadStats();
                 loadBotStatus();
+                loadProducts();
                 const interval = setInterval(() => {
                     loadConversations();
                     loadStats();
                 }, 5000);
                 return () => clearInterval(interval);
             }, []);
+
+            async function loadProducts() {
+                try {
+                    const res = await fetch(`${API_URL}/api/products`);
+                    const data = await res.json();
+                    setProducts(Array.isArray(data) ? data : []);
+                } catch (err) {
+                    console.error('Error cargando catálogo:', err);
+                }
+            }
+
+            function handlePhotoSelect(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    setNewProduct(prev => ({ ...prev, photoBase64: reader.result, photoPreview: reader.result }));
+                };
+                reader.readAsDataURL(file);
+            }
+
+            async function addProduct() {
+                if (!newProduct.name.trim() || !newProduct.price || !newProduct.category.trim()) {
+                    alert('Completa nombre, precio y categoría');
+                    return;
+                }
+                setSavingProduct(true);
+                try {
+                    let imageUrl = '';
+                    if (newProduct.photoBase64) {
+                        const uploadRes = await fetch(`${API_URL}/api/upload-image`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
+                            body: JSON.stringify({ imageBase64: newProduct.photoBase64 })
+                        });
+                        const uploadData = await uploadRes.json();
+                        if (uploadData.error) throw new Error(uploadData.error);
+                        imageUrl = uploadData.url;
+                    }
+
+                    const res = await fetch(`${API_URL}/api/products`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
+                        body: JSON.stringify({
+                            name: newProduct.name,
+                            price: parseFloat(newProduct.price),
+                            category: newProduct.category,
+                            image_url: imageUrl
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error);
+
+                    setNewProduct({ name: '', price: '', category: '', photoBase64: '', photoPreview: '' });
+                    loadProducts();
+                } catch (err) {
+                    alert('Error agregando producto: ' + err.message);
+                } finally {
+                    setSavingProduct(false);
+                }
+            }
+
+            async function removeProduct(id) {
+                if (!confirm('¿Eliminar este producto del catálogo?')) return;
+                try {
+                    await fetch(`${API_URL}/api/products/${id}`, {
+                        method: 'DELETE',
+                        headers: { 'x-crm-key': CRM_KEY }
+                    });
+                    loadProducts();
+                } catch (err) {
+                    alert('Error eliminando producto: ' + err.message);
+                }
+            }
 
             async function loadBotStatus() {
                 try {
@@ -542,6 +808,11 @@
                             </div>
                         </div>
 
+                        <div className="nav-tabs">
+                            <div className={`nav-tab ${activeTab === 'conversaciones' ? 'active' : ''}`} onClick={() => setActiveTab('conversaciones')}>💬 Conversaciones</div>
+                            <div className={`nav-tab ${activeTab === 'catalogo' ? 'active' : ''}`} onClick={() => setActiveTab('catalogo')}>🕯️ Catálogo</div>
+                        </div>
+
                         <div className="stats">
                             <div className="stat-card">
                                 <h4>Total Clientes</h4>
@@ -561,6 +832,7 @@
                             </div>
                         </div>
 
+                        {activeTab === 'conversaciones' ? (
                         <div className="content">
                             <div className="conversations-list">
                                 <div className="conversations-list-header">Conversaciones</div>
@@ -579,17 +851,23 @@
                             {selectedConv ? (
                                 <div className="chat-area">
                                     <div className="messages-container">
-                                        {messages.map((msg, idx) => (
-                                            <div key={idx} className={`message ${msg.sender}`}>
-                                                <div>
-                                                    <div className="message-bubble">
-                                                        {msg.type === 'image' ? <img src={msg.content.match(/https?:\/\/\S+/)?.[0]} /> : null}
-                                                        {msg.content}
+                                        {messages.map((msg, idx) => {
+                                            const urlMatch = msg.content.match(/^https?:\/\/\S+/);
+                                            const mediaUrl = urlMatch ? urlMatch[0] : null;
+                                            const textPart = mediaUrl ? msg.content.replace(mediaUrl, '').replace(/^\n/, '') : msg.content;
+                                            return (
+                                                <div key={idx} className={`message ${msg.sender}`}>
+                                                    <div>
+                                                        <div className="message-bubble">
+                                                            {msg.type === 'image' && mediaUrl ? <img src={mediaUrl} onClick={() => window.open(mediaUrl, '_blank')} /> : null}
+                                                            {msg.type === 'audio' && mediaUrl ? <audio controls src={mediaUrl} style={{ maxWidth: '220px', marginBottom: '6px', display: 'block' }} /> : null}
+                                                            {textPart}
+                                                        </div>
+                                                        <div className="message-time">{new Date(msg.timestamp).toLocaleTimeString('es-EC')}</div>
                                                     </div>
-                                                    <div className="message-time">{new Date(msg.timestamp).toLocaleTimeString('es-EC')}</div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
 
                                     <div className="input-area">
@@ -611,6 +889,54 @@
                                 </div>
                             )}
                         </div>
+                        ) : (
+                        <div className="catalog-container">
+                            <div className="catalog-form">
+                                <div className="form-field">
+                                    <label>Foto</label>
+                                    <label className="photo-upload">
+                                        {newProduct.photoPreview ? <img src={newProduct.photoPreview} /> : '📷'}
+                                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoSelect} />
+                                    </label>
+                                </div>
+                                <div className="form-field">
+                                    <label>Nombre del producto</label>
+                                    <input type="text" placeholder="Ej: Vela Aromática Lavanda" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                                </div>
+                                <div className="form-field">
+                                    <label>Precio por docena ($)</label>
+                                    <input type="number" step="0.01" placeholder="Ej: 25.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
+                                </div>
+                                <div className="form-field">
+                                    <label>Categoría / Evento</label>
+                                    <input type="text" placeholder="Ej: Bautizo, Cumpleaños, XV años" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
+                                </div>
+                                <button className="btn-add-product" onClick={addProduct} disabled={savingProduct}>
+                                    {savingProduct ? 'Guardando...' : '+ Agregar'}
+                                </button>
+                            </div>
+
+                            {products.length === 0 ? (
+                                <div className="empty-catalog">
+                                    <p>Aún no has agregado productos. Usa el formulario de arriba para empezar tu catálogo 🕯️</p>
+                                </div>
+                            ) : (
+                                <div className="catalog-grid">
+                                    {products.map(product => (
+                                        <div key={product.id} className="product-card">
+                                            <img className="photo" src={product.image_url || 'logo.png'} />
+                                            <div className="info">
+                                                <span className="category-tag">{product.category}</span>
+                                                <h4>{product.name}</h4>
+                                                <div className="price">${product.price} <small>por docena</small></div>
+                                                <button className="btn-delete-product" onClick={() => removeProduct(product.id)}>🗑️ Eliminar</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        )}
                     </div>
                 </div>
             );

@@ -12,8 +12,9 @@ import {
   getAllProducts,
   getProductsByCategory
 } from '../db';
-import { sendTextMessage, sendImageMessage } from '../services/whatsapp';
-import { generateResponse, analyzeUserIntent } from '../services/openai';
+import { sendTextMessage, sendImageMessage, getMediaUrl, downloadMedia } from '../services/whatsapp';
+import { generateResponse, analyzeUserIntent, transcribeAudio, describeImage } from '../services/openai';
+import { uploadBufferToStorage } from '../services/storage';
 
 export async function handleWebhookMessage(message: any, changes: any) {
   try {
@@ -33,16 +34,33 @@ export async function handleWebhookMessage(message: any, changes: any) {
 
     const conversationId = conversation.id;
 
-    // Extraer contenido del mensaje
+    // Extraer contenido del mensaje (userContent = lo que se guarda/muestra en el CRM, aiContent = lo que "entiende" la IA)
     let userContent = '';
+    let aiContent = '';
+
     if (messageType === 'text') {
       userContent = message.text.body;
+      aiContent = userContent;
     } else if (messageType === 'image') {
-      userContent = `[Cliente envió imagen]: ${message.image.caption || 'sin descripción'}`;
+      const media = await getMediaUrl(message.image.id);
+      const buffer = await downloadMedia(media.url);
+      const publicUrl = await uploadBufferToStorage(buffer, media.mimeType);
+      const description = await describeImage(publicUrl);
+      userContent = `${publicUrl}\n${message.image.caption || description}`;
+      aiContent = `[Cliente envió una foto]: ${description}${message.image.caption ? ` (con el mensaje: "${message.image.caption}")` : ''}`;
+    } else if (messageType === 'audio') {
+      const media = await getMediaUrl(message.audio.id);
+      const buffer = await downloadMedia(media.url);
+      const publicUrl = await uploadBufferToStorage(buffer, media.mimeType);
+      const transcript = await transcribeAudio(buffer, media.mimeType);
+      userContent = `${publicUrl}\n🎤 "${transcript}"`;
+      aiContent = `[Cliente envió un audio que dice]: "${transcript}"`;
     } else if (messageType === 'document') {
       userContent = `[Cliente envió documento]: ${message.document.filename}`;
+      aiContent = userContent;
     } else {
       userContent = `[Mensaje tipo: ${messageType}]`;
+      aiContent = userContent;
     }
 
     // Guardar mensaje recibido
@@ -59,18 +77,19 @@ export async function handleWebhookMessage(message: any, changes: any) {
     }
 
     // Analizar intención
-    const intent = await analyzeUserIntent(userContent);
+    const intent = await analyzeUserIntent(aiContent);
     console.log(`🎯 Intención detectada: ${intent.intent}`);
 
     // Obtener historial de conversación
     const history = await getConversationHistory(conversationId, 5);
     const conversationHistory: { role: 'user' | 'assistant'; content: string }[] = history.map((msg: any) => ({
       role: msg.sender === 'customer' ? 'user' as const : 'assistant' as const,
-      content: msg.content
+      content: msg.content.replace(/^https?:\/\/\S+\n?/, '')
     }));
 
-    // Generar respuesta con IA
-    const { response: aiResponse } = await generateResponse(conversationHistory, userContent);
+    // Generar respuesta con IA (con el catálogo real de productos)
+    const catalog = await getAllProducts();
+    const { response: aiResponse } = await generateResponse(conversationHistory, aiContent, catalog);
     console.log(`🤖 Respuesta IA generada`);
 
     // Enviar respuesta al cliente
@@ -118,7 +137,7 @@ async function handleProductInquiry(conversationId: string, phoneNumber: string,
       if (product.image_url) {
         const caption = `🕯️ *${product.name}*\n${product.description}\n💰 $${product.price}`;
         await sendImageMessage(phoneNumber, product.image_url, caption);
-        await saveMessage(conversationId, 'bot', 'image', caption);
+        await saveMessage(conversationId, 'bot', 'image', `${product.image_url}\n${caption}`);
       }
     }
   } catch (error) {

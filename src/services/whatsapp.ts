@@ -87,6 +87,21 @@ export async function sendTemplateMessage(phoneNumber: string, templateName: str
   }
 }
 
+export async function getMediaUrl(mediaId: string): Promise<{ url: string; mimeType: string }> {
+  const response = await axios.get(`${WHATSAPP_API_URL}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` }
+  });
+  return { url: response.data.url, mimeType: response.data.mime_type };
+}
+
+export async function downloadMedia(mediaUrl: string): Promise<Buffer> {
+  const response = await axios.get(mediaUrl, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+    responseType: 'arraybuffer'
+  });
+  return Buffer.from(response.data);
+}
+
 export async function sendButtonMessage(phoneNumber: string, text: string, buttons: any[]) {
   try {
     const message: WhatsAppMessage = {

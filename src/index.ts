@@ -1,17 +1,28 @@
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
-import { initDatabase, saveMessage, setConfig, getConfig } from './db';
+import { randomUUID } from 'crypto';
+import {
+  initDatabase,
+  saveMessage,
+  setConfig,
+  getConfig,
+  getAllProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct
+} from './db';
 import { handleWebhookMessage } from './controllers/messageController';
 import { verifyWebhook } from './middleware/auth';
 import { sendTextMessage, sendImageMessage } from './services/whatsapp';
+import { supabase } from './db';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 
 // Servir el CRM (dashboard) como app web instalable en /crm
 app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard')));
@@ -103,7 +114,7 @@ app.post('/api/send-image', verifyCrmKey, async (req: Request, res: Response) =>
       return res.status(400).json({ error: 'phoneNumber e imageUrl son requeridos' });
     }
     await sendImageMessage(phoneNumber, imageUrl, caption);
-    await saveMessage(conversationId, 'bot', 'image', caption || imageUrl);
+    await saveMessage(conversationId, 'bot', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl);
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.message);
@@ -127,6 +138,92 @@ app.post('/api/bot-status', verifyCrmKey, async (req: Request, res: Response) =>
     await setConfig('bot_enabled', enabled ? 'true' : 'false');
     res.json({ success: true, enabled });
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// CRM: subir foto de producto a Supabase Storage
+app.post('/api/upload-image', verifyCrmKey, async (req: Request, res: Response) => {
+  try {
+    const { imageBase64, fileName } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'imageBase64 es requerido' });
+    }
+
+    const matches = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/);
+    const contentType = matches ? matches[1] : 'image/jpeg';
+    const base64Data = matches ? matches[2] : imageBase64;
+    const buffer = Buffer.from(base64Data, 'base64');
+    const ext = contentType.split('/')[1] || 'jpg';
+    const finalName = `${randomUUID()}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('product-images')
+      .upload(finalName, buffer, { contentType });
+
+    if (error) throw error;
+
+    const { data: publicUrlData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(finalName);
+
+    res.json({ url: publicUrlData.publicUrl });
+  } catch (error: any) {
+    console.error('Error subiendo imagen:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Catálogo: listar productos (público, lo usa también el bot indirectamente)
+app.get('/api/products', async (req: Request, res: Response) => {
+  try {
+    const products = await getAllProducts();
+    res.json(products);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Catálogo: crear producto
+app.post('/api/products', verifyCrmKey, async (req: Request, res: Response) => {
+  try {
+    const { name, price, category, image_url } = req.body;
+    if (!name || !price || !category) {
+      return res.status(400).json({ error: 'name, price y category son requeridos' });
+    }
+    const product = await createProduct(name, `Precio por docena: $${price}`, price, 999, category, image_url);
+    res.json(product);
+  } catch (error: any) {
+    console.error('Error creando producto:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Catálogo: editar producto
+app.put('/api/products/:id', verifyCrmKey, async (req: Request, res: Response) => {
+  try {
+    const { name, price, category, image_url } = req.body;
+    const updates: any = {};
+    if (name !== undefined) updates.name = name;
+    if (price !== undefined) { updates.price = price; updates.description = `Precio por docena: $${price}`; }
+    if (category !== undefined) updates.category = category;
+    if (image_url !== undefined) updates.image_url = image_url;
+
+    const product = await updateProduct(req.params.id, updates);
+    res.json(product);
+  } catch (error: any) {
+    console.error('Error actualizando producto:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Catálogo: eliminar producto
+app.delete('/api/products/:id', verifyCrmKey, async (req: Request, res: Response) => {
+  try {
+    await deleteProduct(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Error eliminando producto:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
