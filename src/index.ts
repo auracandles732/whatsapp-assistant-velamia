@@ -16,12 +16,13 @@ initDatabase();
 
 // Webhook verification (GET)
 app.get('/webhook', (req: Request, res: Response) => {
-  const token = req.query.hub_verify_token;
-  const challenge = req.query.hub_challenge;
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
-  if (token === process.env.WEBHOOK_VERIFY_TOKEN) {
-    res.send(challenge);
+  if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
     console.log('✅ Webhook verificado');
+    res.status(200).send(challenge);
   } else {
     res.status(403).send('Token inválido');
   }
