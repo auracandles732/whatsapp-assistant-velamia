@@ -1,0 +1,23 @@
+{
+  "name": "VELAMIA CRM WhatsApp",
+  "short_name": "VELAMIA CRM",
+  "description": "Panel de control del asistente WhatsApp de VELAMIA",
+  "start_url": "/crm/index.html",
+  "scope": "/crm/",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#667eea",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192x192/667eea/ffffff?text=V",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://via.placeholder.com/512x512/667eea/ffffff?text=V",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

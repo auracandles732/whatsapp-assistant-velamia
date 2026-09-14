@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
+import path from 'path';
 import { initDatabase, saveMessage, setConfig, getConfig } from './db';
 import { handleWebhookMessage } from './controllers/messageController';
 import { verifyWebhook } from './middleware/auth';
@@ -11,6 +12,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// Servir el CRM (dashboard) como app web instalable en /crm
+app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard')));
 
 // CORS para permitir que el CRM (dashboard) llame a esta API desde el navegador
 app.use((req: Request, res: Response, next: NextFunction) => {
