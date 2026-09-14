@@ -2,6 +2,7 @@
   "name": "whatsapp-assistant-velamia",
   "version": "1.0.0",
   "description": "Asistente WhatsApp para velas VELAMIA",
+  "license": "MIT",
   "main": "dist/index.js",
   "type": "module",
   "engines": {
