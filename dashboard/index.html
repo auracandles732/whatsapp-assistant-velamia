@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VELAMIA - CRM WhatsApp Assistant</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #fff;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+        }
+
+        .toggle-bot {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .toggle-bot.active {
+            background: #4caf50;
+        }
+
+        .toggle-bot.inactive {
+            background: #f44336;
+        }
+
+        .content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .conversations-list {
+            width: 300px;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+
+        .conversation-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .conversation-item:hover {
+            background: #f9f9f9;
+        }
+
+        .conversation-item.active {
+            background: #e3f2fd;
+            border-left: 4px solid #667eea;
+        }
+
+        .conversation-item h3 {
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .conversation-item p {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        .message.customer {
+            justify-content: flex-end;
+        }
+
+        .message.bot {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 60%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+        }
+
+        .message.customer .message-bubble {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.bot .message-bubble {
+            background: #f0f0f0;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .input-area {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: none;
+            font-family: inherit;
+            min-height: 60px;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-send {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .btn-send:hover {
+            background: #5568d3;
+        }
+
+        .btn-photo {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-photo:hover {
+            background: #45a049;
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+            text-align: center;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            padding: 20px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .stat-card {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card h4 {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Configuración de Supabase
+        const SUPABASE_URL = 'https://yhaiprlfpmugohmzpzcq.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloYWlwcmxmcG11Z29obXpwemNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYzMjY3NTUsImV4cCI6MjA0MTkwMjc1NX0.yg-VQ0QRfbLCJLNYczjZZT5W0ChS8-T7p0ZP5-6k7m4';
+
+        function App() {
+            const [conversations, setConversations] = useState([]);
+            const [selectedConv, setSelectedConv] = useState(null);
+            const [messages, setMessages] = useState([]);
+            const [inputText, setInputText] = useState('');
+            const [botEnabled, setBotEnabled] = useState(true);
+            const [stats, setStats] = useState({ total: 0, active: 0, orders: 0, revenue: 0 });
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                loadConversations();
+                loadStats();
+                const interval = setInterval(() => {
+                    loadConversations();
+                    loadStats();
+                }, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            useEffect(() => {
+                if (selectedConv) {
+                    loadMessages(selectedConv.id);
+                    const interval = setInterval(() => loadMessages(selectedConv.id), 3000);
+                    return () => clearInterval(interval);
+                }
+            }, [selectedConv]);
+
+            async function loadConversations() {
+                try {
+                    const res = await fetch(`${SUPABASE_URL}/rest/v1/conversations?order=last_message_time.desc`, {
+                        headers: { 'apikey': SUPABASE_KEY }
+                    });
+                    const data = await res.json();
+                    setConversations(data);
+                    setLoading(false);
+                } catch (err) {
+                    console.error('Error cargando conversaciones:', err);
+                }
+            }
+
+            async function loadMessages(convId) {
+                try {
+                    const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?conversation_id=eq.${convId}&order=timestamp.asc`, {
+                        headers: { 'apikey': SUPABASE_KEY }
+                    });
+                    const data = await res.json();
+                    setMessages(data);
+                } catch (err) {
+                    console.error('Error cargando mensajes:', err);
+                }
+            }
+
+            async function loadStats() {
+                try {
+                    const convRes = await fetch(`${SUPABASE_URL}/rest/v1/conversations?select=count()`, {
+                        headers: { 'apikey': SUPABASE_KEY }
+                    });
+                    const ordersRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=total_amount`, {
+                        headers: { 'apikey': SUPABASE_KEY }
+                    });
+
+                    const orders = await ordersRes.json();
+                    const revenue = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+
+                    setStats({
+                        total: conversations.length,
+                        active: conversations.filter(c => c.status === 'active').length,
+                        orders: orders.length,
+                        revenue: revenue
+                    });
+                } catch (err) {
+                    console.error('Error cargando stats:', err);
+                }
+            }
+
+            async function sendMessage() {
+                if (!inputText.trim() || !selectedConv) return;
+
+                try {
+                    const messageId = 'msg_' + Date.now();
+                    await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': SUPABASE_KEY,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            id: messageId,
+                            conversation_id: selectedConv.id,
+                            sender: 'bot',
+                            type: 'text',
+                            content: inputText,
+                            timestamp: new Date().toISOString()
+                        })
+                    });
+
+                    setInputText('');
+                    loadMessages(selectedConv.id);
+                } catch (err) {
+                    alert('Error enviando mensaje: ' + err.message);
+                }
+            }
+
+            if (loading) {
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                        <div className="loading">
+                            <div className="spinner"></div>
+                            <p>Cargando CRM...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="container">
+                    <div className="main">
+                        <div className="header">
+                            <h1>🕯️ VELAMIA - CRM WhatsApp</h1>
+                            <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={() => setBotEnabled(!botEnabled)}>
+                                <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
+                            </div>
+                        </div>
+
+                        <div className="stats">
+                            <div className="stat-card">
+                                <h4>Total Clientes</h4>
+                                <div className="number">{conversations.length}</div>
+                            </div>
+                            <div className="stat-card">
+                                <h4>Conversaciones Activas</h4>
+                                <div className="number">{stats.active}</div>
+                            </div>
+                            <div className="stat-card">
+                                <h4>Pedidos</h4>
+                                <div className="number">{stats.orders}</div>
+                            </div>
+                            <div className="stat-card">
+                                <h4>Ingresos</h4>
+                                <div className="number">${stats.revenue.toFixed(2)}</div>
+                            </div>
+                        </div>
+
+                        <div className="content">
+                            <div className="conversations-list">
+                                {conversations.map(conv => (
+                                    <div
+                                        key={conv.id}
+                                        className={`conversation-item ${selectedConv?.id === conv.id ? 'active' : ''}`}
+                                        onClick={() => setSelectedConv(conv)}
+                                    >
+                                        <h3>📱 {conv.customer_name || conv.phone_number}</h3>
+                                        <p>{new Date(conv.last_message_time).toLocaleString('es-EC')}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {selectedConv ? (
+                                <div className="chat-area">
+                                    <div className="messages-container">
+                                        {messages.map((msg, idx) => (
+                                            <div key={idx} className={`message ${msg.sender}`}>
+                                                <div>
+                                                    <div className="message-bubble">{msg.content}</div>
+                                                    <div className="message-time">{new Date(msg.timestamp).toLocaleTimeString('es-EC')}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="input-area">
+                                        <textarea
+                                            placeholder="Escribe tu respuesta aquí..."
+                                            value={inputText}
+                                            onChange={e => setInputText(e.target.value)}
+                                            onKeyPress={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                                        ></textarea>
+                                        <div className="button-group">
+                                            <button className="btn-send" onClick={sendMessage}>📤 Enviar</button>
+                                            <button className="btn-photo">📷 Foto</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="empty-state">
+                                    <p>Selecciona una conversación</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
