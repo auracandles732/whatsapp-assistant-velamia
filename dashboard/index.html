@@ -7,18 +7,34 @@
 
     <!-- Instalable como app (PWA) -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#667eea">
+    <meta name="theme-color" content="#B96B4F">
 
     <!-- iPhone -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="VELAMIA CRM">
-    <link rel="apple-touch-icon" href="https://via.placeholder.com/180x180/667eea/ffffff?text=V">
+    <link rel="apple-touch-icon" href="logo.png">
+    <link rel="icon" href="logo.png">
 
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
+        :root {
+            --terracota: #B96B4F;
+            --terracota-dark: #9C5740;
+            --rosa-palo: #E3B7AC;
+            --rosa-palo-suave: #F0DAD3;
+            --beige: #F7EFEA;
+            --beige-claro: #FCF8F5;
+            --crema: #FDFAF7;
+            --texto: #4A3B35;
+            --texto-suave: #9C8880;
+            --azul-suave: #A8C5D6;
+            --verde-suave: #A8D5BA;
+            --amarillo-suave: #E8C88A;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -27,8 +43,8 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            background: var(--beige);
+            color: var(--texto);
         }
 
         .container {
@@ -36,50 +52,96 @@
             height: 100vh;
         }
 
-        .sidebar {
-            width: 300px;
-            background: #fff;
-            border-right: 1px solid #ddd;
-            overflow-y: auto;
-            padding: 20px;
-        }
-
         .main {
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-width: 0;
         }
 
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
+            background: var(--crema);
+            border-bottom: 1px solid var(--rosa-palo-suave);
+            color: var(--texto);
+            padding: 16px 28px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
-        .header h1 {
-            font-size: 24px;
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-brand img {
+            height: 42px;
+            width: auto;
+            display: block;
+        }
+
+        .header-brand .subtitle {
+            font-size: 12px;
+            color: var(--texto-suave);
+            letter-spacing: 0.5px;
         }
 
         .toggle-bot {
             display: flex;
             align-items: center;
-            gap: 10px;
-            background: rgba(255,255,255,0.2);
-            padding: 8px 16px;
-            border-radius: 20px;
+            gap: 8px;
+            padding: 10px 18px;
+            border-radius: 24px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+            color: white;
         }
 
         .toggle-bot.active {
-            background: #4caf50;
+            background: var(--verde-suave);
+            color: #2f5540;
         }
 
         .toggle-bot.inactive {
-            background: #f44336;
+            background: #e39a9a;
+            color: #6b2c2c;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            padding: 20px 28px;
+            background: var(--beige);
+        }
+
+        .stat-card {
+            padding: 18px;
+            border-radius: 14px;
+            color: white;
+            box-shadow: 0 2px 10px rgba(185, 107, 79, 0.12);
+        }
+
+        .stat-card:nth-child(1) { background: linear-gradient(135deg, var(--terracota), var(--terracota-dark)); }
+        .stat-card:nth-child(2) { background: linear-gradient(135deg, var(--azul-suave), #8ba9bb); }
+        .stat-card:nth-child(3) { background: linear-gradient(135deg, var(--amarillo-suave), #d1ac6a); }
+        .stat-card:nth-child(4) { background: linear-gradient(135deg, var(--verde-suave), #85b89b); }
+
+        .stat-card h4 {
+            font-size: 12px;
+            font-weight: 500;
+            opacity: 0.9;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .number {
+            font-size: 28px;
+            font-weight: 700;
         }
 
         .content {
@@ -90,47 +152,60 @@
 
         .conversations-list {
             width: 300px;
-            border-right: 1px solid #ddd;
+            background: var(--crema);
+            border-right: 1px solid var(--rosa-palo-suave);
             overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .conversations-list-header {
+            padding: 16px 18px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--texto-suave);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .conversation-item {
-            padding: 15px;
-            border-bottom: 1px solid #eee;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--beige);
             cursor: pointer;
             transition: background 0.2s;
         }
 
         .conversation-item:hover {
-            background: #f9f9f9;
+            background: var(--rosa-palo-suave);
         }
 
         .conversation-item.active {
-            background: #e3f2fd;
-            border-left: 4px solid #667eea;
+            background: var(--rosa-palo-suave);
+            border-left: 4px solid var(--terracota);
         }
 
         .conversation-item h3 {
             font-size: 14px;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
+            color: var(--texto);
         }
 
         .conversation-item p {
             font-size: 12px;
-            color: #999;
+            color: var(--texto-suave);
         }
 
         .chat-area {
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: white;
+            background: var(--beige-claro);
+            min-width: 0;
         }
 
         .messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 24px;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -138,7 +213,7 @@
 
         .message {
             display: flex;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .message.customer {
@@ -152,43 +227,60 @@
         .message-bubble {
             max-width: 60%;
             padding: 12px 16px;
-            border-radius: 12px;
+            border-radius: 14px;
             word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.4;
         }
 
         .message.customer .message-bubble {
-            background: #667eea;
+            background: var(--terracota);
             color: white;
             border-bottom-right-radius: 4px;
         }
 
         .message.bot .message-bubble {
-            background: #f0f0f0;
-            color: #333;
+            background: var(--rosa-palo-suave);
+            color: var(--texto);
             border-bottom-left-radius: 4px;
+        }
+
+        .message-bubble img {
+            max-width: 220px;
+            border-radius: 10px;
+            display: block;
+            margin-bottom: 6px;
         }
 
         .message-time {
             font-size: 11px;
-            color: #999;
+            color: var(--texto-suave);
             margin-top: 4px;
         }
 
         .input-area {
-            padding: 20px;
-            border-top: 1px solid #ddd;
+            padding: 18px 24px;
+            border-top: 1px solid var(--rosa-palo-suave);
             display: flex;
             gap: 10px;
+            background: var(--crema);
         }
 
         textarea {
             flex: 1;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            padding: 12px 14px;
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 10px;
             resize: none;
             font-family: inherit;
-            min-height: 60px;
+            min-height: 56px;
+            background: var(--beige-claro);
+            color: var(--texto);
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--terracota);
         }
 
         .button-group {
@@ -198,31 +290,31 @@
         }
 
         button {
-            padding: 10px 16px;
+            padding: 10px 18px;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 600;
             transition: all 0.2s;
         }
 
         .btn-send {
-            background: #667eea;
+            background: var(--terracota);
             color: white;
-            font-weight: 600;
         }
 
         .btn-send:hover {
-            background: #5568d3;
+            background: var(--terracota-dark);
         }
 
         .btn-photo {
-            background: #4caf50;
-            color: white;
+            background: var(--rosa-palo);
+            color: var(--texto);
         }
 
         .btn-photo:hover {
-            background: #45a049;
+            background: var(--rosa-palo-suave);
         }
 
         .empty-state {
@@ -230,47 +322,19 @@
             align-items: center;
             justify-content: center;
             height: 100%;
-            color: #999;
+            color: var(--texto-suave);
             text-align: center;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            padding: 20px;
-            background: white;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .stat-card {
-            background: #f9f9f9;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .stat-card h4 {
-            font-size: 12px;
-            color: #999;
-            margin-bottom: 8px;
-        }
-
-        .stat-card .number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
         }
 
         .loading {
             text-align: center;
             padding: 40px;
-            color: #999;
+            color: var(--texto-suave);
         }
 
         .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
+            border: 3px solid var(--rosa-palo-suave);
+            border-top: 3px solid var(--terracota);
             border-radius: 50%;
             width: 30px;
             height: 30px;
@@ -281,6 +345,12 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 700px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .conversations-list { width: 220px; }
+            .header-brand img { height: 32px; }
         }
     </style>
 </head>
@@ -448,7 +518,7 @@
 
             if (loading) {
                 return (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--beige)' }}>
                         <div className="loading">
                             <div className="spinner"></div>
                             <p>Cargando CRM...</p>
@@ -461,7 +531,12 @@
                 <div className="container">
                     <div className="main">
                         <div className="header">
-                            <h1>🕯️ VELAMIA - CRM WhatsApp</h1>
+                            <div className="header-brand">
+                                <img src="logo.png" alt="VELAMIA" />
+                                <div>
+                                    <div className="subtitle">CRM · Asistente WhatsApp</div>
+                                </div>
+                            </div>
                             <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
                                 <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
                             </div>
@@ -488,6 +563,7 @@
 
                         <div className="content">
                             <div className="conversations-list">
+                                <div className="conversations-list-header">Conversaciones</div>
                                 {conversations.map(conv => (
                                     <div
                                         key={conv.id}
@@ -506,7 +582,10 @@
                                         {messages.map((msg, idx) => (
                                             <div key={idx} className={`message ${msg.sender}`}>
                                                 <div>
-                                                    <div className="message-bubble">{msg.content}</div>
+                                                    <div className="message-bubble">
+                                                        {msg.type === 'image' ? <img src={msg.content.match(/https?:\/\/\S+/)?.[0]} /> : null}
+                                                        {msg.content}
+                                                    </div>
                                                     <div className="message-time">{new Date(msg.timestamp).toLocaleTimeString('es-EC')}</div>
                                                 </div>
                                             </div>

@@ -5,19 +5,15 @@
   "start_url": "/crm/index.html",
   "scope": "/crm/",
   "display": "standalone",
-  "background_color": "#f5f5f5",
-  "theme_color": "#667eea",
+  "background_color": "#F7EFEA",
+  "theme_color": "#B96B4F",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://via.placeholder.com/192x192/667eea/ffffff?text=V",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://via.placeholder.com/512x512/667eea/ffffff?text=V",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "logo.png",
+      "sizes": "1920x1920",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
