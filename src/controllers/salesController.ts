@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
-import { runQuery, getQuery, allQuery } from '../db.js';
-import { sendTextMessage } from '../services/whatsapp.js';
-import { generateFollowUp } from '../services/openai.js';
+import { runQuery, getQuery, allQuery } from '../db';
+import { sendTextMessage } from '../services/whatsapp';
+import { generateFollowUp } from '../services/openai';
 
 export interface OrderInput {
   conversationId: string;

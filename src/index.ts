@@ -1,8 +1,8 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
-import { initDatabase } from './db.js';
-import { handleWebhookMessage } from './controllers/messageController.js';
-import { verifyWebhook } from './middleware/auth.js';
+import { initDatabase } from './db';
+import { handleWebhookMessage } from './controllers/messageController';
+import { verifyWebhook } from './middleware/auth';
 
 dotenv.config();
 

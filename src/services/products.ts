@@ -1,4 +1,4 @@
-import { runQuery, getQuery, allQuery } from '../db.js';
+import { runQuery, getQuery, allQuery } from '../db';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface Product {

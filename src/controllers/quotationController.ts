@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { runQuery, getQuery, allQuery } from '../db.js';
-import { sendTextMessage } from '../services/whatsapp.js';
-import { sendButtonMessage } from '../services/whatsapp.js';
-import { getAllProducts } from '../services/products.js';
+import { runQuery, getQuery, allQuery } from '../db';
+import { sendTextMessage } from '../services/whatsapp';
+import { sendButtonMessage } from '../services/whatsapp';
+import { getAllProducts } from '../services/products';
 
 interface QuotationItem {
   product_id: string;

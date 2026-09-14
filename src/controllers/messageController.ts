@@ -8,9 +8,9 @@ import {
   createQuotation,
   createOrder,
   getOrdersByConversation
-} from '../db.js';
-import { sendTextMessage } from '../services/whatsapp.js';
-import { generateResponse, analyzeUserIntent } from '../services/openai.js';
+} from '../db';
+import { sendTextMessage } from '../services/whatsapp';
+import { generateResponse, analyzeUserIntent } from '../services/openai';
 
 export async function handleWebhookMessage(message: any, changes: any) {
   try {
