@@ -600,6 +600,85 @@
             100% { transform: rotate(360deg); }
         }
 
+        .login-screen {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--beige);
+            padding: 20px;
+        }
+
+        .login-card {
+            background: var(--crema);
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 18px;
+            padding: 40px 34px;
+            width: 100%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 6px 30px rgba(185, 107, 79, 0.1);
+        }
+
+        .login-card img {
+            height: 54px;
+            margin-bottom: 26px;
+        }
+
+        .login-card input {
+            width: 100%;
+            padding: 13px 15px;
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 15px;
+            background: var(--beige-claro);
+            color: var(--texto);
+            text-align: center;
+        }
+
+        .login-card input:focus {
+            outline: none;
+            border-color: var(--terracota);
+        }
+
+        .login-card button {
+            width: 100%;
+            margin-top: 12px;
+            padding: 13px;
+            background: var(--terracota);
+            color: white;
+            font-size: 14px;
+        }
+
+        .login-card button:hover {
+            background: var(--terracota-dark);
+        }
+
+        .login-error {
+            color: #b45050;
+            font-size: 13px;
+            margin-top: 14px;
+        }
+
+        .btn-logout {
+            background: transparent;
+            border: 1px solid var(--rosa-palo);
+            color: var(--texto-suave);
+            padding: 9px 14px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        .btn-logout:hover {
+            background: var(--rosa-palo-suave);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
+
         @media (max-width: 700px) {
             .stats { grid-template-columns: repeat(2, 1fr); }
             .conversations-list { width: 220px; }
@@ -615,15 +694,105 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Configuración de Supabase (solo lectura de datos)
-        const SUPABASE_URL = 'https://yhaiprlfpmugohmzpzcq.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_0qYx-odpKqBHpDNZWGyNbg_-luUJY4J';
-
-        // Backend real (envía mensajes de WhatsApp de verdad)
         const API_URL = 'https://whatsapp-assistant-velamia.onrender.com';
-        const CRM_KEY = 'velamia_webhook_2024_secure_token';
+        const TOKEN_KEY = 'velamia_crm_token';
 
-        function App() {
+        let onSessionExpired = () => {};
+
+        // Algunos navegadores bloquean el almacenamiento (modo privado, restricciones):
+        // en ese caso la sesión dura lo que dure la pestaña en lugar de romper la app.
+        let memoryToken = null;
+
+        function getToken() {
+            try {
+                return localStorage.getItem(TOKEN_KEY) || memoryToken;
+            } catch {
+                return memoryToken;
+            }
+        }
+
+        function setToken(value) {
+            memoryToken = value;
+            try {
+                if (value === null) localStorage.removeItem(TOKEN_KEY);
+                else localStorage.setItem(TOKEN_KEY, value);
+            } catch {
+                // sesión solo en memoria
+            }
+        }
+
+        // Todas las peticiones pasan por el backend autenticado: el navegador
+        // nunca maneja claves de Supabase ni de WhatsApp.
+        async function api(path, options = {}) {
+            const token = getToken();
+            const res = await fetch(`${API_URL}${path}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    ...(options.headers || {})
+                }
+            });
+
+            if (res.status === 401) {
+                setToken(null);
+                onSessionExpired();
+                throw new Error('Sesión expirada, vuelve a entrar');
+            }
+
+            const data = await res.json();
+            if (data && data.error) throw new Error(data.error);
+            return data;
+        }
+
+        function LoginScreen({ onLogin }) {
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const [checking, setChecking] = useState(false);
+
+            async function submit() {
+                if (!password) return;
+                setChecking(true);
+                setError('');
+                try {
+                    const res = await fetch(`${API_URL}/api/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'No se pudo entrar');
+                    setToken(data.token);
+                    onLogin();
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setChecking(false);
+                }
+            }
+
+            return (
+                <div className="login-screen">
+                    <div className="login-card">
+                        <img src="logo.png" alt="VELAMIA" />
+                        <input
+                            type="password"
+                            placeholder="Contraseña"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && submit()}
+                            autoFocus
+                        />
+                        <button onClick={submit} disabled={checking}>
+                            {checking ? 'Entrando...' : 'Entrar al CRM'}
+                        </button>
+                        {error && <div className="login-error">{error}</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        function App({ onLogout }) {
             const [conversations, setConversations] = useState([]);
             const [selectedConv, setSelectedConv] = useState(null);
             const [messages, setMessages] = useState([]);
@@ -654,10 +823,7 @@
 
             async function loadSystemPrompt() {
                 try {
-                    const res = await fetch(`${API_URL}/api/system-prompt`, {
-                        headers: { 'x-crm-key': CRM_KEY }
-                    });
-                    const data = await res.json();
+                    const data = await api('/api/system-prompt');
                     setSystemPrompt(data.prompt || '');
                 } catch (err) {
                     console.error('Error cargando system prompt:', err);
@@ -667,9 +833,8 @@
             async function saveSystemPrompt() {
                 setSavingPrompt(true);
                 try {
-                    await fetch(`${API_URL}/api/system-prompt`, {
+                    await api('/api/system-prompt', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
                         body: JSON.stringify({ prompt: systemPrompt })
                     });
                     setPromptSaved(true);
@@ -683,8 +848,7 @@
 
             async function loadProducts() {
                 try {
-                    const res = await fetch(`${API_URL}/api/products`);
-                    const data = await res.json();
+                    const data = await api('/api/products');
                     setProducts(Array.isArray(data) ? data : []);
                 } catch (err) {
                     console.error('Error cargando catálogo:', err);
@@ -710,19 +874,15 @@
                 try {
                     let imageUrl = '';
                     if (newProduct.photoBase64) {
-                        const uploadRes = await fetch(`${API_URL}/api/upload-image`, {
+                        const uploadData = await api('/api/upload-image', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
                             body: JSON.stringify({ imageBase64: newProduct.photoBase64 })
                         });
-                        const uploadData = await uploadRes.json();
-                        if (uploadData.error) throw new Error(uploadData.error);
                         imageUrl = uploadData.url;
                     }
 
-                    const res = await fetch(`${API_URL}/api/products`, {
+                    await api('/api/products', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
                         body: JSON.stringify({
                             name: newProduct.name,
                             price: parseFloat(newProduct.price),
@@ -730,8 +890,6 @@
                             image_url: imageUrl
                         })
                     });
-                    const data = await res.json();
-                    if (data.error) throw new Error(data.error);
 
                     setNewProduct({ name: '', price: '', category: '', photoBase64: '', photoPreview: '' });
                     loadProducts();
@@ -745,10 +903,7 @@
             async function removeProduct(id) {
                 if (!confirm('¿Eliminar este producto del catálogo?')) return;
                 try {
-                    await fetch(`${API_URL}/api/products/${id}`, {
-                        method: 'DELETE',
-                        headers: { 'x-crm-key': CRM_KEY }
-                    });
+                    await api(`/api/products/${id}`, { method: 'DELETE' });
                     loadProducts();
                 } catch (err) {
                     alert('Error eliminando producto: ' + err.message);
@@ -757,10 +912,7 @@
 
             async function loadBotStatus() {
                 try {
-                    const res = await fetch(`${API_URL}/api/bot-status`, {
-                        headers: { 'x-crm-key': CRM_KEY }
-                    });
-                    const data = await res.json();
+                    const data = await api('/api/bot-status');
                     setBotEnabled(data.enabled);
                 } catch (err) {
                     console.error('Error cargando estado del bot:', err);
@@ -771,9 +923,8 @@
                 const newValue = !botEnabled;
                 setBotEnabled(newValue);
                 try {
-                    await fetch(`${API_URL}/api/bot-status`, {
+                    await api('/api/bot-status', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
                         body: JSON.stringify({ enabled: newValue })
                     });
                 } catch (err) {
@@ -789,9 +940,8 @@
                 const caption = prompt('Descripción (opcional):') || '';
 
                 try {
-                    const res = await fetch(`${API_URL}/api/send-image`, {
+                    await api('/api/send-image', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
                         body: JSON.stringify({
                             conversationId: selectedConv.id,
                             phoneNumber: selectedConv.phone_number,
@@ -799,8 +949,6 @@
                             caption
                         })
                     });
-                    const data = await res.json();
-                    if (data.error) throw new Error(data.error);
                     loadMessages(selectedConv.id);
                 } catch (err) {
                     alert('Error enviando foto: ' + err.message);
@@ -817,24 +965,19 @@
 
             async function loadConversations() {
                 try {
-                    const res = await fetch(`${SUPABASE_URL}/rest/v1/conversations?order=last_message_time.desc`, {
-                        headers: { 'apikey': SUPABASE_KEY }
-                    });
-                    const data = await res.json();
-                    setConversations(data);
-                    setLoading(false);
+                    const data = await api('/api/conversations');
+                    setConversations(Array.isArray(data) ? data : []);
                 } catch (err) {
                     console.error('Error cargando conversaciones:', err);
+                } finally {
+                    setLoading(false);
                 }
             }
 
             async function loadMessages(convId) {
                 try {
-                    const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?conversation_id=eq.${convId}&order=timestamp.asc`, {
-                        headers: { 'apikey': SUPABASE_KEY }
-                    });
-                    const data = await res.json();
-                    setMessages(data);
+                    const data = await api(`/api/conversations/${convId}/messages`);
+                    setMessages(Array.isArray(data) ? data : []);
                 } catch (err) {
                     console.error('Error cargando mensajes:', err);
                 }
@@ -842,19 +985,7 @@
 
             async function loadStats() {
                 try {
-                    const ordersRes = await fetch(`${SUPABASE_URL}/rest/v1/orders?select=total_amount,status`, {
-                        headers: { 'apikey': SUPABASE_KEY }
-                    });
-
-                    const orders = await ordersRes.json();
-                    const revenue = Array.isArray(orders) ? orders.reduce((sum, o) => sum + (o.total_amount || 0), 0) : 0;
-
-                    setStats({
-                        total: conversations.length,
-                        active: conversations.filter(c => c.status === 'active').length,
-                        orders: Array.isArray(orders) ? orders.length : 0,
-                        revenue: revenue
-                    });
+                    setStats(await api('/api/stats'));
                 } catch (err) {
                     console.error('Error cargando stats:', err);
                 }
@@ -864,17 +995,14 @@
                 if (!inputText.trim() || !selectedConv) return;
 
                 try {
-                    const res = await fetch(`${API_URL}/api/send-message`, {
+                    await api('/api/send-message', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
                         body: JSON.stringify({
                             conversationId: selectedConv.id,
                             phoneNumber: selectedConv.phone_number,
                             text: inputText
                         })
                     });
-                    const data = await res.json();
-                    if (data.error) throw new Error(data.error);
 
                     setInputText('');
                     loadMessages(selectedConv.id);
@@ -904,8 +1032,11 @@
                                     <div className="subtitle">CRM · Asistente WhatsApp</div>
                                 </div>
                             </div>
-                            <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
-                                <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
+                            <div className="header-actions">
+                                <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
+                                    <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
+                                </div>
+                                <button className="btn-logout" onClick={onLogout}>Salir</button>
                             </div>
                         </div>
 
@@ -918,7 +1049,7 @@
                         <div className="stats">
                             <div className="stat-card">
                                 <h4>Total Clientes</h4>
-                                <div className="number">{conversations.length}</div>
+                                <div className="number">{stats.total}</div>
                             </div>
                             <div className="stat-card">
                                 <h4>Conversaciones Activas</h4>
@@ -1065,7 +1196,24 @@
             );
         }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+        function Root() {
+            const [authenticated, setAuthenticated] = useState(!!getToken());
+
+            useEffect(() => {
+                onSessionExpired = () => setAuthenticated(false);
+            }, []);
+
+            if (!authenticated) {
+                return <LoginScreen onLogin={() => setAuthenticated(true)} />;
+            }
+
+            return <App onLogout={() => {
+                setToken(null);
+                setAuthenticated(false);
+            }} />;
+        }
+
+        ReactDOM.render(<Root />, document.getElementById('root'));
     </script>
     <script>
         if ('serviceWorker' in navigator) {

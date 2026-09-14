@@ -3,52 +3,53 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import {
+  supabase,
   initDatabase,
   saveMessage,
   setConfig,
   getConfig,
+  getAllConversations,
+  getMessages,
+  getSalesMetrics,
   getAllProducts,
   createProduct,
   updateProduct,
   deleteProduct
 } from './db';
 import { handleWebhookMessage } from './controllers/messageController';
-import { verifyWebhook } from './middleware/auth';
+import {
+  requireCrmSession,
+  isPasswordValid,
+  issueSessionToken,
+  verifyWebhookSignature
+} from './middleware/auth';
 import { sendTextMessage, sendImageMessage } from './services/whatsapp';
-import { supabase } from './db';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '15mb' }));
+// El raw body es necesario para validar la firma HMAC que envía Meta.
+app.use(express.json({
+  limit: '15mb',
+  verify: (req, _res, buf) => { (req as any).rawBody = buf; }
+}));
 
-// Servir el CRM (dashboard) como app web instalable en /crm
-app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard')));
-
-// CORS para permitir que el CRM (dashboard) llame a esta API desde el navegador
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, x-crm-key');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
 
-// Autenticación simple para endpoints del CRM
-function verifyCrmKey(req: Request, res: Response, next: NextFunction) {
-  const key = req.headers['x-crm-key'];
-  if (key !== process.env.WEBHOOK_VERIFY_TOKEN) {
-    return res.status(401).json({ error: 'No autorizado' });
-  }
-  next();
-}
+app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard')));
 
-// Inicializar base de datos
 initDatabase();
 
-// Webhook verification (GET)
+// ---------- WhatsApp ----------
+
 app.get('/webhook', (req: Request, res: Response) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -62,40 +63,86 @@ app.get('/webhook', (req: Request, res: Response) => {
   }
 });
 
-// Recibir mensajes de WhatsApp (POST)
-app.post('/webhook', verifyWebhook, async (req: Request, res: Response) => {
-  try {
-    const data = req.body;
+app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
+  const data = req.body;
 
-    if (data.object === 'whatsapp_business_account') {
-      const changes = data.entry?.[0]?.changes?.[0]?.value;
+  // Meta exige respuesta en pocos segundos; transcribir audio o analizar fotos tarda más,
+  // así que se confirma primero y el procesamiento sigue en segundo plano.
+  res.status(200).send('EVENT_RECEIVED');
 
-      if (changes?.messages?.[0]) {
-        const message = changes.messages[0];
-        await handleWebhookMessage(message, changes);
-      }
+  if (data.object !== 'whatsapp_business_account') return;
 
-      res.status(200).send('EVENT_RECEIVED');
-    } else {
-      res.status(404).send('not found');
-    }
-  } catch (error) {
-    console.error('Error en webhook:', error);
-    res.status(500).send('Internal Server Error');
-  }
+  const changes = data.entry?.[0]?.changes?.[0]?.value;
+  const message = changes?.messages?.[0];
+  if (!message) return;
+
+  handleWebhookMessage(message, changes).catch(error => {
+    console.error('Error procesando mensaje:', error);
+  });
 });
 
-// Health check
-app.get('/health', (req: Request, res: Response) => {
+// ---------- Salud ----------
+
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// CRM: enviar mensaje de texto manual real al cliente
-app.post('/api/send-message', verifyCrmKey, async (req: Request, res: Response) => {
+// ---------- Acceso al CRM ----------
+
+app.post('/api/login', (req: Request, res: Response) => {
+  const { password } = req.body;
+
+  if (!password || !isPasswordValid(password)) {
+    return res.status(401).json({ error: 'Contraseña incorrecta' });
+  }
+
+  res.json({ token: issueSessionToken() });
+});
+
+// ---------- Datos del CRM ----------
+// Supabase bloquea el acceso directo del navegador (RLS), así que el CRM lee por aquí.
+
+app.get('/api/conversations', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await getAllConversations());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/conversations/:id/messages', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    res.json(await getMessages(req.params.id));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/stats', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    const [conversations, metrics] = await Promise.all([
+      getAllConversations(),
+      getSalesMetrics(365)
+    ]);
+
+    res.json({
+      total: conversations.length,
+      active: conversations.filter((c: any) => c.status === 'active').length,
+      orders: metrics.totalOrders,
+      revenue: metrics.totalRevenue
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Mensajería manual ----------
+
+app.post('/api/send-message', requireCrmSession, async (req: Request, res: Response) => {
   try {
     const { conversationId, phoneNumber, text } = req.body;
-    if (!phoneNumber || !text) {
-      return res.status(400).json({ error: 'phoneNumber y text son requeridos' });
+    if (!conversationId || !phoneNumber || !text) {
+      return res.status(400).json({ error: 'conversationId, phoneNumber y text son requeridos' });
     }
     await sendTextMessage(phoneNumber, text);
     await saveMessage(conversationId, 'bot', 'text', text);
@@ -106,12 +153,11 @@ app.post('/api/send-message', verifyCrmKey, async (req: Request, res: Response) 
   }
 });
 
-// CRM: enviar foto manual real al cliente
-app.post('/api/send-image', verifyCrmKey, async (req: Request, res: Response) => {
+app.post('/api/send-image', requireCrmSession, async (req: Request, res: Response) => {
   try {
     const { conversationId, phoneNumber, imageUrl, caption } = req.body;
-    if (!phoneNumber || !imageUrl) {
-      return res.status(400).json({ error: 'phoneNumber e imageUrl son requeridos' });
+    if (!conversationId || !phoneNumber || !imageUrl) {
+      return res.status(400).json({ error: 'conversationId, phoneNumber e imageUrl son requeridos' });
     }
     await sendImageMessage(phoneNumber, imageUrl, caption);
     await saveMessage(conversationId, 'bot', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl);
@@ -122,8 +168,9 @@ app.post('/api/send-image', verifyCrmKey, async (req: Request, res: Response) =>
   }
 });
 
-// CRM: leer/cambiar estado del bot (activado/desactivado)
-app.get('/api/bot-status', verifyCrmKey, async (req: Request, res: Response) => {
+// ---------- Control del bot ----------
+
+app.get('/api/bot-status', requireCrmSession, async (_req: Request, res: Response) => {
   try {
     const value = await getConfig('bot_enabled');
     res.json({ enabled: value !== 'false' });
@@ -132,7 +179,7 @@ app.get('/api/bot-status', verifyCrmKey, async (req: Request, res: Response) => 
   }
 });
 
-app.post('/api/bot-status', verifyCrmKey, async (req: Request, res: Response) => {
+app.post('/api/bot-status', requireCrmSession, async (req: Request, res: Response) => {
   try {
     const { enabled } = req.body;
     await setConfig('bot_enabled', enabled ? 'true' : 'false');
@@ -142,10 +189,31 @@ app.post('/api/bot-status', verifyCrmKey, async (req: Request, res: Response) =>
   }
 });
 
-// CRM: subir foto de producto a Supabase Storage
-app.post('/api/upload-image', verifyCrmKey, async (req: Request, res: Response) => {
+// ---------- Instrucciones del asistente ----------
+
+app.get('/api/system-prompt', requireCrmSession, async (_req: Request, res: Response) => {
   try {
-    const { imageBase64, fileName } = req.body;
+    const prompt = await getConfig('system_prompt');
+    res.json({ prompt: prompt || '' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/system-prompt', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    await setConfig('system_prompt', req.body.prompt || '');
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Catálogo ----------
+
+app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const { imageBase64 } = req.body;
     if (!imageBase64) {
       return res.status(400).json({ error: 'imageBase64 es requerido' });
     }
@@ -154,8 +222,7 @@ app.post('/api/upload-image', verifyCrmKey, async (req: Request, res: Response) 
     const contentType = matches ? matches[1] : 'image/jpeg';
     const base64Data = matches ? matches[2] : imageBase64;
     const buffer = Buffer.from(base64Data, 'base64');
-    const ext = contentType.split('/')[1] || 'jpg';
-    const finalName = `${randomUUID()}.${ext}`;
+    const finalName = `${randomUUID()}.${contentType.split('/')[1] || 'jpg'}`;
 
     const { error } = await supabase.storage
       .from('product-images')
@@ -163,62 +230,62 @@ app.post('/api/upload-image', verifyCrmKey, async (req: Request, res: Response) 
 
     if (error) throw error;
 
-    const { data: publicUrlData } = supabase.storage
-      .from('product-images')
-      .getPublicUrl(finalName);
-
-    res.json({ url: publicUrlData.publicUrl });
+    const { data } = supabase.storage.from('product-images').getPublicUrl(finalName);
+    res.json({ url: data.publicUrl });
   } catch (error: any) {
     console.error('Error subiendo imagen:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Catálogo: listar productos (público, lo usa también el bot indirectamente)
-app.get('/api/products', async (req: Request, res: Response) => {
+app.get('/api/products', requireCrmSession, async (_req: Request, res: Response) => {
   try {
-    const products = await getAllProducts();
-    res.json(products);
+    res.json(await getAllProducts());
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Catálogo: crear producto
-app.post('/api/products', verifyCrmKey, async (req: Request, res: Response) => {
+app.post('/api/products', requireCrmSession, async (req: Request, res: Response) => {
   try {
     const { name, price, category, image_url } = req.body;
-    if (!name || !price || !category) {
-      return res.status(400).json({ error: 'name, price y category son requeridos' });
+    const parsedPrice = Number(price);
+
+    if (!name?.trim() || !category?.trim() || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      return res.status(400).json({ error: 'Nombre, categoría y un precio válido son requeridos' });
     }
-    const product = await createProduct(name, `Precio por docena: $${price}`, price, 999, category, image_url);
-    res.json(product);
+
+    res.json(await createProduct(name.trim(), '', parsedPrice, 999, category.trim(), image_url));
   } catch (error: any) {
     console.error('Error creando producto:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Catálogo: editar producto
-app.put('/api/products/:id', verifyCrmKey, async (req: Request, res: Response) => {
+app.put('/api/products/:id', requireCrmSession, async (req: Request, res: Response) => {
   try {
     const { name, price, category, image_url } = req.body;
     const updates: any = {};
+
     if (name !== undefined) updates.name = name;
-    if (price !== undefined) { updates.price = price; updates.description = `Precio por docena: $${price}`; }
     if (category !== undefined) updates.category = category;
     if (image_url !== undefined) updates.image_url = image_url;
+    if (price !== undefined) {
+      const parsedPrice = Number(price);
+      if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({ error: 'Precio inválido' });
+      }
+      updates.price = parsedPrice;
+    }
 
-    const product = await updateProduct(req.params.id, updates);
-    res.json(product);
+    res.json(await updateProduct(req.params.id, updates));
   } catch (error: any) {
     console.error('Error actualizando producto:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Catálogo: eliminar producto
-app.delete('/api/products/:id', verifyCrmKey, async (req: Request, res: Response) => {
+app.delete('/api/products/:id', requireCrmSession, async (req: Request, res: Response) => {
   try {
     await deleteProduct(req.params.id);
     res.json({ success: true });
@@ -228,32 +295,13 @@ app.delete('/api/products/:id', verifyCrmKey, async (req: Request, res: Response
   }
 });
 
-// CRM: leer/guardar el system prompt personalizado del bot
-app.get('/api/system-prompt', verifyCrmKey, async (req: Request, res: Response) => {
-  try {
-    const prompt = await getConfig('system_prompt');
-    res.json({ prompt: prompt || '' });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/system-prompt', verifyCrmKey, async (req: Request, res: Response) => {
-  try {
-    const { prompt } = req.body;
-    await setConfig('system_prompt', prompt || '');
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 404
-app.use((req: Request, res: Response) => {
+app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
-  console.log(`📱 Webhook URL: ${process.env.NODE_ENV === 'production' ? 'https://tu-dominio.com' : `http://localhost:${PORT}`}/webhook`);
+  if (!process.env.CRM_PASSWORD) {
+    console.warn('⚠️  Falta CRM_PASSWORD: el CRM no permitirá iniciar sesión');
+  }
 });

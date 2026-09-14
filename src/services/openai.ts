@@ -151,6 +151,60 @@ export async function analyzeUserIntent(userMessage: string) {
   }
 }
 
+/**
+ * Extrae qué productos del catálogo quiere el cliente y cuántas docenas.
+ * Devuelve solo coincidencias reales del catálogo: nunca inventa productos ni precios.
+ */
+export async function extractOrderItems(
+  userMessage: string,
+  catalog: { name: string; price: number; category: string }[]
+): Promise<{ name: string; price: number; quantity: number }[]> {
+  if (!catalog || catalog.length === 0) return [];
+
+  try {
+    const catalogNames = catalog.map(p => p.name).join('\n');
+    const prompt = `Catálogo disponible (un producto por línea):
+${catalogNames}
+
+Mensaje del cliente: "${userMessage}"
+
+Identifica qué productos del catálogo pide el cliente y cuántas DOCENAS de cada uno.
+Reglas:
+- Usa EXACTAMENTE los nombres del catálogo.
+- Si el cliente no menciona ningún producto del catálogo con claridad, devuelve una lista vacía.
+- Si no especifica cantidad, asume 1 docena.
+
+Responde solo JSON: {"items":[{"name":"...","quantity":1}]}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+      max_tokens: 300,
+      response_format: { type: 'json_object' }
+    });
+
+    const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+
+    return items
+      .map((item: any) => {
+        const match = catalog.find(p => p.name.toLowerCase() === String(item.name || '').toLowerCase());
+        if (!match) return null;
+        const quantity = Number(item.quantity);
+        return {
+          name: match.name,
+          price: match.price,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? Math.floor(quantity) : 1
+        };
+      })
+      .filter(Boolean) as { name: string; price: number; quantity: number }[];
+  } catch (error: any) {
+    console.error('Error extrayendo productos del pedido:', error.message);
+    return [];
+  }
+}
+
 export async function generateQuotation(products: any[], customerName: string) {
   try {
     const productsList = products.map(p => `- ${p.name}: $${p.price} x ${p.quantity}`).join('\n');

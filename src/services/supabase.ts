@@ -48,6 +48,17 @@ export async function getConversationById(conversationId: string) {
   return data;
 }
 
+/** Marca actividad reciente: el CRM ordena las conversaciones por este campo. */
+export async function touchConversation(conversationId: string) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('conversations')
+    .update({ status: 'active', last_message_time: now, updated_at: now })
+    .eq('id', conversationId);
+
+  if (error) throw new Error(`Error actualizando actividad: ${error.message}`);
+}
+
 export async function updateConversation(conversationId: string, updates: any) {
   const { data, error } = await supabase
     .from('conversations')
@@ -63,8 +74,24 @@ export async function updateConversation(conversationId: string, updates: any) {
   return data;
 }
 
+export async function getAllConversations() {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .order('last_message_time', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo conversaciones: ${error.message}`);
+  return data || [];
+}
+
 // MENSAJES
-export async function saveMessage(conversationId: string, sender: 'customer' | 'bot', type: string, content: string) {
+export async function saveMessage(
+  conversationId: string,
+  sender: 'customer' | 'bot',
+  type: string,
+  content: string,
+  waMessageId?: string
+) {
   const { data, error } = await supabase
     .from('messages')
     .insert([{
@@ -73,6 +100,7 @@ export async function saveMessage(conversationId: string, sender: 'customer' | '
       sender,
       type,
       content,
+      wa_message_id: waMessageId,
       timestamp: new Date().toISOString()
     }])
     .select()
@@ -80,6 +108,29 @@ export async function saveMessage(conversationId: string, sender: 'customer' | '
 
   if (error) throw new Error(`Error guardando mensaje: ${error.message}`);
   return data;
+}
+
+export async function isMessageAlreadyProcessed(waMessageId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('wa_message_id', waMessageId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error verificando mensaje duplicado: ${error.message}`);
+  return !!data;
+}
+
+export async function getMessages(conversationId: string, limit: number = 200) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('timestamp', { ascending: true })
+    .limit(limit);
+
+  if (error) throw new Error(`Error obteniendo mensajes: ${error.message}`);
+  return data || [];
 }
 
 export async function getConversationHistory(conversationId: string, limit: number = 10) {
@@ -354,14 +405,18 @@ export async function getProduct(productId: string) {
   return data;
 }
 
-export async function getProductsByCategory(category: string) {
+/** Busca por categoría o nombre, sin distinguir mayúsculas ni coincidencia exacta. */
+export async function searchProducts(term: string) {
+  const safeTerm = term.replace(/[%,()]/g, '');
+  if (!safeTerm.trim()) return [];
+
   const { data, error } = await supabase
     .from('products')
     .select('*')
-    .eq('category', category)
+    .or(`category.ilike.%${safeTerm}%,name.ilike.%${safeTerm}%`)
     .order('name', { ascending: true });
 
-  if (error) throw new Error(`Error obteniendo productos: ${error.message}`);
+  if (error) throw new Error(`Error buscando productos: ${error.message}`);
   return data || [];
 }
 
@@ -414,16 +469,6 @@ export async function decreaseProductStock(productId: string, quantity: number) 
   if (!product) throw new Error('Producto no encontrado');
 
   return updateProductStock(productId, Math.max(0, product.stock - quantity));
-}
-
-export async function getProductsByName(searchTerm: string) {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .ilike('name', `%${searchTerm}%`);
-
-  if (error) throw new Error(`Error buscando productos: ${error.message}`);
-  return data || [];
 }
 
 // CONFIGURACIÓN
