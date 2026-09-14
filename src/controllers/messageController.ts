@@ -51,8 +51,8 @@ export async function handleWebhookMessage(message: any, changes: any) {
 
     // Obtener historial de conversación
     const history = await getConversationHistory(conversationId, 5);
-    const conversationHistory = history.map((msg: any) => ({
-      role: msg.sender === 'customer' ? 'user' : 'assistant',
+    const conversationHistory: { role: 'user' | 'assistant'; content: string }[] = history.map((msg: any) => ({
+      role: msg.sender === 'customer' ? 'user' as const : 'assistant' as const,
       content: msg.content
     }));
 

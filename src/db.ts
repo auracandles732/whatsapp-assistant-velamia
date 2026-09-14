@@ -19,4 +19,4 @@ export async function initDatabase() {
 }
 
 // Re-export todas las funciones del servicio de Supabase
-export * from './services/supabase.js';
+export * from './services/supabase';

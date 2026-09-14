@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const WHATSAPP_API_URL = 'https://graph.instagram.com/v18.0';
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
 const PHONE_ID = process.env.WHATSAPP_PHONE_ID;
 const TOKEN = process.env.WHATSAPP_TOKEN;
 
