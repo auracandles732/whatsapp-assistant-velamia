@@ -7,9 +7,12 @@ import {
   updateConversation,
   createQuotation,
   createOrder,
-  getOrdersByConversation
+  getOrdersByConversation,
+  getConfig,
+  getAllProducts,
+  getProductsByCategory
 } from '../db';
-import { sendTextMessage } from '../services/whatsapp';
+import { sendTextMessage, sendImageMessage } from '../services/whatsapp';
 import { generateResponse, analyzeUserIntent } from '../services/openai';
 
 export async function handleWebhookMessage(message: any, changes: any) {
@@ -45,6 +48,16 @@ export async function handleWebhookMessage(message: any, changes: any) {
     // Guardar mensaje recibido
     await saveMessage(conversationId, 'customer', messageType, userContent);
 
+    // Actualizar última actividad de conversación (siempre, incluso si el bot está apagado)
+    await updateConversation(conversationId, { status: 'active' });
+
+    // Verificar si el bot está activo (control manual desde el CRM)
+    const botEnabled = await getConfig('bot_enabled');
+    if (botEnabled === 'false') {
+      console.log('🚫 Bot desactivado - mensaje guardado, esperando respuesta manual');
+      return;
+    }
+
     // Analizar intención
     const intent = await analyzeUserIntent(userContent);
     console.log(`🎯 Intención detectada: ${intent.intent}`);
@@ -60,8 +73,14 @@ export async function handleWebhookMessage(message: any, changes: any) {
     const { response: aiResponse } = await generateResponse(conversationHistory, userContent);
     console.log(`🤖 Respuesta IA generada`);
 
+    // Enviar respuesta al cliente
+    await sendTextMessage(phoneNumber, aiResponse);
+    await saveMessage(conversationId, 'bot', 'text', aiResponse);
+
     // Procesar según intención detectada
-    if (intent.intent === 'quotation') {
+    if (intent.intent === 'product_inquiry') {
+      await handleProductInquiry(conversationId, phoneNumber, intent.entities || []);
+    } else if (intent.intent === 'quotation') {
       await handleQuotationIntent(conversationId, phoneNumber, userContent);
     } else if (intent.intent === 'order') {
       await handleOrderIntent(conversationId, phoneNumber, userContent);
@@ -69,17 +88,41 @@ export async function handleWebhookMessage(message: any, changes: any) {
       await handleDeliveryStatusIntent(conversationId, phoneNumber);
     }
 
-    // Enviar respuesta al cliente
-    await sendTextMessage(phoneNumber, aiResponse);
-
-    // Guardar respuesta de IA en historial
-    await saveMessage(conversationId, 'bot', 'text', aiResponse);
-
-    // Actualizar última actividad de conversación
-    await updateConversation(conversationId, { status: 'active' });
-
   } catch (error) {
     console.error('❌ Error en handleWebhookMessage:', error);
+  }
+}
+
+async function handleProductInquiry(conversationId: string, phoneNumber: string, entities: string[]) {
+  try {
+    console.log('🕯️ Buscando productos para enviar fotos...');
+
+    let products = await getAllProducts();
+
+    // Si el cliente mencionó una categoría/evento específico, filtrar
+    const searchTerm = entities.find(e => typeof e === 'string');
+    if (searchTerm) {
+      const filtered = await getProductsByCategory(searchTerm);
+      if (filtered && filtered.length > 0) {
+        products = filtered;
+      }
+    }
+
+    if (!products || products.length === 0) {
+      return;
+    }
+
+    // Enviar hasta 3 fotos de productos con precio y descripción
+    const toSend = products.slice(0, 3);
+    for (const product of toSend) {
+      if (product.image_url) {
+        const caption = `🕯️ *${product.name}*\n${product.description}\n💰 $${product.price}`;
+        await sendImageMessage(phoneNumber, product.image_url, caption);
+        await saveMessage(conversationId, 'bot', 'image', caption);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error enviando fotos de productos:', error);
   }
 }
 

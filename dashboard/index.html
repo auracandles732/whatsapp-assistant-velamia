@@ -279,9 +279,13 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Configuración de Supabase
+        // Configuración de Supabase (solo lectura de datos)
         const SUPABASE_URL = 'https://yhaiprlfpmugohmzpzcq.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloYWlwcmxmcG11Z29obXpwemNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYzMjY3NTUsImV4cCI6MjA0MTkwMjc1NX0.yg-VQ0QRfbLCJLNYczjZZT5W0ChS8-T7p0ZP5-6k7m4';
+
+        // Backend real (envía mensajes de WhatsApp de verdad)
+        const API_URL = 'https://whatsapp-assistant-velamia.onrender.com';
+        const CRM_KEY = 'velamia_webhook_2024_secure_token';
 
         function App() {
             const [conversations, setConversations] = useState([]);
@@ -295,12 +299,65 @@
             useEffect(() => {
                 loadConversations();
                 loadStats();
+                loadBotStatus();
                 const interval = setInterval(() => {
                     loadConversations();
                     loadStats();
                 }, 5000);
                 return () => clearInterval(interval);
             }, []);
+
+            async function loadBotStatus() {
+                try {
+                    const res = await fetch(`${API_URL}/api/bot-status`, {
+                        headers: { 'x-crm-key': CRM_KEY }
+                    });
+                    const data = await res.json();
+                    setBotEnabled(data.enabled);
+                } catch (err) {
+                    console.error('Error cargando estado del bot:', err);
+                }
+            }
+
+            async function toggleBotStatus() {
+                const newValue = !botEnabled;
+                setBotEnabled(newValue);
+                try {
+                    await fetch(`${API_URL}/api/bot-status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
+                        body: JSON.stringify({ enabled: newValue })
+                    });
+                } catch (err) {
+                    alert('Error cambiando estado del bot: ' + err.message);
+                    setBotEnabled(!newValue);
+                }
+            }
+
+            async function sendPhoto() {
+                if (!selectedConv) return;
+                const imageUrl = prompt('Pega la URL de la foto a enviar:');
+                if (!imageUrl) return;
+                const caption = prompt('Descripción (opcional):') || '';
+
+                try {
+                    const res = await fetch(`${API_URL}/api/send-image`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
+                        body: JSON.stringify({
+                            conversationId: selectedConv.id,
+                            phoneNumber: selectedConv.phone_number,
+                            imageUrl,
+                            caption
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error);
+                    loadMessages(selectedConv.id);
+                } catch (err) {
+                    alert('Error enviando foto: ' + err.message);
+                }
+            }
 
             useEffect(() => {
                 if (selectedConv) {
@@ -362,22 +419,17 @@
                 if (!inputText.trim() || !selectedConv) return;
 
                 try {
-                    const messageId = 'msg_' + Date.now();
-                    await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
+                    const res = await fetch(`${API_URL}/api/send-message`, {
                         method: 'POST',
-                        headers: {
-                            'apikey': SUPABASE_KEY,
-                            'Content-Type': 'application/json'
-                        },
+                        headers: { 'Content-Type': 'application/json', 'x-crm-key': CRM_KEY },
                         body: JSON.stringify({
-                            id: messageId,
-                            conversation_id: selectedConv.id,
-                            sender: 'bot',
-                            type: 'text',
-                            content: inputText,
-                            timestamp: new Date().toISOString()
+                            conversationId: selectedConv.id,
+                            phoneNumber: selectedConv.phone_number,
+                            text: inputText
                         })
                     });
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error);
 
                     setInputText('');
                     loadMessages(selectedConv.id);
@@ -402,7 +454,7 @@
                     <div className="main">
                         <div className="header">
                             <h1>🕯️ VELAMIA - CRM WhatsApp</h1>
-                            <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={() => setBotEnabled(!botEnabled)}>
+                            <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
                                 <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
                             </div>
                         </div>
@@ -462,7 +514,7 @@
                                         ></textarea>
                                         <div className="button-group">
                                             <button className="btn-send" onClick={sendMessage}>📤 Enviar</button>
-                                            <button className="btn-photo">📷 Foto</button>
+                                            <button className="btn-photo" onClick={sendPhoto}>📷 Foto</button>
                                         </div>
                                     </div>
                                 </div>
