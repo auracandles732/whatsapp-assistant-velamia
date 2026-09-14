@@ -303,9 +303,28 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
 
+/**
+ * Render suspende el plan gratuito tras 15 minutos sin tráfico y tarda ~50s en
+ * volver, tiempo en el que se pierden mensajes de WhatsApp. Una petición propia
+ * cada 10 minutos mantiene la instancia despierta.
+ */
+function keepAwake() {
+  const externalUrl = process.env.RENDER_EXTERNAL_URL;
+  if (!externalUrl) return;
+
+  setInterval(() => {
+    fetch(`${externalUrl}/health`).catch(error => {
+      console.error('Ping de mantenimiento falló:', error.message);
+    });
+  }, 10 * 60 * 1000);
+
+  console.log('⏰ Auto-ping activo: el servidor no se dormirá');
+}
+
 app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
   if (!process.env.CRM_PASSWORD) {
     console.warn('⚠️  Falta CRM_PASSWORD: el CRM no permitirá iniciar sesión');
   }
+  keepAwake();
 });
