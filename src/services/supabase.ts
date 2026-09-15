@@ -566,17 +566,33 @@ export async function getSentProductNames(conversationId: string): Promise<strin
   return [...new Set(names)];
 }
 
-export async function hasRecentOrder(conversationId: string, hours: number = 24): Promise<boolean> {
+/** Pedido pendiente creado en las últimas horas, para actualizarlo en vez de duplicarlo. */
+export async function getRecentPendingOrder(conversationId: string, hours: number = 24) {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
   const { data, error } = await supabase
     .from('orders')
-    .select('id')
+    .select('*')
     .eq('conversation_id', conversationId)
+    .eq('status', 'pending')
     .gte('created_at', since.toISOString())
-    .limit(1);
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (error) throw new Error(`Error verificando pedidos recientes: ${error.message}`);
-  return (data || []).length > 0;
+  if (error) throw new Error(`Error buscando pedido reciente: ${error.message}`);
+  return data;
+}
+
+export async function updateOrderItems(orderId: string, products: any, totalAmount: number) {
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ products: JSON.stringify(products), total_amount: totalAmount })
+    .eq('id', orderId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error actualizando pedido: ${error.message}`);
+  return data;
 }
 
 // PAUSA DEL BOT POR CONVERSACIÓN

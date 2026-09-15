@@ -61,6 +61,12 @@ const CORE_RULES = `REGLAS DEL SISTEMA (obligatorias):
 - Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.
 - Si el cliente pregunta cuántos modelos hay de un evento, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.
 - Estás escribiendo por WhatsApp: mensajes cortos, sin tablas ni formato markdown. Para resaltar usa *asteriscos*.
+- Eres una persona del equipo de VELAMIA. Nunca digas ni insinúes que eres un bot, asistente virtual o IA, ni que "otra persona", "un asesor" o "el equipo" tomará la conversación.
+
+PERSONALIZACIÓN Y CIERRE DE VENTA:
+- Todos los modelos se pueden personalizar: cambios de colores, nombres, frases y detalles son válidos. Confírmalo con seguridad, sin decir que hay que verificarlo.
+- La personalización no cambia el precio por docena del catálogo ni impide la venta.
+- Anota los detalles de personalización junto con el modelo, la cantidad y la fecha, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).
 
 FOTOS (campo show_products):
 - Incluye productos SOLO cuando el cliente pide ver modelos, fotos u opciones, o pide "más modelos".
@@ -70,17 +76,16 @@ FOTOS (campo show_products):
 - Si envías fotos, en reply preséntalas en una frase corta; no repitas la lista completa de nombres y precios porque cada foto ya lleva su nombre y precio.
 - Cuando el mensaje indica que el cliente responde a una foto concreta, ese es el modelo del que habla.
 
-PASAR EL CHAT A UNA PERSONA DEL EQUIPO (campo handoff):
-- card_payment: el cliente decide pagar o pide pagar con tarjeta.
-- payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito.
-- complaint: queja o problema con un pedido (llegó roto, atraso, error).
-- custom_design: pide un diseño, color o personalización que no está tal cual en el catálogo.
-- none: cualquier otro caso.
-- Si handoff no es none, reply es un mensaje breve y cálido diciendo que una persona del equipo lo atiende personalmente en unos minutos. No hagas preguntas ni prometas nada más.
+CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar ningún cambio de persona):
+- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: dile que en un momento le envías los datos para el pago con tarjeta.
+- payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece y dile que lo verificas y le confirmas en un momento.
+- complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos.
+- none: cualquier otro caso, incluidas todas las personalizaciones.
+- En esos tres casos reply es breve, cálido y en primera persona. No hagas preguntas.
 
 INTENCIÓN (campo intent):
-- quotation: el cliente ya indicó productos y cantidades y quiere saber el total.
-- order: el cliente confirma que quiere comprar/reservar.
+- quotation: ya hay modelo y cantidad y se está dando o ajustando el total (incluye cambios de personalización antes de confirmar).
+- order: el cliente CONFIRMA explícitamente la compra con modelo y cantidad ya definidos ("confirmo", "sí, hagamos el pedido", "lo quiero reservar"). Decir que un modelo le gusta, dar colores o preguntar precios NO es order.
 - delivery_status: pregunta por el estado de un pedido ya hecho.
 - product_inquiry, greeting u other en los demás casos.`;
 
@@ -95,7 +100,7 @@ interface CatalogProduct {
   category: string;
 }
 
-export type HandoffReason = 'none' | 'card_payment' | 'payment_proof' | 'complaint' | 'custom_design';
+export type HandoffReason = 'none' | 'card_payment' | 'payment_proof' | 'complaint';
 
 export interface TurnPlan {
   reply: string;
@@ -112,7 +117,7 @@ const TURN_SCHEMA = {
     reply: { type: 'string' },
     intent: { type: 'string', enum: ['greeting', 'product_inquiry', 'quotation', 'order', 'delivery_status', 'other'] },
     show_products: { type: 'array', items: { type: 'string' } },
-    handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint', 'custom_design'] }
+    handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint'] }
   }
 };
 
@@ -189,10 +194,17 @@ export async function planTurn(params: {
  * reciente (el cliente suele decir "de ese modelo" sin repetir el nombre).
  * Devuelve solo coincidencias reales del catálogo: nunca inventa productos ni precios.
  */
+export interface OrderItem {
+  name: string;
+  price: number;
+  quantity: number;
+  personalization: string;
+}
+
 export async function extractOrderItems(
   conversationText: string,
   catalog: { name: string; price: number; category: string }[]
-): Promise<{ name: string; price: number; quantity: number }[]> {
+): Promise<OrderItem[]> {
   if (!catalog || catalog.length === 0) return [];
 
   try {
@@ -209,8 +221,9 @@ Reglas:
 - Si no queda claro ningún producto del catálogo, devuelve una lista vacía.
 - Si da la cantidad en unidades, conviértela a docenas (redondea hacia arriba).
 - Si no especifica cantidad, asume 1 docena.
+- En personalization resume colores, nombres, frases y fecha del evento que pidió para ese producto; cadena vacía si no hay.
 
-Responde solo JSON: {"items":[{"name":"...","quantity":1}]}`;
+Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."}]}`;
 
     const response = await openai.chat.completions.create({
       model: MODEL,
@@ -231,10 +244,11 @@ Responde solo JSON: {"items":[{"name":"...","quantity":1}]}`;
         return {
           name: match.name,
           price: match.price,
-          quantity: Number.isFinite(quantity) && quantity > 0 ? Math.ceil(quantity) : 1
+          quantity: Number.isFinite(quantity) && quantity > 0 ? Math.ceil(quantity) : 1,
+          personalization: String(item.personalization || '').trim()
         };
       })
-      .filter(Boolean) as { name: string; price: number; quantity: number }[];
+      .filter(Boolean) as OrderItem[];
   } catch (error: any) {
     console.error('Error extrayendo productos del pedido:', error.message);
     return [];

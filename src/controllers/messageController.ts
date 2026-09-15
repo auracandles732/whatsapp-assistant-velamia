@@ -14,7 +14,8 @@ import {
   pauseBot,
   getMessageByWaId,
   getSentProductNames,
-  hasRecentOrder,
+  getRecentPendingOrder,
+  updateOrderItems,
   productNameFromCaption
 } from '../db';
 import {
@@ -258,16 +259,21 @@ async function registerSale(
       return;
     }
 
-    // Un cliente suele confirmar varias veces seguidas ("sí", "listo", "confirmado").
-    if (await hasRecentOrder(ctx.conversationId)) {
-      console.log('🛍️ Ya hay un pedido reciente en esta conversación; no se duplica');
+    // Un cliente suele confirmar varias veces o ajustar detalles después de confirmar:
+    // se actualiza el pedido pendiente reciente en lugar de duplicarlo o de dejarlo desactualizado.
+    const existing = await getRecentPendingOrder(ctx.conversationId);
+    if (existing) {
+      await updateOrderItems(existing.id, items, totalAmount);
+      console.log(`🛍️ Pedido ${existing.id.substring(0, 8)} actualizado: $${totalAmount.toFixed(2)}`);
       return;
     }
 
     await createOrder(ctx.conversationId, ctx.phoneNumber, ctx.customerName, items, totalAmount);
     console.log(`🛍️ Pedido registrado: $${totalAmount.toFixed(2)}`);
 
-    const detail = items.map(i => `${i.quantity} doc. ${i.name}`).join(', ') + ` · Total $${totalAmount.toFixed(2)}`;
+    const detail = items
+      .map(i => `${i.quantity} doc. ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`)
+      .join(', ') + ` · Total $${totalAmount.toFixed(2)}`;
     await notifyOwner({
       conversationId: ctx.conversationId,
       customerPhone: ctx.phoneNumber,

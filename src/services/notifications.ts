@@ -1,13 +1,12 @@
 import { sendTextMessage } from './whatsapp';
 import { getOwnerPhone, logNotification } from '../db';
 
-export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'custom_design' | 'new_order';
+export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order';
 
 const EVENT_LABELS: Record<OwnerEvent, string> = {
   card_payment: '💳 Quiere pagar con tarjeta',
   payment_proof: '📸 Envió comprobante de pago',
   complaint: '⚠️ Reclamo o problema con un pedido',
-  custom_design: '🎨 Pide un diseño o personalización',
   new_order: '🎉 Nuevo pedido registrado'
 };
 
