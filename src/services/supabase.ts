@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
 // Cliente único con la service key: ignora RLS, por eso solo se usa en el servidor.
+// supabase-js ya reintenta las lecturas ante cortes de red (hasta 4 intentos) y no repite escrituras.
 export const supabase: SupabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
 
 const PAUSED_UNTIL_RESUMED = '2100-01-01T00:00:00Z';
@@ -270,7 +271,8 @@ export async function getAllQuotations() {
     .eq('status', 'pending')
     .lt('expires_at', new Date().toISOString());
 
-  if (expireError) throw new Error(`Error actualizando cotizaciones vencidas: ${expireError.message}`);
+  // Marcar vencidas es secundario: si falla, igual se muestra la lista y se reintenta en la próxima carga.
+  if (expireError) console.error('No se pudieron marcar cotizaciones vencidas:', expireError.message);
 
   const { data, error } = await supabase
     .from('quotations')
