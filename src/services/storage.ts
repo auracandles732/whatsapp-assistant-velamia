@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+import { supabase } from './supabase';
 
 export async function uploadBufferToStorage(buffer: Buffer, mimeType: string, bucket: string = 'chat-media'): Promise<string> {
   const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
@@ -18,7 +16,7 @@ export async function uploadBufferToStorage(buffer: Buffer, mimeType: string, bu
 }
 
 /**
- * Borra del almacenamiento las fotos/audios que envió un cliente. Solo toca el bucket
+ * Borra del almacenamiento las fotos/audios/documentos que envió un cliente. Solo toca el bucket
  * indicado: las fotos del catálogo (product-images) nunca se eliminan por borrar un chat.
  */
 export async function removeFilesByPublicUrls(urls: string[], bucket: string = 'chat-media'): Promise<number> {

@@ -1,7 +1,10 @@
 import { OpenAI, toFile } from 'openai';
 
+// Sin timeout propio el SDK espera hasta 10 minutos: la clienta quedaría sin respuesta ese tiempo.
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: 60_000,
+  maxRetries: 2
 });
 
 const MODEL = 'gpt-5.4-mini';
@@ -140,7 +143,12 @@ function buildSystemPrompt(catalog: CatalogProduct[], customPrompt: string | und
     ? `FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ${sentProducts.join(', ')}`
     : 'FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ninguna';
 
-  return `${persona}\n\n${CORE_RULES}\n\n${catalogText}\n\n${sentText}`;
+  // Sin la fecha la IA no puede saber si "el 18" ya pasó ni qué año corresponde.
+  const today = new Date().toLocaleDateString('es-EC', {
+    timeZone: 'America/Guayaquil', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+
+  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${catalogText}\n\n${sentText}`;
 }
 
 /**

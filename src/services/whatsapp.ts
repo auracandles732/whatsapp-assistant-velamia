@@ -1,14 +1,13 @@
 import axios from 'axios';
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
-const PHONE_ID = process.env.WHATSAPP_PHONE_ID;
-const TOKEN = process.env.WHATSAPP_TOKEN;
+// Meta retira cada versión de la Graph API a los ~2 años; al pedir una vencida la sustituye
+// sin avisar. Revisar la cabecera "facebook-api-version" de las respuestas al actualizar.
+const GRAPH_API = 'https://graph.facebook.com/v25.0';
 
-interface WhatsAppMessage {
-  messaging_product: string;
-  to: string;
-  type: string;
-  [key: string]: any;
+const graph = axios.create({ timeout: 30_000 });
+
+function authHeaders() {
+  return { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` };
 }
 
 /**
@@ -26,120 +25,44 @@ export function getSentMessageId(responseData: any): string | undefined {
   return responseData?.messages?.[0]?.id;
 }
 
-export async function sendTextMessage(phoneNumber: string, text: string) {
+async function postMessage(payload: Record<string, any>, label: string) {
   try {
-    const message: WhatsAppMessage = {
-      messaging_product: 'whatsapp',
-      to: normalizePhone(phoneNumber),
-      type: 'text',
-      text: { body: text }
-    };
-
-    const response = await axios.post(
-      `${WHATSAPP_API_URL}/${PHONE_ID}/messages`,
-      message,
-      { headers: { Authorization: `Bearer ${TOKEN}` } }
+    const response = await graph.post(
+      `${GRAPH_API}/${process.env.WHATSAPP_PHONE_ID}/messages`,
+      { messaging_product: 'whatsapp', ...payload },
+      { headers: authHeaders() }
     );
-
-    console.log(`✅ Mensaje enviado a ${phoneNumber}`);
+    console.log(`✅ ${label} enviado a ${payload.to}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error enviando mensaje:', error.response?.data || error.message);
+    console.error(`Error enviando ${label}:`, error.response?.data || error.message);
     throw error;
   }
 }
 
-export async function sendImageMessage(phoneNumber: string, imageUrl: string, caption?: string) {
-  try {
-    const message: WhatsAppMessage = {
-      messaging_product: 'whatsapp',
-      to: normalizePhone(phoneNumber),
-      type: 'image',
-      image: {
-        link: imageUrl,
-        ...(caption && { caption })
-      }
-    };
-
-    const response = await axios.post(
-      `${WHATSAPP_API_URL}/${PHONE_ID}/messages`,
-      message,
-      { headers: { Authorization: `Bearer ${TOKEN}` } }
-    );
-
-    console.log(`✅ Imagen enviada a ${phoneNumber}`);
-    return response.data;
-  } catch (error: any) {
-    console.error('Error enviando imagen:', error.response?.data || error.message);
-    throw error;
-  }
+export function sendTextMessage(phoneNumber: string, text: string) {
+  return postMessage({ to: normalizePhone(phoneNumber), type: 'text', text: { body: text } }, 'Mensaje');
 }
 
-export async function sendTemplateMessage(phoneNumber: string, templateName: string, parameters: any[]) {
-  try {
-    const message: WhatsAppMessage = {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: 'es_ES' },
-        parameters: { body: { parameters } }
-      }
-    };
-
-    const response = await axios.post(
-      `${WHATSAPP_API_URL}/${PHONE_ID}/messages`,
-      message,
-      { headers: { Authorization: `Bearer ${TOKEN}` } }
-    );
-
-    console.log(`✅ Plantilla "${templateName}" enviada a ${phoneNumber}`);
-    return response.data;
-  } catch (error: any) {
-    console.error('Error enviando plantilla:', error.response?.data || error.message);
-    throw error;
-  }
+export function sendImageMessage(phoneNumber: string, imageUrl: string, caption?: string) {
+  return postMessage({
+    to: normalizePhone(phoneNumber),
+    type: 'image',
+    image: { link: imageUrl, ...(caption && { caption }) }
+  }, 'Imagen');
 }
 
 export async function getMediaUrl(mediaId: string): Promise<{ url: string; mimeType: string }> {
-  const response = await axios.get(`${WHATSAPP_API_URL}/${mediaId}`, {
-    headers: { Authorization: `Bearer ${TOKEN}` }
-  });
+  const response = await graph.get(`${GRAPH_API}/${mediaId}`, { headers: authHeaders() });
   return { url: response.data.url, mimeType: response.data.mime_type };
 }
 
 export async function downloadMedia(mediaUrl: string): Promise<Buffer> {
-  const response = await axios.get(mediaUrl, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
-    responseType: 'arraybuffer'
+  const response = await graph.get(mediaUrl, {
+    headers: authHeaders(),
+    responseType: 'arraybuffer',
+    timeout: 60_000,
+    maxContentLength: 25 * 1024 * 1024
   });
   return Buffer.from(response.data);
-}
-
-export async function sendButtonMessage(phoneNumber: string, text: string, buttons: any[]) {
-  try {
-    const message: WhatsAppMessage = {
-      messaging_product: 'whatsapp',
-      to: phoneNumber,
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { text },
-        action: { buttons }
-      }
-    };
-
-    const response = await axios.post(
-      `${WHATSAPP_API_URL}/${PHONE_ID}/messages`,
-      message,
-      { headers: { Authorization: `Bearer ${TOKEN}` } }
-    );
-
-    console.log(`✅ Mensaje interactivo enviado a ${phoneNumber}`);
-    return response.data;
-  } catch (error: any) {
-    console.error('Error enviando mensaje interactivo:', error.response?.data || error.message);
-    throw error;
-  }
 }

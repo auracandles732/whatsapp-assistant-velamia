@@ -1,13 +1,14 @@
 import { sendTextMessage } from './whatsapp';
-import { getOwnerPhone, logNotification } from '../db';
+import { getOwnerPhone, logNotification } from './supabase';
 
-export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order';
+export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'bot_error';
 
 const EVENT_LABELS: Record<OwnerEvent, string> = {
   card_payment: '💳 Quiere pagar con tarjeta',
   payment_proof: '📸 Envió comprobante de pago',
   complaint: '⚠️ Reclamo o problema con un pedido',
-  new_order: '🎉 Nuevo pedido registrado'
+  new_order: '🎉 Nuevo pedido registrado',
+  bot_error: '🤖 El bot no pudo responder, responde tú desde el CRM'
 };
 
 /**

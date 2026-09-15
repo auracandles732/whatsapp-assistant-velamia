@@ -16,9 +16,10 @@
     <link rel="apple-touch-icon" href="logo.png">
     <link rel="icon" href="logo.png">
 
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Versiones fijas: una actualización externa de estas librerías no puede romper el CRM. -->
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
     <style>
         :root {
             --terracota: #B96B4F;
@@ -898,7 +899,10 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        const API_URL = 'https://whatsapp-assistant-velamia.onrender.com';
+        // El CRM lo sirve el mismo servidor: se usa su propio origen (sirve igual en otro dominio).
+        const API_URL = /^https?:$/.test(window.location.protocol)
+            ? window.location.origin
+            : 'https://whatsapp-assistant-velamia.onrender.com';
         const TOKEN_KEY = 'velamia_crm_token';
 
         let onSessionExpired = () => {};
@@ -944,10 +948,19 @@
                 throw new Error('Sesión expirada, vuelve a entrar');
             }
 
-            const data = await res.json();
-            if (data && data.error) throw new Error(data.error);
+            // Durante un despliegue Render puede responder una página HTML en lugar de JSON.
+            let data;
+            try {
+                data = await res.json();
+            } catch {
+                throw new Error('El servidor no está disponible en este momento, intenta en unos segundos');
+            }
+            if (!res.ok || (data && data.error)) throw new Error(data?.error || `Error ${res.status}`);
             return data;
         }
+
+        // Tipos cuyo contenido guardado empieza con la URL del archivo.
+        const MEDIA_TYPES = ['image', 'audio', 'document'];
 
         // La base guarda las fechas en UTC sin zona horaria; sin la "Z" el navegador
         // las toma como hora local y en Ecuador aparecen 5 horas adelantadas.
@@ -988,7 +1001,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ password })
                     });
-                    const data = await res.json();
+                    const data = await res.json().catch(() => ({ error: 'El servidor no está disponible, intenta en unos segundos' }));
                     if (!res.ok) throw new Error(data.error || 'No se pudo entrar');
                     setToken(data.token);
                     onLogin();
@@ -1185,6 +1198,7 @@
                         })
                     });
                     loadMessages(selectedConv.id);
+                    loadConversations();
                 } catch (err) {
                     alert('Error enviando foto: ' + err.message);
                 }
@@ -1357,7 +1371,7 @@
                                     <div className="number">{stats.total}</div>
                                 </div>
                                 <div className="stat-card">
-                                    <h4>Conversaciones Activas</h4>
+                                    <h4>Activas (últimas 24 h)</h4>
                                     <div className="number">{stats.active}</div>
                                 </div>
                                 <div className="stat-card">
@@ -1365,7 +1379,7 @@
                                     <div className="number">{stats.orders}</div>
                                 </div>
                                 <div className="stat-card">
-                                    <h4>Ingresos</h4>
+                                    <h4>Ventas en pedidos</h4>
                                     <div className="number">${stats.revenue.toFixed(2)}</div>
                                 </div>
                             </div>
@@ -1410,16 +1424,20 @@
                                         </div>
                                     </div>
                                     <div className="messages-container">
-                                        {messages.map((msg, idx) => {
-                                            const urlMatch = msg.content.match(/^https?:\/\/\S+/);
+                                        {messages.map((msg) => {
+                                            const content = msg.content || '';
+                                            // Solo en fotos, audios y documentos la primera línea es la URL del archivo;
+                                            // un enlace que escribe la clienta se muestra tal cual.
+                                            const urlMatch = MEDIA_TYPES.includes(msg.type) ? content.match(/^https?:\/\/\S+/) : null;
                                             const mediaUrl = urlMatch ? urlMatch[0] : null;
-                                            const textPart = mediaUrl ? msg.content.replace(mediaUrl, '').replace(/^\n/, '') : msg.content;
+                                            const textPart = mediaUrl ? content.slice(mediaUrl.length).replace(/^\n/, '') : content;
                                             return (
-                                                <div key={idx} className={`message ${msg.sender}`}>
+                                                <div key={msg.id} className={`message ${msg.sender}`}>
                                                     <div>
                                                         <div className="message-bubble">
                                                             {msg.type === 'image' && mediaUrl ? <img src={mediaUrl} onClick={() => window.open(mediaUrl, '_blank')} /> : null}
                                                             {msg.type === 'audio' && mediaUrl ? <audio controls src={mediaUrl} style={{ maxWidth: '220px', marginBottom: '6px', display: 'block' }} /> : null}
+                                                            {msg.type === 'document' && mediaUrl ? <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>📎 Abrir documento</a> : null}
                                                             {textPart}
                                                         </div>
                                                         <div className="message-time">{formatTime(msg.timestamp)}</div>
@@ -1513,7 +1531,7 @@
                                     <span>{visible.length} cotización(es) · ${total.toFixed(2)}</span>
                                 </div>
                                 {visible.length === 0 ? (
-                                    <div className="empty-catalog"><p>Aún no hay cotizaciones. Se anotan solas cuando una clienta pide precio de un modelo con cantidad 🧾</p></div>
+                                    <div className="empty-catalog"><p>Aún no hay cotizaciones. Se anotan solas cuando una clienta pide la cotización o el valor total de su pedido 🧾</p></div>
                                 ) : visible.map(q => {
                                     let items = [];
                                     try { items = typeof q.products === 'string' ? JSON.parse(q.products) : (q.products || []); } catch { items = []; }

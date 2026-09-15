@@ -1,4 +1,6 @@
--- Crear tablas completas con optimización
+-- ⚠️  HISTÓRICA — NO VOLVER A EJECUTAR EN PRODUCCIÓN.
+-- Esta migración BORRA todas las tablas y sus datos (DROP TABLE). Solo sirve para crear
+-- una base nueva desde cero; después se aplican 003, 004, 005 y 006 en orden.
 
 DROP TABLE IF EXISTS followups CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;

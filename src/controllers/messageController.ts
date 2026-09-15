@@ -32,7 +32,8 @@ import {
   planTurn,
   transcribeAudio,
   describeImage,
-  extractOrderItems
+  extractOrderItems,
+  TurnPlan
 } from '../services/openai';
 import { uploadBufferToStorage } from '../services/storage';
 import { notifyOwner } from '../services/notifications';
@@ -40,17 +41,39 @@ import { notifyOwner } from '../services/notifications';
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
 
+// Mensajes cuyo contenido guardado empieza con la URL del archivo (el CRM la muestra aparte).
+const MEDIA_TYPES = new Set(['image', 'audio', 'document']);
+
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
-/** Convierte un mensaje guardado en lo que la IA necesita leer (sin URLs). */
+/**
+ * Los mensajes de un mismo cliente se procesan en fila: si escribe tres seguidos, cada
+ * respuesta ve la anterior y nunca se crean dos chats para el mismo número.
+ */
+const queues = new Map<string, Promise<void>>();
+
+export function handleWebhookMessage(message: any, value: any): Promise<void> {
+  const key = String(message?.from || 'desconocido');
+  const previous = queues.get(key) || Promise.resolve();
+  const current = previous.then(() => processMessage(message, value));
+  queues.set(key, current);
+  current.finally(() => {
+    if (queues.get(key) === current) queues.delete(key);
+  });
+  return current;
+}
+
+/** Convierte un mensaje guardado en lo que la IA necesita leer (sin URLs de archivos). */
 function toAiText(msg: any): string {
-  const text = String(msg.content || '').replace(/^https?:\/\/\S+\n?/, '').trim();
+  const raw = String(msg.content || '');
+  const text = MEDIA_TYPES.has(msg.type) ? raw.replace(/^https?:\/\/\S+\n?/, '').trim() : raw.trim();
   if (msg.sender === 'bot' && msg.type === 'image') {
-    const name = productNameFromCaption(msg.content);
+    const name = productNameFromCaption(raw);
     return name ? `[Foto enviada del producto: ${name}]` : `[Foto enviada] ${text}`;
   }
   if (msg.sender === 'customer' && msg.type === 'image') return `[El cliente envió una foto]: ${text}`;
   if (msg.sender === 'customer' && msg.type === 'audio') return `[El cliente envió un audio]: ${text}`;
+  if (msg.sender === 'customer' && msg.type === 'document') return `[El cliente envió un documento]: ${text}`;
   return text;
 }
 
@@ -60,7 +83,106 @@ async function sendAndSaveText(conversationId: string, phoneNumber: string, text
   await saveMessage(conversationId, 'bot', 'text', text, getSentMessageId(sent));
 }
 
-export async function handleWebhookMessage(message: any, changes: any) {
+/** Descarga un archivo de WhatsApp y lo sube al almacenamiento; devuelve su URL pública. */
+async function storeIncomingMedia(mediaId: string) {
+  const media = await getMediaUrl(mediaId);
+  const buffer = await downloadMedia(media.url);
+  const publicUrl = await uploadBufferToStorage(buffer, media.mimeType);
+  return { publicUrl, buffer, mimeType: media.mimeType };
+}
+
+/**
+ * Traduce cada tipo de mensaje de WhatsApp a lo que se guarda en el CRM (userContent)
+ * y a lo que entiende la IA (aiContent). Devuelve null si el mensaje no requiere atención.
+ */
+async function readIncomingContent(message: any): Promise<{ userContent: string; aiContent: string } | null> {
+  const type = message.type;
+
+  try {
+    switch (type) {
+      case 'text':
+        return { userContent: message.text.body, aiContent: message.text.body };
+
+      case 'image': {
+        const { publicUrl } = await storeIncomingMedia(message.image.id);
+        const description = await describeImage(publicUrl);
+        const caption = message.image.caption;
+        return {
+          userContent: `${publicUrl}\n${caption || description}`,
+          aiContent: `[El cliente envió una foto]: ${description}${caption ? ` (con el mensaje: "${caption}")` : ''}`
+        };
+      }
+
+      case 'audio': {
+        const { publicUrl, buffer, mimeType } = await storeIncomingMedia(message.audio.id);
+        const transcript = await transcribeAudio(buffer, mimeType);
+        return {
+          userContent: `${publicUrl}\n🎤 "${transcript}"`,
+          aiContent: `[El cliente envió un audio que dice]: "${transcript}"`
+        };
+      }
+
+      case 'document': {
+        // Suele ser un comprobante de pago en PDF: se guarda para verlo desde el CRM.
+        const { publicUrl } = await storeIncomingMedia(message.document.id);
+        const name = message.document.filename || 'documento';
+        const caption = message.document.caption ? ` (con el mensaje: "${message.document.caption}")` : '';
+        return {
+          userContent: `${publicUrl}\n📄 ${name}${message.document.caption ? `\n${message.document.caption}` : ''}`,
+          aiContent: `[El cliente envió un documento llamado "${name}"]${caption}`
+        };
+      }
+
+      case 'video': {
+        const caption = message.video?.caption;
+        return {
+          userContent: `🎬 [Video]${caption ? `\n${caption}` : ''}`,
+          aiContent: `[El cliente envió un video]${caption ? ` (con el mensaje: "${caption}")` : ''}`
+        };
+      }
+
+      case 'sticker':
+        return { userContent: '🙂 [Sticker]', aiContent: '[El cliente envió un sticker]' };
+
+      case 'location': {
+        const loc = message.location || {};
+        const place = [loc.name, loc.address].filter(Boolean).join(', ');
+        const coords = `${loc.latitude}, ${loc.longitude}`;
+        return {
+          userContent: `📍 Ubicación: ${place ? `${place} ` : ''}(${coords})\nhttps://maps.google.com/?q=${coords.replace(' ', '')}`,
+          aiContent: `[El cliente envió su ubicación${place ? `: ${place}` : ''}]`
+        };
+      }
+
+      case 'contacts':
+        return { userContent: '👤 [Contacto compartido]', aiContent: '[El cliente compartió un contacto]' };
+
+      case 'button':
+        return { userContent: message.button?.text || '[Botón]', aiContent: message.button?.text || '[Botón]' };
+
+      case 'interactive': {
+        const title = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '[Respuesta interactiva]';
+        return { userContent: title, aiContent: title };
+      }
+
+      case 'reaction':
+        // Un 👍 a un mensaje no es algo que el bot deba contestar.
+        return null;
+
+      default:
+        return { userContent: `[Mensaje tipo: ${type}]`, aiContent: `[El cliente envió un mensaje de tipo ${type} que no se puede leer]` };
+    }
+  } catch (error: any) {
+    // Si falla la descarga o el análisis del archivo, igual queda registro y el bot pide reenviarlo.
+    console.error(`❌ No se pudo procesar el ${type}:`, error.message);
+    return {
+      userContent: `[${type} que no se pudo descargar]`,
+      aiContent: `[El cliente envió un ${type} que no se pudo abrir; pídele amablemente que lo reenvíe]`
+    };
+  }
+}
+
+async function processMessage(message: any, value: any) {
   try {
     const phoneNumber = message.from;
     const waMessageId = message.id;
@@ -72,49 +194,21 @@ export async function handleWebhookMessage(message: any, changes: any) {
       return;
     }
 
+    const content = await readIncomingContent(message);
+    if (!content) {
+      console.log(`↪️  Mensaje ${messageType} de ${phoneNumber} ignorado`);
+      return;
+    }
+    let { userContent, aiContent } = content;
+
     console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
 
     let conversation = await getConversation(phoneNumber);
     if (!conversation) {
-      conversation = await createConversation(phoneNumber, changes?.contacts?.[0]?.profile?.name);
+      conversation = await createConversation(phoneNumber, value?.contacts?.[0]?.profile?.name);
     }
     const conversationId = conversation.id;
     const customerName = conversation.customer_name || phoneNumber;
-
-    // userContent = lo que se guarda y se ve en el CRM. aiContent = lo que "entiende" la IA.
-    let userContent = '';
-    let aiContent = '';
-
-    if (messageType === 'text') {
-      userContent = message.text.body;
-      aiContent = userContent;
-    } else if (messageType === 'image') {
-      const media = await getMediaUrl(message.image.id);
-      const buffer = await downloadMedia(media.url);
-      const publicUrl = await uploadBufferToStorage(buffer, media.mimeType);
-      const description = await describeImage(publicUrl);
-      userContent = `${publicUrl}\n${message.image.caption || description}`;
-      aiContent = `[El cliente envió una foto]: ${description}${message.image.caption ? ` (con el mensaje: "${message.image.caption}")` : ''}`;
-    } else if (messageType === 'audio') {
-      const media = await getMediaUrl(message.audio.id);
-      const buffer = await downloadMedia(media.url);
-      const publicUrl = await uploadBufferToStorage(buffer, media.mimeType);
-      const transcript = await transcribeAudio(buffer, media.mimeType);
-      userContent = `${publicUrl}\n🎤 "${transcript}"`;
-      aiContent = `[El cliente envió un audio que dice]: "${transcript}"`;
-    } else if (messageType === 'document') {
-      userContent = `[Cliente envió documento]: ${message.document.filename}`;
-      aiContent = userContent;
-    } else if (messageType === 'button') {
-      userContent = message.button?.text || '[Botón]';
-      aiContent = userContent;
-    } else if (messageType === 'interactive') {
-      userContent = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '[Respuesta interactiva]';
-      aiContent = userContent;
-    } else {
-      userContent = `[Mensaje tipo: ${messageType}]`;
-      aiContent = userContent;
-    }
 
     // Si el cliente respondió citando un mensaje (por ejemplo una foto del catálogo),
     // la IA necesita saber de qué producto habla.
@@ -139,10 +233,10 @@ export async function handleWebhookMessage(message: any, changes: any) {
       content: toAiText(msg)
     }));
 
-    // La URL de foto/audio debe seguir al inicio para que el CRM la muestre.
+    // La URL del archivo debe seguir al inicio para que el CRM la muestre.
     let storedContent = userContent;
     if (quotedLabel) {
-      storedContent = /^https?:\/\//.test(userContent)
+      storedContent = MEDIA_TYPES.has(messageType)
         ? userContent.replace(/^(\S+)\n?/, `$1\n${quotedLabel}\n`)
         : `${quotedLabel}\n${userContent}`;
     }
@@ -150,8 +244,7 @@ export async function handleWebhookMessage(message: any, changes: any) {
     await saveMessage(conversationId, 'customer', messageType, storedContent, waMessageId);
     await touchConversation(conversationId);
 
-    const botEnabled = await getConfig('bot_enabled');
-    if (botEnabled === 'false') {
+    if ((await getConfig('bot_enabled')) === 'false') {
       console.log('🚫 Bot desactivado - mensaje guardado, esperando respuesta manual');
       return;
     }
@@ -167,29 +260,27 @@ export async function handleWebhookMessage(message: any, changes: any) {
       getSentProductNames(conversationId)
     ]);
 
-    const plan = await planTurn({
-      history: conversationHistory,
-      userMessage: aiContent,
-      catalog,
-      customPrompt,
-      sentProducts
-    });
-    console.log(`🎯 intención: ${plan.intent} | fotos: ${plan.show_products.length} | pasar a persona: ${plan.handoff}`);
+    const customerDetail = toAiText({ sender: 'customer', type: messageType, content: storedContent });
+
+    let plan: TurnPlan;
+    try {
+      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts });
+    } catch (error: any) {
+      // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
+      console.error('❌ La IA no respondió:', error.message);
+      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
+      return;
+    }
+    console.log(`🎯 intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff}`);
 
     if (plan.reply) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);
     }
 
-    // El bot se aparta: queda pausado en este chat hasta que alguien lo reactive desde el CRM.
+    // Caso de revisión manual: el bot queda pausado en este chat hasta que lo reactiven desde el CRM.
     if (plan.handoff !== 'none') {
       await pauseBot(conversationId);
-      await notifyOwner({
-        conversationId,
-        customerPhone: phoneNumber,
-        customerName,
-        event: plan.handoff,
-        detail: toAiText({ sender: 'customer', type: messageType, content: userContent })
-      });
+      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: plan.handoff, detail: customerDetail });
       return;
     }
 
@@ -199,24 +290,17 @@ export async function handleWebhookMessage(message: any, changes: any) {
 
     if (plan.intent === 'quotation' || plan.intent === 'order') {
       const transcript = [
-        ...conversationHistory.slice(-10).map(t => `${t.role === 'user' ? 'Cliente' : 'VELAMIA'}: ${t.content}`),
+        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : 'VELAMIA'}: ${t.content}`),
         `Cliente: ${aiContent}`,
         `VELAMIA: ${plan.reply}`
       ].join('\n');
 
-      await registerSale(plan.intent, {
-        conversationId,
-        phoneNumber,
-        customerName,
-        transcript,
-        catalog,
-        lastMessage: aiContent
-      });
+      await registerSale(plan.intent, { conversationId, phoneNumber, customerName, transcript, catalog });
     } else if (plan.intent === 'delivery_status') {
       await handleDeliveryStatusIntent(conversationId, phoneNumber);
     }
   } catch (error) {
-    console.error('❌ Error en handleWebhookMessage:', error);
+    console.error('❌ Error procesando mensaje:', error);
   }
 }
 
@@ -245,7 +329,7 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
  */
 async function registerSale(
   kind: 'quotation' | 'order',
-  ctx: { conversationId: string; phoneNumber: string; customerName: string; transcript: string; catalog: any[]; lastMessage: string }
+  ctx: { conversationId: string; phoneNumber: string; customerName: string; transcript: string; catalog: any[] }
 ) {
   try {
     const items = await extractOrderItems(ctx.transcript, ctx.catalog);
@@ -255,11 +339,10 @@ async function registerSale(
     }
 
     const totalAmount = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-
     const pendingQuotation = await getRecentPendingQuotation(ctx.conversationId);
 
     if (kind === 'quotation') {
-      // El cliente ajusta cantidad o colores varias veces: se actualiza la misma cotización.
+      // El cliente vuelve a pedir el total con otra cantidad: se actualiza la misma cotización.
       if (pendingQuotation) {
         await updateQuotationItems(pendingQuotation.id, items, totalAmount);
         console.log(`📋 Cotización ${pendingQuotation.id.substring(0, 8)} actualizada: $${totalAmount.toFixed(2)}`);
@@ -306,7 +389,7 @@ async function registerSale(
 async function handleDeliveryStatusIntent(conversationId: string, phoneNumber: string) {
   try {
     const orders = await getOrdersByConversation(conversationId);
-    if (!orders || orders.length === 0) return;
+    if (orders.length === 0) return;
 
     const lastOrder = orders[0];
     const statusMap: { [key: string]: string } = {
