@@ -77,6 +77,23 @@ FORMAS DE PAGO (estas reglas mandan sobre cualquier otra instrucción de pago):
 - Si el cliente pregunta cómo pagar, explica ambas opciones con sus montos y pregúntale cuál prefiere.
 - Nunca escribas números de cuenta, bancos ni titulares: el sistema los envía en un mensaje aparte (campo send_bank_details).
 
+ENVÍOS Y PEDIDOS:
+- Se hacen envíos a todo Ecuador. No hay retiro en local: si el cliente pide retirar, explícale con amabilidad que todos los pedidos se entregan por envío.
+- No hay pedido mínimo: se puede pedir cualquier cantidad (el precio del catálogo sigue siendo por docena).
+- Para costos, empresas y tiempos de envío usa solo la INFORMACIÓN DE ENVÍOS de abajo. Nunca inventes costos ni plazos.
+
+FECHAS DE ENTREGA (estas reglas mandan sobre cualquier otra instrucción de disponibilidad):
+- Siempre hay disponibilidad: nunca digas que una fecha no está disponible ni que debes verificar la disponibilidad.
+- Fecha de entrega = fecha del evento MENOS 3 días; ese día el pedido le llega al cliente. Ejemplo: evento 21/09/2026 → entrega 18/09/2026.
+- Cuando conozcas la fecha del evento, menciona la fecha de entrega en formato día/mes/año.
+- Para impulsar la venta explica que la fecha queda reservada al recibir el anticipo y que las fechas se van ocupando por orden de pago; invítalo a asegurar su fecha. Nunca digas que quedan pocos cupos.
+- event_date: fecha del evento en formato AAAA-MM-DD si el cliente la indicó en la conversación; si no, cadena vacía. Si no dice el año, usa la próxima vez que llegue esa fecha a partir de hoy.
+- delivery_date: la fecha de entrega que mencionas en reply, en formato AAAA-MM-DD; cadena vacía si no mencionas ninguna.
+
+PREGUNTAS SIN RESPUESTA (campo owner_question):
+- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo ni en la información de envíos, dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.
+- En cualquier otro caso owner_question es una cadena vacía.
+
 DATOS BANCARIOS (campo send_bank_details):
 - true SOLO cuando el cliente elige pagar por transferencia o pide los datos de la cuenta. En cualquier otro caso false.
 - Si es true, en reply confirma el total y el anticipo del 50% y dile que a continuación le compartes los datos de la cuenta.
@@ -121,22 +138,64 @@ export interface TurnPlan {
   show_products: string[];
   handoff: HandoffReason;
   send_bank_details: boolean;
+  owner_question: string;
+  /** Fecha del evento (AAAA-MM-DD) o cadena vacía. */
+  event_date: string;
+  /** Fecha de entrega calculada por el sistema (evento − 3 días) o cadena vacía. */
+  delivery_date: string;
 }
 
 const TURN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['reply', 'intent', 'show_products', 'handoff', 'send_bank_details'],
+  required: ['reply', 'intent', 'show_products', 'handoff', 'send_bank_details', 'owner_question', 'event_date', 'delivery_date'],
   properties: {
     reply: { type: 'string' },
     intent: { type: 'string', enum: ['greeting', 'product_inquiry', 'quotation', 'order', 'delivery_status', 'other'] },
     show_products: { type: 'array', items: { type: 'string' } },
     handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint'] },
-    send_bank_details: { type: 'boolean' }
+    send_bank_details: { type: 'boolean' },
+    owner_question: { type: 'string' },
+    event_date: { type: 'string' },
+    delivery_date: { type: 'string' }
   }
 };
 
-function buildSystemPrompt(catalog: CatalogProduct[], customPrompt: string | undefined, sentProducts: string[], bankDetailsSent: boolean) {
+// Días antes del evento en que el pedido le llega a la clienta.
+export const DELIVERY_DAYS_BEFORE_EVENT = 3;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Resta días a una fecha AAAA-MM-DD sin depender de la zona horaria del servidor. */
+export function subtractDays(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d - days));
+  return date.toISOString().slice(0, 10);
+}
+
+export function formatDateEc(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+export function todayInGuayaquil(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date());
+}
+
+function isValidIsoDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+function buildSystemPrompt(
+  catalog: CatalogProduct[],
+  customPrompt: string | undefined,
+  sentProducts: string[],
+  bankDetailsSent: boolean,
+  shippingInfo: string | undefined
+) {
   const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_PERSONA;
 
   let catalogText = 'CATÁLOGO: todavía no hay productos cargados. Si el cliente pregunta por productos, indícale que en breve le compartes las opciones.';
@@ -164,7 +223,11 @@ function buildSystemPrompt(catalog: CatalogProduct[], customPrompt: string | und
     ? 'DATOS BANCARIOS: ya se enviaron en esta conversación; vuelve a marcar send_bank_details solo si el cliente los pide de nuevo.'
     : 'DATOS BANCARIOS: aún no se han enviado en esta conversación.';
 
-  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${catalogText}\n\n${sentText}\n${bankText}`;
+  const shippingText = shippingInfo && shippingInfo.trim()
+    ? `INFORMACIÓN DE ENVÍOS (escrita por la dueña):\n${shippingInfo.trim()}`
+    : 'INFORMACIÓN DE ENVÍOS: la dueña aún no la ha configurado. Si preguntan costos o tiempos de envío, di que lo verificas y usa owner_question.';
+
+  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${shippingText}\n\n${catalogText}\n\n${sentText}\n${bankText}`;
 }
 
 /**
@@ -178,25 +241,50 @@ export async function planTurn(params: {
   customPrompt?: string;
   sentProducts: string[];
   bankDetailsSent?: boolean;
+  shippingInfo?: string;
 }): Promise<TurnPlan> {
-  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false } = params;
+  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, shippingInfo } = params;
 
-  const response = await openai.chat.completions.create({
-    model: MODEL,
-    reasoning_effort: REASONING_EFFORT,
-    max_completion_tokens: 3000,
-    response_format: {
-      type: 'json_schema',
-      json_schema: { name: 'turno_whatsapp', strict: true, schema: TURN_SCHEMA }
-    },
-    messages: [
-      { role: 'system', content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent) },
-      ...history,
-      { role: 'user', content: userMessage }
-    ]
-  });
+  const baseMessages = [
+    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, shippingInfo) },
+    ...history,
+    { role: 'user' as const, content: userMessage }
+  ];
 
-  const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
+  const ask = async (extraSystem?: string) => {
+    const response = await openai.chat.completions.create({
+      model: MODEL,
+      reasoning_effort: REASONING_EFFORT,
+      max_completion_tokens: 3000,
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'turno_whatsapp', strict: true, schema: TURN_SCHEMA }
+      },
+      messages: extraSystem ? [...baseMessages, { role: 'system' as const, content: extraSystem }] : baseMessages
+    });
+    return JSON.parse(response.choices[0]?.message?.content || '{}');
+  };
+
+  let parsed = await ask();
+
+  // La resta de fechas la hace el sistema: si la IA mencionó otra fecha de entrega, rehace la respuesta.
+  const eventDate = isValidIsoDate(String(parsed.event_date || '')) ? parsed.event_date : '';
+  const expectedDelivery = eventDate ? subtractDays(eventDate, DELIVERY_DAYS_BEFORE_EVENT) : '';
+  const mentioned = String(parsed.delivery_date || '');
+  if (expectedDelivery && mentioned && expectedDelivery <= todayInGuayaquil()) {
+    // Evento muy cercano: siempre se atiende, pero decirle una fecha de entrega ya pasada no tiene sentido.
+    console.warn(`📅 Entrega calculada ${expectedDelivery} es hoy o ya pasó: se pide no mencionarla`);
+    parsed = await ask(
+      `CORRECCIÓN: el evento es el ${formatDateEc(eventDate)} y la entrega calculada (${DELIVERY_DAYS_BEFORE_EVENT} días antes) ya pasó o es hoy. ` +
+      'No menciones ninguna fecha de entrega. Confirma con seguridad que sí atendemos su pedido para su evento y dile que en un momento le confirmas el día exacto de entrega.'
+    );
+  } else if (expectedDelivery && mentioned && mentioned !== expectedDelivery) {
+    console.warn(`📅 Fecha de entrega corregida: la IA dijo ${mentioned}, corresponde ${expectedDelivery}`);
+    parsed = await ask(
+      `CORRECCIÓN: el evento es el ${formatDateEc(eventDate)} y la fecha de entrega correcta es el ${formatDateEc(expectedDelivery)} ` +
+      `(${DELIVERY_DAYS_BEFORE_EVENT} días antes). Rehaz la respuesta usando exactamente esa fecha de entrega.`
+    );
+  }
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
   const byName = new Map(catalog.map(p => [p.name.trim().toLowerCase(), p.name]));
@@ -211,7 +299,10 @@ export async function planTurn(params: {
     intent: parsed.intent || 'other',
     show_products: showProducts,
     handoff: parsed.handoff || 'none',
-    send_bank_details: parsed.send_bank_details === true
+    send_bank_details: parsed.send_bank_details === true,
+    owner_question: String(parsed.owner_question || '').trim(),
+    event_date: eventDate,
+    delivery_date: expectedDelivery
   };
 }
 

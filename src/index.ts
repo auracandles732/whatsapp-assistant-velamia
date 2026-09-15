@@ -348,6 +348,30 @@ app.post('/api/payment-info', requireCrmSession, async (req: Request, res: Respo
   }
 });
 
+// ---------- Información de envíos ----------
+// La escribe la dueña en el CRM; el bot la usa para responder costos y tiempos de envío.
+
+app.get('/api/shipping-info', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json({ shipping: (await getConfig('shipping_info')) || '' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/shipping-info', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const shipping = String(req.body?.shipping || '').trim();
+    if (shipping.length > 3000) {
+      return res.status(400).json({ error: 'La información de envíos no puede superar 3000 caracteres' });
+    }
+    await setConfig('shipping_info', shipping);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ---------- Catálogo ----------
 
 app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Response) => {

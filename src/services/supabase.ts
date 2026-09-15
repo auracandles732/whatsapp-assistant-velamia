@@ -543,6 +543,21 @@ export async function getFollowUpActivity(days: number) {
 
 // ---------- AVISOS A LA DUEÑA ----------
 
+/** Evita repetir el mismo aviso cada vez que la clienta escribe en la misma conversación. */
+export async function hasRecentNotification(conversationId: string, eventType: string, hours: number = 24): Promise<boolean> {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .eq('event_type', eventType)
+    .gte('created_at', since)
+    .limit(1);
+
+  if (error) throw new Error(`Error consultando avisos: ${error.message}`);
+  return (data || []).length > 0;
+}
+
 export async function logNotification(conversationId: string, eventType: string, message: string) {
   const now = new Date().toISOString();
   const { error } = await supabase

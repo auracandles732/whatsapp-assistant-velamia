@@ -54,6 +54,17 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 | Comprobante | — | Avisa a la dueña para verificar; el bot sigue atendiendo |
 
 La IA nunca redacta números de cuenta: el bloque bancario (clave `payment_transfer_info`) se envía sin modificar.
+
+## Fechas, envíos y preguntas sin respuesta
+
+- **Entrega = fecha del evento − 3 días** (el pedido le llega a la clienta ese día). Siempre hay disponibilidad.
+  La resta la hace el sistema (`subtractDays`); si la IA menciona otra fecha, se rehace la respuesta.
+  Si la entrega calculada es hoy o ya pasó, el bot no menciona fecha y la dueña recibe el aviso `urgent_date` (una vez al día por chat).
+- Urgencia honesta: la fecha se reserva al recibir el anticipo.
+- **Envíos** a todo Ecuador, sin retiro en local, sin pedido mínimo. Costos y tiempos salen de
+  **CRM → Configuración → Envíos** (clave `shipping_info`); la IA no los inventa.
+- Si la clienta pregunta algo que no está en las instrucciones, el bot dice que lo verifica y la dueña
+  recibe el aviso `owner_question` con la pregunta; el bot sigue atendiendo.
 - Cotización en el CRM solo cuando la clienta pide cotización o valor total.
 - Si una persona escribe desde el CRM, el bot queda pausado en ese chat hasta reactivarlo.
 

@@ -20,7 +20,8 @@ import {
   updateQuotationItems,
   updateQuotationStatus,
   productNameFromCaption,
-  recordFollowUp
+  recordFollowUp,
+  hasRecentNotification
 } from '../db';
 import { FOLLOW_UP_MARKER } from '../services/followups';
 import {
@@ -35,7 +36,9 @@ import {
   transcribeAudio,
   describeImage,
   extractOrderItems,
-  TurnPlan
+  TurnPlan,
+  todayInGuayaquil,
+  formatDateEc
 } from '../services/openai';
 import { uploadBufferToStorage } from '../services/storage';
 import { notifyOwner } from '../services/notifications';
@@ -274,11 +277,12 @@ async function processMessage(message: any, value: any) {
       return;
     }
 
-    const [catalog, customPrompt, sentProducts, bankDetails] = await Promise.all([
+    const [catalog, customPrompt, sentProducts, bankDetails, shippingInfo] = await Promise.all([
       getAllProducts(),
       getConfig('system_prompt'),
       getSentProductNames(conversationId),
-      getConfig('payment_transfer_info')
+      getConfig('payment_transfer_info'),
+      getConfig('shipping_info')
     ]);
 
     const customerDetail = toAiText({ sender: 'customer', type: messageType, content: storedContent });
@@ -286,7 +290,7 @@ async function processMessage(message: any, value: any) {
 
     let plan: TurnPlan;
     try {
-      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent });
+      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, shippingInfo });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
       console.error('❌ La IA no respondió:', error.message);
@@ -304,6 +308,20 @@ async function processMessage(message: any, value: any) {
 
     if (plan.reply) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);
+    }
+
+    // Siempre se confirma la fecha, pero si la entrega cae hoy o ya pasó la dueña debe saberlo (una vez al día por chat).
+    if (plan.delivery_date && plan.delivery_date <= todayInGuayaquil()
+      && !(await hasRecentNotification(conversationId, 'urgent_date'))) {
+      await notifyOwner({
+        conversationId, customerPhone: phoneNumber, customerName, event: 'urgent_date',
+        detail: `Evento ${formatDateEc(plan.event_date)} · entrega calculada ${formatDateEc(plan.delivery_date)}`
+      });
+    }
+
+    // Pregunta que el bot no pudo contestar: la dueña recibe el aviso y el bot sigue atendiendo.
+    if (plan.owner_question) {
+      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'owner_question', detail: plan.owner_question });
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.

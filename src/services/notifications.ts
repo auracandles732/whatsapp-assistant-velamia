@@ -1,9 +1,11 @@
 import { sendTextMessage, sendTemplateMessage } from './whatsapp';
 import { getOwnerPhone, logNotification } from './supabase';
 
-export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'bot_error' | 'bank_details_missing';
+export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'bot_error' | 'bank_details_missing' | 'owner_question' | 'urgent_date';
 
 const EVENT_LABELS: Record<OwnerEvent, string> = {
+  urgent_date: '📅 Pedido con entrega para hoy o una fecha ya pasada',
+  owner_question: '❓ El bot no supo responder una pregunta',
   card_payment: '💳 Quiere pagar con tarjeta, envíale el link de pago',
   bank_details_missing: '🏦 Eligió transferencia, pero faltan tus datos bancarios en el CRM',
   payment_proof: '📸 Envió comprobante de pago',
