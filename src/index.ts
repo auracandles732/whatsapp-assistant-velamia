@@ -32,7 +32,8 @@ import {
   issueSessionToken,
   verifyWebhookSignature
 } from './middleware/auth';
-import { sendTextMessage, sendImageMessage, getSentMessageId } from './services/whatsapp';
+import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
+import { startFollowUpScheduler } from './services/followups';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -97,7 +98,12 @@ app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
 // ---------- Salud ----------
 
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    // Solo indica si la configuración existe, nunca su valor.
+    followups: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? 'activo' : 'falta WHATSAPP_BUSINESS_ACCOUNT_ID'
+  });
 });
 
 // ---------- Acceso al CRM ----------
@@ -261,7 +267,7 @@ app.post('/api/send-message', requireCrmSession, async (req: Request, res: Respo
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando mensaje manual:', error.response?.data || error.message);
-    res.status(500).json({ error: error.response?.data?.error?.message || error.message });
+    res.status(500).json({ error: describeWhatsAppError(error) });
   }
 });
 
@@ -277,7 +283,7 @@ app.post('/api/send-image', requireCrmSession, async (req: Request, res: Respons
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.response?.data || error.message);
-    res.status(500).json({ error: error.response?.data?.error?.message || error.message });
+    res.status(500).json({ error: describeWhatsAppError(error) });
   }
 });
 
@@ -455,11 +461,12 @@ initDatabase().catch(error => console.error('❌', error.message));
 app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
 
-  const missing = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID', 'OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'WEBHOOK_VERIFY_TOKEN', 'CRM_PASSWORD', 'META_APP_SECRET']
+  const missing = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID', 'WHATSAPP_BUSINESS_ACCOUNT_ID', 'OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'WEBHOOK_VERIFY_TOKEN', 'CRM_PASSWORD', 'META_APP_SECRET']
     .filter(key => !process.env[key]);
   if (missing.length > 0) {
     console.warn(`⚠️  Variables de entorno sin configurar: ${missing.join(', ')}`);
   }
 
   keepAwake();
+  startFollowUpScheduler();
 });

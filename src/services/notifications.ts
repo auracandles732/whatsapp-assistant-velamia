@@ -1,4 +1,4 @@
-import { sendTextMessage } from './whatsapp';
+import { sendTextMessage, sendTemplateMessage } from './whatsapp';
 import { getOwnerPhone, logNotification } from './supabase';
 
 export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'bot_error';
@@ -11,12 +11,19 @@ const EVENT_LABELS: Record<OwnerEvent, string> = {
   bot_error: '🤖 El bot no pudo responder, responde tú desde el CRM'
 };
 
+// Plantilla aprobada por Meta: llega aunque la dueña no haya escrito al bot en 24 horas.
+const ALERT_TEMPLATE = 'velamia_aviso_equipo';
+const ALERT_TEMPLATE_LANGUAGE = 'es';
+
+/** WhatsApp rechaza variables de plantilla con saltos de línea, tabulaciones o muchos espacios. */
+function toTemplateParam(value: string): string {
+  return value.replace(/[\n\t\r]+/g, ' ').replace(/ {4,}/g, '   ').trim().slice(0, 200) || '-';
+}
+
 /**
  * Avisa a la dueña por WhatsApp. Nunca lanza error: un aviso fallido no debe
- * interrumpir la atención al cliente.
- *
- * Nota: WhatsApp solo entrega mensajes libres si ese número escribió al número del
- * negocio en las últimas 24 horas.
+ * interrumpir la atención al cliente. Si la plantilla no está disponible (en revisión
+ * o rechazada) se intenta con texto libre, que solo llega dentro de las 24 horas.
  */
 export async function notifyOwner(params: {
   conversationId: string;
@@ -34,10 +41,15 @@ export async function notifyOwner(params: {
       return;
     }
 
-    const crmUrl = process.env.RENDER_EXTERNAL_URL ? `\n\nResponder en el CRM: ${process.env.RENDER_EXTERNAL_URL}/crm` : '';
-    const text = `🔔 *VELAMIA · Atención requerida*\n\n${EVENT_LABELS[event]}\n\n👤 ${customerName}\n📱 +${customerPhone}\n💬 "${detail.slice(0, 300)}"${crmUrl}`;
+    try {
+      await sendTemplateMessage(ownerPhone, ALERT_TEMPLATE, ALERT_TEMPLATE_LANGUAGE,
+        [EVENT_LABELS[event], customerName, `+${customerPhone}`, detail].map(toTemplateParam));
+    } catch (templateError: any) {
+      console.warn('⚠️ Plantilla de aviso no disponible, se envía texto libre:', templateError.response?.data?.error?.message || templateError.message);
+      const crmUrl = process.env.RENDER_EXTERNAL_URL ? `\n\nResponder en el CRM: ${process.env.RENDER_EXTERNAL_URL}/crm` : '';
+      await sendTextMessage(ownerPhone, `🔔 *VELAMIA · Atención requerida*\n\n${EVENT_LABELS[event]}\n\n👤 ${customerName}\n📱 +${customerPhone}\n💬 "${detail.slice(0, 300)}"${crmUrl}`);
+    }
 
-    await sendTextMessage(ownerPhone, text);
     await logNotification(conversationId, event, detail.slice(0, 500));
     console.log(`📬 Aviso enviado a la dueña: ${event}`);
   } catch (error: any) {

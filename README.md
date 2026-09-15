@@ -47,6 +47,26 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 - Cotización en el CRM solo cuando la clienta pide cotización o valor total.
 - Si una persona escribe desde el CRM, el bot queda pausado en ese chat hasta reactivarlo.
 
+## Seguimientos automáticos (`src/services/followups.ts`)
+
+Cada 15 minutos, entre 9:00 y 19:00 (Guayaquil), se envían las plantillas aprobadas en Meta
+según los días sin respuesta desde el último mensaje de la clienta:
+
+| Días | Plantilla |
+|---|---|
+| 1 | `velamia_seguimiento_01` |
+| 2 | `velamia_seguimiento_02` |
+| 4 | `velamia_seguimiento_03` |
+| 7 | `velamia_seguimiento_04_v2` |
+| 14 | `velamia_seguimiento_05_v2` |
+
+- No se envían si el bot está apagado, el chat está pausado, hay un pedido en los últimos 60 días
+  o la clienta respondió **NO** (queda registrado como `opt_out` en `followups`).
+- Si la clienta responde, la serie se reinicia desde su nuevo mensaje. Nunca dos seguimientos en menos de 20 h.
+- Cada envío queda en `followups` (`auto_followup`) y en el chat con el prefijo "📩 Seguimiento automático".
+- Los avisos a la dueña usan la plantilla `velamia_aviso_equipo`; si no está aprobada, texto libre.
+- Requiere la variable `WHATSAPP_BUSINESS_ACCOUNT_ID` (en `/health` aparece `followups: activo`).
+
 ## Variables de entorno (Render → Environment)
 
 | Variable | Uso |

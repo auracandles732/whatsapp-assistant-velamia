@@ -492,6 +492,55 @@ export async function getOwnerPhone(): Promise<string | null> {
   return (await getConfig('owner_phone')) || null;
 }
 
+// ---------- SEGUIMIENTOS AUTOMÁTICOS ----------
+// Se registran en la tabla followups: 'auto_followup' por cada plantilla enviada y
+// 'opt_out' cuando la clienta responde NO.
+
+export async function recordFollowUp(conversationId: string, type: 'auto_followup' | 'opt_out', message: string) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('followups')
+    .insert([{
+      id: randomUUID(),
+      conversation_id: conversationId,
+      type,
+      message,
+      scheduled_time: now,
+      status: 'sent',
+      created_at: now
+    }]);
+
+  if (error) throw new Error(`Error registrando seguimiento: ${error.message}`);
+}
+
+/** Lo necesario para decidir seguimientos de todos los chats con solo tres consultas. */
+export async function getFollowUpActivity(days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const [followUps, optOuts, orders] = await Promise.all([
+    supabase.from('followups').select('conversation_id, created_at').eq('type', 'auto_followup').gte('created_at', since),
+    supabase.from('followups').select('conversation_id').eq('type', 'opt_out'),
+    supabase.from('orders').select('conversation_id').neq('status', 'cancelled').gte('created_at', since)
+  ]);
+
+  for (const result of [followUps, optOuts, orders]) {
+    if (result.error) throw new Error(`Error leyendo actividad de seguimientos: ${result.error.message}`);
+  }
+
+  const sentByConversation = new Map<string, Date[]>();
+  for (const row of followUps.data || []) {
+    const list = sentByConversation.get(row.conversation_id) || [];
+    list.push(parseDbTimestamp(row.created_at));
+    sentByConversation.set(row.conversation_id, list);
+  }
+
+  return {
+    followUps: sentByConversation,
+    optedOut: new Set((optOuts.data || []).map(r => r.conversation_id)),
+    withOrder: new Set((orders.data || []).map(r => r.conversation_id))
+  };
+}
+
 // ---------- AVISOS A LA DUEÑA ----------
 
 export async function logNotification(conversationId: string, eventType: string, message: string) {

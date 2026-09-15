@@ -19,8 +19,10 @@ import {
   getRecentPendingQuotation,
   updateQuotationItems,
   updateQuotationStatus,
-  productNameFromCaption
+  productNameFromCaption,
+  recordFollowUp
 } from '../db';
+import { FOLLOW_UP_MARKER } from '../services/followups';
 import {
   sendTextMessage,
   sendImageMessage,
@@ -243,6 +245,18 @@ async function processMessage(message: any, value: any) {
 
     await saveMessage(conversationId, 'customer', messageType, storedContent, waMessageId);
     await touchConversation(conversationId);
+
+    // Las plantillas de seguimiento dicen "responde NO": se respeta siempre, aunque el bot esté pausado.
+    const lastBotMessage = history[history.length - 1];
+    const answeredFollowUp = lastBotMessage?.sender === 'bot' && String(lastBotMessage.content || '').startsWith(FOLLOW_UP_MARKER);
+    if (answeredFollowUp && messageType === 'text' && /^\s*no\s*[.!¡]*\s*$/i.test(userContent)) {
+      await recordFollowUp(conversationId, 'opt_out', 'La clienta respondió NO a los seguimientos');
+      console.log(`🔕 ${phoneNumber} no quiere más seguimientos`);
+      if ((await getConfig('bot_enabled')) !== 'false' && !(await isBotPaused(conversationId))) {
+        await sendAndSaveText(conversationId, phoneNumber, 'Listo 🤍 No te enviaré más mensajes de seguimiento. Si más adelante necesitas velitas para tu evento, aquí estaré ✨');
+      }
+      return;
+    }
 
     if ((await getConfig('bot_enabled')) === 'false') {
       console.log('🚫 Bot desactivado - mensaje guardado, esperando respuesta manual');
