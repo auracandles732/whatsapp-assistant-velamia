@@ -39,7 +39,10 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 ## Comportamiento del bot
 
 - Precios siempre **por docena**; solo productos reales del catálogo.
-- Envía fotos solo cuando la clienta pide ver modelos; todas las de la categoría, sin repetir.
+- Espera **5 segundos** sin mensajes nuevos antes de responder y contesta en un solo turno todo lo que la clienta
+  escribió seguido (máximo 20 s de espera si no deja de escribir). El mensaje se guarda en el CRM al instante.
+- Envía fotos solo cuando la clienta pide ver modelos, sin repetir, **de 4 en 4**: si quedan más, pregunta
+  "¿Te gustaría ver más modelos?" y envía las siguientes 4 cuando acepta.
 - Reconoce la foto que la clienta cita al responder.
 - La personalización (colores, nombres, frases) siempre es válida y no impide cerrar la venta.
 - Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido, reclamo**.

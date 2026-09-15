@@ -113,6 +113,8 @@ FOTOS (campo show_products):
 - No repitas fotos ya enviadas en esta conversación, salvo que el cliente pida volver a ver un modelo concreto.
 - Déjalo vacío cuando el cliente está dando detalles de su pedido (cantidad, fecha, colores, nombres, personalización), confirmando, preguntando precios o formas de pago, o conversando. En esos casos una foto no aporta y confunde.
 - Si envías fotos, en reply preséntalas en una frase corta; no repitas la lista completa de nombres y precios porque cada foto ya lleva su nombre y precio.
+- El sistema envía las fotos de 4 en 4 y, si quedan más, pregunta solo si desea ver más modelos. No hagas tú esa pregunta ni digas cuántas fotos vas a enviar.
+- Si el cliente acepta ver más ("sí", "dale", "muéstrame más"…) y hay FOTOS PENDIENTES POR MOSTRAR, pon TODAS esas en show_products (el sistema las reparte).
 - Cuando el mensaje indica que el cliente responde a una foto concreta, ese es el modelo del que habla.
 
 CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar ningún cambio de persona):
@@ -247,7 +249,8 @@ function buildSystemPrompt(
   catalog: CatalogProduct[],
   customPrompt: string | undefined,
   sentProducts: string[],
-  bankDetailsSent: boolean
+  bankDetailsSent: boolean,
+  pendingProducts: string[] = []
 ) {
   const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_PERSONA;
 
@@ -266,6 +269,9 @@ function buildSystemPrompt(
   const sentText = sentProducts.length > 0
     ? `FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ${sentProducts.join(', ')}`
     : 'FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ninguna';
+  const pendingText = pendingProducts.length > 0
+    ? `\nFOTOS PENDIENTES POR MOSTRAR (ya se le preguntó si desea ver más modelos): ${pendingProducts.join(', ')}`
+    : '';
 
   // Sin la fecha la IA no puede saber si "el 18" ya pasó ni qué año corresponde.
   const today = new Date().toLocaleDateString('es-EC', {
@@ -278,7 +284,7 @@ function buildSystemPrompt(
 
   const shippingText = `TARIFAS DE ENVÍO DESDE GUAYAQUIL (uso interno, todos los cantones de la provincia cuestan igual):\n${shippingRatesSummary()}`;
 
-  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${shippingText}\n\n${catalogText}\n\n${sentText}\n${bankText}`;
+  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${shippingText}\n\n${catalogText}\n\n${sentText}${pendingText}\n${bankText}`;
 }
 
 /**
@@ -292,11 +298,12 @@ export async function planTurn(params: {
   customPrompt?: string;
   sentProducts: string[];
   bankDetailsSent?: boolean;
+  pendingProducts?: string[];
 }): Promise<TurnPlan> {
-  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false } = params;
+  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [] } = params;
 
   const baseMessages = [
-    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent) },
+    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts) },
     ...history,
     { role: 'user' as const, content: userMessage }
   ];

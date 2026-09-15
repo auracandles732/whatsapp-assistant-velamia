@@ -56,23 +56,65 @@ const PAUSING_HANDOFFS = new Set(['card_payment', 'complaint']);
 // Inicio del mensaje con los datos bancarios: permite saber si ya se enviaron en el chat.
 const BANK_DETAILS_MARKER = '🏦 Datos para transferencia';
 
+// La clienta suele escribir en varios mensajes seguidos: se espera este silencio antes de responder
+// a todos juntos. Si no deja de escribir, se responde igual pasado el tiempo máximo.
+export const RESPONSE_DELAY_MS = 5000;
+const MAX_RESPONSE_WAIT_MS = 20000;
+
+// Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
+export const PHOTO_BATCH_SIZE = 4;
+export const MORE_PHOTOS_QUESTION = '¿Te gustaría ver más modelos? 😊✨';
+
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
+type IncomingItem = { aiContent: string; storedContent: string; messageType: string; waMessageId: string };
+
+type PendingBatch = {
+  conversationId: string;
+  phoneNumber: string;
+  customerName: string;
+  items: IncomingItem[];
+  firstAt: number;
+  timer?: NodeJS.Timeout;
+};
+
 /**
- * Los mensajes de un mismo cliente se procesan en fila: si escribe tres seguidos, cada
- * respuesta ve la anterior y nunca se crean dos chats para el mismo número.
+ * Los mensajes de un mismo cliente se procesan en fila: guardar, responder y volver a guardar
+ * nunca se cruzan, y nunca se crean dos chats para el mismo número.
  */
 const queues = new Map<string, Promise<void>>();
 
-export function handleWebhookMessage(message: any, value: any): Promise<void> {
-  const key = String(message?.from || 'desconocido');
+// Mensajes ya guardados que esperan la respuesta del bot, por teléfono.
+const pendingBatches = new Map<string, PendingBatch>();
+
+// Fotos que quedaron por mostrar tras preguntar "¿más modelos?", por conversación.
+const pendingPhotos = new Map<string, string[]>();
+
+function enqueue(key: string, task: () => Promise<void>): Promise<void> {
   const previous = queues.get(key) || Promise.resolve();
-  const current = previous.then(() => processMessage(message, value));
+  const current = previous.then(task, task);
   queues.set(key, current);
   current.finally(() => {
     if (queues.get(key) === current) queues.delete(key);
   });
   return current;
+}
+
+export function handleWebhookMessage(message: any, value: any): Promise<void> {
+  const key = String(message?.from || 'desconocido');
+  return enqueue(key, () => ingestMessage(message, value));
+}
+
+/** Programa (o reprograma) la respuesta: se envía tras RESPONSE_DELAY_MS sin mensajes nuevos. */
+function scheduleResponse(key: string, batch: PendingBatch) {
+  if (batch.timer) clearTimeout(batch.timer);
+  const remaining = batch.firstAt + MAX_RESPONSE_WAIT_MS - Date.now();
+  const delay = Math.max(0, Math.min(RESPONSE_DELAY_MS, remaining));
+  batch.timer = setTimeout(() => {
+    if (pendingBatches.get(key) !== batch) return;
+    pendingBatches.delete(key);
+    enqueue(key, () => respondToBatch(batch));
+  }, delay);
 }
 
 /** Convierte un mensaje guardado en lo que la IA necesita leer (sin URLs de archivos). */
@@ -194,7 +236,8 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
   }
 }
 
-async function processMessage(message: any, value: any) {
+/** Guarda el mensaje en el CRM al instante y lo deja esperando la respuesta del bot. */
+async function ingestMessage(message: any, value: any) {
   try {
     const phoneNumber = message.from;
     const waMessageId = message.id;
@@ -238,13 +281,6 @@ async function processMessage(message: any, value: any) {
       }
     }
 
-    // El historial se lee ANTES de guardar el mensaje nuevo; si no, se enviaría duplicado a la IA.
-    const history = await getConversationHistory(conversationId, HISTORY_LIMIT);
-    const conversationHistory: ChatTurn[] = history.map((msg: any) => ({
-      role: msg.sender === 'customer' ? 'user' as const : 'assistant' as const,
-      content: toAiText(msg)
-    }));
-
     // La URL del archivo debe seguir al inicio para que el CRM la muestre.
     let storedContent = userContent;
     if (quotedLabel) {
@@ -253,12 +289,13 @@ async function processMessage(message: any, value: any) {
         : `${quotedLabel}\n${userContent}`;
     }
 
+    const [lastMessage] = await getConversationHistory(conversationId, 1);
+
     await saveMessage(conversationId, 'customer', messageType, storedContent, waMessageId);
     await touchConversation(conversationId);
 
     // Las plantillas de seguimiento dicen "responde NO": se respeta siempre, aunque el bot esté pausado.
-    const lastBotMessage = history[history.length - 1];
-    const answeredFollowUp = lastBotMessage?.sender === 'bot' && String(lastBotMessage.content || '').startsWith(FOLLOW_UP_MARKER);
+    const answeredFollowUp = lastMessage?.sender === 'bot' && String(lastMessage.content || '').startsWith(FOLLOW_UP_MARKER);
     if (answeredFollowUp && messageType === 'text' && /^\s*no\s*[.!¡]*\s*$/i.test(userContent)) {
       await recordFollowUp(conversationId, 'opt_out', 'La clienta respondió NO a los seguimientos');
       console.log(`🔕 ${phoneNumber} no quiere más seguimientos`);
@@ -268,15 +305,43 @@ async function processMessage(message: any, value: any) {
       return;
     }
 
+    const key = String(phoneNumber);
+    let batch = pendingBatches.get(key);
+    if (!batch) {
+      batch = { conversationId, phoneNumber, customerName, items: [], firstAt: Date.now() };
+      pendingBatches.set(key, batch);
+    }
+    batch.items.push({ aiContent, storedContent, messageType, waMessageId });
+    scheduleResponse(key, batch);
+  } catch (error) {
+    console.error('❌ Error guardando mensaje:', error);
+  }
+}
+
+/** Responde en un solo turno a todos los mensajes que la clienta envió seguidos. */
+async function respondToBatch(batch: PendingBatch) {
+  const { conversationId, phoneNumber, customerName, items } = batch;
+  try {
     if ((await getConfig('bot_enabled')) === 'false') {
       console.log('🚫 Bot desactivado - mensaje guardado, esperando respuesta manual');
       return;
     }
 
+    // Se revisa al responder: la dueña pudo escribir desde el CRM durante la espera.
     if (await isBotPaused(conversationId)) {
       console.log('⏸️ Bot pausado en este chat - lo atiende una persona');
       return;
     }
+
+    // Los mensajes de la tanda ya están guardados: se quitan del historial para no enviarlos dos veces a la IA.
+    const batchIds = new Set(items.map(i => i.waMessageId).filter(Boolean));
+    const history = (await getConversationHistory(conversationId, HISTORY_LIMIT + items.length))
+      .filter((m: any) => !(m.sender === 'customer' && batchIds.has(m.wa_message_id)))
+      .slice(-HISTORY_LIMIT);
+    const conversationHistory: ChatTurn[] = history.map((msg: any) => ({
+      role: msg.sender === 'customer' ? 'user' as const : 'assistant' as const,
+      content: toAiText(msg)
+    }));
 
     const [catalog, customPrompt, sentProducts, bankDetails] = await Promise.all([
       getAllProducts(),
@@ -285,12 +350,22 @@ async function processMessage(message: any, value: any) {
       getConfig('payment_transfer_info')
     ]);
 
-    const customerDetail = toAiText({ sender: 'customer', type: messageType, content: storedContent });
+    const aiContent = items.map(i => i.aiContent).join('\n');
+    const customerDetail = items
+      .map(i => toAiText({ sender: 'customer', type: i.messageType, content: i.storedContent }))
+      .join('\n');
     const bankDetailsSent = history.some((m: any) => m.sender === 'bot' && String(m.content || '').startsWith(BANK_DETAILS_MARKER));
+
+    // Solo cuentan como pendientes si la última pregunta del bot fue "¿más modelos?".
+    const lastBot = [...history].reverse().find((m: any) => m.sender === 'bot');
+    const offeredMore = lastBot?.type === 'text' && String(lastBot.content || '') === MORE_PHOTOS_QUESTION;
+    const pendingProducts = offeredMore
+      ? (pendingPhotos.get(conversationId) || []).filter(n => !sentProducts.includes(n))
+      : [];
 
     let plan: TurnPlan;
     try {
-      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent });
+      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
       // Una vez por hora por chat: si la IA está caída (por ejemplo sin crédito), cada mensaje generaría otro aviso.
@@ -300,7 +375,7 @@ async function processMessage(message: any, value: any) {
       }
       return;
     }
-    console.log(`🎯 intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff} | datos bancarios: ${plan.send_bank_details}`);
+    console.log(`🎯 ${items.length} mensaje(s) | intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff} | datos bancarios: ${plan.send_bank_details}`);
 
     // Respuesta vacía y nada más que enviar: la clienta quedaría sin contestar.
     if (!plan.reply && plan.handoff === 'none' && plan.show_products.length === 0) {
@@ -346,7 +421,11 @@ async function processMessage(message: any, value: any) {
     }
 
     if (plan.show_products.length > 0) {
-      await sendProductPhotos(conversationId, phoneNumber, plan.show_products, catalog);
+      // Si la IA eligió solo parte de las pendientes, se toman todas: las que no entren en esta tanda
+      // quedan para la siguiente pregunta en vez de perderse.
+      const continuesPending = pendingProducts.length > 0 && plan.show_products.every(n => pendingProducts.includes(n));
+      const photos = continuesPending ? pendingProducts : plan.show_products;
+      await sendProductPhotos(conversationId, phoneNumber, photos, catalog);
     }
 
     if (plan.intent === 'quotation' || plan.intent === 'order') {
@@ -361,19 +440,22 @@ async function processMessage(message: any, value: any) {
       await handleDeliveryStatusIntent(conversationId, phoneNumber);
     }
   } catch (error) {
-    console.error('❌ Error procesando mensaje:', error);
+    console.error('❌ Error respondiendo mensaje:', error);
   }
 }
 
+/** Envía hasta PHOTO_BATCH_SIZE fotos; si quedan más, las guarda y pregunta si desea verlas. */
 async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[]) {
   const products = names
     .map(name => catalog.find(p => p.name === name))
     .filter(p => p && p.image_url);
 
-  console.log(`🕯️ Enviando ${products.length} foto(s) de productos`);
+  const batch = products.slice(0, PHOTO_BATCH_SIZE);
+  const rest = products.slice(PHOTO_BATCH_SIZE).map(p => p.name);
+  console.log(`🕯️ Enviando ${batch.length} foto(s) de productos${rest.length ? ` (quedan ${rest.length})` : ''}`);
 
   // Una a una y en orden: si una falla, las demás igual se envían.
-  for (const product of products) {
+  for (const product of batch) {
     try {
       const caption = `🕯️ *${product.name}*\n💰 $${product.price} la docena`;
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
@@ -381,6 +463,13 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
     } catch (error: any) {
       console.error(`❌ No se pudo enviar la foto de ${product.name}:`, error.message);
     }
+  }
+
+  if (rest.length > 0) {
+    pendingPhotos.set(conversationId, rest);
+    await sendAndSaveText(conversationId, phoneNumber, MORE_PHOTOS_QUESTION);
+  } else {
+    pendingPhotos.delete(conversationId);
   }
 }
 
