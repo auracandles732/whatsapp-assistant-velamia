@@ -61,9 +61,15 @@ const BANK_DETAILS_MARKER = '🏦 Datos para transferencia';
 // solo da datos: sin una de estas no se registra pedido aunque la IA lo haya marcado.
 // Palabras con que la clienta pide cotización o el valor total. La dueña pidió anotar cotizaciones solo en ese caso,
 // aunque el bot mencione un total por su cuenta.
-const QUOTE_REQUEST_PATTERN = /(?<!\p{L})(cotiz\p{L}*|total\p{L}*|cu[aá]nt\p{L}*|precio\p{L}*|valor\p{L}*|sale|salen|saldr\p{L}*|cuest\p{L}*|cost\p{L}*|monto|presupuesto)(?!\p{L})/iu;
+// Pedidos claros del valor total ("cuánto sería el total", "me cotizas"): con ellos se anota la cotización
+// aunque la IA no la marque. Preguntar el precio de un modelo no entra aquí.
+const TOTAL_REQUEST_PATTERN = /(?<!\p{L})(cotiz\p{L}*|total|presupuesto|cu[aá]nto\s+(?:ser[ií]a|me\s+sale|sale|saldr[ií]a|queda|quedar[ií]a|es\s+todo|pago|pagar[ií]a|debo))(?!\p{L})/iu;
 
-const CONFIRMATION_PATTERN =/(?<!\p{L})(confirm\p{L}*|reserv\p{L}*|separ\p{L}*|apart\p{L}*|hag[aá]mos\p{L}*|procedamos|proceder|de acuerdo|listo|dale|vamos|ok|okey|okay|s[ií]|claro|perfecto|lo quiero|la quiero|los quiero|las quiero|me (?:lo|la|los|las) llevo|compr\p{L}*|pag\p{L}*|transfer\p{L}*|tarjeta|dep[oó]sit\p{L}*|comprobante|anticipo)(?!\p{L})/iu;
+const QUOTE_REQUEST_PATTERN =/(?<!\p{L})(cotiz\p{L}*|total\p{L}*|cu[aá]nt\p{L}*|precio\p{L}*|valor\p{L}*|sale|salen|saldr\p{L}*|cuest\p{L}*|cost\p{L}*|monto|presupuesto)(?!\p{L})/iu;
+
+// Las palabras débiles ("ok", "sí", "perfecto") no confirman si en el mismo mensaje pregunta el precio.
+const STRONG_CONFIRMATION = /(?<!\p{L})(confirm\p{L}*|reserv\p{L}*|separ\p{L}*|apart\p{L}*|hag[aá]mos\p{L}*|procedamos|proceder|lo quiero|la quiero|los quiero|las quiero|me (?:lo|la|los|las) llevo|compr[aeoó]\p{L}*|transfer\p{L}*|tarjeta|dep[oó]sit\p{L}*|comprobante)(?!\p{L})/iu;
+const WEAK_CONFIRMATION = /(?<!\p{L})(de acuerdo|listo|dale|vamos|ok|okey|okay|s[ií]|claro|perfecto|pag\p{L}*|anticipo)(?!\p{L})/iu;
 
 // La clienta suele escribir en varios mensajes seguidos: se espera este silencio antes de responder
 // a todos juntos. Si no deja de escribir, se responde igual pasado el tiempo máximo.
@@ -72,7 +78,21 @@ const MAX_RESPONSE_WAIT_MS = 20000;
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
 export const PHOTO_BATCH_SIZE = 4;
-export const MORE_PHOTOS_QUESTION = '¿Te gustaría ver más modelos? 😊✨';
+// Varias formas de preguntar para no repetir siempre la misma frase y los mismos emojis.
+export const MORE_PHOTOS_QUESTIONS = [
+  '¿Te gustaría ver más modelos? 😊',
+  '¿Quieres que te muestre más modelos? 🌸',
+  '¿Te enseño más opciones? 🎀',
+  '¿Deseas ver más diseños? 💕'
+];
+
+// Emojis de las últimas respuestas del bot: la IA los evita para no repetir siempre los mismos.
+// Los emojis al inicio de cada línea de una lista (🕯️ Modelo, 💰 Total…) son etiquetas y no cuentan.
+function recentBotEmojis(history: any[]): string[] {
+  const texts = history.filter(m => m.sender === 'bot' && m.type === 'text').slice(-4);
+  const lines = texts.flatMap(m => String(m.content || '').split('\n').map(l => l.replace(/^\s*\p{Extended_Pictographic}️?/u, '')));
+  return [...new Set(lines.flatMap(l => l.match(/\p{Extended_Pictographic}/gu) || []))];
+}
 
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
@@ -404,14 +424,17 @@ async function respondToBatch(batch: PendingBatch) {
 
     // Solo cuentan como pendientes si la última pregunta del bot fue "¿más modelos?".
     const lastBot = [...history].reverse().find((m: any) => m.sender === 'bot');
-    const offeredMore = lastBot?.type === 'text' && String(lastBot.content || '') === MORE_PHOTOS_QUESTION;
+    const offeredMore = lastBot?.type === 'text' && MORE_PHOTOS_QUESTIONS.includes(String(lastBot.content || ''));
     const pendingProducts = offeredMore
       ? (pendingPhotos.get(conversationId) || []).filter(n => !sentProducts.includes(n))
       : [];
 
     let plan: TurnPlan;
     try {
-      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts });
+      plan = await planTurn({
+        history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts,
+        recentEmojis: recentBotEmojis(history)
+      });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
       // Una vez por hora por chat: si la IA está caída (por ejemplo sin crédito), cada mensaje generaría otro aviso.
@@ -459,9 +482,15 @@ async function respondToBatch(batch: PendingBatch) {
 
     // Un pedido falso le avisaría a la dueña sin motivo y frenaría los seguimientos de la clienta.
     let saleIntent = plan.intent;
-    if (saleIntent === 'order' && !plan.send_bank_details && plan.handoff === 'none' && !CONFIRMATION_PATTERN.test(aiContent)) {
-      console.log('🛍️ La IA marcó pedido sin confirmación de la clienta; no se registra');
-      saleIntent = 'other';
+    const asksPrice = QUOTE_REQUEST_PATTERN.test(aiContent);
+    const confirms = STRONG_CONFIRMATION.test(aiContent) || (WEAK_CONFIRMATION.test(aiContent) && !asksPrice);
+    if (saleIntent === 'order' && !plan.send_bank_details && plan.handoff === 'none' && !confirms) {
+      // "Ok, ¿cuánto sería el total?" pide la cotización, no confirma la compra.
+      saleIntent = asksPrice ? 'quotation' : 'other';
+      console.log(`🛍️ La IA marcó pedido sin confirmación de la clienta; se registra como: ${saleIntent === 'quotation' ? 'cotización' : 'nada'}`);
+    }
+    if (saleIntent !== 'order' && plan.order_total > 0 && TOTAL_REQUEST_PATTERN.test(aiContent)) {
+      saleIntent = 'quotation';
     }
     if (saleIntent === 'quotation' && !QUOTE_REQUEST_PATTERN.test(aiContent)) {
       console.log('📋 La IA marcó cotización sin que la clienta la pidiera; no se registra');
@@ -530,7 +559,8 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
 
   if (rest.length > 0) {
     pendingPhotos.set(conversationId, rest);
-    await sendAndSaveText(conversationId, phoneNumber, MORE_PHOTOS_QUESTION);
+    const question = MORE_PHOTOS_QUESTIONS[Math.floor(Math.random() * MORE_PHOTOS_QUESTIONS.length)];
+    await sendAndSaveText(conversationId, phoneNumber, question);
   } else {
     pendingPhotos.delete(conversationId);
   }

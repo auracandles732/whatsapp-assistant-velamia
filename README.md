@@ -49,6 +49,10 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
   cantidad y ciudad no es un pedido. Cotización y pedido usan los mismos modelos, docenas y personalización
   con que se calculó el valor que recibió la clienta.
 - Al publicar una versión (SIGTERM de Render) responde de inmediato los mensajes que estaban en espera.
+- **Formato:** frase cálida, datos en lista (un dato por línea con emoji), reserva de fecha debajo y una pregunta.
+  Nunca "te lo dejo anotado". Si la IA repite un emoji de adorno de los últimos 4 mensajes, `varyEmojis` lo cambia.
+- **Datos bancarios:** solo cuando la clienta elige transferencia o pide la cuenta (`BANK_CHOICE_PATTERN`);
+  si no eligió forma de pago, el bot pregunta "transferencia o tarjeta".
 - Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido, reclamo**.
   Solo avisa (sin pausar) cuando llega un **comprobante de pago**, un **pedido nuevo** o si la IA falla.
 

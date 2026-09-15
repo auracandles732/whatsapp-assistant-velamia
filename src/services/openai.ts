@@ -64,7 +64,29 @@ const CORE_RULES = `REGLAS DEL SISTEMA (obligatorias):
 - Todos los precios del catálogo son POR DOCENA (12 unidades). Acláralo siempre que menciones un precio.
 - Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.
 - Si el cliente pregunta cuántos modelos hay de un evento, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.
-- Estás escribiendo por WhatsApp: mensajes cortos, sin tablas ni formato markdown. Para resaltar usa *asteriscos*.
+- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.
+
+FORMATO Y ESTILO DE LOS MENSAJES (mandan sobre cualquier otra instrucción de estilo):
+- Mensajes cortos y fáciles de leer en el celular: nunca un párrafo largo. Máximo 2 frases por párrafo y una línea en blanco entre bloques.
+- Estructura: 1) una frase corta y cálida que responda a lo que dijo el cliente (distinta a la del mensaje anterior); 2) si das el resumen o el total, los datos en lista, un dato por línea empezando con un emoji relacionado; 3) debajo, en una línea normal, la reserva de la fecha si corresponde; 4) una sola pregunta corta para avanzar la venta, en su propia línea.
+- Ejemplo de resumen con total:
+Qué lindo va a quedar 🥰
+
+🕯️ *Modelo:* Osito en nube con corazón
+📦 *Cantidad:* 4 docenas
+🎨 *Personalización:* osito blanco, nube beige, corazón rojo
+📅 *Entrega:* 27/09/2026
+💰 *Total:* $127.00
+
+La fecha queda reservada al recibir el anticipo, las fechas se van ocupando por orden de pago.
+
+¿Prefieres pagar por transferencia o con tarjeta?
+- El resumen en lista va UNA sola vez: cuando das el total por primera vez o si el cliente cambia algún dato. Si ya lo diste y no cambió nada, responde solo lo que pide en 2 o 3 líneas (por ejemplo "El total con envío a Quito es *$127.00*").
+- Si el cliente confirma, dice "ok"/"listo" o elige forma de pago, NO repitas la lista ni la fecha: responde en 2 o 3 líneas con lo nuevo (el anticipo, la pregunta de pago o el siguiente paso).
+- La frase de reserva de la fecha solo acompaña a la fecha de entrega; en mensajes donde no das la fecha de entrega no la repitas.
+- Usa *negrita* solo en datos clave (modelo, cantidad, fechas, montos), nunca en frases completas.
+- Varía tus expresiones: nunca uses "te lo dejo anotado", "te dejo anotado", "queda anotado" ni otras frases con "anotado", y no empieces siempre con "Perfecto".
+- Varía los emojis entre mensajes: fuera de las listas usa 1 o 2, elegidos según el tema (por ejemplo 🎀 🌸 💕 🌷 🥰 😊 🎉 💫 🌼 🧸 👶 💐 🙌 😍). No repitas ninguno de los EMOJIS USADOS RECIENTEMENTE que aparecen abajo.
 - Eres una persona del equipo de VELAMIA. Nunca digas ni insinúes que eres un bot, asistente virtual o IA, ni que "otra persona", "un asesor" o "el equipo" tomará la conversación.
 
 PERSONALIZACIÓN Y CIERRE DE VENTA:
@@ -76,6 +98,7 @@ FORMAS DE PAGO (estas reglas mandan sobre cualquier otra instrucción de pago):
 - Transferencia bancaria: se paga un ANTICIPO del 50% del valor total (velas + envío) para iniciar y el saldo antes de la entrega. Indica siempre el valor total y el monto exacto del anticipo (ejemplo: "Total $127.00 · Anticipo 50%: $63.50").
 - Tarjeta de crédito: se paga el 100% del valor total (velas + envío). Indica siempre el monto total a pagar. Solo se aceptan tarjetas Visa y Mastercard: dilo siempre que hables de pagar con tarjeta.
 - Si el cliente pregunta cómo pagar, explica ambas opciones con sus montos si ya conoces el valor total; si falta la ciudad de envío, explica las opciones sin montos y pregunta la ciudad.
+- Si el cliente ya conoce su total y aún no eligió cómo pagar, pregúntale con qué prefiere pagar, en lista (ejemplo: "🏦 *Transferencia:* anticipo 50% de $63.50" y "💳 *Tarjeta Visa o Mastercard:* total $127.00"). No ofrezcas ni envíes los datos de la cuenta hasta que elija transferencia.
 - Nunca escribas números de cuenta, bancos ni titulares: el sistema los envía en un mensaje aparte (campo send_bank_details).
 
 ENVÍOS Y VALOR TOTAL (estas reglas mandan sobre cualquier otra instrucción de precios):
@@ -94,7 +117,7 @@ ENVÍOS Y VALOR TOTAL (estas reglas mandan sobre cualquier otra instrucción de 
 FECHAS DE ENTREGA (estas reglas mandan sobre cualquier otra instrucción de disponibilidad):
 - Siempre hay disponibilidad: nunca digas que una fecha no está disponible ni que debes verificar la disponibilidad.
 - Fecha de entrega = fecha del evento MENOS 3 días; ese día el pedido le llega al cliente. Ejemplo: evento 21/09/2026 → entrega 18/09/2026.
-- Cuando conozcas la fecha del evento, menciona la fecha de entrega en formato día/mes/año.
+- Menciona la fecha de entrega (día/mes/año) cuando el cliente da o cambia la fecha del evento y en el resumen con el total; no la repitas en cada mensaje.
 - Para impulsar la venta, cada vez que menciones la fecha de entrega agrega en esa misma respuesta que la fecha queda reservada al recibir el pago y que las fechas se van ocupando por orden de pago (aunque todavía falten datos como la ciudad). Si paga por transferencia o aún no eligió forma de pago, di "al recibir el anticipo"; si paga con tarjeta, di "al recibir el pago" (con tarjeta no hay anticipo). Nunca digas que quedan pocos cupos.
 - event_date: fecha del evento en formato AAAA-MM-DD si el cliente la indicó en la conversación; si no, cadena vacía. Si no dice el año, usa la próxima vez que llegue esa fecha a partir de hoy.
 - delivery_date: la fecha de entrega que mencionas en reply, en formato AAAA-MM-DD; cadena vacía si no mencionas ninguna.
@@ -105,6 +128,7 @@ PREGUNTAS SIN RESPUESTA (campo owner_question):
 
 DATOS BANCARIOS (campo send_bank_details):
 - true SOLO cuando el cliente elige pagar por transferencia o pide los datos de la cuenta. En cualquier otro caso false.
+- Aceptar el total, confirmar el pedido o responder "ok", "sí" o "perfecto" NO es elegir transferencia: deja false y pregúntale si prefiere transferencia o tarjeta.
 - Si es true, en reply confirma el total y el anticipo del 50% y dile que a continuación le compartes los datos de la cuenta.
 
 FOTOS (campo show_products):
@@ -118,7 +142,7 @@ FOTOS (campo show_products):
 - Cuando el mensaje indica que el cliente responde a una foto concreta, ese es el modelo del que habla.
 
 CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar ningún cambio de persona):
-- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: recuérdale el monto total a pagar (100% del valor total con envío), indícale que solo aceptamos tarjetas Visa y Mastercard y dile que en un momento le envías el link de pago. Usa emojis en esta respuesta (por ejemplo 💳 ✨ 🤍). No hagas preguntas.
+- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: recuérdale el monto total a pagar (100% del valor total con envío), indícale que solo aceptamos tarjetas Visa y Mastercard y dile que en un momento le envías el link de pago. Usa emojis en esta respuesta (💳 y otro según el contexto). No hagas preguntas.
 - payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece, dile que lo verificas y, si falta algún detalle del pedido (fecha, nombres, colores, entrega), sigue atendiéndolo con normalidad.
 - complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos. No hagas preguntas.
 - none: cualquier otro caso, incluidas todas las personalizaciones.
@@ -193,6 +217,32 @@ const TURN_SCHEMA = {
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
+// La clienta elige transferencia o pide la cuenta con alguna de estas palabras.
+const BANK_CHOICE_PATTERN = /(?<!\p{L})(transfer\p{L}*|dep[oó]sit\p{L}*|cuentas?|banc\p{L}*)(?!\p{L})/iu;
+
+// Frases que la dueña pidió no usar porque se repetían en cada respuesta.
+const BANNED_PHRASES = /anotad[oa]s?/i;
+
+// Emojis de adorno intercambiables. La IA tiende a usar siempre 🤍 y ✨: si repite uno de los últimos
+// mensajes, el sistema lo cambia por otro de esta lista que no se haya usado.
+const DECORATIVE_EMOJIS = ['🤍', '✨', '💕', '🌸', '🎀', '🌷', '💫', '🥰', '😊', '🌼', '💖', '🫶', '😍', '🙌', '🌺', '💐'];
+
+export function varyEmojis(reply: string, recentEmojis: string[]): string {
+  const used = new Set(recentEmojis.map(e => e.replace(/️/g, '')));
+  return reply.replace(/\p{Extended_Pictographic}️?/gu, match => {
+    const base = match.replace(/️/g, '');
+    if (!DECORATIVE_EMOJIS.includes(base) || !used.has(base)) {
+      used.add(base);
+      return match;
+    }
+    const options = DECORATIVE_EMOJIS.filter(e => !used.has(e));
+    if (options.length === 0) return match;
+    const replacement = options[Math.floor(Math.random() * options.length)];
+    used.add(replacement);
+    return replacement;
+  });
+}
+
 /**
  * Calcula el valor total con envío a partir de lo que la IA entendió de la conversación.
  * Los precios salen del catálogo y la tarifa del tarifario: la IA no hace las cuentas.
@@ -254,7 +304,8 @@ function buildSystemPrompt(
   customPrompt: string | undefined,
   sentProducts: string[],
   bankDetailsSent: boolean,
-  pendingProducts: string[] = []
+  pendingProducts: string[] = [],
+  recentEmojis: string[] = []
 ) {
   const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_PERSONA;
 
@@ -288,7 +339,7 @@ function buildSystemPrompt(
 
   const shippingText = `TARIFAS DE ENVÍO DESDE GUAYAQUIL (uso interno, todos los cantones de la provincia cuestan igual):\n${shippingRatesSummary()}`;
 
-  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${shippingText}\n\n${catalogText}\n\n${sentText}${pendingText}\n${bankText}`;
+  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${shippingText}\n\n${catalogText}\n\n${sentText}${pendingText}\n${bankText}\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`;
 }
 
 /**
@@ -303,11 +354,15 @@ export async function planTurn(params: {
   sentProducts: string[];
   bankDetailsSent?: boolean;
   pendingProducts?: string[];
+  recentEmojis?: string[];
 }): Promise<TurnPlan> {
-  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [] } = params;
+  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [], recentEmojis = [] } = params;
+  // Lo que escribió la clienta, sin el texto citado de otro mensaje (que puede decir "transferencia").
+  const customerWords = userMessage.replace(/\[El cliente responde a [^\]]*\]/g, '');
+  const choseTransfer = BANK_CHOICE_PATTERN.test(customerWords);
 
   const baseMessages = [
-    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts) },
+    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts, recentEmojis) },
     ...history,
     { role: 'user' as const, content: userMessage }
   ];
@@ -360,6 +415,19 @@ export async function planTurn(params: {
   // Con tarjeta se paga el 100%: hablar de anticipo confunde a la clienta.
   if (parsed.handoff === 'card_payment' && /anticipo/i.test(String(parsed.reply || ''))) {
     corrections.push('La clienta paga con tarjeta: se cancela el 100% del valor total. No menciones la palabra anticipo; si hablas de la reserva de la fecha di "al recibir el pago".');
+  }
+
+  // Los datos bancarios solo salen cuando la clienta eligió transferencia o pidió la cuenta.
+  if (parsed.send_bank_details === true && !choseTransfer) {
+    console.warn('🏦 La IA quiso enviar datos bancarios sin que la clienta eligiera transferencia');
+    corrections.push(
+      'La clienta todavía NO eligió pagar por transferencia ni pidió los datos de la cuenta: send_bank_details debe ser false. ' +
+      'No digas que le envías ni que le compartes los datos de la cuenta. Pregúntale con qué prefiere pagar, en lista: transferencia (anticipo 50%) o tarjeta Visa o Mastercard (100% del total).'
+    );
+  }
+
+  if (BANNED_PHRASES.test(String(parsed.reply || ''))) {
+    corrections.push('No uses "te lo dejo anotado" ni ninguna frase con "anotado"; exprésalo de otra forma.');
   }
 
   const quotedTotal = Number(parsed.quoted_total) || 0;
@@ -417,11 +485,12 @@ export async function planTurn(params: {
   )].slice(0, MAX_PHOTOS_PER_TURN);
 
   return {
-    reply: String(parsed.reply || '').trim(),
+    reply: varyEmojis(String(parsed.reply || '').trim(), recentEmojis),
     intent: parsed.intent || 'other',
     show_products: showProducts,
     handoff: parsed.handoff || 'none',
-    send_bank_details: parsed.send_bank_details === true,
+    // Aunque la corrección falle, sin elección de transferencia nunca se envían las cuentas.
+    send_bank_details: parsed.send_bank_details === true && choseTransfer,
     owner_question: String(parsed.owner_question || '').trim(),
     event_date: eventDate,
     delivery_date: expectedDelivery,
