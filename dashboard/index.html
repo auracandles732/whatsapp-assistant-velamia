@@ -63,7 +63,7 @@
             background: var(--crema);
             border-bottom: 1px solid var(--rosa-palo-suave);
             color: var(--texto);
-            padding: 16px 28px;
+            padding: 8px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -76,7 +76,7 @@
         }
 
         .header-brand img {
-            height: 42px;
+            height: 34px;
             width: auto;
             display: block;
         }
@@ -91,7 +91,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 10px 18px;
+            padding: 7px 14px;
             border-radius: 24px;
             cursor: pointer;
             font-size: 13px;
@@ -112,14 +112,16 @@
 
         .nav-tabs {
             display: flex;
-            gap: 6px;
-            padding: 0 28px;
+            align-items: center;
+            gap: 4px;
+            padding: 0 20px;
             background: var(--crema);
             border-bottom: 1px solid var(--rosa-palo-suave);
+            flex-shrink: 0;
         }
 
         .nav-tab {
-            padding: 12px 20px;
+            padding: 9px 16px;
             font-size: 13px;
             font-weight: 600;
             color: var(--texto-suave);
@@ -363,41 +365,37 @@
             font-weight: 600;
         }
 
-        .stats-container {
-            background: var(--beige);
-            margin-bottom: 10px;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
+        /* Botón de estadísticas dentro de la fila de pestañas: no ocupa una franja propia. */
         .stats-toggle {
-            padding: 12px 28px;
+            margin-left: auto;
+            padding: 5px 12px;
             cursor: pointer;
+            font-size: 12px;
             font-weight: 600;
-            color: var(--texto);
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            color: var(--texto-suave);
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 14px;
             user-select: none;
-            transition: background 0.2s;
-            background: var(--beige);
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            white-space: nowrap;
         }
 
-        .stats-toggle:hover {
-            background: rgba(0,0,0,0.02);
+        .stats-toggle:hover,
+        .stats-toggle.open {
+            color: var(--terracota);
+            border-color: var(--terracota);
         }
 
         .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-            padding: 20px 28px;
+            gap: 12px;
+            padding: 12px 20px;
             background: var(--beige);
+            flex-shrink: 0;
         }
 
         .stat-card {
-            padding: 18px;
+            padding: 12px 16px;
             border-radius: 14px;
             color: white;
             box-shadow: 0 2px 10px rgba(185, 107, 79, 0.12);
@@ -418,7 +416,7 @@
         }
 
         .stat-card .number {
-            font-size: 28px;
+            font-size: 22px;
             font-weight: 700;
         }
 
@@ -426,10 +424,11 @@
             flex: 1;
             display: flex;
             overflow: hidden;
+            min-height: 0;
         }
 
         .conversations-list {
-            width: 300px;
+            width: 230px;
             background: var(--crema);
             border-right: 1px solid var(--rosa-palo-suave);
             overflow-y: auto;
@@ -446,7 +445,7 @@
         }
 
         .conversation-item {
-            padding: 14px 18px;
+            padding: 10px 14px;
             border-bottom: 1px solid var(--beige);
             cursor: pointer;
             transition: background 0.2s;
@@ -465,6 +464,44 @@
             font-size: 14px;
             margin-bottom: 4px;
             color: var(--texto);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .paused-badge {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #fde2e2;
+            color: #a33b3b;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 6px 16px;
+            background: var(--crema);
+            border-bottom: 1px solid var(--rosa-palo-suave);
+            flex-shrink: 0;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .chat-header.paused {
+            background: #fde2e2;
+            color: #a33b3b;
+        }
+
+        .chat-header .chat-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .conversation-item p {
@@ -603,19 +640,17 @@
         }
 
         .btn-bot-control {
-            background: var(--gris-claro);
-            color: var(--texto);
             font-size: 12px;
         }
 
         .btn-bot-control.active {
-            background: #ffd700;
+            background: var(--amarillo-suave);
             color: var(--texto);
         }
 
         .btn-bot-control.paused {
-            background: #ff6b6b;
-            color: white;
+            background: var(--verde-suave);
+            color: #2f5540;
         }
 
         .btn-bot-control:hover {
@@ -802,6 +837,30 @@
             return data;
         }
 
+        // La base guarda las fechas en UTC sin zona horaria; sin la "Z" el navegador
+        // las toma como hora local y en Ecuador aparecen 5 horas adelantadas.
+        const BUSINESS_TZ = 'America/Guayaquil';
+
+        function parseTs(value) {
+            if (!value) return null;
+            return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value}Z`);
+        }
+
+        function formatDateTime(value) {
+            const date = parseTs(value);
+            return date ? date.toLocaleString('es-EC', { timeZone: BUSINESS_TZ, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+        }
+
+        function formatTime(value) {
+            const date = parseTs(value);
+            return date ? date.toLocaleTimeString('es-EC', { timeZone: BUSINESS_TZ, hour: 'numeric', minute: '2-digit' }) : '';
+        }
+
+        function isBotPausedIn(conv) {
+            const until = parseTs(conv?.bot_paused_until);
+            return !!until && until > new Date();
+        }
+
         function LoginScreen({ onLogin }) {
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
@@ -864,7 +923,6 @@
             const [systemPrompt, setSystemPrompt] = useState('');
             const [savingPrompt, setSavingPrompt] = useState(false);
             const [promptSaved, setPromptSaved] = useState(false);
-            const [botPausedInChat, setBotPausedInChat] = useState(false);
             const [pausingBot, setPausingBot] = useState(false);
             const [statsExpanded, setStatsExpanded] = useState(false);
 
@@ -1015,24 +1073,20 @@
                 }
             }
 
-            async function loadBotPauseStatus(convId) {
-                try {
-                    const data = await api(`/api/conversations/${convId}/bot-status`);
-                    setBotPausedInChat(data.bot_paused);
-                } catch (err) {
-                    console.error('Error cargando estado del bot:', err);
-                }
-            }
+            // La lista se refresca cada 5 s, así la pausa que active el bot (reclamo, pago...)
+            // se refleja sola sin volver a abrir el chat.
+            const currentConv = conversations.find(c => c.id === selectedConv?.id) || selectedConv;
+            const botPausedInChat = isBotPausedIn(currentConv);
 
             async function pauseOrResumeBot() {
-                if (!selectedConv) return;
+                if (!currentConv) return;
                 setPausingBot(true);
                 try {
                     const endpoint = botPausedInChat ? 'resume' : 'pause';
-                    await api(`/api/conversations/${selectedConv.id}/${endpoint}`, { method: 'POST', body: JSON.stringify({}) });
-                    setBotPausedInChat(!botPausedInChat);
+                    await api(`/api/conversations/${currentConv.id}/${endpoint}`, { method: 'POST', body: JSON.stringify({}) });
+                    await loadConversations();
                 } catch (err) {
-                    alert(`Error ${botPausedInChat ? 'reanudando' : 'pausando'} el bot: ${err.message}`);
+                    alert(`Error ${botPausedInChat ? 'reactivando' : 'pausando'} el bot: ${err.message}`);
                 } finally {
                     setPausingBot(false);
                 }
@@ -1041,7 +1095,6 @@
             useEffect(() => {
                 if (selectedConv) {
                     loadMessages(selectedConv.id);
-                    loadBotPauseStatus(selectedConv.id);
                     const interval = setInterval(() => loadMessages(selectedConv.id), 3000);
                     return () => clearInterval(interval);
                 }
@@ -1079,15 +1132,7 @@
                 if (!inputText.trim() || !selectedConv) return;
 
                 try {
-                    // PUNTO 1: Pausar automáticamente el bot cuando el usuario escribe manualmente
-                    if (!botPausedInChat) {
-                        await api(`/api/conversations/${selectedConv.id}/pause`, {
-                            method: 'POST',
-                            body: JSON.stringify({ minutes: 10 })
-                        });
-                        setBotPausedInChat(true);
-                    }
-
+                    // El servidor pausa el bot en este chat al enviar un mensaje manual.
                     await api('/api/send-message', {
                         method: 'POST',
                         body: JSON.stringify({
@@ -1099,6 +1144,7 @@
 
                     setInputText('');
                     loadMessages(selectedConv.id);
+                    loadConversations();
                 } catch (err) {
                     alert('Error enviando mensaje: ' + err.message);
                 }
@@ -1137,12 +1183,11 @@
                             <div className={`nav-tab ${activeTab === 'conversaciones' ? 'active' : ''}`} onClick={() => setActiveTab('conversaciones')}>💬 Conversaciones</div>
                             <div className={`nav-tab ${activeTab === 'catalogo' ? 'active' : ''}`} onClick={() => setActiveTab('catalogo')}>🕯️ Catálogo</div>
                             <div className={`nav-tab ${activeTab === 'configuracion' ? 'active' : ''}`} onClick={() => setActiveTab('configuracion')}>⚙️ Configuración</div>
+                            <div className={`stats-toggle ${statsExpanded ? 'open' : ''}`} onClick={() => setStatsExpanded(!statsExpanded)}>
+                                📊 {statsExpanded ? 'Ocultar estadísticas' : 'Estadísticas'}
+                            </div>
                         </div>
 
-                        <div className="stats-container">
-                            <div className="stats-toggle" onClick={() => setStatsExpanded(!statsExpanded)}>
-                                <span>{statsExpanded ? '▼' : '▶'} Estadísticas</span>
-                            </div>
                             {statsExpanded && (
                             <div className="stats">
                                 <div className="stat-card">
@@ -1163,7 +1208,6 @@
                                 </div>
                             </div>
                             )}
-                        </div>
 
                         {activeTab === 'conversaciones' && (
                         <div className="content">
@@ -1176,13 +1220,28 @@
                                         onClick={() => setSelectedConv(conv)}
                                     >
                                         <h3>📱 {conv.customer_name || conv.phone_number}</h3>
-                                        <p>{new Date(conv.last_message_time).toLocaleString('es-EC')}</p>
+                                        <p>{formatDateTime(conv.last_message_time)}</p>
+                                        {isBotPausedIn(conv) && <span className="paused-badge">⏸️ Te necesita</span>}
                                     </div>
                                 ))}
                             </div>
 
                             {selectedConv ? (
                                 <div className="chat-area">
+                                    <div className={`chat-header ${botPausedInChat ? 'paused' : ''}`}>
+                                        <span className="chat-name">
+                                            {botPausedInChat
+                                                ? `⏸️ Bot pausado: atiendes tú a ${currentConv.customer_name || currentConv.phone_number}`
+                                                : `🤖 El bot atiende a ${currentConv.customer_name || currentConv.phone_number}`}
+                                        </span>
+                                        <button
+                                            className={`btn-bot-control ${botPausedInChat ? 'paused' : 'active'}`}
+                                            onClick={pauseOrResumeBot}
+                                            disabled={pausingBot}
+                                        >
+                                            {botPausedInChat ? '▶️ Reactivar bot' : '⏸️ Pausar bot'}
+                                        </button>
+                                    </div>
                                     <div className="messages-container">
                                         {messages.map((msg, idx) => {
                                             const urlMatch = msg.content.match(/^https?:\/\/\S+/);
@@ -1196,7 +1255,7 @@
                                                             {msg.type === 'audio' && mediaUrl ? <audio controls src={mediaUrl} style={{ maxWidth: '220px', marginBottom: '6px', display: 'block' }} /> : null}
                                                             {textPart}
                                                         </div>
-                                                        <div className="message-time">{new Date(msg.timestamp).toLocaleTimeString('es-EC')}</div>
+                                                        <div className="message-time">{formatTime(msg.timestamp)}</div>
                                                     </div>
                                                 </div>
                                             );
@@ -1213,14 +1272,6 @@
                                         <div className="button-group">
                                             <button className="btn-send" onClick={sendMessage}>📤 Enviar</button>
                                             <button className="btn-photo" onClick={sendPhoto}>📷 Foto</button>
-                                            <button
-                                                className={`btn-bot-control ${botPausedInChat ? 'paused' : 'active'}`}
-                                                onClick={pauseOrResumeBot}
-                                                disabled={pausingBot}
-                                                title={botPausedInChat ? 'Reanudar bot' : 'Pausar bot en este chat'}
-                                            >
-                                                {botPausedInChat ? '⏸️ Reanuda' : '▶️ Pausa'}
-                                            </button>
                                         </div>
                                     </div>
                                 </div>

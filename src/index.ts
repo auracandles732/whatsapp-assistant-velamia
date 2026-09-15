@@ -15,7 +15,7 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
-  pauseBotUntil,
+  pauseBot,
   resumeBot,
   isBotPaused,
   getConversationById
@@ -27,7 +27,7 @@ import {
   issueSessionToken,
   verifyWebhookSignature
 } from './middleware/auth';
-import { sendTextMessage, sendImageMessage } from './services/whatsapp';
+import { sendTextMessage, sendImageMessage, getSentMessageId } from './services/whatsapp';
 
 dotenv.config();
 
@@ -152,9 +152,11 @@ app.post('/api/send-message', requireCrmSession, async (req: Request, res: Respo
     if (!conversationId || !phoneNumber || !text) {
       return res.status(400).json({ error: 'conversationId, phoneNumber y text son requeridos' });
     }
-    await sendTextMessage(phoneNumber, text);
-    await saveMessage(conversationId, 'bot', 'text', text);
-    res.json({ success: true });
+    const sent = await sendTextMessage(phoneNumber, text);
+    await saveMessage(conversationId, 'bot', 'text', text, getSentMessageId(sent));
+    // Una persona tomó el chat: el bot se calla aquí hasta que lo reactiven desde el CRM.
+    await pauseBot(conversationId);
+    res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando mensaje manual:', error.message);
     res.status(500).json({ error: error.message });
@@ -167,9 +169,10 @@ app.post('/api/send-image', requireCrmSession, async (req: Request, res: Respons
     if (!conversationId || !phoneNumber || !imageUrl) {
       return res.status(400).json({ error: 'conversationId, phoneNumber e imageUrl son requeridos' });
     }
-    await sendImageMessage(phoneNumber, imageUrl, caption);
-    await saveMessage(conversationId, 'bot', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl);
-    res.json({ success: true });
+    const sent = await sendImageMessage(phoneNumber, imageUrl, caption);
+    await saveMessage(conversationId, 'bot', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl, getSentMessageId(sent));
+    await pauseBot(conversationId);
+    res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.message);
     res.status(500).json({ error: error.message });
@@ -306,26 +309,26 @@ app.delete('/api/products/:id', requireCrmSession, async (req: Request, res: Res
 // ---------- Control del bot por conversación ----------
 
 /**
- * PUNTO 1: Pausa el bot en una conversación específica.
- * Útil cuando el dueño atiende manualmente o detecta que necesita intervención.
+ * Pausa el bot en una conversación. Sin "minutes" queda pausado hasta reactivarlo.
  */
 app.post('/api/conversations/:id/pause', requireCrmSession, async (req: Request, res: Response) => {
   try {
-    const { minutes = 10 } = req.body;
     const conv = await getConversationById(req.params.id);
     if (!conv) {
       return res.status(404).json({ error: 'Conversación no encontrada' });
     }
 
-    await pauseBotUntil(req.params.id, Math.max(1, Math.min(1440, minutes))); // Entre 1 y 1440 minutos (24h)
-    res.json({ success: true, message: `Bot pausado por ${minutes} minutos` });
+    const minutes = Number(req.body?.minutes);
+    const validMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.min(minutes, 60 * 24 * 30) : undefined;
+    await pauseBot(req.params.id, validMinutes);
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * PUNTO 1: Reanuda el bot en una conversación específica.
+ * Reactiva el bot en una conversación.
  */
 app.post('/api/conversations/:id/resume', requireCrmSession, async (req: Request, res: Response) => {
   try {

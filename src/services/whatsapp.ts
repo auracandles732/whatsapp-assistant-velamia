@@ -11,11 +11,26 @@ interface WhatsAppMessage {
   [key: string]: any;
 }
 
+/**
+ * WhatsApp exige el número en formato internacional sin "+" ni ceros iniciales.
+ * Los números de Ecuador escritos localmente (0986673197) se convierten a 593986673197.
+ */
+export function normalizePhone(phoneNumber: string): string {
+  const digits = String(phoneNumber).replace(/\D/g, '');
+  if (digits.startsWith('0') && digits.length === 10) return `593${digits.slice(1)}`;
+  return digits;
+}
+
+/** Id que Meta asigna al mensaje enviado; permite reconocer cuando el cliente lo responde. */
+export function getSentMessageId(responseData: any): string | undefined {
+  return responseData?.messages?.[0]?.id;
+}
+
 export async function sendTextMessage(phoneNumber: string, text: string) {
   try {
     const message: WhatsAppMessage = {
       messaging_product: 'whatsapp',
-      to: phoneNumber,
+      to: normalizePhone(phoneNumber),
       type: 'text',
       text: { body: text }
     };
@@ -38,7 +53,7 @@ export async function sendImageMessage(phoneNumber: string, imageUrl: string, ca
   try {
     const message: WhatsAppMessage = {
       messaging_product: 'whatsapp',
-      to: phoneNumber,
+      to: normalizePhone(phoneNumber),
       type: 'image',
       image: {
         link: imageUrl,

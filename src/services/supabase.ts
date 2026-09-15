@@ -527,18 +527,73 @@ export async function getTotalRevenue() {
   return data?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
 }
 
-// PAUSA DEL BOT (Punto 1)
 /**
- * Pausa el bot en una conversación por un tiempo determinado.
- * Cuando el usuario escribe manualmente, se pausa automáticamente.
+ * Las columnas de fecha son TIMESTAMP sin zona horaria y guardan hora UTC; sin la "Z"
+ * JavaScript las leería como hora local y se desfasarían 5 horas en Ecuador.
  */
-export async function pauseBotUntil(conversationId: string, minutes: number = 10) {
-  const pausedUntil = new Date();
-  pausedUntil.setMinutes(pausedUntil.getMinutes() + minutes);
+export function parseDbTimestamp(value: string): Date {
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value}Z`);
+}
+
+export async function getMessageByWaId(waMessageId: string) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('wa_message_id', waMessageId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error buscando mensaje: ${error.message}`);
+  return data;
+}
+
+/** Nombre del producto dentro del texto de una foto enviada ("🕯️ *NOMBRE*\n💰 ..."). */
+export function productNameFromCaption(content: string): string | null {
+  const match = content.match(/\*([^*]+)\*/);
+  return match ? match[1].trim() : null;
+}
+
+/** Productos cuya foto ya se envió en la conversación, para no repetirlas. */
+export async function getSentProductNames(conversationId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('content')
+    .eq('conversation_id', conversationId)
+    .eq('sender', 'bot')
+    .eq('type', 'image');
+
+  if (error) throw new Error(`Error obteniendo fotos enviadas: ${error.message}`);
+  const names = (data || []).map(m => productNameFromCaption(m.content)).filter(Boolean) as string[];
+  return [...new Set(names)];
+}
+
+export async function hasRecentOrder(conversationId: string, hours: number = 24): Promise<boolean> {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .gte('created_at', since.toISOString())
+    .limit(1);
+
+  if (error) throw new Error(`Error verificando pedidos recientes: ${error.message}`);
+  return (data || []).length > 0;
+}
+
+// PAUSA DEL BOT POR CONVERSACIÓN
+const PAUSED_UNTIL_RESUMED = '2100-01-01T00:00:00Z';
+
+/**
+ * Pausa el bot en una conversación. Sin minutos, queda pausado hasta que alguien
+ * lo reactive desde el CRM (así el bot nunca responde encima de una persona).
+ */
+export async function pauseBot(conversationId: string, minutes?: number) {
+  const pausedUntil = minutes
+    ? new Date(Date.now() + minutes * 60 * 1000).toISOString()
+    : PAUSED_UNTIL_RESUMED;
 
   const { error } = await supabase
     .from('conversations')
-    .update({ bot_paused_until: pausedUntil.toISOString() })
+    .update({ bot_paused_until: pausedUntil })
     .eq('id', conversationId);
 
   if (error) throw new Error(`Error pausando bot: ${error.message}`);
@@ -569,14 +624,10 @@ export async function isBotPaused(conversationId: string): Promise<boolean> {
   if (error) throw new Error(`Error verificando pausa del bot: ${error.message}`);
   if (!data?.bot_paused_until) return false;
 
-  const pausedUntil = new Date(data.bot_paused_until);
-  return pausedUntil > new Date();
+  return parseDbTimestamp(data.bot_paused_until) > new Date();
 }
 
-// NOTIFICACIONES (Punto 2)
-/**
- * Obtiene el número de teléfono del dueño para notificaciones.
- */
+// AVISOS A LA DUEÑA
 export async function getOwnerPhone(): Promise<string | null> {
   const value = await getConfig('owner_phone');
   return value || null;
