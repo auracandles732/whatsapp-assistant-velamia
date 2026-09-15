@@ -363,6 +363,31 @@
             font-weight: 600;
         }
 
+        .stats-container {
+            background: var(--beige);
+            margin-bottom: 10px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .stats-toggle {
+            padding: 12px 28px;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--texto);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            user-select: none;
+            transition: background 0.2s;
+            background: var(--beige);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .stats-toggle:hover {
+            background: rgba(0,0,0,0.02);
+        }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -834,6 +859,7 @@
             const [promptSaved, setPromptSaved] = useState(false);
             const [botPausedInChat, setBotPausedInChat] = useState(false);
             const [pausingBot, setPausingBot] = useState(false);
+            const [statsExpanded, setStatsExpanded] = useState(false);
 
             useEffect(() => {
                 loadConversations();
@@ -1106,23 +1132,30 @@
                             <div className={`nav-tab ${activeTab === 'configuracion' ? 'active' : ''}`} onClick={() => setActiveTab('configuracion')}>⚙️ Configuración</div>
                         </div>
 
-                        <div className="stats">
-                            <div className="stat-card">
-                                <h4>Total Clientes</h4>
-                                <div className="number">{stats.total}</div>
+                        <div className="stats-container">
+                            <div className="stats-toggle" onClick={() => setStatsExpanded(!statsExpanded)}>
+                                <span>{statsExpanded ? '▼' : '▶'} Estadísticas</span>
                             </div>
-                            <div className="stat-card">
-                                <h4>Conversaciones Activas</h4>
-                                <div className="number">{stats.active}</div>
+                            {statsExpanded && (
+                            <div className="stats">
+                                <div className="stat-card">
+                                    <h4>Total Clientes</h4>
+                                    <div className="number">{stats.total}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <h4>Conversaciones Activas</h4>
+                                    <div className="number">{stats.active}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <h4>Pedidos</h4>
+                                    <div className="number">{stats.orders}</div>
+                                </div>
+                                <div className="stat-card">
+                                    <h4>Ingresos</h4>
+                                    <div className="number">${stats.revenue.toFixed(2)}</div>
+                                </div>
                             </div>
-                            <div className="stat-card">
-                                <h4>Pedidos</h4>
-                                <div className="number">{stats.orders}</div>
-                            </div>
-                            <div className="stat-card">
-                                <h4>Ingresos</h4>
-                                <div className="number">${stats.revenue.toFixed(2)}</div>
-                            </div>
+                            )}
                         </div>
 
                         {activeTab === 'conversaciones' && (
