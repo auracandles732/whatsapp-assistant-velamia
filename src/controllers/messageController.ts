@@ -46,6 +46,12 @@ const HISTORY_LIMIT = 30;
 // Mensajes cuyo contenido guardado empieza con la URL del archivo (el CRM la muestra aparte).
 const MEDIA_TYPES = new Set(['image', 'audio', 'document']);
 
+// Casos en que el bot se aparta hasta que la dueña lo reactive. El comprobante de pago solo avisa.
+const PAUSING_HANDOFFS = new Set(['card_payment', 'complaint']);
+
+// Inicio del mensaje con los datos bancarios: permite saber si ya se enviaron en el chat.
+const BANK_DETAILS_MARKER = '🏦 Datos para transferencia';
+
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
 /**
@@ -268,24 +274,26 @@ async function processMessage(message: any, value: any) {
       return;
     }
 
-    const [catalog, customPrompt, sentProducts] = await Promise.all([
+    const [catalog, customPrompt, sentProducts, bankDetails] = await Promise.all([
       getAllProducts(),
       getConfig('system_prompt'),
-      getSentProductNames(conversationId)
+      getSentProductNames(conversationId),
+      getConfig('payment_transfer_info')
     ]);
 
     const customerDetail = toAiText({ sender: 'customer', type: messageType, content: storedContent });
+    const bankDetailsSent = history.some((m: any) => m.sender === 'bot' && String(m.content || '').startsWith(BANK_DETAILS_MARKER));
 
     let plan: TurnPlan;
     try {
-      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts });
+      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
       console.error('❌ La IA no respondió:', error.message);
       await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
       return;
     }
-    console.log(`🎯 intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff}`);
+    console.log(`🎯 intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff} | datos bancarios: ${plan.send_bank_details}`);
 
     // Respuesta vacía y nada más que enviar: la clienta quedaría sin contestar.
     if (!plan.reply && plan.handoff === 'none' && plan.show_products.length === 0) {
@@ -298,11 +306,22 @@ async function processMessage(message: any, value: any) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);
     }
 
-    // Caso de revisión manual: el bot queda pausado en este chat hasta que lo reactiven desde el CRM.
+    // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.
+    if (plan.send_bank_details) {
+      if (bankDetails && bankDetails.trim()) {
+        await sendAndSaveText(conversationId, phoneNumber, `${BANK_DETAILS_MARKER}\n\n${bankDetails.trim()}`);
+      } else {
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bank_details_missing', detail: customerDetail });
+      }
+    }
+
     if (plan.handoff !== 'none') {
-      await pauseBot(conversationId);
       await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: plan.handoff, detail: customerDetail });
-      return;
+      // Tarjeta y reclamos: el bot queda pausado hasta que lo reactiven desde el CRM.
+      if (PAUSING_HANDOFFS.has(plan.handoff)) {
+        await pauseBot(conversationId);
+        return;
+      }
     }
 
     if (plan.show_products.length > 0) {

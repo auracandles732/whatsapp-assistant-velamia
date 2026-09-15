@@ -324,6 +324,30 @@ app.post('/api/system-prompt', requireCrmSession, async (req: Request, res: Resp
   }
 });
 
+// ---------- Datos de pago ----------
+// Los escribe la dueña en el CRM; el bot los envía textuales cuando la clienta elige transferencia.
+
+app.get('/api/payment-info', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json({ transfer: (await getConfig('payment_transfer_info')) || '' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/payment-info', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const transfer = String(req.body?.transfer || '').trim();
+    if (transfer.length > 1500) {
+      return res.status(400).json({ error: 'Los datos bancarios no pueden superar 1500 caracteres' });
+    }
+    await setConfig('payment_transfer_info', transfer);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ---------- Catálogo ----------
 
 app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Response) => {

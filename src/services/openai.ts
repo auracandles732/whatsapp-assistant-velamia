@@ -71,6 +71,16 @@ PERSONALIZACIÓN Y CIERRE DE VENTA:
 - La personalización no cambia el precio por docena del catálogo ni impide la venta.
 - Anota los detalles de personalización junto con el modelo, la cantidad y la fecha, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).
 
+FORMAS DE PAGO (estas reglas mandan sobre cualquier otra instrucción de pago):
+- Transferencia bancaria: se paga un ANTICIPO del 50% del valor total de la cotización para iniciar y el saldo antes de la entrega. Indica siempre el total y el monto exacto del anticipo (ejemplo: "Total $120 · Anticipo 50%: $60").
+- Tarjeta de crédito: se paga el 100% del valor total de la cotización. Indica siempre el monto total a pagar.
+- Si el cliente pregunta cómo pagar, explica ambas opciones con sus montos y pregúntale cuál prefiere.
+- Nunca escribas números de cuenta, bancos ni titulares: el sistema los envía en un mensaje aparte (campo send_bank_details).
+
+DATOS BANCARIOS (campo send_bank_details):
+- true SOLO cuando el cliente elige pagar por transferencia o pide los datos de la cuenta. En cualquier otro caso false.
+- Si es true, en reply confirma el total y el anticipo del 50% y dile que a continuación le compartes los datos de la cuenta.
+
 FOTOS (campo show_products):
 - Incluye productos SOLO cuando el cliente pide ver modelos, fotos u opciones, o pide "más modelos".
 - Incluye TODOS los productos del catálogo que correspondan a lo que pidió (por ejemplo, todos los de la categoría o todos los que coinciden con el modelo), usando los nombres exactos.
@@ -80,11 +90,11 @@ FOTOS (campo show_products):
 - Cuando el mensaje indica que el cliente responde a una foto concreta, ese es el modelo del que habla.
 
 CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar ningún cambio de persona):
-- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: dile que en un momento le envías los datos para el pago con tarjeta.
-- payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece y dile que lo verificas y le confirmas en un momento.
-- complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos.
+- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: recuérdale el monto total a pagar (100% de la cotización) y dile que en un momento le envías el link de pago. No hagas preguntas.
+- payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece, dile que lo verificas y, si falta algún detalle del pedido (fecha, nombres, colores, entrega), sigue atendiéndolo con normalidad.
+- complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos. No hagas preguntas.
 - none: cualquier otro caso, incluidas todas las personalizaciones.
-- En esos tres casos reply es breve, cálido y en primera persona. No hagas preguntas.
+- Reply siempre en primera persona.
 
 INTENCIÓN (campo intent):
 - quotation: SOLO cuando el cliente pide explícitamente una cotización o el valor total de su pedido ("me cotizas", "cuánto sería en total", "cuánto me sale todo", "pásame la cotización"). Dar cantidad, fecha o colores, o preguntar el precio de un modelo, NO es quotation aunque tú menciones un total.
@@ -110,21 +120,23 @@ export interface TurnPlan {
   intent: 'greeting' | 'product_inquiry' | 'quotation' | 'order' | 'delivery_status' | 'other';
   show_products: string[];
   handoff: HandoffReason;
+  send_bank_details: boolean;
 }
 
 const TURN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['reply', 'intent', 'show_products', 'handoff'],
+  required: ['reply', 'intent', 'show_products', 'handoff', 'send_bank_details'],
   properties: {
     reply: { type: 'string' },
     intent: { type: 'string', enum: ['greeting', 'product_inquiry', 'quotation', 'order', 'delivery_status', 'other'] },
     show_products: { type: 'array', items: { type: 'string' } },
-    handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint'] }
+    handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint'] },
+    send_bank_details: { type: 'boolean' }
   }
 };
 
-function buildSystemPrompt(catalog: CatalogProduct[], customPrompt: string | undefined, sentProducts: string[]) {
+function buildSystemPrompt(catalog: CatalogProduct[], customPrompt: string | undefined, sentProducts: string[], bankDetailsSent: boolean) {
   const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_PERSONA;
 
   let catalogText = 'CATÁLOGO: todavía no hay productos cargados. Si el cliente pregunta por productos, indícale que en breve le compartes las opciones.';
@@ -148,7 +160,11 @@ function buildSystemPrompt(catalog: CatalogProduct[], customPrompt: string | und
     timeZone: 'America/Guayaquil', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   });
 
-  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${catalogText}\n\n${sentText}`;
+  const bankText = bankDetailsSent
+    ? 'DATOS BANCARIOS: ya se enviaron en esta conversación; vuelve a marcar send_bank_details solo si el cliente los pide de nuevo.'
+    : 'DATOS BANCARIOS: aún no se han enviado en esta conversación.';
+
+  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${catalogText}\n\n${sentText}\n${bankText}`;
 }
 
 /**
@@ -161,8 +177,9 @@ export async function planTurn(params: {
   catalog: CatalogProduct[];
   customPrompt?: string;
   sentProducts: string[];
+  bankDetailsSent?: boolean;
 }): Promise<TurnPlan> {
-  const { history, userMessage, catalog, customPrompt, sentProducts } = params;
+  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false } = params;
 
   const response = await openai.chat.completions.create({
     model: MODEL,
@@ -173,7 +190,7 @@ export async function planTurn(params: {
       json_schema: { name: 'turno_whatsapp', strict: true, schema: TURN_SCHEMA }
     },
     messages: [
-      { role: 'system', content: buildSystemPrompt(catalog, customPrompt, sentProducts) },
+      { role: 'system', content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent) },
       ...history,
       { role: 'user', content: userMessage }
     ]
@@ -193,7 +210,8 @@ export async function planTurn(params: {
     reply: String(parsed.reply || '').trim(),
     intent: parsed.intent || 'other',
     show_products: showProducts,
-    handoff: parsed.handoff || 'none'
+    handoff: parsed.handoff || 'none',
+    send_bank_details: parsed.send_bank_details === true
   };
 }
 

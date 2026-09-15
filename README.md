@@ -42,8 +42,18 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 - Envía fotos solo cuando la clienta pide ver modelos; todas las de la categoría, sin repetir.
 - Reconoce la foto que la clienta cita al responder.
 - La personalización (colores, nombres, frases) siempre es válida y no impide cerrar la venta.
-- Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido,
-  comprobante de pago, reclamo**. También avisa de cada **pedido nuevo** y si la IA falla.
+- Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido, reclamo**.
+  Solo avisa (sin pausar) cuando llega un **comprobante de pago**, un **pedido nuevo** o si la IA falla.
+
+## Pagos
+
+| Forma | Monto que indica el bot | Qué pasa |
+|---|---|---|
+| Transferencia | Anticipo del 50% del total (saldo antes de la entrega) | El sistema envía el texto de **CRM → Configuración → Datos para transferencia** tal cual. Si está vacío, avisa a la dueña |
+| Tarjeta | 100% del total | El bot se pausa y avisa a la dueña para que envíe el link de pago |
+| Comprobante | — | Avisa a la dueña para verificar; el bot sigue atendiendo |
+
+La IA nunca redacta números de cuenta: el bloque bancario (clave `payment_transfer_info`) se envía sin modificar.
 - Cotización en el CRM solo cuando la clienta pide cotización o valor total.
 - Si una persona escribe desde el CRM, el bot queda pausado en ese chat hasta reactivarlo.
 

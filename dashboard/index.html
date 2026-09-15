@@ -1048,6 +1048,9 @@
             const [systemPrompt, setSystemPrompt] = useState('');
             const [savingPrompt, setSavingPrompt] = useState(false);
             const [promptSaved, setPromptSaved] = useState(false);
+            const [transferInfo, setTransferInfo] = useState('');
+            const [savingTransfer, setSavingTransfer] = useState(false);
+            const [transferSaved, setTransferSaved] = useState(false);
             const [pausingBot, setPausingBot] = useState(false);
             const [statsExpanded, setStatsExpanded] = useState(false);
             const [quotations, setQuotations] = useState([]);
@@ -1061,6 +1064,7 @@
                 loadProducts();
                 loadSystemPrompt();
                 loadQuotations();
+                loadPaymentInfo();
                 const interval = setInterval(() => {
                     loadConversations();
                     loadStats();
@@ -1091,6 +1095,31 @@
                     alert('Error guardando instrucciones: ' + err.message);
                 } finally {
                     setSavingPrompt(false);
+                }
+            }
+
+            async function loadPaymentInfo() {
+                try {
+                    const data = await api('/api/payment-info');
+                    setTransferInfo(data.transfer || '');
+                } catch (err) {
+                    console.error('Error cargando datos de pago:', err);
+                }
+            }
+
+            async function savePaymentInfo() {
+                setSavingTransfer(true);
+                try {
+                    await api('/api/payment-info', {
+                        method: 'POST',
+                        body: JSON.stringify({ transfer: transferInfo })
+                    });
+                    setTransferSaved(true);
+                    setTimeout(() => setTransferSaved(false), 3000);
+                } catch (err) {
+                    alert('Error guardando datos de pago: ' + err.message);
+                } finally {
+                    setSavingTransfer(false);
                 }
             }
 
@@ -1583,6 +1612,23 @@
                         })()}
                         {activeTab === 'configuracion' && (
                         <div className="settings-container">
+                            <div className="settings-card">
+                                <h3>🏦 Datos para transferencia</h3>
+                                <p className="hint">Cuando una clienta elige pagar por transferencia, el bot le indica el anticipo del 50% y le envía este texto exactamente como lo escribas. Con tarjeta, el bot indica el pago del total, se pausa y te avisa para que envíes el link de pago.</p>
+                                <textarea
+                                    className="prompt-textarea"
+                                    style={{ minHeight: '140px' }}
+                                    placeholder={'Banco:\nTipo de cuenta:\nNúmero de cuenta:\nTitular:\nCédula / RUC:\n\nEnvíanos el comprobante por este chat 🤍'}
+                                    value={transferInfo}
+                                    onChange={e => setTransferInfo(e.target.value)}
+                                ></textarea>
+                                <div className="settings-actions">
+                                    <span className="save-status">{transferSaved ? '✅ Guardado' : (transferInfo.trim() ? '' : '⚠️ Sin datos: el bot te avisará cuando una clienta elija transferencia')}</span>
+                                    <button className="btn-save-prompt" onClick={savePaymentInfo} disabled={savingTransfer}>
+                                        {savingTransfer ? 'Guardando...' : '💾 Guardar datos de pago'}
+                                    </button>
+                                </div>
+                            </div>
                             <div className="settings-card">
                                 <h3>🧠 Instrucciones del asistente (System Prompt)</h3>
                                 <p className="hint">Aquí defines cómo debe comportarse el bot: su tono, reglas, políticas de entrega/pago, y cualquier detalle de tu negocio. Se aplica a todas las conversaciones nuevas. Deja vacío para usar el comportamiento por defecto.</p>
