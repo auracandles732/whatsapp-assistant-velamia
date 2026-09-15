@@ -273,6 +273,13 @@ async function processMessage(message: any, value: any) {
     }
     console.log(`🎯 intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff}`);
 
+    // Respuesta vacía y nada más que enviar: la clienta quedaría sin contestar.
+    if (!plan.reply && plan.handoff === 'none' && plan.show_products.length === 0) {
+      console.error('❌ La IA devolvió una respuesta vacía');
+      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
+      return;
+    }
+
     if (plan.reply) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);
     }

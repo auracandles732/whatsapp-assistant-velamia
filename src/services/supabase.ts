@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 // Cliente único con la service key: ignora RLS, por eso solo se usa en el servidor.
 export const supabase: SupabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
@@ -33,7 +33,7 @@ export async function createConversation(phoneNumber: string, customerName?: str
   const { data, error } = await supabase
     .from('conversations')
     .insert([{
-      id: uuidv4(),
+      id: randomUUID(),
       phone_number: phoneNumber,
       customer_name: customerName,
       status: 'active',
@@ -123,7 +123,7 @@ export async function saveMessage(
   const { data, error } = await supabase
     .from('messages')
     .insert([{
-      id: uuidv4(),
+      id: randomUUID(),
       conversation_id: conversationId,
       sender,
       type,
@@ -153,16 +153,20 @@ export async function getMessageByWaId(waMessageId: string) {
   return data;
 }
 
-export async function getMessages(conversationId: string, limit: number = 200) {
+/**
+ * Los últimos N mensajes en orden cronológico. Se piden del más nuevo al más viejo:
+ * con orden ascendente y límite, un chat largo mostraría los antiguos y escondería los nuevos.
+ */
+export async function getMessages(conversationId: string, limit: number = 300) {
   const { data, error } = await supabase
     .from('messages')
     .select('*')
     .eq('conversation_id', conversationId)
-    .order('timestamp', { ascending: true })
+    .order('timestamp', { ascending: false })
     .limit(limit);
 
   if (error) throw new Error(`Error obteniendo mensajes: ${error.message}`);
-  return data || [];
+  return (data || []).reverse();
 }
 
 /** Últimos N mensajes en orden cronológico. */
@@ -242,7 +246,7 @@ export async function createQuotation(conversationId: string, phoneNumber: strin
   const { data, error } = await supabase
     .from('quotations')
     .insert([{
-      id: uuidv4(),
+      id: randomUUID(),
       conversation_id: conversationId,
       customer_phone: phoneNumber,
       products,
@@ -327,7 +331,7 @@ export async function createOrder(conversationId: string, phoneNumber: string, c
   const { data, error } = await supabase
     .from('orders')
     .insert([{
-      id: uuidv4(),
+      id: randomUUID(),
       conversation_id: conversationId,
       customer_name: customerName,
       customer_phone: phoneNumber,
@@ -408,7 +412,7 @@ export async function createProduct(name: string, price: number, category: strin
   const { data, error } = await supabase
     .from('products')
     .insert([{
-      id: uuidv4(),
+      id: randomUUID(),
       name,
       description: '',
       price,
@@ -447,13 +451,17 @@ export async function updateProduct(productId: string, updates: { name?: string;
   return data;
 }
 
+/** Elimina el producto y devuelve la fila borrada (para limpiar su foto), o null si no existía. */
 export async function deleteProduct(productId: string) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('products')
     .delete()
-    .eq('id', productId);
+    .eq('id', productId)
+    .select()
+    .maybeSingle();
 
   if (error) throw new Error(`Error eliminando producto: ${error.message}`);
+  return data;
 }
 
 // ---------- CONFIGURACIÓN ----------
@@ -491,7 +499,7 @@ export async function logNotification(conversationId: string, eventType: string,
   const { error } = await supabase
     .from('notifications')
     .insert([{
-      id: uuidv4(),
+      id: randomUUID(),
       conversation_id: conversationId,
       event_type: eventType,
       message,

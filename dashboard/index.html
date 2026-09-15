@@ -1106,6 +1106,17 @@
             function handlePhotoSelect(e) {
                 const file = e.target.files[0];
                 if (!file) return;
+                // WhatsApp solo envía fotos JPG o PNG de hasta 5 MB.
+                if (!['image/jpeg', 'image/png'].includes(file.type)) {
+                    alert('La foto debe ser JPG o PNG. WhatsApp no puede enviar otros formatos.');
+                    e.target.value = '';
+                    return;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('La foto pesa más de 5 MB. Usa una foto más liviana para que WhatsApp la pueda enviar.');
+                    e.target.value = '';
+                    return;
+                }
                 const reader = new FileReader();
                 reader.onload = () => {
                     setNewProduct(prev => ({ ...prev, photoBase64: reader.result, photoPreview: reader.result }));
@@ -1474,7 +1485,7 @@
                                     <label>Foto</label>
                                     <label className="photo-upload">
                                         {newProduct.photoPreview ? <img src={newProduct.photoPreview} /> : '📷'}
-                                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoSelect} />
+                                        <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={handlePhotoSelect} />
                                     </label>
                                 </div>
                                 <div className="form-field">

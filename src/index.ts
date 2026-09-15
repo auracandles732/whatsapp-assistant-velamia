@@ -322,14 +322,19 @@ app.post('/api/system-prompt', requireCrmSession, async (req: Request, res: Resp
 
 app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Response) => {
   try {
-    const matches = String(req.body?.imageBase64 || '').match(/^data:(image\/(?:jpeg|jpg|png|webp|gif));base64,(.+)$/);
+    // WhatsApp solo envía fotos JPG o PNG de hasta 5 MB: otra foto nunca le llegaría a la clienta.
+    const matches = String(req.body?.imageBase64 || '').match(/^data:(image\/(?:jpeg|jpg|png));base64,(.+)$/);
     if (!matches) {
-      return res.status(400).json({ error: 'La foto debe ser JPG, PNG, WEBP o GIF' });
+      return res.status(400).json({ error: 'La foto debe ser JPG o PNG' });
     }
 
-    const contentType = matches[1];
     const buffer = Buffer.from(matches[2], 'base64');
-    const finalName = `${randomUUID()}.${contentType.split('/')[1]}`;
+    if (buffer.length > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: 'La foto pesa más de 5 MB; WhatsApp no la podría enviar' });
+    }
+
+    const contentType = matches[1] === 'image/jpg' ? 'image/jpeg' : matches[1];
+    const finalName = `${randomUUID()}.${contentType === 'image/png' ? 'png' : 'jpg'}`;
 
     const { error } = await supabase.storage.from('product-images').upload(finalName, buffer, { contentType });
     if (error) throw error;
@@ -393,7 +398,19 @@ app.put('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Re
 
 app.delete('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
   try {
-    await deleteProduct(req.params.id);
+    const deleted = await deleteProduct(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    // La foto se borra solo si ningún otro producto la usa. Si falla, el producto ya se eliminó.
+    if (deleted.image_url) {
+      try {
+        const stillUsed = (await getAllProducts()).some((p: any) => p.image_url === deleted.image_url);
+        if (!stillUsed) await removeFilesByPublicUrls([deleted.image_url], 'product-images');
+      } catch (error: any) {
+        console.error('No se pudo borrar la foto del producto:', error.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error eliminando producto:', error.message);
