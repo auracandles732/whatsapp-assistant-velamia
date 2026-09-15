@@ -114,15 +114,15 @@ export async function handleWebhookMessage(message: any, changes: any) {
 
 async function handleProductInquiry(conversationId: string, phoneNumber: string, entities: string[]) {
   try {
-    let products = await getAllProducts();
-
-    const searchTerm = entities.find(e => typeof e === 'string' && e.trim().length > 2);
-    if (searchTerm) {
-      const filtered = await searchProducts(searchTerm);
-      if (filtered.length > 0) products = filtered;
+    // Solo se envían fotos de lo que el cliente pidió: si pregunta por algo que no existe
+    // (p. ej. "boda"), recibir fotos de otra categoría confunde más de lo que ayuda.
+    const terms = entities.filter(e => typeof e === 'string' && e.trim().length > 2);
+    const found = new Map<string, any>();
+    for (const term of terms) {
+      for (const product of await searchProducts(term)) found.set(product.id, product);
     }
 
-    const toSend = products.filter(p => p.image_url).slice(0, 3);
+    const toSend = [...found.values()].filter(p => p.image_url).slice(0, 5);
     if (toSend.length === 0) return;
 
     console.log(`🕯️ Enviando ${toSend.length} foto(s) de productos`);
