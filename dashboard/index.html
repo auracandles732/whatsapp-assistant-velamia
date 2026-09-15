@@ -1051,9 +1051,6 @@
             const [transferInfo, setTransferInfo] = useState('');
             const [savingTransfer, setSavingTransfer] = useState(false);
             const [transferSaved, setTransferSaved] = useState(false);
-            const [shippingInfo, setShippingInfo] = useState('');
-            const [savingShipping, setSavingShipping] = useState(false);
-            const [shippingSaved, setShippingSaved] = useState(false);
             const [pausingBot, setPausingBot] = useState(false);
             const [statsExpanded, setStatsExpanded] = useState(false);
             const [quotations, setQuotations] = useState([]);
@@ -1068,7 +1065,6 @@
                 loadSystemPrompt();
                 loadQuotations();
                 loadPaymentInfo();
-                loadShippingInfo();
                 const interval = setInterval(() => {
                     loadConversations();
                     loadStats();
@@ -1124,31 +1120,6 @@
                     alert('Error guardando datos de pago: ' + err.message);
                 } finally {
                     setSavingTransfer(false);
-                }
-            }
-
-            async function loadShippingInfo() {
-                try {
-                    const data = await api('/api/shipping-info');
-                    setShippingInfo(data.shipping || '');
-                } catch (err) {
-                    console.error('Error cargando información de envíos:', err);
-                }
-            }
-
-            async function saveShippingInfo() {
-                setSavingShipping(true);
-                try {
-                    await api('/api/shipping-info', {
-                        method: 'POST',
-                        body: JSON.stringify({ shipping: shippingInfo })
-                    });
-                    setShippingSaved(true);
-                    setTimeout(() => setShippingSaved(false), 3000);
-                } catch (err) {
-                    alert('Error guardando información de envíos: ' + err.message);
-                } finally {
-                    setSavingShipping(false);
                 }
             }
 
@@ -1617,7 +1588,9 @@
                                                 <div className="quote-total">${Number(q.total_amount || 0).toFixed(2)}</div>
                                             </div>
                                             <ul className="quote-items">
-                                                {items.map((item, i) => (
+                                                {items.map((item, i) => item.type === 'shipping' ? (
+                                                    <li key={i}>🚚 {item.name} — ${Number(item.price).toFixed(2)}</li>
+                                                ) : (
                                                     <li key={i}>
                                                         {item.quantity} doc. × {item.name} — ${(Number(item.price) * Number(item.quantity)).toFixed(2)}
                                                         {item.personalization ? <><br /><small>🎨 {item.personalization}</small></> : null}
@@ -1655,23 +1628,6 @@
                                     <span className="save-status">{transferSaved ? '✅ Guardado' : (transferInfo.trim() ? '' : '⚠️ Sin datos: el bot te avisará cuando una clienta elija transferencia')}</span>
                                     <button className="btn-save-prompt" onClick={savePaymentInfo} disabled={savingTransfer}>
                                         {savingTransfer ? 'Guardando...' : '💾 Guardar datos de pago'}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="settings-card">
-                                <h3>📦 Envíos</h3>
-                                <p className="hint">El bot usa este texto para responder costos, empresas y tiempos de envío. Si una clienta pregunta algo que no está aquí, te llega un aviso y el bot sigue atendiendo. Los envíos son a todo Ecuador, sin retiro en local y sin pedido mínimo.</p>
-                                <textarea
-                                    className="prompt-textarea"
-                                    style={{ minHeight: '140px' }}
-                                    placeholder={'Empresa de envío: \nCosto Guayaquil: $\nCosto otras ciudades: $\nTiempo de viaje Guayaquil: \nTiempo de viaje otras ciudades: \nCómo se paga el envío: '}
-                                    value={shippingInfo}
-                                    onChange={e => setShippingInfo(e.target.value)}
-                                ></textarea>
-                                <div className="settings-actions">
-                                    <span className="save-status">{shippingSaved ? '✅ Guardado' : (shippingInfo.trim() ? '' : '⚠️ Sin datos: si preguntan por envíos, el bot te avisará')}</span>
-                                    <button className="btn-save-prompt" onClick={saveShippingInfo} disabled={savingShipping}>
-                                        {savingShipping ? 'Guardando...' : '💾 Guardar envíos'}
                                     </button>
                                 </div>
                             </div>

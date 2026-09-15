@@ -41,6 +41,7 @@ import {
   formatDateEc
 } from '../services/openai';
 import { uploadBufferToStorage } from '../services/storage';
+import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
@@ -277,12 +278,11 @@ async function processMessage(message: any, value: any) {
       return;
     }
 
-    const [catalog, customPrompt, sentProducts, bankDetails, shippingInfo] = await Promise.all([
+    const [catalog, customPrompt, sentProducts, bankDetails] = await Promise.all([
       getAllProducts(),
       getConfig('system_prompt'),
       getSentProductNames(conversationId),
-      getConfig('payment_transfer_info'),
-      getConfig('shipping_info')
+      getConfig('payment_transfer_info')
     ]);
 
     const customerDetail = toAiText({ sender: 'customer', type: messageType, content: storedContent });
@@ -290,11 +290,14 @@ async function processMessage(message: any, value: any) {
 
     let plan: TurnPlan;
     try {
-      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, shippingInfo });
+      plan = await planTurn({ history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
+      // Una vez por hora por chat: si la IA está caída (por ejemplo sin crédito), cada mensaje generaría otro aviso.
       console.error('❌ La IA no respondió:', error.message);
-      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
+      if (!(await hasRecentNotification(conversationId, 'bot_error', 1))) {
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
+      }
       return;
     }
     console.log(`🎯 intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff} | datos bancarios: ${plan.send_bank_details}`);
@@ -353,7 +356,7 @@ async function processMessage(message: any, value: any) {
         `VELAMIA: ${plan.reply}`
       ].join('\n');
 
-      await registerSale(plan.intent, { conversationId, phoneNumber, customerName, transcript, catalog });
+      await registerSale(plan.intent, { conversationId, phoneNumber, customerName, transcript, catalog, shippingPlace: plan.shipping_place });
     } else if (plan.intent === 'delivery_status') {
       await handleDeliveryStatusIntent(conversationId, phoneNumber);
     }
@@ -387,7 +390,7 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
  */
 async function registerSale(
   kind: 'quotation' | 'order',
-  ctx: { conversationId: string; phoneNumber: string; customerName: string; transcript: string; catalog: any[] }
+  ctx: { conversationId: string; phoneNumber: string; customerName: string; transcript: string; catalog: any[]; shippingPlace: string }
 ) {
   try {
     const items = await extractOrderItems(ctx.transcript, ctx.catalog);
@@ -396,16 +399,22 @@ async function registerSale(
       return;
     }
 
-    const totalAmount = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    // La clienta ve un solo valor; en el CRM el envío queda como línea aparte para la dueña.
+    const dozens = items.reduce((sum, i) => sum + i.quantity, 0);
+    const shipping = ctx.shippingPlace ? shippingCost(ctx.shippingPlace, dozens) : null;
+    const products: any[] = shipping
+      ? [...items, { type: 'shipping', name: `Envío a ${shipping.place}`, price: shipping.cost, quantity: 1 }]
+      : items;
+    const totalAmount = Math.round((items.reduce((sum, i) => sum + i.price * i.quantity, 0) + (shipping?.cost || 0)) * 100) / 100;
     const pendingQuotation = await getRecentPendingQuotation(ctx.conversationId);
 
     if (kind === 'quotation') {
       // El cliente vuelve a pedir el total con otra cantidad: se actualiza la misma cotización.
       if (pendingQuotation) {
-        await updateQuotationItems(pendingQuotation.id, items, totalAmount);
+        await updateQuotationItems(pendingQuotation.id, products, totalAmount);
         console.log(`📋 Cotización ${pendingQuotation.id.substring(0, 8)} actualizada: $${totalAmount.toFixed(2)}`);
       } else {
-        await createQuotation(ctx.conversationId, ctx.phoneNumber, items, totalAmount);
+        await createQuotation(ctx.conversationId, ctx.phoneNumber, products, totalAmount);
         console.log(`📋 Cotización registrada: $${totalAmount.toFixed(2)}`);
       }
       return;
@@ -413,7 +422,7 @@ async function registerSale(
 
     // El cliente confirmó: la cotización en curso queda como aceptada.
     if (pendingQuotation) {
-      await updateQuotationItems(pendingQuotation.id, items, totalAmount);
+      await updateQuotationItems(pendingQuotation.id, products, totalAmount);
       await updateQuotationStatus(pendingQuotation.id, 'accepted');
     }
 
@@ -421,17 +430,17 @@ async function registerSale(
     // se actualiza el pedido pendiente reciente en lugar de duplicarlo o de dejarlo desactualizado.
     const existing = await getRecentPendingOrder(ctx.conversationId);
     if (existing) {
-      await updateOrderItems(existing.id, items, totalAmount);
+      await updateOrderItems(existing.id, products, totalAmount);
       console.log(`🛍️ Pedido ${existing.id.substring(0, 8)} actualizado: $${totalAmount.toFixed(2)}`);
       return;
     }
 
-    await createOrder(ctx.conversationId, ctx.phoneNumber, ctx.customerName, items, totalAmount);
+    await createOrder(ctx.conversationId, ctx.phoneNumber, ctx.customerName, products, totalAmount);
     console.log(`🛍️ Pedido registrado: $${totalAmount.toFixed(2)}`);
 
     const detail = items
       .map(i => `${i.quantity} doc. ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`)
-      .join(', ') + ` · Total $${totalAmount.toFixed(2)}`;
+      .join(', ') + `${shipping ? ` · envío a ${shipping.place}` : ' · sin ciudad de envío'} · Total $${totalAmount.toFixed(2)}`;
     await notifyOwner({
       conversationId: ctx.conversationId,
       customerPhone: ctx.phoneNumber,

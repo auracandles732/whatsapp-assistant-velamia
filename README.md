@@ -61,8 +61,20 @@ La IA nunca redacta números de cuenta: el bloque bancario (clave `payment_trans
   La resta la hace el sistema (`subtractDays`); si la IA menciona otra fecha, se rehace la respuesta.
   Si la entrega calculada es hoy o ya pasó, el bot no menciona fecha y la dueña recibe el aviso `urgent_date` (una vez al día por chat).
 - Urgencia honesta: la fecha se reserva al recibir el anticipo.
-- **Envíos** a todo Ecuador, sin retiro en local, sin pedido mínimo. Costos y tiempos salen de
-  **CRM → Configuración → Envíos** (clave `shipping_info`); la IA no los inventa.
+- **Envíos** a todo Ecuador desde Guayaquil (Servientrega), sin retiro en local, sin pedido mínimo.
+
+## Envíos y valor total (`src/services/shippingRates.ts`)
+
+- Tarifario referencial hasta 2 kg (24 provincias, 222 cantones) tomado de `Tarifario_Envios_Ecuador_Hasta_2kg.pdf`.
+  Todos los cantones cuestan lo de su provincia, excepto Guayas: Guayaquil y Durán $3.00, resto $5.25.
+- Hasta **3 docenas** se cobra la tarifa; con más docenas el envío sube **$1.00** (una vez). Nunca se le menciona a la clienta.
+- La clienta recibe **un solo valor**: velas + envío. Sin la ciudad, el bot la pide antes de dar cualquier monto.
+- El total lo calcula el sistema (`computeOrderTotal`): precios del catálogo × docenas + envío. Si la IA escribe
+  otro total, otro anticipo o cualquier monto extra (precio por docena, costo de envío), la respuesta se rehace.
+- Anticipo por transferencia = 50% del valor total con envío; tarjeta = 100%.
+- Reconoce "Ciudad, Provincia", nombres populares (Puyo, Macas, El Coca, Sangolquí, Puerto Ayora…) y pide la provincia
+  cuando un nombre es ambiguo con tarifas distintas (Olmedo, Bolívar, Pichincha) o cuando solo dicen "Guayas".
+- En el CRM (pestaña Cotizaciones) la dueña sí ve el envío como línea aparte ("🚚 Envío a…").
 - Si la clienta pregunta algo que no está en las instrucciones, el bot dice que lo verifica y la dueña
   recibe el aviso `owner_question` con la pregunta; el bot sigue atendiendo.
 - Cotización en el CRM solo cuando la clienta pide cotización o valor total.

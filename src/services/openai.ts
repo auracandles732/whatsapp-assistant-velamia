@@ -1,4 +1,5 @@
 import { OpenAI, toFile } from 'openai';
+import { shippingCost, shippingRatesSummary, DOZENS_INCLUDED_IN_BASE_RATE, EXTRA_SHIPPING_COST } from './shippingRates';
 
 // Sin timeout propio el SDK espera hasta 10 minutos: la clienta quedaría sin respuesta ese tiempo.
 const openai = new OpenAI({
@@ -72,26 +73,34 @@ PERSONALIZACIÓN Y CIERRE DE VENTA:
 - Anota los detalles de personalización junto con el modelo, la cantidad y la fecha, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).
 
 FORMAS DE PAGO (estas reglas mandan sobre cualquier otra instrucción de pago):
-- Transferencia bancaria: se paga un ANTICIPO del 50% del valor total de la cotización para iniciar y el saldo antes de la entrega. Indica siempre el total y el monto exacto del anticipo (ejemplo: "Total $120 · Anticipo 50%: $60").
-- Tarjeta de crédito: se paga el 100% del valor total de la cotización. Indica siempre el monto total a pagar. Solo se aceptan tarjetas Visa y Mastercard: dilo siempre que hables de pagar con tarjeta.
-- Si el cliente pregunta cómo pagar, explica ambas opciones con sus montos y pregúntale cuál prefiere.
+- Transferencia bancaria: se paga un ANTICIPO del 50% del valor total (velas + envío) para iniciar y el saldo antes de la entrega. Indica siempre el valor total y el monto exacto del anticipo (ejemplo: "Total $127.00 · Anticipo 50%: $63.50").
+- Tarjeta de crédito: se paga el 100% del valor total (velas + envío). Indica siempre el monto total a pagar. Solo se aceptan tarjetas Visa y Mastercard: dilo siempre que hables de pagar con tarjeta.
+- Si el cliente pregunta cómo pagar, explica ambas opciones con sus montos si ya conoces el valor total; si falta la ciudad de envío, explica las opciones sin montos y pregunta la ciudad.
 - Nunca escribas números de cuenta, bancos ni titulares: el sistema los envía en un mensaje aparte (campo send_bank_details).
 
-ENVÍOS Y PEDIDOS:
-- Se hacen envíos a todo Ecuador. No hay retiro en local: si el cliente pide retirar, explícale con amabilidad que todos los pedidos se entregan por envío.
+ENVÍOS Y VALOR TOTAL (estas reglas mandan sobre cualquier otra instrucción de precios):
+- Enviamos a todo Ecuador desde Guayaquil por Servientrega. No hay retiro en local: si el cliente pide retirar, explícale con amabilidad que todos los pedidos se entregan por envío.
 - No hay pedido mínimo: se puede pedir cualquier cantidad (el precio del catálogo sigue siendo por docena).
-- Para costos, empresas y tiempos de envío usa solo la INFORMACIÓN DE ENVÍOS de abajo. Nunca inventes costos ni plazos.
+- Para dar un valor total (cotización, total, anticipo o monto con tarjeta) necesitas saber qué modelos, cuántas docenas y la ciudad de envío. Si falta la ciudad, pregúntala antes de dar cualquier total.
+- El valor total es UN SOLO VALOR que ya incluye las velas y el envío. Nunca lo desgloses: no digas el costo del envío por separado, ni el subtotal de las velas, ni "más envío". En el mensaje donde das el valor total no menciones ningún otro monto (ni el precio por docena), salvo el anticipo cuando corresponda. Nunca menciones peso, kilos ni cargos adicionales.
+- Cálculo interno: suma de (precio por docena × docenas) + tarifa de envío de la ciudad (TARIFAS DE ENVÍO de abajo). Si el pedido suma más de ${DOZENS_INCLUDED_IN_BASE_RATE} docenas, la tarifa de envío sube $${EXTRA_SHIPPING_COST.toFixed(2)}.
+- Si preguntan cuánto cuesta el envío, responde que el valor total que le das ya incluye el envío a su ciudad (y dáselo si ya conoces modelos, cantidad y ciudad).
+- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.
+- order_items: modelos del catálogo (nombre exacto) y docenas del pedido actual según toda la conversación; lista vacía si no están claros.
+- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.
+- quoted_total: el valor total que mencionas en reply, como número; 0 si no mencionas ninguno.
+- quoted_deposit: el anticipo que mencionas en reply, como número; 0 si no mencionas ninguno.
 
 FECHAS DE ENTREGA (estas reglas mandan sobre cualquier otra instrucción de disponibilidad):
 - Siempre hay disponibilidad: nunca digas que una fecha no está disponible ni que debes verificar la disponibilidad.
 - Fecha de entrega = fecha del evento MENOS 3 días; ese día el pedido le llega al cliente. Ejemplo: evento 21/09/2026 → entrega 18/09/2026.
 - Cuando conozcas la fecha del evento, menciona la fecha de entrega en formato día/mes/año.
-- Para impulsar la venta explica que la fecha queda reservada al recibir el anticipo y que las fechas se van ocupando por orden de pago; invítalo a asegurar su fecha. Nunca digas que quedan pocos cupos.
+- Para impulsar la venta, cada vez que menciones la fecha de entrega agrega en esa misma respuesta que la fecha queda reservada al recibir el pago y que las fechas se van ocupando por orden de pago (aunque todavía falten datos como la ciudad). Si paga por transferencia o aún no eligió forma de pago, di "al recibir el anticipo"; si paga con tarjeta, di "al recibir el pago" (con tarjeta no hay anticipo). Nunca digas que quedan pocos cupos.
 - event_date: fecha del evento en formato AAAA-MM-DD si el cliente la indicó en la conversación; si no, cadena vacía. Si no dice el año, usa la próxima vez que llegue esa fecha a partir de hoy.
 - delivery_date: la fecha de entrega que mencionas en reply, en formato AAAA-MM-DD; cadena vacía si no mencionas ninguna.
 
 PREGUNTAS SIN RESPUESTA (campo owner_question):
-- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo ni en la información de envíos, dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.
+- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo ni en el tarifario de envíos, dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.
 - En cualquier otro caso owner_question es una cadena vacía.
 
 DATOS BANCARIOS (campo send_bank_details):
@@ -107,7 +116,7 @@ FOTOS (campo show_products):
 - Cuando el mensaje indica que el cliente responde a una foto concreta, ese es el modelo del que habla.
 
 CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar ningún cambio de persona):
-- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: recuérdale el monto total a pagar (100% de la cotización), indícale que solo aceptamos tarjetas Visa y Mastercard y dile que en un momento le envías el link de pago. Usa emojis en esta respuesta (por ejemplo 💳 ✨ 🤍). No hagas preguntas.
+- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: recuérdale el monto total a pagar (100% del valor total con envío), indícale que solo aceptamos tarjetas Visa y Mastercard y dile que en un momento le envías el link de pago. Usa emojis en esta respuesta (por ejemplo 💳 ✨ 🤍). No hagas preguntas.
 - payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece, dile que lo verificas y, si falta algún detalle del pedido (fecha, nombres, colores, entrega), sigue atendiéndolo con normalidad.
 - complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos. No hagas preguntas.
 - none: cualquier otro caso, incluidas todas las personalizaciones.
@@ -143,12 +152,19 @@ export interface TurnPlan {
   event_date: string;
   /** Fecha de entrega calculada por el sistema (evento − 3 días) o cadena vacía. */
   delivery_date: string;
+  /** Modelos reales del catálogo con sus docenas, según la conversación. */
+  order_items: { name: string; price: number; dozens: number }[];
+  shipping_place: string;
+  /** Valor total calculado por el sistema (velas + envío) o 0 si falta información. */
+  order_total: number;
+  /** Anticipo del 50% del valor total o 0. */
+  deposit: number;
 }
 
 const TURN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['reply', 'intent', 'show_products', 'handoff', 'send_bank_details', 'owner_question', 'event_date', 'delivery_date'],
+  required: ['reply', 'intent', 'show_products', 'handoff', 'send_bank_details', 'owner_question', 'event_date', 'delivery_date', 'order_items', 'shipping_place', 'quoted_total', 'quoted_deposit'],
   properties: {
     reply: { type: 'string' },
     intent: { type: 'string', enum: ['greeting', 'product_inquiry', 'quotation', 'order', 'delivery_status', 'other'] },
@@ -157,9 +173,47 @@ const TURN_SCHEMA = {
     send_bank_details: { type: 'boolean' },
     owner_question: { type: 'string' },
     event_date: { type: 'string' },
-    delivery_date: { type: 'string' }
+    delivery_date: { type: 'string' },
+    order_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'dozens'],
+        properties: { name: { type: 'string' }, dozens: { type: 'number' } }
+      }
+    },
+    shipping_place: { type: 'string' },
+    quoted_total: { type: 'number' },
+    quoted_deposit: { type: 'number' }
   }
 };
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * Calcula el valor total con envío a partir de lo que la IA entendió de la conversación.
+ * Los precios salen del catálogo y la tarifa del tarifario: la IA no hace las cuentas.
+ */
+export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: CatalogProduct[]) {
+  const byName = new Map(catalog.map(p => [p.name.trim().toLowerCase(), p]));
+  const items = (Array.isArray(rawItems) ? rawItems : [])
+    .map((i: any) => ({ product: byName.get(String(i?.name || '').trim().toLowerCase()), dozens: Number(i?.dozens) }))
+    .filter((i: any) => i.product && Number.isFinite(i.dozens) && i.dozens > 0)
+    .map((i: any) => ({ name: i.product.name, price: Number(i.product.price), dozens: i.dozens }));
+
+  const place = String(rawPlace || '').trim();
+  const dozens = items.reduce((sum: number, i: any) => sum + i.dozens, 0);
+  const shipping = place ? shippingCost(place, dozens) : null;
+
+  let missing: '' | 'items' | 'place' | 'unknown_place' = '';
+  if (items.length === 0) missing = 'items';
+  else if (!place) missing = 'place';
+  else if (!shipping) missing = 'unknown_place';
+
+  const total = missing ? 0 : round2(items.reduce((sum: number, i: any) => sum + i.price * i.dozens, 0) + shipping!.cost);
+  return { items, place, shipping, missing, total, deposit: round2(total / 2) };
+}
 
 // Días antes del evento en que el pedido le llega a la clienta.
 export const DELIVERY_DAYS_BEFORE_EVENT = 3;
@@ -193,8 +247,7 @@ function buildSystemPrompt(
   catalog: CatalogProduct[],
   customPrompt: string | undefined,
   sentProducts: string[],
-  bankDetailsSent: boolean,
-  shippingInfo: string | undefined
+  bankDetailsSent: boolean
 ) {
   const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_PERSONA;
 
@@ -223,9 +276,7 @@ function buildSystemPrompt(
     ? 'DATOS BANCARIOS: ya se enviaron en esta conversación; vuelve a marcar send_bank_details solo si el cliente los pide de nuevo.'
     : 'DATOS BANCARIOS: aún no se han enviado en esta conversación.';
 
-  const shippingText = shippingInfo && shippingInfo.trim()
-    ? `INFORMACIÓN DE ENVÍOS (escrita por la dueña):\n${shippingInfo.trim()}`
-    : 'INFORMACIÓN DE ENVÍOS: la dueña aún no la ha configurado. Si preguntan costos o tiempos de envío, di que lo verificas y usa owner_question.';
+  const shippingText = `TARIFAS DE ENVÍO DESDE GUAYAQUIL (uso interno, todos los cantones de la provincia cuestan igual):\n${shippingRatesSummary()}`;
 
   return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${shippingText}\n\n${catalogText}\n\n${sentText}\n${bankText}`;
 }
@@ -241,12 +292,11 @@ export async function planTurn(params: {
   customPrompt?: string;
   sentProducts: string[];
   bankDetailsSent?: boolean;
-  shippingInfo?: string;
 }): Promise<TurnPlan> {
-  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, shippingInfo } = params;
+  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false } = params;
 
   const baseMessages = [
-    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, shippingInfo) },
+    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent) },
     ...history,
     { role: 'user' as const, content: userMessage }
   ];
@@ -267,24 +317,85 @@ export async function planTurn(params: {
 
   let parsed = await ask();
 
-  // La resta de fechas la hace el sistema: si la IA mencionó otra fecha de entrega, rehace la respuesta.
+  // Fechas y montos los calcula el sistema. Si la IA escribió otros, se rehace la respuesta
+  // una sola vez con todas las correcciones juntas.
+  const corrections: string[] = [];
+
   const eventDate = isValidIsoDate(String(parsed.event_date || '')) ? parsed.event_date : '';
   const expectedDelivery = eventDate ? subtractDays(eventDate, DELIVERY_DAYS_BEFORE_EVENT) : '';
   const mentioned = String(parsed.delivery_date || '');
   if (expectedDelivery && mentioned && expectedDelivery <= todayInGuayaquil()) {
     // Evento muy cercano: siempre se atiende, pero decirle una fecha de entrega ya pasada no tiene sentido.
     console.warn(`📅 Entrega calculada ${expectedDelivery} es hoy o ya pasó: se pide no mencionarla`);
-    parsed = await ask(
-      `CORRECCIÓN: el evento es el ${formatDateEc(eventDate)} y la entrega calculada (${DELIVERY_DAYS_BEFORE_EVENT} días antes) ya pasó o es hoy. ` +
+    corrections.push(
+      `El evento es el ${formatDateEc(eventDate)} y la entrega calculada (${DELIVERY_DAYS_BEFORE_EVENT} días antes) ya pasó o es hoy. ` +
       'No menciones ninguna fecha de entrega. Confirma con seguridad que sí atendemos su pedido para su evento y dile que en un momento le confirmas el día exacto de entrega.'
     );
   } else if (expectedDelivery && mentioned && mentioned !== expectedDelivery) {
     console.warn(`📅 Fecha de entrega corregida: la IA dijo ${mentioned}, corresponde ${expectedDelivery}`);
-    parsed = await ask(
-      `CORRECCIÓN: el evento es el ${formatDateEc(eventDate)} y la fecha de entrega correcta es el ${formatDateEc(expectedDelivery)} ` +
-      `(${DELIVERY_DAYS_BEFORE_EVENT} días antes). Rehaz la respuesta usando exactamente esa fecha de entrega.`
+    corrections.push(
+      `El evento es el ${formatDateEc(eventDate)} y la fecha de entrega correcta es el ${formatDateEc(expectedDelivery)} ` +
+      `(${DELIVERY_DAYS_BEFORE_EVENT} días antes). Usa exactamente esa fecha de entrega y di que la fecha se reserva al recibir el anticipo.`
     );
+  } else if (expectedDelivery && mentioned && !(parsed.handoff === 'card_payment'
+    ? /recibir el pago|confirmar el pago/i
+    : /anticipo/i).test(String(parsed.reply || ''))) {
+    // La fecha es correcta, pero sin la reserva por pago se pierde la urgencia que pidió la dueña.
+    corrections.push(parsed.handoff === 'card_payment'
+      ? 'Mantén la misma fecha de entrega y agrega que la fecha queda reservada al recibir el pago, ya que las fechas se van ocupando por orden de pago. No menciones anticipo: con tarjeta se paga el total.'
+      : 'Mantén la misma fecha de entrega y agrega que la fecha queda reservada al recibir el anticipo, ya que las fechas se van ocupando por orden de pago.');
   }
+
+  // Con tarjeta se paga el 100%: hablar de anticipo confunde a la clienta.
+  if (parsed.handoff === 'card_payment' && /anticipo/i.test(String(parsed.reply || ''))) {
+    corrections.push('La clienta paga con tarjeta: se cancela el 100% del valor total. No menciones la palabra anticipo; si hablas de la reserva de la fecha di "al recibir el pago".');
+  }
+
+  const quotedTotal = Number(parsed.quoted_total) || 0;
+  const quotedDeposit = Number(parsed.quoted_deposit) || 0;
+  const firstOrder = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog);
+  // Montos que aparecen escritos en la respuesta ("$30", "$127.00", "$63,50").
+  const amountsInReply = (String(parsed.reply || '').match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || [])
+    .map(a => Number(a.replace(/[$\s]/g, '').replace(',', '.')));
+  // Sin montos todavía, pero la reserva con anticipo sí se puede mencionar para crear urgencia.
+  const noAmountsYet = 'No escribas ningún monto (ni valor total ni valor del anticipo) todavía; sí puedes decir que la fecha se reserva con el anticipo.';
+
+  if (quotedTotal > 0 || quotedDeposit > 0) {
+    if (firstOrder.missing === 'items') {
+      corrections.push(`${noAmountsYet} Aún no está claro qué modelos y cuántas docenas quiere; pregúntale.`);
+    } else if (firstOrder.missing === 'place') {
+      corrections.push(`${noAmountsYet} Pregunta primero a qué ciudad se envía el pedido.`);
+    } else if (firstOrder.missing === 'unknown_place') {
+      corrections.push(`${noAmountsYet} "${firstOrder.place}" no aparece en el tarifario o existe en varias provincias; pregunta la ciudad y la provincia exactas.`);
+    }
+  }
+
+  // Si ya se conocen modelos, cantidad y ciudad, cualquier monto escrito debe cuadrar con el cálculo del sistema,
+  // aunque la IA no lo haya declarado en quoted_total (por ejemplo "$123.00" en lugar de "$124.00").
+  if (!firstOrder.missing && amountsInReply.length > 0) {
+    const allowed = [firstOrder.total, firstOrder.deposit];
+    const catalogPrices = catalog.map(p => Number(p.price));
+    const givesTotal = quotedTotal > 0 || quotedDeposit > 0 || amountsInReply.some(a => allowed.some(v => Math.abs(a - v) < 0.009));
+    const wrongTotal = (quotedTotal > 0 && Math.abs(quotedTotal - firstOrder.total) > 0.009)
+      || (quotedDeposit > 0 && Math.abs(quotedDeposit - firstOrder.deposit) > 0.009);
+    // Al dar el total solo valen total y anticipo; en otros mensajes también se permite el precio de catálogo.
+    const accepted = givesTotal ? allowed : [...allowed, ...catalogPrices];
+    const extraAmounts = amountsInReply.some(a => !accepted.some(v => Math.abs(a - v) < 0.009));
+    if (wrongTotal || extraAmounts) {
+      console.warn(`💲 Montos corregidos: la IA dijo ${quotedTotal}/${quotedDeposit} (${amountsInReply.join(', ')}), corresponde ${firstOrder.total}/${firstOrder.deposit}`);
+      corrections.push(
+        `El valor total correcto del pedido (velas + envío a ${firstOrder.shipping!.place}) es $${firstOrder.total.toFixed(2)} ` +
+        `y el anticipo del 50% es $${firstOrder.deposit.toFixed(2)}. Escribe solo esos montos, como un solo valor: ` +
+        'sin precio por docena, sin subtotal de velas y sin mencionar el envío por separado.'
+      );
+    }
+  }
+
+  if (corrections.length > 0) {
+    parsed = await ask(`CORRECCIÓN (obligatoria):\n- ${corrections.join('\n- ')}\nRehaz la respuesta aplicando estas correcciones.`);
+  }
+
+  const order = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog);
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
   const byName = new Map(catalog.map(p => [p.name.trim().toLowerCase(), p.name]));
@@ -302,7 +413,11 @@ export async function planTurn(params: {
     send_bank_details: parsed.send_bank_details === true,
     owner_question: String(parsed.owner_question || '').trim(),
     event_date: eventDate,
-    delivery_date: expectedDelivery
+    delivery_date: expectedDelivery,
+    order_items: order.items,
+    shipping_place: order.place,
+    order_total: order.total,
+    deposit: order.total ? order.deposit : 0
   };
 }
 
