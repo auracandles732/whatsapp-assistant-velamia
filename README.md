@@ -45,6 +45,10 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
   "¿Te gustaría ver más modelos?" y envía las siguientes 4 cuando acepta.
 - Reconoce la foto que la clienta cita al responder.
 - La personalización (colores, nombres, frases) siempre es válida y no impide cerrar la venta.
+- Solo registra un pedido (y avisa a la dueña) cuando la clienta confirma o elige forma de pago; dar modelo,
+  cantidad y ciudad no es un pedido. Cotización y pedido usan los mismos modelos, docenas y personalización
+  con que se calculó el valor que recibió la clienta.
+- Al publicar una versión (SIGTERM de Render) responde de inmediato los mensajes que estaban en espera.
 - Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido, reclamo**.
   Solo avisa (sin pausar) cuando llega un **comprobante de pago**, un **pedido nuevo** o si la IA falla.
 
@@ -96,7 +100,8 @@ según los días sin respuesta desde el último mensaje de la clienta:
 | 7 | `velamia_seguimiento_04_v2` |
 | 14 | `velamia_seguimiento_05_v2` |
 
-- No se envían si el bot está apagado, el chat está pausado, hay un pedido en los últimos 60 días
+- No se envían si el bot está apagado, el chat está pausado, la clienta lleva más de 21 días sin escribir,
+  hay un pedido en los últimos 60 días
   o la clienta respondió **NO** (queda registrado como `opt_out` en `followups`).
 - Si la clienta responde, la serie se reinicia desde su nuevo mensaje. Nunca dos seguimientos en menos de 20 h.
 - Cada envío queda en `followups` (`auto_followup`) y en el chat con el prefijo "📩 Seguimiento automático".

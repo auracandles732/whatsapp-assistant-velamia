@@ -29,6 +29,9 @@ const CHECK_EVERY_MS = 15 * 60 * 1000;
 const TEMPLATE_CACHE_MS = 30 * 60 * 1000;
 // Pedido reciente = la clienta ya compró, no se le insiste.
 const ACTIVITY_WINDOW_DAYS = 60;
+// Pasado el último paso (14 días) más un margen, ya no se escribe. Debe ser menor que ACTIVITY_WINDOW_DAYS:
+// si no, los seguimientos viejos saldrían de la consulta y la serie volvería a empezar.
+const MAX_SILENCE_DAYS = 21;
 
 export function hourInGuayaquil(date: Date): number {
   return Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Guayaquil', hour: 'numeric', hourCycle: 'h23' }).format(date));
@@ -93,6 +96,7 @@ export async function runFollowUps(now: Date = new Date()): Promise<{ sent: numb
 
       // last_message_time solo cambia con mensajes de la clienta: es su última respuesta.
       const lastCustomerAt = parseDbTimestamp(conv.last_message_time);
+      if (now.getTime() - lastCustomerAt.getTime() > MAX_SILENCE_DAYS * DAY_MS) continue;
       const sentSinceLast = (activity.followUps.get(conv.id) || [])
         .filter(date => date > lastCustomerAt)
         .sort((a, b) => a.getTime() - b.getTime());

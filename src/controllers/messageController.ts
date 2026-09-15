@@ -36,6 +36,7 @@ import {
   transcribeAudio,
   describeImage,
   extractOrderItems,
+  OrderItem,
   TurnPlan,
   todayInGuayaquil,
   formatDateEc
@@ -55,6 +56,14 @@ const PAUSING_HANDOFFS = new Set(['card_payment', 'complaint']);
 
 // Inicio del mensaje con los datos bancarios: permite saber si ya se enviaron en el chat.
 const BANK_DETAILS_MARKER = '🏦 Datos para transferencia';
+
+// Palabras con que la clienta confirma una compra o elige cómo pagar. "Quiero 4 docenas para Quito"
+// solo da datos: sin una de estas no se registra pedido aunque la IA lo haya marcado.
+// Palabras con que la clienta pide cotización o el valor total. La dueña pidió anotar cotizaciones solo en ese caso,
+// aunque el bot mencione un total por su cuenta.
+const QUOTE_REQUEST_PATTERN = /(?<!\p{L})(cotiz\p{L}*|total\p{L}*|cu[aá]nt\p{L}*|precio\p{L}*|valor\p{L}*|sale|salen|saldr\p{L}*|cuest\p{L}*|cost\p{L}*|monto|presupuesto)(?!\p{L})/iu;
+
+const CONFIRMATION_PATTERN =/(?<!\p{L})(confirm\p{L}*|reserv\p{L}*|separ\p{L}*|apart\p{L}*|hag[aá]mos\p{L}*|procedamos|proceder|de acuerdo|listo|dale|vamos|ok|okey|okay|s[ií]|claro|perfecto|lo quiero|la quiero|los quiero|las quiero|me (?:lo|la|los|las) llevo|compr\p{L}*|pag\p{L}*|transfer\p{L}*|tarjeta|dep[oó]sit\p{L}*|comprobante|anticipo)(?!\p{L})/iu;
 
 // La clienta suele escribir en varios mensajes seguidos: se espera este silencio antes de responder
 // a todos juntos. Si no deja de escribir, se responde igual pasado el tiempo máximo.
@@ -110,11 +119,42 @@ function scheduleResponse(key: string, batch: PendingBatch) {
   if (batch.timer) clearTimeout(batch.timer);
   const remaining = batch.firstAt + MAX_RESPONSE_WAIT_MS - Date.now();
   const delay = Math.max(0, Math.min(RESPONSE_DELAY_MS, remaining));
+  // La tanda se cierra recién cuando le toca su turno en la fila: un mensaje que se estaba guardando
+  // (una foto o un audio tardan) entra en esta misma respuesta en vez de quedar desordenado.
   batch.timer = setTimeout(() => {
-    if (pendingBatches.get(key) !== batch) return;
+    enqueue(key, async () => {
+      if (pendingBatches.get(key) !== batch) return;
+      pendingBatches.delete(key);
+      if (batch.timer) clearTimeout(batch.timer);
+      await respondToBatch(batch);
+    });
+  }, delay);
+}
+
+/**
+ * Render detiene la instancia anterior al publicar una versión: se responde ya lo que estaba
+ * en espera y se aguardan las respuestas en curso, sin pasar del tiempo indicado.
+ */
+export async function flushPendingResponses(timeoutMs: number) {
+  for (const [key, batch] of [...pendingBatches]) {
+    if (batch.timer) clearTimeout(batch.timer);
     pendingBatches.delete(key);
     enqueue(key, () => respondToBatch(batch));
-  }, delay);
+  }
+  await Promise.race([
+    Promise.allSettled([...queues.values()]),
+    new Promise(resolve => setTimeout(resolve, timeoutMs))
+  ]);
+}
+
+/** Olvida lo que estaba en memoria de un chat eliminado desde el CRM. */
+export function forgetConversation(phoneNumber: string, conversationId: string) {
+  const batch = pendingBatches.get(String(phoneNumber));
+  if (batch?.conversationId === conversationId) {
+    if (batch.timer) clearTimeout(batch.timer);
+    pendingBatches.delete(String(phoneNumber));
+  }
+  pendingPhotos.delete(conversationId);
 }
 
 /** Convierte un mensaje guardado en lo que la IA necesita leer (sin URLs de archivos). */
@@ -220,8 +260,13 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
       }
 
       case 'reaction':
-        // Un 👍 a un mensaje no es algo que el bot deba contestar.
+      case 'system':
+        // Un 👍 a un mensaje o un aviso de WhatsApp (por ejemplo cambio de número) no se contestan.
         return null;
+
+      case 'request_welcome':
+        // La clienta abrió el chat por primera vez sin escribir todavía.
+        return { userContent: '👋 Abrió el chat', aiContent: '[El cliente abrió el chat por primera vez; salúdalo y ofrécele ayuda]' };
 
       default:
         return { userContent: `[Mensaje tipo: ${type}]`, aiContent: `[El cliente envió un mensaje de tipo ${type} que no se puede leer]` };
@@ -296,7 +341,8 @@ async function ingestMessage(message: any, value: any) {
 
     // Las plantillas de seguimiento dicen "responde NO": se respeta siempre, aunque el bot esté pausado.
     const answeredFollowUp = lastMessage?.sender === 'bot' && String(lastMessage.content || '').startsWith(FOLLOW_UP_MARKER);
-    if (answeredFollowUp && messageType === 'text' && /^\s*no\s*[.!¡]*\s*$/i.test(userContent)) {
+    // También cuenta si toca un botón "No" de la plantilla.
+    if (answeredFollowUp && ['text', 'button', 'interactive'].includes(messageType) && /^\s*no\s*[.!¡]*\s*$/i.test(userContent)) {
       await recordFollowUp(conversationId, 'opt_out', 'La clienta respondió NO a los seguimientos');
       console.log(`🔕 ${phoneNumber} no quiere más seguimientos`);
       if ((await getConfig('bot_enabled')) !== 'false' && !(await isBotPaused(conversationId))) {
@@ -411,6 +457,29 @@ async function respondToBatch(batch: PendingBatch) {
       }
     }
 
+    // Un pedido falso le avisaría a la dueña sin motivo y frenaría los seguimientos de la clienta.
+    let saleIntent = plan.intent;
+    if (saleIntent === 'order' && !plan.send_bank_details && plan.handoff === 'none' && !CONFIRMATION_PATTERN.test(aiContent)) {
+      console.log('🛍️ La IA marcó pedido sin confirmación de la clienta; no se registra');
+      saleIntent = 'other';
+    }
+    if (saleIntent === 'quotation' && !QUOTE_REQUEST_PATTERN.test(aiContent)) {
+      console.log('📋 La IA marcó cotización sin que la clienta la pidiera; no se registra');
+      saleIntent = 'other';
+    }
+
+    // Se registra antes de la revisión manual: si confirma y elige tarjeta en el mismo mensaje,
+    // el bot se pausa y el pedido igual debe quedar anotado.
+    if (saleIntent === 'quotation' || saleIntent === 'order') {
+      const transcript = [
+        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : 'VELAMIA'}: ${t.content}`),
+        `Cliente: ${aiContent}`,
+        `VELAMIA: ${plan.reply}`
+      ].join('\n');
+
+      await registerSale(saleIntent, { conversationId, phoneNumber, customerName, transcript, catalog, shippingPlace: plan.shipping_place, planItems: plan.order_items });
+    }
+
     if (plan.handoff !== 'none') {
       await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: plan.handoff, detail: customerDetail });
       // Tarjeta y reclamos: el bot queda pausado hasta que lo reactiven desde el CRM.
@@ -421,22 +490,16 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     if (plan.show_products.length > 0) {
-      // Si la IA eligió solo parte de las pendientes, se toman todas: las que no entren en esta tanda
-      // quedan para la siguiente pregunta en vez de perderse.
-      const continuesPending = pendingProducts.length > 0 && plan.show_products.every(n => pendingProducts.includes(n));
+      // Si la IA eligió una tanda de las pendientes, se toman todas: las que no entren quedan para la
+      // siguiente pregunta en vez de perderse. Si pidió uno o dos modelos concretos, se envían solo esos.
+      const continuesPending = pendingProducts.length > 0
+        && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
+        && plan.show_products.every(n => pendingProducts.includes(n));
       const photos = continuesPending ? pendingProducts : plan.show_products;
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog);
     }
 
-    if (plan.intent === 'quotation' || plan.intent === 'order') {
-      const transcript = [
-        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : 'VELAMIA'}: ${t.content}`),
-        `Cliente: ${aiContent}`,
-        `VELAMIA: ${plan.reply}`
-      ].join('\n');
-
-      await registerSale(plan.intent, { conversationId, phoneNumber, customerName, transcript, catalog, shippingPlace: plan.shipping_place });
-    } else if (plan.intent === 'delivery_status') {
+    if (plan.intent === 'delivery_status') {
       await handleDeliveryStatusIntent(conversationId, phoneNumber);
     }
   } catch (error) {
@@ -457,7 +520,7 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
   // Una a una y en orden: si una falla, las demás igual se envían.
   for (const product of batch) {
     try {
-      const caption = `🕯️ *${product.name}*\n💰 $${product.price} la docena`;
+      const caption = `🕯️ *${product.name}*\n💰 $${Number(product.price).toFixed(2)} la docena`;
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
       await saveMessage(conversationId, 'bot', 'image', `${product.image_url}\n${caption}`, getSentMessageId(sent));
     } catch (error: any) {
@@ -479,10 +542,14 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
  */
 async function registerSale(
   kind: 'quotation' | 'order',
-  ctx: { conversationId: string; phoneNumber: string; customerName: string; transcript: string; catalog: any[]; shippingPlace: string }
+  ctx: { conversationId: string; phoneNumber: string; customerName: string; transcript: string; catalog: any[]; shippingPlace: string; planItems: TurnPlan['order_items'] }
 ) {
   try {
-    const items = await extractOrderItems(ctx.transcript, ctx.catalog);
+    // Los mismos modelos y docenas con que se calculó el valor que recibió la clienta, para que el CRM cuadre.
+    // Solo si la IA no los identificó en el turno se leen de nuevo de la conversación.
+    const items: OrderItem[] = ctx.planItems.length > 0
+      ? ctx.planItems.map(i => ({ name: i.name, price: i.price, quantity: i.dozens, personalization: i.personalization }))
+      : await extractOrderItems(ctx.transcript, ctx.catalog);
     if (items.length === 0) {
       console.log(`📋 ${kind} sin productos claros del catálogo; no se registra`);
       return;

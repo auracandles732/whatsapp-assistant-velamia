@@ -897,7 +897,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         // El CRM lo sirve el mismo servidor: se usa su propio origen (sirve igual en otro dominio).
         const API_URL = /^https?:$/.test(window.location.protocol)
@@ -1056,6 +1056,10 @@
             const [quotations, setQuotations] = useState([]);
             const [quoteFilter, setQuoteFilter] = useState('all');
             const [deletingChat, setDeletingChat] = useState(false);
+            const [sending, setSending] = useState(false);
+            const messagesRef = useRef(null);
+            // Se sigue al último mensaje salvo que la dueña haya subido a leer mensajes anteriores.
+            const stickToBottom = useRef(true);
 
             useEffect(() => {
                 loadConversations();
@@ -1307,7 +1311,22 @@
                 }
             }
 
+            function keepAtBottom() {
+                const el = messagesRef.current;
+                if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+            }
+
+            function handleMessagesScroll() {
+                const el = messagesRef.current;
+                if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+            }
+
+            useEffect(keepAtBottom, [messages]);
+
             useEffect(() => {
+                // Al abrir otro chat no se muestran por un instante los mensajes del anterior.
+                stickToBottom.current = true;
+                setMessages([]);
                 if (selectedConv) {
                     loadMessages(selectedConv.id);
                     const interval = setInterval(() => loadMessages(selectedConv.id), 3000);
@@ -1344,8 +1363,10 @@
             }
 
             async function sendMessage() {
-                if (!inputText.trim() || !selectedConv) return;
+                if (!inputText.trim() || !selectedConv || sending) return;
 
+                // Sin esto, dos Enter seguidos le enviarían el mismo mensaje dos veces a la clienta.
+                setSending(true);
                 try {
                     // El servidor pausa el bot en este chat al enviar un mensaje manual.
                     await api('/api/send-message', {
@@ -1358,10 +1379,13 @@
                     });
 
                     setInputText('');
+                    stickToBottom.current = true;
                     loadMessages(selectedConv.id);
                     loadConversations();
                 } catch (err) {
                     alert('Error enviando mensaje: ' + err.message);
+                } finally {
+                    setSending(false);
                 }
             }
 
@@ -1463,7 +1487,7 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="messages-container">
+                                    <div className="messages-container" ref={messagesRef} onScroll={handleMessagesScroll}>
                                         {messages.map((msg) => {
                                             const content = msg.content || '';
                                             // Solo en fotos, audios y documentos la primera línea es la URL del archivo;
@@ -1475,7 +1499,7 @@
                                                 <div key={msg.id} className={`message ${msg.sender}`}>
                                                     <div>
                                                         <div className="message-bubble">
-                                                            {msg.type === 'image' && mediaUrl ? <img src={mediaUrl} onClick={() => window.open(mediaUrl, '_blank')} /> : null}
+                                                            {msg.type === 'image' && mediaUrl ? <img src={mediaUrl} onLoad={keepAtBottom} onClick={() => window.open(mediaUrl, '_blank')} /> : null}
                                                             {msg.type === 'audio' && mediaUrl ? <audio controls src={mediaUrl} style={{ maxWidth: '220px', marginBottom: '6px', display: 'block' }} /> : null}
                                                             {msg.type === 'document' && mediaUrl ? <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>📎 Abrir documento</a> : null}
                                                             {textPart}
@@ -1492,10 +1516,15 @@
                                             placeholder="Escribe tu respuesta aquí..."
                                             value={inputText}
                                             onChange={e => setInputText(e.target.value)}
-                                            onKeyPress={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                                            onKeyPress={e => {
+                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                    e.preventDefault();
+                                                    sendMessage();
+                                                }
+                                            }}
                                         ></textarea>
                                         <div className="button-group">
-                                            <button className="btn-send" onClick={sendMessage}>📤 Enviar</button>
+                                            <button className="btn-send" onClick={sendMessage} disabled={sending}>{sending ? 'Enviando...' : '📤 Enviar'}</button>
                                             <button className="btn-photo" onClick={sendPhoto}>📷 Foto</button>
                                         </div>
                                     </div>
@@ -1633,10 +1662,10 @@
                             </div>
                             <div className="settings-card">
                                 <h3>🧠 Instrucciones del asistente (System Prompt)</h3>
-                                <p className="hint">Aquí defines cómo debe comportarse el bot: su tono, reglas, políticas de entrega/pago, y cualquier detalle de tu negocio. Se aplica a todas las conversaciones nuevas. Deja vacío para usar el comportamiento por defecto.</p>
+                                <p className="hint">Aquí defines el tono del bot y detalles de tu negocio. Se aplica de inmediato en todos los chats. Los precios por docena, pagos (anticipo 50% / tarjeta Visa y Mastercard), envíos por Servientrega y fechas de entrega ya están fijos en el sistema y mandan sobre lo que escribas aquí.</p>
                                 <textarea
                                     className="prompt-textarea"
-                                    placeholder="Ej: Eres el asistente de ventas de VELAMIA. Responde siempre en español, de forma cálida y cercana. Los pagos son por transferencia o contra entrega. Los envíos son solo dentro de Guayaquil..."
+                                    placeholder="Ej: Eres parte del equipo de VELAMIA. Responde siempre en español, de forma cálida y cercana, con mensajes cortos y algún emoji 🤍"
                                     value={systemPrompt}
                                     onChange={e => setSystemPrompt(e.target.value)}
                                 ></textarea>

@@ -25,7 +25,7 @@ import {
   parseDbTimestamp
 } from './db';
 import { removeFilesByPublicUrls } from './services/storage';
-import { handleWebhookMessage } from './controllers/messageController';
+import { handleWebhookMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
 import {
   requireCrmSession,
   isPasswordValid,
@@ -166,6 +166,7 @@ app.delete('/api/conversations/:id', requireCrmSession, requireUuidParam, async 
     if (!conv) return res.status(404).json({ error: 'Conversación no encontrada' });
 
     const { mediaUrls } = await deleteConversationCompletely(req.params.id);
+    forgetConversation(conv.phone_number, conv.id);
 
     // Si falla el borrado de archivos, los datos ya se eliminaron: se registra sin revertir.
     let filesRemoved = 0;
@@ -350,6 +351,12 @@ app.post('/api/payment-info', requireCrmSession, async (req: Request, res: Respo
 
 // ---------- Catálogo ----------
 
+// El nombre va entre *asteriscos* en el texto de cada foto y así se reconoce qué modelo se envió:
+// un asterisco dentro del nombre rompería esa lectura.
+function cleanProductName(value: unknown): string {
+  return String(value ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+}
+
 app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Response) => {
   try {
     // WhatsApp solo envía fotos JPG o PNG de hasta 5 MB: otra foto nunca le llegaría a la clienta.
@@ -390,11 +397,11 @@ app.post('/api/products', requireCrmSession, async (req: Request, res: Response)
     const { name, price, category, image_url } = req.body || {};
     const parsedPrice = Number(price);
 
-    if (!String(name || '').trim() || !String(category || '').trim() || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+    if (!cleanProductName(name) || !String(category || '').trim() || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       return res.status(400).json({ error: 'Nombre, categoría y un precio válido son requeridos' });
     }
 
-    res.json(await createProduct(String(name).trim(), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined));
+    res.json(await createProduct(cleanProductName(name), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined));
   } catch (error: any) {
     console.error('Error creando producto:', error.message);
     res.status(500).json({ error: error.message });
@@ -406,7 +413,10 @@ app.put('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Re
     const { name, price, category, image_url } = req.body || {};
     const updates: { name?: string; price?: number; category?: string; image_url?: string } = {};
 
-    if (name !== undefined) updates.name = String(name).trim();
+    if (name !== undefined) {
+      updates.name = cleanProductName(name);
+      if (!updates.name) return res.status(400).json({ error: 'El nombre no puede quedar vacío' });
+    }
     if (category !== undefined) updates.category = String(category).trim().toUpperCase();
     if (image_url !== undefined) updates.image_url = image_url;
     if (price !== undefined) {
@@ -479,6 +489,15 @@ function keepAwake() {
 // Un error inesperado en segundo plano no debe apagar el servidor y cortar la atención.
 process.on('unhandledRejection', reason => console.error('Promesa rechazada sin manejar:', reason));
 process.on('uncaughtException', error => console.error('Excepción no capturada:', error));
+
+// Al publicar una versión, Render avisa con SIGTERM y da ~30 s antes de apagar la instancia anterior.
+let shuttingDown = false;
+process.on('SIGTERM', () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('🛑 Apagando: se responden los mensajes en espera antes de salir');
+  flushPendingResponses(25_000).finally(() => process.exit(0));
+});
 
 initDatabase().catch(error => console.error('❌', error.message));
 

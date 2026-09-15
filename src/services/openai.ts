@@ -15,8 +15,8 @@ const MODEL = 'gpt-5.4-mini';
 // para responder rápido por WhatsApp.
 const REASONING_EFFORT = 'low' as const;
 
-// Máximo de fotos por respuesta: cubre una categoría completa sin saturar el chat.
-export const MAX_PHOTOS_PER_TURN = 15;
+// Máximo de fotos que la IA puede elegir en un turno; el controlador las envía de 4 en 4.
+export const MAX_PHOTOS_PER_TURN = 40;
 
 export async function transcribeAudio(buffer: Buffer, mimeType: string): Promise<string> {
   try {
@@ -86,7 +86,7 @@ ENVÍOS Y VALOR TOTAL (estas reglas mandan sobre cualquier otra instrucción de 
 - Cálculo interno: suma de (precio por docena × docenas) + tarifa de envío de la ciudad (TARIFAS DE ENVÍO de abajo). Si el pedido suma más de ${DOZENS_INCLUDED_IN_BASE_RATE} docenas, la tarifa de envío sube $${EXTRA_SHIPPING_COST.toFixed(2)}.
 - Si preguntan cuánto cuesta el envío, responde que el valor total que le das ya incluye el envío a su ciudad (y dáselo si ya conoces modelos, cantidad y ciudad).
 - Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.
-- order_items: modelos del catálogo (nombre exacto) y docenas del pedido actual según toda la conversación; lista vacía si no están claros.
+- order_items: modelos del catálogo (nombre exacto) y docenas del pedido actual según toda la conversación; lista vacía si no están claros. En personalization resume los colores, nombres, frases y detalles que pidió para ese modelo (cadena vacía si no hay).
 - shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.
 - quoted_total: el valor total que mencionas en reply, como número; 0 si no mencionas ninguno.
 - quoted_deposit: el anticipo que mencionas en reply, como número; 0 si no mencionas ninguno.
@@ -126,7 +126,7 @@ CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar
 
 INTENCIÓN (campo intent):
 - quotation: SOLO cuando el cliente pide explícitamente una cotización o el valor total de su pedido ("me cotizas", "cuánto sería en total", "cuánto me sale todo", "pásame la cotización"). Dar cantidad, fecha o colores, o preguntar el precio de un modelo, NO es quotation aunque tú menciones un total.
-- order: el cliente CONFIRMA explícitamente la compra con modelo y cantidad ya definidos ("confirmo", "sí, hagamos el pedido", "lo quiero reservar"). Decir que un modelo le gusta, dar colores o preguntar precios NO es order.
+- order: el cliente CONFIRMA explícitamente la compra con modelo y cantidad ya definidos ("confirmo", "sí, hagamos el pedido", "lo quiero reservar"). Decir que un modelo le gusta, dar modelo, cantidad, colores, fecha o ciudad (aunque diga "quiero 4 docenas") o preguntar precios NO es order: usa product_inquiry u other. Elegir la forma de pago después de conocer el total sí confirma la compra.
 - delivery_status: pregunta por el estado de un pedido ya hecho.
 - product_inquiry, greeting u other en los demás casos.`;
 
@@ -155,7 +155,7 @@ export interface TurnPlan {
   /** Fecha de entrega calculada por el sistema (evento − 3 días) o cadena vacía. */
   delivery_date: string;
   /** Modelos reales del catálogo con sus docenas, según la conversación. */
-  order_items: { name: string; price: number; dozens: number }[];
+  order_items: { name: string; price: number; dozens: number; personalization: string }[];
   shipping_place: string;
   /** Valor total calculado por el sistema (velas + envío) o 0 si falta información. */
   order_total: number;
@@ -181,8 +181,8 @@ const TURN_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'dozens'],
-        properties: { name: { type: 'string' }, dozens: { type: 'number' } }
+        required: ['name', 'dozens', 'personalization'],
+        properties: { name: { type: 'string' }, dozens: { type: 'number' }, personalization: { type: 'string' } }
       }
     },
     shipping_place: { type: 'string' },
@@ -200,9 +200,13 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: CatalogProduct[]) {
   const byName = new Map(catalog.map(p => [p.name.trim().toLowerCase(), p]));
   const items = (Array.isArray(rawItems) ? rawItems : [])
-    .map((i: any) => ({ product: byName.get(String(i?.name || '').trim().toLowerCase()), dozens: Number(i?.dozens) }))
+    .map((i: any) => ({
+      product: byName.get(String(i?.name || '').trim().toLowerCase()),
+      dozens: Number(i?.dozens),
+      personalization: String(i?.personalization || '').trim()
+    }))
     .filter((i: any) => i.product && Number.isFinite(i.dozens) && i.dozens > 0)
-    .map((i: any) => ({ name: i.product.name, price: Number(i.product.price), dozens: i.dozens }));
+    .map((i: any) => ({ name: i.product.name, price: Number(i.product.price), dozens: i.dozens, personalization: i.personalization }));
 
   const place = String(rawPlace || '').trim();
   const dozens = items.reduce((sum: number, i: any) => sum + i.dozens, 0);
@@ -262,7 +266,7 @@ function buildSystemPrompt(
       byCategory[p.category].push(p);
     }
     catalogText = 'CATÁLOGO ACTUAL DE VELAMIA (precios por docena):\n\n' + Object.entries(byCategory)
-      .map(([cat, items]) => `${cat} (${items.length} modelos):\n` + items.map(i => `  - ${i.name}: $${i.price} por docena`).join('\n'))
+      .map(([cat, items]) => `${cat} (${items.length} modelos):\n` + items.map(i => `  - ${i.name}: $${Number(i.price).toFixed(2)} por docena`).join('\n'))
       .join('\n\n');
   }
 
