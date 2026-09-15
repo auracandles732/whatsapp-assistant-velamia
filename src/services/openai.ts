@@ -84,7 +84,7 @@ CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar
 - En esos tres casos reply es breve, cálido y en primera persona. No hagas preguntas.
 
 INTENCIÓN (campo intent):
-- quotation: ya hay modelo y cantidad y se está dando o ajustando el total (incluye cambios de personalización antes de confirmar).
+- quotation: SOLO cuando el cliente pide explícitamente una cotización o el valor total de su pedido ("me cotizas", "cuánto sería en total", "cuánto me sale todo", "pásame la cotización"). Dar cantidad, fecha o colores, o preguntar el precio de un modelo, NO es quotation aunque tú menciones un total.
 - order: el cliente CONFIRMA explícitamente la compra con modelo y cantidad ya definidos ("confirmo", "sí, hagamos el pedido", "lo quiero reservar"). Decir que un modelo le gusta, dar colores o preguntar precios NO es order.
 - delivery_status: pregunta por el estado de un pedido ya hecho.
 - product_inquiry, greeting u other en los demás casos.`;
