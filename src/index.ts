@@ -14,7 +14,11 @@ import {
   getAllProducts,
   createProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  pauseBotUntil,
+  resumeBot,
+  isBotPaused,
+  getConversationById
 } from './db';
 import { handleWebhookMessage } from './controllers/messageController';
 import {
@@ -295,6 +299,64 @@ app.delete('/api/products/:id', requireCrmSession, async (req: Request, res: Res
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error eliminando producto:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Control del bot por conversación ----------
+
+/**
+ * PUNTO 1: Pausa el bot en una conversación específica.
+ * Útil cuando el dueño atiende manualmente o detecta que necesita intervención.
+ */
+app.post('/api/conversations/:id/pause', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const { minutes = 10 } = req.body;
+    const conv = await getConversationById(req.params.id);
+    if (!conv) {
+      return res.status(404).json({ error: 'Conversación no encontrada' });
+    }
+
+    await pauseBotUntil(req.params.id, Math.max(1, Math.min(1440, minutes))); // Entre 1 y 1440 minutos (24h)
+    res.json({ success: true, message: `Bot pausado por ${minutes} minutos` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUNTO 1: Reanuda el bot en una conversación específica.
+ */
+app.post('/api/conversations/:id/resume', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const conv = await getConversationById(req.params.id);
+    if (!conv) {
+      return res.status(404).json({ error: 'Conversación no encontrada' });
+    }
+
+    await resumeBot(req.params.id);
+    res.json({ success: true, message: 'Bot reanudado' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Obtiene si el bot está pausado en una conversación.
+ */
+app.get('/api/conversations/:id/bot-status', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const conv = await getConversationById(req.params.id);
+    if (!conv) {
+      return res.status(404).json({ error: 'Conversación no encontrada' });
+    }
+
+    const paused = await isBotPaused(req.params.id);
+    res.json({
+      bot_paused: paused,
+      paused_until: conv.bot_paused_until || null
+    });
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });

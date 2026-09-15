@@ -526,3 +526,76 @@ export async function getTotalRevenue() {
   if (error) throw new Error(`Error calculando ingresos: ${error.message}`);
   return data?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
 }
+
+// PAUSA DEL BOT (Punto 1)
+/**
+ * Pausa el bot en una conversación por un tiempo determinado.
+ * Cuando el usuario escribe manualmente, se pausa automáticamente.
+ */
+export async function pauseBotUntil(conversationId: string, minutes: number = 10) {
+  const pausedUntil = new Date();
+  pausedUntil.setMinutes(pausedUntil.getMinutes() + minutes);
+
+  const { error } = await supabase
+    .from('conversations')
+    .update({ bot_paused_until: pausedUntil.toISOString() })
+    .eq('id', conversationId);
+
+  if (error) throw new Error(`Error pausando bot: ${error.message}`);
+}
+
+/**
+ * Reanuda el bot en una conversación.
+ */
+export async function resumeBot(conversationId: string) {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ bot_paused_until: null })
+    .eq('id', conversationId);
+
+  if (error) throw new Error(`Error reanudando bot: ${error.message}`);
+}
+
+/**
+ * Verifica si el bot está pausado en esta conversación.
+ */
+export async function isBotPaused(conversationId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('bot_paused_until')
+    .eq('id', conversationId)
+    .single();
+
+  if (error) throw new Error(`Error verificando pausa del bot: ${error.message}`);
+  if (!data?.bot_paused_until) return false;
+
+  const pausedUntil = new Date(data.bot_paused_until);
+  return pausedUntil > new Date();
+}
+
+// NOTIFICACIONES (Punto 2)
+/**
+ * Obtiene el número de teléfono del dueño para notificaciones.
+ */
+export async function getOwnerPhone(): Promise<string | null> {
+  const value = await getConfig('owner_phone');
+  return value || null;
+}
+
+/**
+ * Registra que se envió una notificación al dueño.
+ */
+export async function logNotification(conversationId: string, eventType: string, message: string) {
+  const { error } = await supabase
+    .from('notifications')
+    .insert([{
+      id: uuidv4(),
+      conversation_id: conversationId,
+      event_type: eventType,
+      message,
+      sent_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
+    }]);
+
+  if (error) throw new Error(`Error registrando notificación: ${error.message}`);
+}

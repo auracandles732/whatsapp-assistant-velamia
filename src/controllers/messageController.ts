@@ -10,7 +10,9 @@ import {
   getOrdersByConversation,
   getConfig,
   getAllProducts,
-  searchProducts
+  searchProducts,
+  isBotPaused,
+  pauseBotUntil
 } from '../db';
 import { sendTextMessage, sendImageMessage, getMediaUrl, downloadMedia } from '../services/whatsapp';
 import {
@@ -21,6 +23,7 @@ import {
   extractOrderItems
 } from '../services/openai';
 import { uploadBufferToStorage } from '../services/storage';
+import { detectNeedsIntervention, notifyOwner } from '../services/notifications';
 
 export async function handleWebhookMessage(message: any, changes: any) {
   try {
@@ -87,6 +90,13 @@ export async function handleWebhookMessage(message: any, changes: any) {
       return;
     }
 
+    // PUNTO 1: Verificar si el bot está pausado en este chat
+    const botPaused = await isBotPaused(conversationId);
+    if (botPaused) {
+      console.log('⏸️ Bot pausado en este chat - esperando respuesta manual');
+      return;
+    }
+
     const intent = await analyzeUserIntent(aiContent);
     console.log(`🎯 Intención detectada: ${intent.intent}`);
 
@@ -96,6 +106,20 @@ export async function handleWebhookMessage(message: any, changes: any) {
 
     await sendTextMessage(phoneNumber, aiResponse);
     await saveMessage(conversationId, 'bot', 'text', aiResponse);
+
+    // PUNTO 2: Detectar si requiere intervención del dueño
+    const intervention = detectNeedsIntervention(aiContent, intent);
+    if (intervention.needed) {
+      console.log(`🚨 Intervención requerida: ${intervention.reason}`);
+      await pauseBotUntil(conversationId, 10); // Pausa 10 minutos
+      await notifyOwner(
+        conversationId,
+        phoneNumber,
+        conversation.customer_name || phoneNumber,
+        intervention.eventType,
+        intervention.reason
+      );
+    }
 
     if (intent.intent === 'product_inquiry') {
       await handleProductInquiry(conversationId, phoneNumber, intent.entities || []);

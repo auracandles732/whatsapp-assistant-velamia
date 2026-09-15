@@ -570,6 +570,31 @@
             background: var(--rosa-palo-suave);
         }
 
+        .btn-bot-control {
+            background: var(--gris-claro);
+            color: var(--texto);
+            font-size: 12px;
+        }
+
+        .btn-bot-control.active {
+            background: #ffd700;
+            color: var(--texto);
+        }
+
+        .btn-bot-control.paused {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-bot-control:hover {
+            opacity: 0.9;
+        }
+
+        .btn-bot-control:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .empty-state {
             display: flex;
             align-items: center;
@@ -807,6 +832,8 @@
             const [systemPrompt, setSystemPrompt] = useState('');
             const [savingPrompt, setSavingPrompt] = useState(false);
             const [promptSaved, setPromptSaved] = useState(false);
+            const [botPausedInChat, setBotPausedInChat] = useState(false);
+            const [pausingBot, setPausingBot] = useState(false);
 
             useEffect(() => {
                 loadConversations();
@@ -955,9 +982,33 @@
                 }
             }
 
+            async function loadBotPauseStatus(convId) {
+                try {
+                    const data = await api(`/api/conversations/${convId}/bot-status`);
+                    setBotPausedInChat(data.bot_paused);
+                } catch (err) {
+                    console.error('Error cargando estado del bot:', err);
+                }
+            }
+
+            async function pauseOrResumeBot() {
+                if (!selectedConv) return;
+                setPausingBot(true);
+                try {
+                    const endpoint = botPausedInChat ? 'resume' : 'pause';
+                    await api(`/api/conversations/${selectedConv.id}/${endpoint}`, { method: 'POST', body: JSON.stringify({}) });
+                    setBotPausedInChat(!botPausedInChat);
+                } catch (err) {
+                    alert(`Error ${botPausedInChat ? 'reanudando' : 'pausando'} el bot: ${err.message}`);
+                } finally {
+                    setPausingBot(false);
+                }
+            }
+
             useEffect(() => {
                 if (selectedConv) {
                     loadMessages(selectedConv.id);
+                    loadBotPauseStatus(selectedConv.id);
                     const interval = setInterval(() => loadMessages(selectedConv.id), 3000);
                     return () => clearInterval(interval);
                 }
@@ -995,6 +1046,15 @@
                 if (!inputText.trim() || !selectedConv) return;
 
                 try {
+                    // PUNTO 1: Pausar automáticamente el bot cuando el usuario escribe manualmente
+                    if (!botPausedInChat) {
+                        await api(`/api/conversations/${selectedConv.id}/pause`, {
+                            method: 'POST',
+                            body: JSON.stringify({ minutes: 10 })
+                        });
+                        setBotPausedInChat(true);
+                    }
+
                     await api('/api/send-message', {
                         method: 'POST',
                         body: JSON.stringify({
@@ -1113,6 +1173,14 @@
                                         <div className="button-group">
                                             <button className="btn-send" onClick={sendMessage}>📤 Enviar</button>
                                             <button className="btn-photo" onClick={sendPhoto}>📷 Foto</button>
+                                            <button
+                                                className={`btn-bot-control ${botPausedInChat ? 'paused' : 'active'}`}
+                                                onClick={pauseOrResumeBot}
+                                                disabled={pausingBot}
+                                                title={botPausedInChat ? 'Reanudar bot' : 'Pausar bot en este chat'}
+                                            >
+                                                {botPausedInChat ? '⏸️ Reanuda' : '▶️ Pausa'}
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
