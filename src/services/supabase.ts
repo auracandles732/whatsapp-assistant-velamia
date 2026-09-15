@@ -74,6 +74,35 @@ export async function updateConversation(conversationId: string, updates: any) {
   return data;
 }
 
+/**
+ * Elimina un chat y todo lo relacionado. Las tablas tienen ON DELETE CASCADE, pero se borra
+ * cada una explícitamente para no depender de cómo quedó configurada la base.
+ * Devuelve las URLs de archivos del cliente para borrarlas también del almacenamiento.
+ */
+export async function deleteConversationCompletely(conversationId: string): Promise<{ mediaUrls: string[] }> {
+  const { data: messages, error: readError } = await supabase
+    .from('messages')
+    .select('content')
+    .eq('conversation_id', conversationId);
+
+  if (readError) throw new Error(`Error leyendo mensajes del chat: ${readError.message}`);
+
+  const mediaUrls = (messages || [])
+    .map(m => String(m.content || '').match(/^https?:\/\/\S+/)?.[0])
+    .filter(Boolean) as string[];
+
+  // Orden: primero lo que depende de otras tablas (followups apunta a orders).
+  for (const table of ['followups', 'notifications', 'quotations', 'orders', 'messages']) {
+    const { error } = await supabase.from(table).delete().eq('conversation_id', conversationId);
+    if (error) throw new Error(`Error borrando ${table}: ${error.message}`);
+  }
+
+  const { error } = await supabase.from('conversations').delete().eq('id', conversationId);
+  if (error) throw new Error(`Error borrando conversación: ${error.message}`);
+
+  return { mediaUrls };
+}
+
 export async function getAllConversations() {
   const { data, error } = await supabase
     .from('conversations')
@@ -208,6 +237,49 @@ export async function updateQuotationStatus(quotationId: string, status: 'pendin
   const { data, error } = await supabase
     .from('quotations')
     .update({ status })
+    .eq('id', quotationId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error actualizando cotización: ${error.message}`);
+  return data;
+}
+
+/** Todas las cotizaciones con el nombre del cliente, las más recientes primero. */
+export async function getAllQuotations() {
+  const { data, error } = await supabase
+    .from('quotations')
+    .select('*, conversations(customer_name, phone_number)')
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo cotizaciones: ${error.message}`);
+  return data || [];
+}
+
+/** Cotización pendiente reciente, para ajustarla cuando el cliente cambia cantidad o detalles. */
+export async function getRecentPendingQuotation(conversationId: string, hours: number = 24) {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const { data, error } = await supabase
+    .from('quotations')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .eq('status', 'pending')
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error buscando cotización reciente: ${error.message}`);
+  return data;
+}
+
+export async function updateQuotationItems(quotationId: string, products: any, totalAmount: number) {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 3);
+
+  const { data, error } = await supabase
+    .from('quotations')
+    .update({ products: JSON.stringify(products), total_amount: totalAmount, expires_at: expiresAt.toISOString() })
     .eq('id', quotationId)
     .select()
     .single();

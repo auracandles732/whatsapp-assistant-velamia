@@ -16,6 +16,9 @@ import {
   getSentProductNames,
   getRecentPendingOrder,
   updateOrderItems,
+  getRecentPendingQuotation,
+  updateQuotationItems,
+  updateQuotationStatus,
   productNameFromCaption
 } from '../db';
 import {
@@ -253,10 +256,24 @@ async function registerSale(
 
     const totalAmount = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
+    const pendingQuotation = await getRecentPendingQuotation(ctx.conversationId);
+
     if (kind === 'quotation') {
-      await createQuotation(ctx.conversationId, ctx.phoneNumber, items, totalAmount);
-      console.log(`📋 Cotización registrada: $${totalAmount.toFixed(2)}`);
+      // El cliente ajusta cantidad o colores varias veces: se actualiza la misma cotización.
+      if (pendingQuotation) {
+        await updateQuotationItems(pendingQuotation.id, items, totalAmount);
+        console.log(`📋 Cotización ${pendingQuotation.id.substring(0, 8)} actualizada: $${totalAmount.toFixed(2)}`);
+      } else {
+        await createQuotation(ctx.conversationId, ctx.phoneNumber, items, totalAmount);
+        console.log(`📋 Cotización registrada: $${totalAmount.toFixed(2)}`);
+      }
       return;
+    }
+
+    // El cliente confirmó: la cotización en curso queda como aceptada.
+    if (pendingQuotation) {
+      await updateQuotationItems(pendingQuotation.id, items, totalAmount);
+      await updateQuotationStatus(pendingQuotation.id, 'accepted');
     }
 
     // Un cliente suele confirmar varias veces o ajustar detalles después de confirmar:

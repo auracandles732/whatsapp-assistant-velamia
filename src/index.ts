@@ -18,8 +18,12 @@ import {
   pauseBot,
   resumeBot,
   isBotPaused,
-  getConversationById
+  getConversationById,
+  deleteConversationCompletely,
+  getAllQuotations,
+  updateQuotationStatus
 } from './db';
+import { removeFilesByPublicUrls } from './services/storage';
 import { handleWebhookMessage } from './controllers/messageController';
 import {
   requireCrmSession,
@@ -118,6 +122,35 @@ app.get('/api/conversations', requireCrmSession, async (_req: Request, res: Resp
   }
 });
 
+/**
+ * Elimina el chat por completo: mensajes, cotizaciones, pedidos, seguimientos, avisos
+ * y las fotos/audios que envió el cliente.
+ */
+app.delete('/api/conversations/:id', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const conv = await getConversationById(req.params.id);
+    if (!conv) {
+      return res.status(404).json({ error: 'Conversación no encontrada' });
+    }
+
+    const { mediaUrls } = await deleteConversationCompletely(req.params.id);
+
+    // Si falla el borrado de archivos, los datos ya se eliminaron: se informa sin revertir.
+    let filesRemoved = 0;
+    try {
+      filesRemoved = await removeFilesByPublicUrls(mediaUrls);
+    } catch (error: any) {
+      console.error('No se pudieron borrar archivos del chat:', error.message);
+    }
+
+    console.log(`🗑️ Chat ${conv.phone_number} eliminado (${filesRemoved} archivo(s))`);
+    res.json({ success: true, filesRemoved });
+  } catch (error: any) {
+    console.error('Error eliminando chat:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/conversations/:id/messages', requireCrmSession, async (req: Request, res: Response) => {
   try {
     res.json(await getMessages(req.params.id));
@@ -139,6 +172,28 @@ app.get('/api/stats', requireCrmSession, async (_req: Request, res: Response) =>
       orders: metrics.totalOrders,
       revenue: metrics.totalRevenue
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Cotizaciones ----------
+
+app.get('/api/quotations', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await getAllQuotations());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/quotations/:id', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body;
+    if (!['pending', 'accepted', 'expired'].includes(status)) {
+      return res.status(400).json({ error: 'Estado inválido' });
+    }
+    res.json(await updateQuotationStatus(req.params.id, status));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
