@@ -264,7 +264,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
 
   add(
     'PREGUNTAS SIN RESPUESTA (campo owner_question):',
-    `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''} (por ejemplo aroma, presentación o empaque, materiales, tamaño), dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
+    `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''} (por ejemplo presentación o empaque, materiales, tamaño), dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
     '- NUNCA inventes ni supongas la respuesta a esas preguntas, tampoco después de haber dicho que lo verificas.',
     '- Si la pregunta ya está en PREGUNTAS YA ENVIADAS A LA DUEÑA, deja owner_question vacío y no repitas "lo reviso" en cada mensaje: menciónalo solo si el cliente vuelve a preguntar ("ya lo estoy confirmando").',
     '- En cualquier otro caso owner_question es una cadena vacía.',

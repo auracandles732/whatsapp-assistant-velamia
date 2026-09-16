@@ -600,11 +600,12 @@ async function respondToBatch(batch: PendingBatch) {
       saleIntent = 'other';
     }
 
-    // La personalización y los ajustes de cantidad suelen llegar después de confirmar:
-    // mientras haya un pedido en curso, se mantiene al día con lo último que dijo la clienta.
-    if (saleIntent !== 'order' && saleIntent !== 'quotation' && plan.order_items.length > 0
-      && await getRecentPendingOrder(conversationId)) {
-      saleIntent = 'order';
+    // La personalización (aroma, colores) y los ajustes de cantidad suelen llegar después del total o de confirmar:
+    // mientras haya un pedido o una cotización en curso, se mantiene al día con lo último que dijo la clienta.
+    // Solo con el total completo: sin ciudad se guardaría un valor sin envío.
+    if (saleIntent !== 'order' && saleIntent !== 'quotation' && plan.order_items.length > 0 && plan.order_total > 0) {
+      if (await getRecentPendingOrder(conversationId)) saleIntent = 'order';
+      else if (await getRecentPendingQuotation(conversationId)) saleIntent = 'quotation';
     }
 
     // Se registra antes de la revisión manual: si confirma y elige tarjeta en el mismo mensaje,
