@@ -44,6 +44,8 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 - Envía fotos solo cuando la clienta pide ver modelos, sin repetir, **de 4 en 4**: si quedan más, pregunta
   "¿Te gustaría ver más modelos?" y envía las siguientes 4 cuando acepta. Si no quedan más, pregunta cuál le gustó.
   Las preguntas sobre las fotos las envía el sistema **después** de las imágenes, nunca antes.
+- **Pausas entre mensajes** de una misma respuesta: 3 s entre el texto, las fotos y la pregunta final, y 2 s entre
+  fotos (`MESSAGE_GAP_MS`, `PHOTO_GAP_MS`). Al apagar el servidor responde sin pausas.
 - Nunca escribe listas de modelos con sus precios en el texto: para mostrar modelos envía las fotos, que ya
   llevan nombre y precio en el pie.
 - Reconoce la foto que la clienta cita al responder.

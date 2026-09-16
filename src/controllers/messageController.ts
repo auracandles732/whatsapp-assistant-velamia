@@ -74,6 +74,23 @@ const WEAK_CONFIRMATION = /(?<!\p{L})(de acuerdo|listo|dale|vamos|ok|okey|okay|s
 // La clienta suele escribir en varios mensajes seguidos: se espera este silencio antes de responder
 // a todos juntos. Si no deja de escribir, se responde igual pasado el tiempo máximo.
 export const RESPONSE_DELAY_MS = 5000;
+
+// Pausas entre mensajes seguidos del bot para que no lleguen todos de golpe.
+export const MESSAGE_GAP_MS = 3000; // entre el texto, las fotos y la pregunta final
+export const PHOTO_GAP_MS = 2000;   // entre fotos de la misma tanda
+const lastSentAt = new Map<string, number>();
+// Al apagar el servidor se responde sin pausas: Render corta el proceso a los pocos segundos.
+let shuttingDown = false;
+
+async function waitGap(phoneNumber: string, gapMs: number) {
+  const last = lastSentAt.get(phoneNumber);
+  const wait = last ? last + gapMs - Date.now() : 0;
+  if (!shuttingDown && wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+  lastSentAt.set(phoneNumber, Date.now());
+  if (lastSentAt.size > 500) {
+    for (const [phone, at] of lastSentAt) if (Date.now() - at > 60_000) lastSentAt.delete(phone);
+  }
+}
 const MAX_RESPONSE_WAIT_MS = 20000;
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
@@ -197,6 +214,7 @@ function scheduleResponse(key: string, batch: PendingBatch) {
  * en espera y se aguardan las respuestas en curso, sin pasar del tiempo indicado.
  */
 export async function flushPendingResponses(timeoutMs: number) {
+  shuttingDown = true;
   for (const [key, batch] of [...pendingBatches]) {
     if (batch.timer) clearTimeout(batch.timer);
     pendingBatches.delete(key);
@@ -234,6 +252,7 @@ function toAiText(msg: any): string {
 
 /** Envía un texto y lo guarda con el id de WhatsApp, para reconocerlo si el cliente lo responde. */
 async function sendAndSaveText(conversationId: string, phoneNumber: string, text: string) {
+  await waitGap(phoneNumber, MESSAGE_GAP_MS);
   const sent = await sendTextMessage(phoneNumber, text);
   await saveMessage(conversationId, 'bot', 'text', text, getSentMessageId(sent));
 }
@@ -608,6 +627,7 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
   for (const product of batch) {
     try {
       const caption = `🕯️ *${product.name}*\n💰 $${Number(product.price).toFixed(2)} la docena`;
+      await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
       await saveMessage(conversationId, 'bot', 'image', `${product.image_url}\n${caption}`, getSentMessageId(sent));
     } catch (error: any) {
