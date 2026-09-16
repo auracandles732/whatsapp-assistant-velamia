@@ -87,6 +87,18 @@ export interface BusinessProfile {
     primaryColor: string;
     logoUrl: string;
   };
+  packaging: {
+    /** Cada producto del catálogo tiene su empaque incluido en el precio; la clienta puede cambiarlo. */
+    enabled: boolean;
+    types: PackagingType[];
+  };
+}
+
+export interface PackagingType {
+  name: string;
+  description: string;
+  /** Costo adicional por unidad de venta al cambiar a este empaque; null = aún no definido. */
+  changeCost: number | null;
 }
 
 export const VELAMIA_PROFILE: BusinessProfile = {
@@ -141,7 +153,15 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     humanPersona: true,
     decorativeEmojis: ['🤍', '✨', '💕', '🌸', '🎀', '🌷', '💫', '🥰', '😊', '🌼', '💖', '🫶', '😍', '🙌', '🌺', '💐']
   },
-  branding: { primaryColor: '#B96B4F', logoUrl: '' }
+  branding: { primaryColor: '#B96B4F', logoUrl: '' },
+  packaging: {
+    enabled: true,
+    types: [
+      { name: 'Acetato', description: 'transparente, elegante y permite ver la vela', changeCost: null },
+      { name: 'Tul', description: 'delicado, ligero y decorativo', changeCost: null },
+      { name: 'Kraft', description: 'natural, minimalista y brinda mayor protección', changeCost: null }
+    ]
+  }
 };
 
 /** Punto de partida para un negocio nuevo: tienda que vende por unidad, sin fechas de evento. */
@@ -191,7 +211,8 @@ export const STORE_PROFILE: BusinessProfile = {
     humanPersona: false,
     decorativeEmojis: ['😊', '✨', '🙌', '👌', '💫', '🎉', '👍', '🛍️', '📦', '🤩']
   },
-  branding: { primaryColor: '#B96B4F', logoUrl: '' }
+  branding: { primaryColor: '#B96B4F', logoUrl: '' },
+  packaging: { enabled: false, types: [] }
 };
 
 /** Mismo funcionamiento que VELAMIA, sin su nombre, plantillas de Meta ni logo. */
@@ -234,6 +255,7 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
   const r = raw && typeof raw === 'object' ? raw : {};
   const b = r.business || {}, s = r.sales || {}, p = r.payments || {}, d = r.dates || {};
   const sh = r.shipping || {}, f = r.followUps || {}, a = r.alerts || {}, st = r.style || {}, br = r.branding || {};
+  const pk = r.packaging || {};
 
   const timezone = text(b.timezone, base.business.timezone, 60);
   const mode = ['ecuador_table', 'flat', 'none'].includes(sh.mode) ? sh.mode : base.shipping.mode;
@@ -305,7 +327,7 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
     alerts: {
       template: /^[a-z0-9_]*$/.test(text(a.template, base.alerts.template, 120)) ? text(a.template, base.alerts.template, 120) : base.alerts.template,
       ownerPhone: (() => {
-        const digits = text(a.ownerPhone, base.alerts.ownerPhone, 30).replace(/D/g, '');
+        const digits = text(a.ownerPhone, base.alerts.ownerPhone, 30).replace(/\D/g, '');
         return digits.length >= 8 && digits.length <= 15 ? digits : '';
       })()
     },
@@ -316,8 +338,29 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
     branding: {
       primaryColor: /^#[0-9a-f]{6}$/i.test(text(br.primaryColor, '', 7)) ? text(br.primaryColor, '', 7) : base.branding.primaryColor,
       logoUrl: /^https:\/\//.test(text(br.logoUrl, '', 500)) ? text(br.logoUrl, '', 500) : ''
+    },
+    packaging: {
+      enabled: bool(pk.enabled, base.packaging.enabled),
+      types: Array.isArray(pk.types)
+        ? pk.types
+          .map((t: any) => ({
+            name: text(t?.name, '', 40),
+            description: text(t?.description, '', 160),
+            // Vacío = costo del cambio sin definir: el bot no da un total con ese cambio.
+            changeCost: t?.changeCost === null || t?.changeCost === undefined || t?.changeCost === '' ? null : num(t.changeCost, 0, 0, 10000)
+          }))
+          .filter((t: PackagingType) => t.name)
+          .slice(0, 10)
+        : base.packaging.types
     }
   };
+}
+
+/** Tipo de empaque por nombre, sin importar mayúsculas ni tildes. */
+export function findPackaging(name: unknown, p: BusinessProfile = current): PackagingType | undefined {
+  const key = (v: unknown) => String(v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+  const wanted = key(name);
+  return wanted ? p.packaging.types.find(t => key(t.name) === wanted) : undefined;
 }
 
 // ---------- Perfil en uso ----------

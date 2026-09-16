@@ -153,7 +153,7 @@
             padding: 22px;
             margin-bottom: 24px;
             display: grid;
-            grid-template-columns: 140px 1fr 1fr 1fr auto;
+            grid-template-columns: 140px 1fr 1fr 1fr 1fr auto;
             gap: 14px;
             align-items: end;
         }
@@ -270,6 +270,18 @@
             font-size: 16px;
             font-weight: 700;
             color: var(--terracota);
+        }
+
+        .packaging-select {
+            width: 100%;
+            margin: 6px 0;
+            padding: 6px 8px;
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 12px;
+            background: var(--beige-claro);
+            color: var(--texto);
         }
 
         .product-card .price small {
@@ -1365,6 +1377,27 @@
                     </div>
 
                     <div className="profile-section">
+                        <h4>Empaques</h4>
+                        <div className="profile-grid">
+                            {check('packaging.enabled', 'Cada producto tiene un empaque incluido y la clienta puede cambiarlo')}
+                        </div>
+                        {form.packaging.enabled && (
+                            <>
+                                <p className="hint">El empaque de cada producto se elige en el Catálogo y va incluido en su precio. "Costo del cambio" es lo que se suma por {form.sales.unitSingular} si la clienta pide cambiar a ese empaque; si lo dejas vacío, el asistente no da el total y te avisa para que lo confirmes.</p>
+                                {(form.packaging.types || []).map((type, i) => (
+                                    <div key={i} className="step-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr) 90px auto' }}>
+                                        <input type="text" placeholder="Nombre (Kraft)" value={type.name} onChange={e => set(`packaging.types.${i}.name`, e.target.value)} />
+                                        <input type="text" placeholder="Cómo es" value={type.description} onChange={e => set(`packaging.types.${i}.description`, e.target.value)} />
+                                        <input type="number" min="0" step="0.01" placeholder="Costo" title={`Costo del cambio por ${form.sales.unitSingular} ($)`} value={type.changeCost ?? ''} onChange={e => set(`packaging.types.${i}.changeCost`, e.target.value === '' ? null : Number(e.target.value))} />
+                                        <button className="btn-link" onClick={() => set('packaging.types', form.packaging.types.filter((_, j) => j !== i))}>Quitar</button>
+                                    </div>
+                                ))}
+                                <button className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null }])}>+ Agregar empaque</button>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="profile-section">
                         <h4>Avisos y estilo</h4>
                         <div className="profile-grid">
                             {text('alerts.ownerPhone', 'Tu WhatsApp para recibir avisos', 'Ej: 593991234567', 'Con código de país, sin + ni espacios', true)}
@@ -1398,7 +1431,7 @@
             const [loading, setLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('conversaciones');
             const [products, setProducts] = useState([]);
-            const [newProduct, setNewProduct] = useState({ name: '', price: '', category: '', photoBase64: '', photoPreview: '' });
+            const [newProduct, setNewProduct] = useState({ name: '', price: '', category: '', packaging: '', photoBase64: '', photoPreview: '' });
             const [savingProduct, setSavingProduct] = useState(false);
             const [systemPrompt, setSystemPrompt] = useState('');
             const [savingPrompt, setSavingPrompt] = useState(false);
@@ -1416,6 +1449,7 @@
             const unit = biz?.sales.unitSingular || 'unidad';
             const unitPlural = biz?.sales.unitPlural || 'unidades';
             const productEmoji = biz?.business.productEmoji || '🛍️';
+            const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
             const messagesRef = useRef(null);
             // Se sigue al último mensaje salvo que la dueña haya subido a leer mensajes anteriores.
             const stickToBottom = useRef(true);
@@ -1539,16 +1573,26 @@
                             name: newProduct.name,
                             price: parseFloat(newProduct.price),
                             category: newProduct.category,
+                            packaging: newProduct.packaging,
                             image_url: imageUrl
                         })
                     });
 
-                    setNewProduct({ name: '', price: '', category: '', photoBase64: '', photoPreview: '' });
+                    setNewProduct({ name: '', price: '', category: '', packaging: '', photoBase64: '', photoPreview: '' });
                     loadProducts();
                 } catch (err) {
                     alert('Error agregando producto: ' + err.message);
                 } finally {
                     setSavingProduct(false);
+                }
+            }
+
+            async function changeProductPackaging(id, packaging) {
+                try {
+                    await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify({ packaging }) });
+                    setProducts(prev => prev.map(p => p.id === id ? { ...p, description: packaging } : p));
+                } catch (err) {
+                    alert('Error cambiando el empaque: ' + err.message);
                 }
             }
 
@@ -1918,6 +1962,15 @@
                                     <label>{biz?.dates.enabled ? `Categoría / ${biz.dates.eventLabel}` : 'Categoría'}</label>
                                     <input type="text" placeholder="Ej: la categoría del producto" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
                                 </div>
+                                {packagingTypes.length > 0 && (
+                                    <div className="form-field">
+                                        <label>Empaque incluido</label>
+                                        <select value={newProduct.packaging} onChange={e => setNewProduct({...newProduct, packaging: e.target.value})}>
+                                            <option value="">Sin definir</option>
+                                            {packagingTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
                                 <button className="btn-add-product" onClick={addProduct} disabled={savingProduct}>
                                     {savingProduct ? 'Guardando...' : '+ Agregar'}
                                 </button>
@@ -1936,6 +1989,12 @@
                                                 <span className="category-tag">{product.category}</span>
                                                 <h4>{product.name}</h4>
                                                 <div className="price">${product.price} <small>por {unit}</small></div>
+                                                {packagingTypes.length > 0 && (
+                                                    <select className="packaging-select" value={product.description || ''} onChange={e => changeProductPackaging(product.id, e.target.value)}>
+                                                        <option value="">🎁 Empaque sin definir</option>
+                                                        {packagingTypes.map(t => <option key={t.name} value={t.name}>🎁 {t.name}</option>)}
+                                                    </select>
+                                                )}
                                                 <button className="btn-delete-product" onClick={() => removeProduct(product.id)}>🗑️ Eliminar</button>
                                             </div>
                                         </div>
@@ -1985,6 +2044,7 @@
                                                     <li key={i}>
                                                         {item.quantity} {Number(item.quantity) === 1 ? unit : unitPlural} × {item.name} — ${(Number(item.price) * Number(item.quantity)).toFixed(2)}
                                                         {item.personalization ? <><br /><small>🎨 {item.personalization}</small></> : null}
+                                                        {item.packaging ? <><br /><small>🎁 Empaque {item.packaging}{item.packagingChanged ? ' (cambiado por la clienta)' : ''}</small></> : null}
                                                     </li>
                                                 ))}
                                             </ul>

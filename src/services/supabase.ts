@@ -420,13 +420,14 @@ export async function getSalesMetrics(days: number = 30) {
 
 // ---------- PRODUCTOS ----------
 
-export async function createProduct(name: string, price: number, category: string, imageUrl?: string) {
+// El empaque del producto se guarda en la columna description (existía sin uso): así no hace falta migrar la base.
+export async function createProduct(name: string, price: number, category: string, imageUrl?: string, packaging?: string) {
   const { data, error } = await supabase
     .from('products')
     .insert([{
       id: randomUUID(),
       name,
-      description: '',
+      description: packaging || '',
       price,
       stock: 999,
       category,
@@ -451,7 +452,7 @@ export async function getAllProducts() {
   return data || [];
 }
 
-export async function updateProduct(productId: string, updates: { name?: string; price?: number; category?: string; image_url?: string }) {
+export async function updateProduct(productId: string, updates: { name?: string; price?: number; category?: string; image_url?: string; description?: string }) {
   const { data, error } = await supabase
     .from('products')
     .update(updates)

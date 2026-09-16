@@ -666,7 +666,8 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
   // Una a una y en orden: si una falla, las demás igual se envían.
   for (const product of batch) {
     try {
-      const caption = `${business.productEmoji} *${product.name}*\n💰 $${Number(product.price).toFixed(2)} ${sales.priceSuffix}`;
+      const packaging = profile().packaging.enabled && product.description ? `\n🎁 Empaque: ${product.description}` : '';
+      const caption = `${business.productEmoji} *${product.name}*\n💰 $${Number(product.price).toFixed(2)} ${sales.priceSuffix}${packaging}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
       await saveMessage(conversationId, 'bot', 'image', `${product.image_url}\n${caption}`, getSentMessageId(sent));
@@ -702,7 +703,10 @@ async function registerSale(
     // Los mismos modelos y docenas con que se calculó el valor que recibió la clienta, para que el CRM cuadre.
     // Solo si la IA no los identificó en el turno se leen de nuevo de la conversación.
     const items: OrderItem[] = ctx.planItems.length > 0
-      ? ctx.planItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity, personalization: i.personalization }))
+      ? ctx.planItems.map(i => ({
+        name: i.name, price: i.price, quantity: i.quantity, personalization: i.personalization,
+        packaging: i.packaging, packagingChanged: i.packagingChanged
+      }))
       : await extractOrderItems(ctx.transcript, ctx.catalog);
     if (items.length === 0) {
       console.log(`📋 ${kind} sin productos claros del catálogo; no se registra`);
@@ -739,7 +743,8 @@ async function registerSale(
     ];
 
     const detail = items
-      .map(i => `${quantityText(i.quantity)} ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`)
+      .map(i => `${quantityText(i.quantity)} ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`
+        + (i.packaging ? ` · empaque ${i.packaging}${i.packagingChanged ? ' (cambió de empaque)' : ''}` : ''))
       .join(', ')
       + (shipping ? ` · envío a ${shipping.place}` : ' · sin ciudad de envío')
       + (deliveryDate ? ` · entrega ${formatDate(deliveryDate)}` : profile().dates.enabled ? ' · sin fecha' : '')

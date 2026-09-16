@@ -1,6 +1,6 @@
 import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
-import { BusinessProfile, profile, todayLocal, formatDate } from '../config/businessProfile';
+import { BusinessProfile, profile, todayLocal, formatDate, findPackaging } from '../config/businessProfile';
 
 // Sin timeout propio el SDK espera hasta 10 minutos: la clienta quedaría sin respuesta ese tiempo.
 const openai = new OpenAI({
@@ -262,9 +262,25 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     add('FECHAS:', `- Este negocio no trabaja con fechas de ${d.eventLabel}: event_date y delivery_date siempre son cadena vacía.`, '');
   }
 
+  const packagingOn = p.packaging.enabled && p.packaging.types.length > 0;
+  if (packagingOn) {
+    const cost = (c: number | null) => c === null ? 'costo por confirmar' : c === 0 ? 'sin costo' : `+${money(c)} por ${unit}`;
+    add(
+      'EMPAQUE (campo packaging de order_items):',
+      `- Cada ${model} viene con su empaque, indicado en el catálogo como "empaque: …", y ese empaque ya está incluido en el precio.`,
+      '- Tipos de empaque:',
+      ...p.packaging.types.map(t => `  - ${t.name}: ${t.description}.`),
+      `- Si preguntan por la presentación o el empaque, dile el empaque del ${model} que le interesa y descríbelo en una frase. Si ese ${model} no tiene empaque en el catálogo, dile que lo verificas y escríbelo en owner_question.`,
+      `- El cliente puede cambiar a otro empaque. Costo del cambio por ${unit}: ${p.packaging.types.map(t => `${t.name} (${cost(t.changeCost)})`).join(', ')}. No menciones estos costos si no pregunta por cambiar el empaque.`,
+      '- Si pide un cambio con "costo por confirmar", dile que lo verificas y le confirmas el valor (escríbelo en owner_question) y no des un total con ese cambio.',
+      `- packaging: el empaque al que el cliente pidió cambiar ese ${model}, según toda la conversación (mantenlo en los mensajes siguientes); cadena vacía si se queda con el empaque del catálogo.`,
+      ''
+    );
+  }
+
   add(
     'PREGUNTAS SIN RESPUESTA (campo owner_question):',
-    `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''} (por ejemplo presentación o empaque, materiales, tamaño), dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
+    `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''} (por ejemplo ${packagingOn ? '' : 'presentación o empaque, '}materiales, tamaño), dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
     '- NUNCA inventes ni supongas la respuesta a esas preguntas, tampoco después de haber dicho que lo verificas.',
     '- Si la pregunta ya está en PREGUNTAS YA ENVIADAS A LA DUEÑA, deja owner_question vacío y no repitas "lo reviso" en cada mensaje: menciónalo solo si el cliente vuelve a preguntar ("ya lo estoy confirmando").',
     '- En cualquier otro caso owner_question es una cadena vacía.',
@@ -332,6 +348,8 @@ interface CatalogProduct {
   name: string;
   price: number;
   category: string;
+  /** Empaque incluido en el precio (se guarda en la columna description). */
+  description?: string | null;
 }
 
 export type HandoffReason = 'none' | 'card_payment' | 'payment_proof' | 'complaint';
@@ -348,7 +366,7 @@ export interface TurnPlan {
   /** Fecha de entrega calculada por el sistema o cadena vacía. */
   delivery_date: string;
   /** Productos reales del catálogo con su cantidad (en la unidad de venta del negocio). */
-  order_items: { name: string; price: number; quantity: number; personalization: string }[];
+  order_items: { name: string; price: number; quantity: number; personalization: string; packaging: string; packagingChanged: boolean }[];
   shipping_place: string;
   /** Valor total calculado por el sistema (productos + envío) o 0 si falta información. */
   order_total: number;
@@ -374,8 +392,8 @@ const TURN_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'quantity', 'personalization'],
-        properties: { name: { type: 'string' }, quantity: { type: 'number' }, personalization: { type: 'string' } }
+        required: ['name', 'quantity', 'personalization', 'packaging'],
+        properties: { name: { type: 'string' }, quantity: { type: 'number' }, personalization: { type: 'string' }, packaging: { type: 'string' } }
       }
     },
     shipping_place: { type: 'string' },
@@ -440,13 +458,15 @@ export function varyEmojis(reply: string, recentEmojis: string[], decorative: st
 
 // Frases del bot ("se puede adaptar a tus colores") que la IA a veces copia como si fueran el pedido de la clienta.
 const GENERIC_PERSONALIZATION = /(se pued|puede[ns]? (adaptar|personalizar|cambiar)|personalizable|admite|a tu gusto|tus colores|lo que (prefieras|quieras)|personalizad[oa]s?$)/i;
-const GENERIC_WORD = /^(los |las |sus |tus )?(detalles|colores|nombres?|frases?|personalizaci[oó]n|dise[ñn]os?)$/i;
+// Notas de relleno ("bicolor a definir", "aroma no confirmado"): se borran esas palabras y se conserva el dato.
+const FILLER = /\b(personalizaci[oó]n|pendientes?|(a|por|sin) (confirmar|definir|elegir)|no (confirmad|definid|elegid)[oa]s?)\b/gi;
+const GENERIC_WORD = /^(los |las |sus |tus |el |la )?(detalles|colores?|nombres?|frases?|personalizaci[oó]n|dise[ñn]os?|aroma|empaque)$/i;
 
 /** La personalización solo guarda lo que pidió la clienta: se quitan las partes genéricas que escribe el bot. */
 export function cleanPersonalization(value: unknown): string {
   return String(value ?? '')
     .split(/,|;|\s+y\s+/)
-    .map(part => part.trim())
+    .map(part => part.replace(FILLER, '').replace(/\s+/g, ' ').replace(/^[\s:-]+|[\s:-]+$/g, '').trim())
     .filter(part => part && !GENERIC_PERSONALIZATION.test(part) && !GENERIC_WORD.test(part))
     .join(', ');
 }
@@ -457,29 +477,49 @@ export function cleanPersonalization(value: unknown): string {
  */
 export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: CatalogProduct[], p: BusinessProfile = profile()) {
   const byName = new Map(catalog.map(c => [productKey(c.name), c]));
+  const packagingOn = p.packaging.enabled && p.packaging.types.length > 0;
+  // Empaque pedido cuyo costo de cambio aún no está definido: sin ese valor no hay total.
+  let packagingUndefined = '';
   const items = (Array.isArray(rawItems) ? rawItems : [])
     .map((i: any) => ({
       product: byName.get(productKey(i?.name)),
       quantity: Number(i?.quantity),
-      personalization: cleanPersonalization(i?.personalization)
+      personalization: cleanPersonalization(i?.personalization),
+      packaging: i?.packaging
     }))
     .filter((i: any) => i.product && Number.isFinite(i.quantity) && i.quantity > 0)
-    .map((i: any) => ({ name: i.product.name, price: Number(i.product.price), quantity: i.quantity, personalization: i.personalization }));
+    .map((i: any) => {
+      // El empaque del catálogo va incluido en el precio; cambiarlo suma el costo del empaque elegido por unidad de venta.
+      const included = packagingOn ? String(i.product.description || '').trim() : '';
+      const wanted = packagingOn ? findPackaging(i.packaging, p) : undefined;
+      const changed = !!wanted && productKey(wanted.name) !== productKey(included);
+      if (changed && wanted!.changeCost === null) packagingUndefined = wanted!.name;
+      const extra = changed ? wanted!.changeCost || 0 : 0;
+      return {
+        name: i.product.name,
+        price: round2(Number(i.product.price) + extra),
+        quantity: i.quantity,
+        personalization: i.personalization,
+        packaging: changed ? wanted!.name : included,
+        packagingChanged: changed
+      };
+    });
 
   const needsPlace = p.shipping.mode !== 'none';
   const place = needsPlace ? String(rawPlace || '').trim() : '';
   const units = items.reduce((sum: number, i: any) => sum + i.quantity, 0);
   const shipping = place ? shippingCost(place, units, p) : null;
 
-  let missing: '' | 'items' | 'place' | 'unknown_place' = '';
+  let missing: '' | 'items' | 'place' | 'unknown_place' | 'packaging_cost' = '';
   if (items.length === 0) missing = 'items';
   else if (needsPlace && !place) missing = 'place';
   else if (needsPlace && !shipping) missing = 'unknown_place';
+  else if (packagingUndefined) missing = 'packaging_cost';
 
   const subtotal = round2(items.reduce((sum: number, i: any) => sum + i.price * i.quantity, 0));
   const total = missing ? 0 : round2(subtotal + (shipping?.cost || 0));
   const depositPercent = p.payments.transferEnabled ? p.payments.depositPercent : 100;
-  return { items, place, shipping, missing, subtotal, total, deposit: round2(total * depositPercent / 100) };
+  return { items, place, shipping, missing, packagingUndefined, subtotal, total, deposit: round2(total * depositPercent / 100) };
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -519,7 +559,7 @@ export function buildSystemPrompt(
       byCategory[c.category].push(c);
     }
     catalogText = `CATÁLOGO ACTUAL DE ${p.business.name.toUpperCase()} (precios por ${unit}):\n\n` + Object.entries(byCategory)
-      .map(([cat, items]) => `${cat} (${items.length} ${models}):\n` + items.map(i => `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${unit}`).join('\n'))
+      .map(([cat, items]) => `${cat} (${items.length} ${models}):\n` + items.map(i => `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${unit}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`).join('\n'))
       .join('\n\n');
   }
 
@@ -700,6 +740,8 @@ export async function planTurn(params: {
       corrections.push(`${noAmountsYet} Pregunta primero a qué ciudad se envía el pedido.`);
     } else if (firstOrder.missing === 'unknown_place') {
       corrections.push(`${noAmountsYet} "${firstOrder.place}" no aparece en el tarifario o existe en varias provincias; pregunta la ciudad y la provincia exactas.`);
+    } else if (firstOrder.missing === 'packaging_cost') {
+      corrections.push(`${noAmountsYet} El costo de cambiar al empaque ${firstOrder.packagingUndefined} todavía no está definido: dile que lo verificas y le confirmas el valor, y escribe la consulta en owner_question.`);
     }
   }
 
@@ -708,7 +750,11 @@ export async function planTurn(params: {
   if (!firstOrder.missing && amountsInReply.length > 0) {
     const showSeparately = hasShipping && p.shipping.showSeparately;
     const allowed = [firstOrder.total, firstOrder.deposit, ...(showSeparately ? [firstOrder.subtotal, firstOrder.shipping?.cost || 0] : [])];
-    const catalogPrices = catalog.map(c => Number(c.price));
+    // El costo de cambiar de empaque se puede mencionar cuando la clienta lo pregunta.
+    const catalogPrices = [
+      ...catalog.map(c => Number(c.price)),
+      ...(p.packaging.enabled ? p.packaging.types.map(t => t.changeCost).filter((c): c is number => typeof c === 'number' && c > 0) : [])
+    ];
     const givesTotal = quotedTotal > 0 || quotedDeposit > 0 || amountsInReply.some(a => [firstOrder.total, firstOrder.deposit].some(v => Math.abs(a - v) < 0.009));
     const wrongTotal = (quotedTotal > 0 && Math.abs(quotedTotal - firstOrder.total) > 0.009)
       || (quotedDeposit > 0 && Math.abs(quotedDeposit - firstOrder.deposit) > 0.009);
@@ -774,6 +820,8 @@ export interface OrderItem {
   price: number;
   quantity: number;
   personalization: string;
+  packaging?: string;
+  packagingChanged?: boolean;
 }
 
 /**

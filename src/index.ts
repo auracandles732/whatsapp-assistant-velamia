@@ -34,7 +34,7 @@ import {
 } from './middleware/auth';
 import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
-import { loadBusinessProfile, saveBusinessProfile, profile, PROFILE_PRESETS } from './config/businessProfile';
+import { loadBusinessProfile, saveBusinessProfile, profile, PROFILE_PRESETS, findPackaging } from './config/businessProfile';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -402,6 +402,12 @@ function cleanProductName(value: unknown): string {
   return String(value ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 }
 
+/** Nombre oficial del empaque (tal como está en el perfil), '' para ninguno, o null si no existe. */
+function packagingName(value: unknown): string | null {
+  if (value === undefined || value === null || String(value).trim() === '') return '';
+  return findPackaging(value)?.name ?? null;
+}
+
 app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Response) => {
   try {
     // WhatsApp solo envía fotos JPG o PNG de hasta 5 MB: otra foto nunca le llegaría a la clienta.
@@ -439,14 +445,16 @@ app.get('/api/products', requireCrmSession, async (_req: Request, res: Response)
 
 app.post('/api/products', requireCrmSession, async (req: Request, res: Response) => {
   try {
-    const { name, price, category, image_url } = req.body || {};
+    const { name, price, category, image_url, packaging } = req.body || {};
     const parsedPrice = Number(price);
 
     if (!cleanProductName(name) || !String(category || '').trim() || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       return res.status(400).json({ error: 'Nombre, categoría y un precio válido son requeridos' });
     }
+    const pkg = packagingName(packaging);
+    if (pkg === null) return res.status(400).json({ error: 'Ese empaque no está en el perfil del negocio' });
 
-    res.json(await createProduct(cleanProductName(name), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined));
+    res.json(await createProduct(cleanProductName(name), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined, pkg));
   } catch (error: any) {
     console.error('Error creando producto:', error.message);
     res.status(500).json({ error: error.message });
@@ -455,8 +463,14 @@ app.post('/api/products', requireCrmSession, async (req: Request, res: Response)
 
 app.put('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
   try {
-    const { name, price, category, image_url } = req.body || {};
-    const updates: { name?: string; price?: number; category?: string; image_url?: string } = {};
+    const { name, price, category, image_url, packaging } = req.body || {};
+    const updates: { name?: string; price?: number; category?: string; image_url?: string; description?: string } = {};
+
+    if (packaging !== undefined) {
+      const pkg = packagingName(packaging);
+      if (pkg === null) return res.status(400).json({ error: 'Ese empaque no está en el perfil del negocio' });
+      updates.description = pkg;
+    }
 
     if (name !== undefined) {
       updates.name = cleanProductName(name);
