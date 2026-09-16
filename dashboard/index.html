@@ -1602,7 +1602,7 @@
                                     <span>{visible.length} cotización(es) · ${total.toFixed(2)}</span>
                                 </div>
                                 {visible.length === 0 ? (
-                                    <div className="empty-catalog"><p>Aún no hay cotizaciones. Se anotan solas cuando una clienta pide la cotización o el valor total de su pedido 🧾</p></div>
+                                    <div className="empty-catalog"><p>Aún no hay cotizaciones. Se anotan solas cada vez que el bot le da a una clienta el valor total de su pedido, y te llega un aviso por WhatsApp 🧾</p></div>
                                 ) : visible.map(q => {
                                     let items = [];
                                     try { items = typeof q.products === 'string' ? JSON.parse(q.products) : (q.products || []); } catch { items = []; }
@@ -1619,7 +1619,9 @@
                                                 <div className="quote-total">${Number(q.total_amount || 0).toFixed(2)}</div>
                                             </div>
                                             <ul className="quote-items">
-                                                {items.map((item, i) => item.type === 'shipping' ? (
+                                                {items.map((item, i) => item.type === 'delivery' ? (
+                                                    <li key={i}>📅 Entrega: {String(item.date || '').split('-').reverse().join('/')}</li>
+                                                ) : item.type === 'shipping' ? (
                                                     <li key={i}>🚚 {item.name} — ${Number(item.price).toFixed(2)}</li>
                                                 ) : (
                                                     <li key={i}>

@@ -329,7 +329,10 @@ export async function updateQuotationStatus(quotationId: string, status: 'pendin
 
 // ---------- PEDIDOS ----------
 
-export async function createOrder(conversationId: string, phoneNumber: string, customerName: string, products: any[], totalAmount: number) {
+export async function createOrder(
+  conversationId: string, phoneNumber: string, customerName: string, products: any[], totalAmount: number,
+  deliveryDate?: string, address?: string
+) {
   const { data, error } = await supabase
     .from('orders')
     .insert([{
@@ -337,10 +340,12 @@ export async function createOrder(conversationId: string, phoneNumber: string, c
       conversation_id: conversationId,
       customer_name: customerName,
       customer_phone: phoneNumber,
+      customer_address: address || null,
       products,
       total_amount: totalAmount,
       status: 'pending',
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      delivery_date: deliveryDate || null
     }])
     .select()
     .single();
@@ -377,10 +382,15 @@ export async function getRecentPendingOrder(conversationId: string, hours: numbe
   return data;
 }
 
-export async function updateOrderItems(orderId: string, products: any[], totalAmount: number) {
+export async function updateOrderItems(orderId: string, products: any[], totalAmount: number, deliveryDate?: string, address?: string) {
   const { data, error } = await supabase
     .from('orders')
-    .update({ products, total_amount: totalAmount })
+    .update({
+      products,
+      total_amount: totalAmount,
+      ...(deliveryDate ? { delivery_date: deliveryDate } : {}),
+      ...(address ? { customer_address: address } : {})
+    })
     .eq('id', orderId)
     .select()
     .single();

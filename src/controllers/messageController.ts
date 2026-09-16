@@ -78,6 +78,47 @@ const MAX_RESPONSE_WAIT_MS = 20000;
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
 export const PHOTO_BATCH_SIZE = 4;
+// La dueña revisa los pedidos cuya entrega cae dentro de estos días (o ya pasó).
+const URGENT_DELIVERY_DAYS = 3;
+
+// Se pregunta DESPUÉS de las fotos: antes de verlas la clienta no puede elegir.
+export const LIKED_PHOTO_QUESTIONS = [
+  '¿Cuál te gustó más? 😊',
+  '¿Cuál de estos modelos te gusta más? 🌸',
+  '¿Cuál prefieres? 🎀'
+];
+export const LIKED_SINGLE_PHOTO_QUESTIONS = [
+  '¿Te gusta este modelo? 😊',
+  '¿Qué te parece? 🌸',
+  '¿Te gustó? 🎀'
+];
+
+const pick = (options: string[]) => options[Math.floor(Math.random() * options.length)];
+
+/** Fecha de entrega guardada en un pedido o cotización anterior. */
+function deliveryDateFromProducts(value: any): string {
+  try {
+    const list = typeof value === 'string' ? JSON.parse(value || '[]') : (value || []);
+    const found = (Array.isArray(list) ? list : []).find((i: any) => i?.type === 'delivery' && i?.date);
+    return found ? String(found.date) : '';
+  } catch {
+    return '';
+  }
+}
+
+/** La fecha de entrega no se repite en cada mensaje: se rescata del último resumen enviado. */
+function lastDeliveryDateFromHistory(history: any[]): string {
+  for (const m of [...history].reverse()) {
+    if (m.sender !== 'bot') continue;
+    const match = String(m.content || '').match(/Entrega:?\*?\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  }
+  return '';
+}
+
+const daysUntil = (isoDate: string) =>
+  Math.round((Date.parse(`${isoDate}T00:00:00Z`) - Date.parse(`${todayInGuayaquil()}T00:00:00Z`)) / 86_400_000);
+
 // Varias formas de preguntar para no repetir siempre la misma frase y los mismos emojis.
 export const MORE_PHOTOS_QUESTIONS = [
   '¿Te gustaría ver más modelos? 😊',
@@ -457,12 +498,14 @@ async function respondToBatch(batch: PendingBatch) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);
     }
 
-    // Siempre se confirma la fecha, pero si la entrega cae hoy o ya pasó la dueña debe saberlo (una vez al día por chat).
-    if (plan.delivery_date && plan.delivery_date <= todayInGuayaquil()
+    // Siempre se confirma la fecha, pero una entrega muy justa la revisa la dueña (una vez al día por chat).
+    if (plan.delivery_date && daysUntil(plan.delivery_date) <= URGENT_DELIVERY_DAYS
       && !(await hasRecentNotification(conversationId, 'urgent_date'))) {
+      const days = daysUntil(plan.delivery_date);
+      const cuando = days < 0 ? 'ya pasó' : days === 0 ? 'es hoy' : days === 1 ? 'es mañana' : `faltan ${days} días`;
       await notifyOwner({
         conversationId, customerPhone: phoneNumber, customerName, event: 'urgent_date',
-        detail: `Evento ${formatDateEc(plan.event_date)} · entrega calculada ${formatDateEc(plan.delivery_date)}`
+        detail: `Evento ${formatDateEc(plan.event_date)} · entrega ${formatDateEc(plan.delivery_date)} (${cuando})`
       });
     }
 
@@ -489,12 +532,22 @@ async function respondToBatch(batch: PendingBatch) {
       saleIntent = asksPrice ? 'quotation' : 'other';
       console.log(`🛍️ La IA marcó pedido sin confirmación de la clienta; se registra como: ${saleIntent === 'quotation' ? 'cotización' : 'nada'}`);
     }
-    if (saleIntent !== 'order' && plan.order_total > 0 && TOTAL_REQUEST_PATTERN.test(aiContent)) {
+    // Si el bot le dio el valor total, es una cotización aunque la clienta no usara esa palabra:
+    // la dueña quiere revisarlas todas.
+    const gaveTotal = plan.order_total > 0 && plan.reply.includes(plan.order_total.toFixed(2));
+    if (saleIntent !== 'order' && (gaveTotal || (plan.order_total > 0 && TOTAL_REQUEST_PATTERN.test(aiContent)))) {
       saleIntent = 'quotation';
     }
-    if (saleIntent === 'quotation' && !QUOTE_REQUEST_PATTERN.test(aiContent)) {
+    if (saleIntent === 'quotation' && !gaveTotal && !QUOTE_REQUEST_PATTERN.test(aiContent)) {
       console.log('📋 La IA marcó cotización sin que la clienta la pidiera; no se registra');
       saleIntent = 'other';
+    }
+
+    // La personalización y los ajustes de cantidad suelen llegar después de confirmar:
+    // mientras haya un pedido en curso, se mantiene al día con lo último que dijo la clienta.
+    if (saleIntent !== 'order' && saleIntent !== 'quotation' && plan.order_items.length > 0
+      && await getRecentPendingOrder(conversationId)) {
+      saleIntent = 'order';
     }
 
     // Se registra antes de la revisión manual: si confirma y elige tarjeta en el mismo mensaje,
@@ -506,7 +559,11 @@ async function respondToBatch(batch: PendingBatch) {
         `VELAMIA: ${plan.reply}`
       ].join('\n');
 
-      await registerSale(saleIntent, { conversationId, phoneNumber, customerName, transcript, catalog, shippingPlace: plan.shipping_place, planItems: plan.order_items });
+      await registerSale(saleIntent, {
+        conversationId, phoneNumber, customerName, transcript, catalog,
+        shippingPlace: plan.shipping_place, planItems: plan.order_items,
+        deliveryDate: plan.delivery_date || lastDeliveryDateFromHistory(history)
+      });
     }
 
     if (plan.handoff !== 'none') {
@@ -525,7 +582,8 @@ async function respondToBatch(batch: PendingBatch) {
         && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
         && plan.show_products.every(n => pendingProducts.includes(n));
       const photos = continuesPending ? pendingProducts : plan.show_products;
-      await sendProductPhotos(conversationId, phoneNumber, photos, catalog);
+      // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
+      await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'));
     }
 
     if (plan.intent === 'delivery_status') {
@@ -537,7 +595,7 @@ async function respondToBatch(batch: PendingBatch) {
 }
 
 /** Envía hasta PHOTO_BATCH_SIZE fotos; si quedan más, las guarda y pregunta si desea verlas. */
-async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[]) {
+async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true) {
   const products = names
     .map(name => catalog.find(p => p.name === name))
     .filter(p => p && p.image_url);
@@ -559,10 +617,13 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
 
   if (rest.length > 0) {
     pendingPhotos.set(conversationId, rest);
-    const question = MORE_PHOTOS_QUESTIONS[Math.floor(Math.random() * MORE_PHOTOS_QUESTIONS.length)];
-    await sendAndSaveText(conversationId, phoneNumber, question);
+    await sendAndSaveText(conversationId, phoneNumber, pick(MORE_PHOTOS_QUESTIONS));
   } else {
     pendingPhotos.delete(conversationId);
+    // Ya vio las fotos: recién ahora tiene sentido preguntarle cuál le gustó.
+    if (askAfter && batch.length > 0) {
+      await sendAndSaveText(conversationId, phoneNumber, pick(batch.length === 1 ? LIKED_SINGLE_PHOTO_QUESTIONS : LIKED_PHOTO_QUESTIONS));
+    }
   }
 }
 
@@ -572,7 +633,10 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
  */
 async function registerSale(
   kind: 'quotation' | 'order',
-  ctx: { conversationId: string; phoneNumber: string; customerName: string; transcript: string; catalog: any[]; shippingPlace: string; planItems: TurnPlan['order_items'] }
+  ctx: {
+    conversationId: string; phoneNumber: string; customerName: string; transcript: string;
+    catalog: any[]; shippingPlace: string; planItems: TurnPlan['order_items']; deliveryDate: string;
+  }
 ) {
   try {
     // Los mismos modelos y docenas con que se calculó el valor que recibió la clienta, para que el CRM cuadre.
@@ -588,21 +652,55 @@ async function registerSale(
     // La clienta ve un solo valor; en el CRM el envío queda como línea aparte para la dueña.
     const dozens = items.reduce((sum, i) => sum + i.quantity, 0);
     const shipping = ctx.shippingPlace ? shippingCost(ctx.shippingPlace, dozens) : null;
-    const products: any[] = shipping
-      ? [...items, { type: 'shipping', name: `Envío a ${shipping.place}`, price: shipping.cost, quantity: 1 }]
-      : items;
     const totalAmount = Math.round((items.reduce((sum, i) => sum + i.price * i.quantity, 0) + (shipping?.cost || 0)) * 100) / 100;
+
     const pendingQuotation = await getRecentPendingQuotation(ctx.conversationId);
+    const existingOrder = await getRecentPendingOrder(ctx.conversationId);
+    // Con un pedido en curso, lo que venga después (personalización, cambio de cantidad) actualiza ese pedido
+    // en lugar de abrir otra cotización: si no, la dueña vería el pedido sin los detalles finales.
+    if (kind === 'quotation' && existingOrder) kind = 'order';
+    // Si en este turno no se mencionó la fecha, se conserva la que ya tenía el pedido o la cotización.
+    const deliveryDate = ctx.deliveryDate
+      || deliveryDateFromProducts(existingOrder?.products)
+      || deliveryDateFromProducts(pendingQuotation?.products);
+
+    const products: any[] = [
+      ...items,
+      ...(shipping ? [{ type: 'shipping', name: `Envío a ${shipping.place}`, price: shipping.cost, quantity: 1 }] : []),
+      ...(deliveryDate ? [{ type: 'delivery', name: 'Entrega', date: deliveryDate }] : [])
+    ];
+
+    const detail = items
+      .map(i => `${i.quantity} doc. ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`)
+      .join(', ')
+      + (shipping ? ` · envío a ${shipping.place}` : ' · sin ciudad de envío')
+      + (deliveryDate ? ` · entrega ${formatDateEc(deliveryDate)}` : ' · sin fecha')
+      + ` · Total $${totalAmount.toFixed(2)}`;
+
+    const owner = { conversationId: ctx.conversationId, customerPhone: ctx.phoneNumber, customerName: ctx.customerName };
+    const signature = (value: any) => {
+      try {
+        return JSON.stringify(typeof value === 'string' ? JSON.parse(value || '[]') : (value || []));
+      } catch {
+        return '';
+      }
+    };
 
     if (kind === 'quotation') {
       // El cliente vuelve a pedir el total con otra cantidad: se actualiza la misma cotización.
       if (pendingQuotation) {
+        const changed = signature(pendingQuotation.products) !== signature(products)
+          || Number(pendingQuotation.total_amount) !== totalAmount;
         await updateQuotationItems(pendingQuotation.id, products, totalAmount);
         console.log(`📋 Cotización ${pendingQuotation.id.substring(0, 8)} actualizada: $${totalAmount.toFixed(2)}`);
+        // Sin cambios no se avisa dos veces por lo mismo.
+        if (!changed) return;
       } else {
         await createQuotation(ctx.conversationId, ctx.phoneNumber, products, totalAmount);
         console.log(`📋 Cotización registrada: $${totalAmount.toFixed(2)}`);
       }
+      // La dueña revisa todas las cotizaciones; el bot nunca se pausa por esto.
+      await notifyOwner({ ...owner, event: 'new_quotation', detail });
       return;
     }
 
@@ -614,26 +712,19 @@ async function registerSale(
 
     // Un cliente suele confirmar varias veces o ajustar detalles después de confirmar:
     // se actualiza el pedido pendiente reciente en lugar de duplicarlo o de dejarlo desactualizado.
-    const existing = await getRecentPendingOrder(ctx.conversationId);
-    if (existing) {
-      await updateOrderItems(existing.id, products, totalAmount);
-      console.log(`🛍️ Pedido ${existing.id.substring(0, 8)} actualizado: $${totalAmount.toFixed(2)}`);
+    if (existingOrder) {
+      const changed = signature(existingOrder.products) !== signature(products)
+        || Number(existingOrder.total_amount) !== totalAmount;
+      await updateOrderItems(existingOrder.id, products, totalAmount, deliveryDate, shipping?.place);
+      console.log(`🛍️ Pedido ${existingOrder.id.substring(0, 8)} actualizado: $${totalAmount.toFixed(2)}`);
+      // La personalización y los cambios de cantidad suelen llegar después de confirmar.
+      if (changed) await notifyOwner({ ...owner, event: 'order_updated', detail });
       return;
     }
 
-    await createOrder(ctx.conversationId, ctx.phoneNumber, ctx.customerName, products, totalAmount);
+    await createOrder(ctx.conversationId, ctx.phoneNumber, ctx.customerName, products, totalAmount, deliveryDate, shipping?.place);
     console.log(`🛍️ Pedido registrado: $${totalAmount.toFixed(2)}`);
-
-    const detail = items
-      .map(i => `${i.quantity} doc. ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`)
-      .join(', ') + `${shipping ? ` · envío a ${shipping.place}` : ' · sin ciudad de envío'} · Total $${totalAmount.toFixed(2)}`;
-    await notifyOwner({
-      conversationId: ctx.conversationId,
-      customerPhone: ctx.phoneNumber,
-      customerName: ctx.customerName,
-      event: 'new_order',
-      detail
-    });
+    await notifyOwner({ ...owner, event: 'new_order', detail });
   } catch (error) {
     console.error(`❌ Error registrando ${kind}:`, error);
   }

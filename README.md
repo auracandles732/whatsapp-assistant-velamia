@@ -42,19 +42,26 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 - Espera **5 segundos** sin mensajes nuevos antes de responder y contesta en un solo turno todo lo que la clienta
   escribió seguido (máximo 20 s de espera si no deja de escribir). El mensaje se guarda en el CRM al instante.
 - Envía fotos solo cuando la clienta pide ver modelos, sin repetir, **de 4 en 4**: si quedan más, pregunta
-  "¿Te gustaría ver más modelos?" y envía las siguientes 4 cuando acepta.
+  "¿Te gustaría ver más modelos?" y envía las siguientes 4 cuando acepta. Si no quedan más, pregunta cuál le gustó.
+  Las preguntas sobre las fotos las envía el sistema **después** de las imágenes, nunca antes.
+- Nunca escribe listas de modelos con sus precios en el texto: para mostrar modelos envía las fotos, que ya
+  llevan nombre y precio en el pie.
 - Reconoce la foto que la clienta cita al responder.
 - La personalización (colores, nombres, frases) siempre es válida y no impide cerrar la venta.
 - Solo registra un pedido (y avisa a la dueña) cuando la clienta confirma o elige forma de pago; dar modelo,
   cantidad y ciudad no es un pedido. Cotización y pedido usan los mismos modelos, docenas y personalización
-  con que se calculó el valor que recibió la clienta.
+  con que se calculó el valor que recibió la clienta, y guardan la **fecha de entrega** y la ciudad.
+- **Cada vez que el bot le da a una clienta el valor total, queda cotización en el CRM y la dueña recibe el
+  aviso `new_quotation` para revisarla.** El bot nunca se pausa por eso. Mientras haya un pedido en curso,
+  lo que venga después (personalización, cambio de cantidad) actualiza ese pedido y avisa con `order_updated`.
 - Al publicar una versión (SIGTERM de Render) responde de inmediato los mensajes que estaban en espera.
 - **Formato:** frase cálida, datos en lista (un dato por línea con emoji), reserva de fecha debajo y una pregunta.
   Nunca "te lo dejo anotado". Si la IA repite un emoji de adorno de los últimos 4 mensajes, `varyEmojis` lo cambia.
 - **Datos bancarios:** solo cuando la clienta elige transferencia o pide la cuenta (`BANK_CHOICE_PATTERN`);
   si no eligió forma de pago, el bot pregunta "transferencia o tarjeta".
 - Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido, reclamo**.
-  Solo avisa (sin pausar) cuando llega un **comprobante de pago**, un **pedido nuevo** o si la IA falla.
+  Solo avisa (sin pausar) con: **cotización enviada, pedido nuevo, pedido actualizado, comprobante de pago,
+  entrega muy justa, pregunta sin respuesta** o si la IA falla.
 
 ## Pagos
 
@@ -70,7 +77,8 @@ La IA nunca redacta números de cuenta: el bloque bancario (clave `payment_trans
 
 - **Entrega = fecha del evento − 3 días** (el pedido le llega a la clienta ese día). Siempre hay disponibilidad.
   La resta la hace el sistema (`subtractDays`); si la IA menciona otra fecha, se rehace la respuesta.
-  Si la entrega calculada es hoy o ya pasó, el bot no menciona fecha y la dueña recibe el aviso `urgent_date` (una vez al día por chat).
+  Si la entrega calculada es hoy o ya pasó, el bot no menciona fecha. La dueña recibe el aviso `urgent_date`
+  cuando la entrega es dentro de **3 días o menos** (una vez al día por chat).
 - Urgencia honesta: la fecha se reserva al recibir el anticipo.
 - **Envíos** a todo Ecuador desde Guayaquil (Servientrega), sin retiro en local, sin pedido mínimo.
 
@@ -88,7 +96,9 @@ La IA nunca redacta números de cuenta: el bloque bancario (clave `payment_trans
 - En el CRM (pestaña Cotizaciones) la dueña sí ve el envío como línea aparte ("🚚 Envío a…").
 - Si la clienta pregunta algo que no está en las instrucciones, el bot dice que lo verifica y la dueña
   recibe el aviso `owner_question` con la pregunta; el bot sigue atendiendo.
-- Cotización en el CRM solo cuando la clienta pide cotización o valor total.
+- Cotización en el CRM cada vez que el bot entrega el valor total (lo pida la clienta con esas palabras o no).
+  La tarjeta muestra la fecha de entrega, guardada dentro de `products` como `{ type: 'delivery', date }`
+  (la tabla `quotations` no tiene columna propia; `orders` sí usa `delivery_date`).
 - Si una persona escribe desde el CRM, el bot queda pausado en ese chat hasta reactivarlo.
 
 ## Seguimientos automáticos (`src/services/followups.ts`)

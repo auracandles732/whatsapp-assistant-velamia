@@ -82,11 +82,13 @@ La fecha queda reservada al recibir el anticipo, las fechas se van ocupando por 
 
 ¿Prefieres pagar por transferencia o con tarjeta?
 - El resumen en lista va UNA sola vez: cuando das el total por primera vez o si el cliente cambia algún dato. Si ya lo diste y no cambió nada, responde solo lo que pide en 2 o 3 líneas (por ejemplo "El total con envío a Quito es *$127.00*").
-- Si el cliente confirma, dice "ok"/"listo" o elige forma de pago, NO repitas la lista ni la fecha: responde en 2 o 3 líneas con lo nuevo (el anticipo, la pregunta de pago o el siguiente paso).
+- Si el cliente confirma, dice "ok"/"listo", elige forma de pago o pregunta otra cosa (personalización, envío, dudas), NO repitas la lista ni la fecha: responde en 2 o 3 líneas solo a eso.
 - La frase de reserva de la fecha solo acompaña a la fecha de entrega; en mensajes donde no das la fecha de entrega no la repitas.
 - Usa *negrita* solo en datos clave (modelo, cantidad, fechas, montos), nunca en frases completas.
 - Varía tus expresiones: nunca uses "te lo dejo anotado", "te dejo anotado", "queda anotado" ni otras frases con "anotado", y no empieces siempre con "Perfecto".
 - Varía los emojis entre mensajes: fuera de las listas usa 1 o 2, elegidos según el tema (por ejemplo 🎀 🌸 💕 🌷 🥰 😊 🎉 💫 🌼 🧸 👶 💐 🙌 😍). No repitas ninguno de los EMOJIS USADOS RECIENTEMENTE que aparecen abajo.
+- NUNCA escribas listas de modelos con sus precios en el texto: para mostrar modelos se envían las fotos (show_products) y el pie de cada foto ya lleva el nombre y el precio. Si el cliente dice qué evento o tema es, elige los modelos y envía las fotos en vez de enumerarlos.
+- Cuando envíes fotos, tu texto va ANTES que ellas: preséntalas en una frase corta y no preguntes cuál le gustó, cuál prefiere ni si le gusta, porque todavía no las ha visto (el sistema pregunta después de mostrarlas).
 - Eres una persona del equipo de VELAMIA. Nunca digas ni insinúes que eres un bot, asistente virtual o IA, ni que "otra persona", "un asesor" o "el equipo" tomará la conversación.
 
 PERSONALIZACIÓN Y CIERRE DE VENTA:
@@ -222,6 +224,12 @@ const BANK_CHOICE_PATTERN = /(?<!\p{L})(transfer\p{L}*|dep[oó]sit\p{L}*|cuentas
 
 // Frases que la dueña pidió no usar porque se repetían en cada respuesta.
 const BANNED_PHRASES = /anotad[oa]s?/i;
+
+// El resumen del pedido en lista y los casos en que sí corresponde volver a darlo.
+// Solo cuenta como "ya dado" el resumen completo (con el total): antes de eso todavía se está armando el pedido.
+const SUMMARY_PATTERN = /\*Modelo:\*/i;
+const FULL_SUMMARY_PATTERN = /\*Modelo:\*[\s\S]*\*Total:\*/i;
+const TOTAL_OR_CHANGE_PATTERN = /(total|cotiz\p{L}*|precio|valor|cu[aá]nt\p{L}*|docen\p{L}*|fecha|evento|ciudad|env[ií]\p{L}*|cambi\p{L}*|mejor|prefiero|agreg\p{L}*|a[ñn]ad\p{L}*|quit\p{L}*|resum\p{L}*)/iu;
 
 // Emojis de adorno intercambiables. La IA tiende a usar siempre 🤍 y ✨: si repite uno de los últimos
 // mensajes, el sistema lo cambia por otro de esta lista que no se haya usado.
@@ -423,6 +431,16 @@ export async function planTurn(params: {
     corrections.push(
       'La clienta todavía NO eligió pagar por transferencia ni pidió los datos de la cuenta: send_bank_details debe ser false. ' +
       'No digas que le envías ni que le compartes los datos de la cuenta. Pregúntale con qué prefiere pagar, en lista: transferencia (anticipo 50%) o tarjeta Visa o Mastercard (100% del total).'
+    );
+  }
+
+  // El resumen en lista solo se repite si vuelve a pedir el total o cambia algo del pedido.
+  const summaryAlreadySent = history.some(m => m.role === 'assistant' && FULL_SUMMARY_PATTERN.test(String(m.content || '')));
+  if (summaryAlreadySent && SUMMARY_PATTERN.test(String(parsed.reply || '')) && !TOTAL_OR_CHANGE_PATTERN.test(customerWords)) {
+    console.warn('📋 La IA repitió el resumen sin que la clienta cambiara nada');
+    corrections.push(
+      'Ya le diste el resumen en lista antes y no cambió ningún dato: no lo repitas. ' +
+      'Responde solo a lo que pregunta, en 2 o 3 líneas, sin la lista, sin repetir la fecha de entrega y sin la frase de la reserva.'
     );
   }
 
