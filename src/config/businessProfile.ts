@@ -159,7 +159,8 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     types: [
       { name: 'Acetato', description: 'transparente, elegante y permite ver la vela', changeCost: null },
       { name: 'Tul', description: 'delicado, ligero y decorativo', changeCost: null },
-      { name: 'Kraft', description: 'natural, minimalista y brinda mayor protección', changeCost: null }
+      { name: 'Kraft', description: 'natural, minimalista y brinda mayor protección', changeCost: null },
+      { name: 'Caja lazo personalizable', description: 'caja con lazo que se puede personalizar', changeCost: null }
     ]
   }
 };
