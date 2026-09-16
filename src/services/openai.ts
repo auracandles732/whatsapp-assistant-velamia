@@ -272,6 +272,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       ...p.packaging.types.map(t => `  - ${t.name}: ${t.description}.`),
       `- Si preguntan por la presentación o el empaque, dile el empaque del ${model} que le interesa y descríbelo en una frase. Si ese ${model} no tiene empaque en el catálogo, dile que lo verificas y escríbelo en owner_question.`,
       `- El cliente puede cambiar a otro empaque. Costo del cambio por ${unit}: ${p.packaging.types.map(t => `${t.name} (${cost(t.changeCost)})`).join(', ')}. No menciones estos costos si no pregunta por cambiar el empaque.`,
+      `- Personalizar la vela (colores, nombres, frases) no es lo mismo que personalizar el empaque. Un empaque solo se personaliza si su descripción lo dice; si preguntan por personalizar otro empaque, aclara que ese empaque no se personaliza (la vela sí) y menciona el que sí se puede.`,
       '- Si pide un cambio con "costo por confirmar", dile que lo verificas y le confirmas el valor (escríbelo en owner_question) y no des un total con ese cambio.',
       `- packaging: el empaque al que el cliente pidió cambiar ese ${model}, según toda la conversación (mantenlo en los mensajes siguientes); cadena vacía si se queda con el empaque del catálogo.`,
       ''
@@ -283,6 +284,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''} (por ejemplo ${packagingOn ? '' : 'presentación o empaque, '}materiales, tamaño), dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
     '- NUNCA inventes ni supongas la respuesta a esas preguntas, tampoco después de haber dicho que lo verificas.',
     '- Si la pregunta ya está en PREGUNTAS YA ENVIADAS A LA DUEÑA, deja owner_question vacío y no repitas "lo reviso" en cada mensaje: menciónalo solo si el cliente vuelve a preguntar ("ya lo estoy confirmando").',
+    '- Si pudiste responder con tus instrucciones, el catálogo o los datos de empaque, owner_question va vacío: el aviso es solo para lo que no sabes.',
     '- En cualquier otro caso owner_question es una cadena vacía.',
     ''
   );
