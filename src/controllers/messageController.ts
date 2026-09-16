@@ -571,14 +571,28 @@ async function respondToBatch(batch: PendingBatch) {
       console.log(`❓ Pregunta ya avisada a la dueña, no se repite: ${plan.owner_question}`);
     }
 
-    // Diseño fuera del catálogo: cuando la IA ya juntó los datos, avisa a la dueña UNA VEZ y pausa el bot
-    // (así la dueña responde con el precio sin que el bot invente). El cliente nunca se entera.
-    if (plan.custom_design_summary && !(await hasRecentNotification(conversationId, 'custom_design_request', 24 * 30))) {
-      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: plan.custom_design_summary });
-      await pauseBot(conversationId);
-      console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${plan.custom_design_summary}`);
-    } else if (plan.custom_design_summary) {
-      console.log(`🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`);
+    // Diseño fuera del catálogo: se avisa UNA sola vez y solo cuando el resumen ya trae los datos clave
+    // (diseño + colores + empaque + cantidad, separados por "·"). Al enviar el aviso, el bot se pausa
+    // para que la dueña conteste con el precio; el cliente nunca se entera.
+    if (plan.custom_design_summary) {
+      const alreadyNotified = await hasRecentNotification(conversationId, 'custom_design_request', 24 * 30);
+      // Señal de "resumen completo": la clienta ya dijo la cantidad (número + unidad de venta).
+      const unitWords = [profile().sales.unitSingular, profile().sales.unitPlural].filter(Boolean).map(w => w.toLowerCase()).join('|');
+      const hasQuantity = new RegExp(`\\d+\\s*(${unitWords})`, 'i').test(plan.custom_design_summary);
+      // Si la clienta envió una foto en el chat, se anota en el aviso para que la dueña abra el chat y la vea.
+      const clientSentPhoto = history.some((m: any) => m.sender === 'customer' && m.type === 'image');
+      const summaryConFoto = clientSentPhoto && !/foto|imagen|referencia/i.test(plan.custom_design_summary)
+        ? `${plan.custom_design_summary} · con foto de referencia`
+        : plan.custom_design_summary;
+      if (!alreadyNotified && hasQuantity) {
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: summaryConFoto });
+        await pauseBot(conversationId);
+        console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${summaryConFoto}`);
+      } else if (!alreadyNotified) {
+        console.log(`🎨 Diseño fuera del catálogo detectado, aún faltan datos (falta la cantidad): ${plan.custom_design_summary}`);
+      } else {
+        console.log(`🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`);
+      }
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.

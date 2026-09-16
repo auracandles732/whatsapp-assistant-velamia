@@ -283,11 +283,11 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
   const packagingList = packagingOn ? p.packaging.types.map(t => t.name).join(', ') : '';
   add(
     'DISEÑO FUERA DEL CATÁLOGO (campos custom_design_requested y custom_design_summary):',
-    `- Si el cliente pide un ${model} con una temática, animal o motivo que NO está en el catálogo (por ejemplo "vela de patito" cuando no hay patito), o si dice que ninguno de los que le mostraste le gusta y quiere algo distinto, es un diseño fuera del catálogo.`,
+    `- Si el cliente pide CUALQUIER ${model} que NO esté en el catálogo (una temática, un animal, un motivo, una figura, un estilo, cualquier cosa) o si dice que ninguno de los ${models} que le mostraste le gusta y quiere algo distinto, es un diseño fuera del catálogo. Da igual qué sea: cualquier cosa que no aparezca en el catálogo entra aquí.`,
     '- NUNCA aceptes ni rechaces el pedido, ni digas que "lo verificas", "lo consultas", "lo confirmas con el equipo" ni nada parecido: el cliente no debe darse cuenta de esta gestión.',
     '- Tampoco des un valor total ni menciones montos: el precio se lo daremos después.',
     '- Pregunta con naturalidad, de a una cosa por mensaje, para entender cómo la quiere:',
-    '  1) descripción del diseño (temática, animal, motivo)',
+    '  1) descripción del diseño (qué quiere que sea) Y si tiene alguna foto de referencia, pídele que te la envíe por este mismo chat: es la forma más clara de entender la idea',
     s.personalization && '  2) colores que le gustaría',
     packagingOn && `  3) empaque que prefiere (${packagingList})`,
     '  4) si quiere algún nombre o frase en la vela',
@@ -295,6 +295,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     d.enabled && `  6) fecha del ${d.eventLabel}`,
     '- No repitas todas las preguntas juntas: una por respuesta, avanzando la conversación.',
     '- Marca custom_design_requested = true en cuanto entiendas que quiere algo fuera del catálogo.',
+    '- Si el cliente envió una foto de referencia en la conversación, agrega "con foto de referencia" al resumen para que la dueña sepa que debe abrir el chat y verla.',
     '- Deja order_items VACÍO mientras sea un diseño fuera del catálogo (no está en el catálogo, no lo pongas).',
     `- Cuando ya tengas al menos la descripción del diseño${s.personalization ? ', los colores' : ''}${packagingOn ? ', el empaque' : ''} y la cantidad, llena custom_design_summary con una sola línea que junte TODO lo que dijo (ejemplo: "${label} temático${s.personalization ? ' · colores' : ''}${packagingOn && p.packaging.types[0] ? ` · empaque ${p.packaging.types[0].name}` : ''} · nombre · 2 ${units}${hasShipping ? ' · ciudad' : ''}${d.enabled ? ` · ${d.eventLabel} DD/MM/YYYY` : ''}"). Antes de tener esos datos, custom_design_summary va vacío.`,
     '- Después de llenar custom_design_summary responde algo cálido y natural (por ejemplo: "Qué idea tan linda 🥰 En un momento te preparo la propuesta"), sin decir que consultas ni prometer una hora.',
