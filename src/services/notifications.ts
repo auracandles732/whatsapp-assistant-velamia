@@ -2,7 +2,7 @@ import { sendTextMessage, sendTemplateMessage } from './whatsapp';
 import { getOwnerPhone, logNotification } from './supabase';
 import { profile } from '../config/businessProfile';
 
-export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'new_quotation' | 'order_updated' | 'bot_error' | 'bank_details_missing' | 'owner_question' | 'urgent_date';
+export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'new_quotation' | 'order_updated' | 'bot_error' | 'bank_details_missing' | 'owner_question' | 'urgent_date' | 'custom_design_request';
 
 const EVENT_LABELS: Record<OwnerEvent, string> = {
   urgent_date: '📅 Entrega muy cerca o fecha ya pasada, revísalo',
@@ -14,7 +14,8 @@ const EVENT_LABELS: Record<OwnerEvent, string> = {
   payment_proof: '📸 Envió comprobante de pago',
   complaint: '⚠️ Reclamo o problema con un pedido',
   new_order: '🎉 Nuevo pedido registrado',
-  bot_error: '🤖 El bot no pudo responder, responde tú desde el CRM'
+  bot_error: '🤖 El bot no pudo responder, responde tú desde el CRM',
+  custom_design_request: '🎨 Pidió un diseño fuera del catálogo (personalizado), responde tú con el precio'
 };
 
 // Plantilla aprobada por Meta (nombre en el perfil del negocio): llega aunque la dueña no haya escrito al bot en 24 horas.

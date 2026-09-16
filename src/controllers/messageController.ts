@@ -571,6 +571,16 @@ async function respondToBatch(batch: PendingBatch) {
       console.log(`❓ Pregunta ya avisada a la dueña, no se repite: ${plan.owner_question}`);
     }
 
+    // Diseño fuera del catálogo: cuando la IA ya juntó los datos, avisa a la dueña UNA VEZ y pausa el bot
+    // (así la dueña responde con el precio sin que el bot invente). El cliente nunca se entera.
+    if (plan.custom_design_summary && !(await hasRecentNotification(conversationId, 'custom_design_request', 24 * 30))) {
+      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: plan.custom_design_summary });
+      await pauseBot(conversationId);
+      console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${plan.custom_design_summary}`);
+    } else if (plan.custom_design_summary) {
+      console.log(`🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`);
+    }
+
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.
     if (plan.send_bank_details) {
       if (bankDetails && bankDetails.trim()) {

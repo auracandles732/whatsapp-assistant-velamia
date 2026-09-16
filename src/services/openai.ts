@@ -150,13 +150,13 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       `- Todos los ${models} se pueden personalizar: ${s.personalizationExamples || 'los cambios que pida'} son válidos. Confírmalo con seguridad, sin decir que hay que verificarlo.`,
       `- La personalización no cambia el precio por ${unit} del catálogo ni impide la venta.`,
       `- Anota los detalles de personalización junto con el ${model}, la cantidad${d.enabled ? ' y la fecha' : ''}, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).`,
-      `- Personalizar es cambiar detalles de un ${model} del catálogo. Las fotos del catálogo son ${models} normales: nunca las presentes como "opciones personalizadas". Si el cliente pide un diseño que no está en el catálogo, dile que lo verificas y escríbelo en owner_question.`,
+      `- Personalizar es cambiar detalles de un ${model} del catálogo. Las fotos del catálogo son ${models} normales: nunca las presentes como "opciones personalizadas".`,
       ''
     );
   } else {
     add(
       'CIERRE DE VENTA:',
-      `- Los ${models} se venden tal como están en el catálogo. Si el cliente pide cambios o versiones especiales, dile que lo verificas y escribe la consulta en owner_question.`,
+      `- Los ${models} se venden tal como están en el catálogo. Para cambios o versiones especiales usa las reglas de DISEÑO FUERA DEL CATÁLOGO.`,
       '- Sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).',
       ''
     );
@@ -280,6 +280,28 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     );
   }
 
+  const packagingList = packagingOn ? p.packaging.types.map(t => t.name).join(', ') : '';
+  add(
+    'DISEÑO FUERA DEL CATÁLOGO (campos custom_design_requested y custom_design_summary):',
+    `- Si el cliente pide un ${model} con una temática, animal o motivo que NO está en el catálogo (por ejemplo "vela de patito" cuando no hay patito), o si dice que ninguno de los que le mostraste le gusta y quiere algo distinto, es un diseño fuera del catálogo.`,
+    '- NUNCA aceptes ni rechaces el pedido, ni digas que "lo verificas", "lo consultas", "lo confirmas con el equipo" ni nada parecido: el cliente no debe darse cuenta de esta gestión.',
+    '- Tampoco des un valor total ni menciones montos: el precio se lo daremos después.',
+    '- Pregunta con naturalidad, de a una cosa por mensaje, para entender cómo la quiere:',
+    '  1) descripción del diseño (temática, animal, motivo)',
+    s.personalization && '  2) colores que le gustaría',
+    packagingOn && `  3) empaque que prefiere (${packagingList})`,
+    '  4) si quiere algún nombre o frase en la vela',
+    `  5) cantidad de ${units}${hasShipping ? ' y ciudad de envío' : ''}`,
+    d.enabled && `  6) fecha del ${d.eventLabel}`,
+    '- No repitas todas las preguntas juntas: una por respuesta, avanzando la conversación.',
+    '- Marca custom_design_requested = true en cuanto entiendas que quiere algo fuera del catálogo.',
+    '- Deja order_items VACÍO mientras sea un diseño fuera del catálogo (no está en el catálogo, no lo pongas).',
+    `- Cuando ya tengas al menos la descripción del diseño${s.personalization ? ', los colores' : ''}${packagingOn ? ', el empaque' : ''} y la cantidad, llena custom_design_summary con una sola línea que junte TODO lo que dijo (ejemplo: "${label} temático${s.personalization ? ' · colores' : ''}${packagingOn && p.packaging.types[0] ? ` · empaque ${p.packaging.types[0].name}` : ''} · nombre · 2 ${units}${hasShipping ? ' · ciudad' : ''}${d.enabled ? ` · ${d.eventLabel} DD/MM/YYYY` : ''}"). Antes de tener esos datos, custom_design_summary va vacío.`,
+    '- Después de llenar custom_design_summary responde algo cálido y natural (por ejemplo: "Qué idea tan linda 🥰 En un momento te preparo la propuesta"), sin decir que consultas ni prometer una hora.',
+    '- En el resto de casos custom_design_requested = false y custom_design_summary = "".',
+    ''
+  );
+
   add(
     'PREGUNTAS SIN RESPUESTA (campo owner_question):',
     `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''} (por ejemplo ${packagingOn ? '' : 'presentación o empaque, '}materiales, tamaño), dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
@@ -364,6 +386,8 @@ export interface TurnPlan {
   handoff: HandoffReason;
   send_bank_details: boolean;
   owner_question: string;
+  custom_design_requested: boolean;
+  custom_design_summary: string;
   /** Fecha del evento (AAAA-MM-DD) o cadena vacía. */
   event_date: string;
   /** Fecha de entrega calculada por el sistema o cadena vacía. */
@@ -380,7 +404,7 @@ export interface TurnPlan {
 const TURN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['reply', 'intent', 'show_products', 'handoff', 'send_bank_details', 'owner_question', 'event_date', 'delivery_date', 'order_items', 'shipping_place', 'quoted_total', 'quoted_deposit'],
+  required: ['reply', 'intent', 'show_products', 'handoff', 'send_bank_details', 'owner_question', 'custom_design_requested', 'custom_design_summary', 'event_date', 'delivery_date', 'order_items', 'shipping_place', 'quoted_total', 'quoted_deposit'],
   properties: {
     reply: { type: 'string' },
     intent: { type: 'string', enum: ['greeting', 'product_inquiry', 'quotation', 'order', 'delivery_status', 'other'] },
@@ -388,6 +412,8 @@ const TURN_SCHEMA = {
     handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint'] },
     send_bank_details: { type: 'boolean' },
     owner_question: { type: 'string' },
+    custom_design_requested: { type: 'boolean' },
+    custom_design_summary: { type: 'string' },
     event_date: { type: 'string' },
     delivery_date: { type: 'string' },
     order_items: {
@@ -828,6 +854,8 @@ export async function planTurn(params: {
     // Aunque la corrección falle, sin elección de transferencia nunca se envían las cuentas.
     send_bank_details: parsed.send_bank_details === true && choseTransfer,
     owner_question: String(parsed.owner_question || '').trim(),
+    custom_design_requested: parsed.custom_design_requested === true,
+    custom_design_summary: String(parsed.custom_design_summary || '').trim(),
     event_date: eventDate,
     delivery_date: expectedDelivery,
     order_items: order.items.map(i => ({
