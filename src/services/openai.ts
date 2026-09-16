@@ -150,6 +150,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       `- Todos los ${models} se pueden personalizar: ${s.personalizationExamples || 'los cambios que pida'} son válidos. Confírmalo con seguridad, sin decir que hay que verificarlo.`,
       `- La personalización no cambia el precio por ${unit} del catálogo ni impide la venta.`,
       `- Anota los detalles de personalización junto con el ${model}, la cantidad${d.enabled ? ' y la fecha' : ''}, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).`,
+      `- Personalizar es cambiar detalles de un ${model} del catálogo. Las fotos del catálogo son ${models} normales: nunca las presentes como "opciones personalizadas". Si el cliente pide un diseño que no está en el catálogo, dile que lo verificas y escríbelo en owner_question.`,
       ''
     );
   } else {
@@ -203,7 +204,8 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     s.minimumOrder
       ? `- Pedido mínimo: ${s.minimumOrder}.`
       : `- No hay pedido mínimo: se puede pedir cualquier cantidad (el precio del catálogo sigue siendo por ${unit}).`,
-    `- Para dar un valor total (${amountList}) necesitas saber qué ${models}, la cantidad de ${units}${hasShipping ? ' y la ciudad de envío. Si falta la ciudad, pregúntala antes de dar cualquier total' : ''}.`
+    `- Para dar un valor total (${amountList}) necesitas saber qué ${models}, la cantidad de ${units}${hasShipping ? ' y la ciudad de envío. Si falta la ciudad, pregúntala antes de dar cualquier total' : ''}.`,
+    d.enabled && `- La fecha del ${d.eventLabel} NO hace falta para dar el total: si ya conoces ${models}, cantidad${hasShipping ? ' y ciudad' : ''}, da el total y después pregunta la fecha.`
   );
   if (hasShipping && !sh.showSeparately) {
     add(
@@ -225,7 +227,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     if (sh.mode === 'ecuador_table') add('- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.');
   }
   add(
-    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.personalization ? ` En personalization resume ${s.personalizationExamples || 'los detalles'} que pidió para ese ${model} (cadena vacía si no hay).` : ' personalization: cadena vacía.'}`,
+    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
     sh.mode === 'ecuador_table'
       ? '- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.'
       : sh.mode === 'flat'
@@ -262,7 +264,9 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
 
   add(
     'PREGUNTAS SIN RESPUESTA (campo owner_question):',
-    `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''}, dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
+    `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''} (por ejemplo aroma, presentación o empaque, materiales, tamaño), dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
+    '- NUNCA inventes ni supongas la respuesta a esas preguntas, tampoco después de haber dicho que lo verificas.',
+    '- Si la pregunta ya está en PREGUNTAS YA ENVIADAS A LA DUEÑA, deja owner_question vacío y no repitas "lo reviso" en cada mensaje: menciónalo solo si el cliente vuelve a preguntar ("ya lo estoy confirmando").',
     '- En cualquier otro caso owner_question es una cadena vacía.',
     ''
   );
@@ -434,6 +438,19 @@ export function varyEmojis(reply: string, recentEmojis: string[], decorative: st
   });
 }
 
+// Frases del bot ("se puede adaptar a tus colores") que la IA a veces copia como si fueran el pedido de la clienta.
+const GENERIC_PERSONALIZATION = /(se pued|puede[ns]? (adaptar|personalizar|cambiar)|personalizable|admite|a tu gusto|tus colores|lo que (prefieras|quieras)|personalizad[oa]s?$)/i;
+const GENERIC_WORD = /^(los |las |sus |tus )?(detalles|colores|nombres?|frases?|personalizaci[oó]n|dise[ñn]os?)$/i;
+
+/** La personalización solo guarda lo que pidió la clienta: se quitan las partes genéricas que escribe el bot. */
+export function cleanPersonalization(value: unknown): string {
+  return String(value ?? '')
+    .split(/,|;|\s+y\s+/)
+    .map(part => part.trim())
+    .filter(part => part && !GENERIC_PERSONALIZATION.test(part) && !GENERIC_WORD.test(part))
+    .join(', ');
+}
+
 /**
  * Calcula el valor total a partir de lo que la IA entendió de la conversación.
  * Los precios salen del catálogo y el envío del perfil del negocio: la IA no hace las cuentas.
@@ -444,7 +461,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
     .map((i: any) => ({
       product: byName.get(productKey(i?.name)),
       quantity: Number(i?.quantity),
-      personalization: String(i?.personalization || '').trim()
+      personalization: cleanPersonalization(i?.personalization)
     }))
     .filter((i: any) => i.product && Number.isFinite(i.quantity) && i.quantity > 0)
     .map((i: any) => ({ name: i.product.name, price: Number(i.product.price), quantity: i.quantity, personalization: i.personalization }));
@@ -545,8 +562,15 @@ export async function planTurn(params: {
   bankDetailsSent?: boolean;
   pendingProducts?: string[];
   recentEmojis?: string[];
+  /** Preguntas que ya se le enviaron a la dueña en este chat y siguen sin respuesta. */
+  pendingOwnerQuestions?: string[];
+  /** La clienta ya eligió pagar con tarjeta: se paga el total, no hay anticipo. */
+  cardChosen?: boolean;
 }): Promise<TurnPlan> {
-  const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [], recentEmojis = [] } = params;
+  const {
+    history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [], recentEmojis = [],
+    pendingOwnerQuestions = [], cardChosen = false
+  } = params;
   const p = profile();
   const pay = p.payments;
   const usesDeposit = pay.transferEnabled && pay.depositPercent < 100;
@@ -561,7 +585,12 @@ export async function planTurn(params: {
   const patterns = summaryPatterns(p);
 
   const baseMessages = [
-    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p) },
+    {
+      role: 'system' as const,
+      content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p)
+        + `\nPREGUNTAS YA ENVIADAS A LA DUEÑA: ${pendingOwnerQuestions.length ? pendingOwnerQuestions.join(' | ') : 'ninguna'}`
+        + (cardChosen && usesDeposit ? '\nFORMA DE PAGO ELEGIDA: tarjeta. Se paga el 100% del total: no menciones anticipo; la fecha se reserva "al recibir el pago".' : '')
+    },
     ...history,
     { role: 'user' as const, content: userMessage }
   ];
@@ -592,6 +621,10 @@ export async function planTurn(params: {
   const expectedDelivery = eventDate ? subtractDays(eventDate, days) : '';
   const mentioned = String(parsed.delivery_date || '');
   const ev = p.dates.eventLabel;
+  const DATE_TALK = new RegExp(`(fecha|entrega|d[ií]a|cu[aá]ndo|llega|${escapeRegex(ev)}|\\d{1,2}\\s+de\\s+\\p{L}+|\\d{1,2}/\\d{1,2})`, 'iu');
+  const dateAlreadyGiven = !!expectedDelivery
+    && history.some(m => m.role === 'assistant' && String(m.content || '').includes(formatDate(expectedDelivery)))
+    && !DATE_TALK.test(customerWords);
   if (expectedDelivery && mentioned && expectedDelivery <= todayLocal(p)) {
     // Evento muy cercano: siempre se atiende, pero decirle una fecha de entrega ya pasada no tiene sentido.
     console.warn(`📅 Entrega calculada ${expectedDelivery} es hoy o ya pasó: se pide no mencionarla`);
@@ -605,9 +638,13 @@ export async function planTurn(params: {
       `El ${ev} es el ${formatDate(eventDate)} y la fecha de entrega correcta es el ${formatDate(expectedDelivery)} ` +
       `(${days} días antes). Usa exactamente esa fecha de entrega y di que la fecha se reserva al recibir el ${usesDeposit ? 'anticipo' : 'pago'}.`
     );
+  } else if (expectedDelivery && mentioned && dateAlreadyGiven) {
+    // Ya se le dio esa fecha y no preguntó por ella: repetirla con la frase de la reserva en cada mensaje cansa.
+    console.warn('📅 La IA repitió la fecha de entrega sin que la clienta la pidiera');
+    corrections.push('Ya le diste la fecha de entrega antes y no la está preguntando: no repitas la fecha de entrega ni la frase de la reserva. Responde solo a lo que pregunta.');
   } else if (expectedDelivery && mentioned) {
     // La fecha es correcta, pero sin la reserva por pago se pierde la urgencia.
-    const payByCard = parsed.handoff === 'card_payment' || !usesDeposit;
+    const payByCard = parsed.handoff === 'card_payment' || cardChosen || !usesDeposit;
     if (!(payByCard ? /recibir el pago|confirmar el pago/i : /anticipo/i).test(reply())) {
       corrections.push(payByCard
         ? `Mantén la misma fecha de entrega y agrega que la fecha queda reservada al recibir el pago, ya que las fechas se van ocupando por orden de pago.${usesDeposit ? ' No menciones anticipo: con tarjeta se paga el total.' : ''}`
@@ -616,7 +653,7 @@ export async function planTurn(params: {
   }
 
   // Con tarjeta se paga el 100%: hablar de anticipo confunde a la clienta.
-  if (usesDeposit && parsed.handoff === 'card_payment' && /anticipo/i.test(reply())) {
+  if (usesDeposit && (parsed.handoff === 'card_payment' || cardChosen) && /anticipo/i.test(reply())) {
     corrections.push('La clienta paga con tarjeta: se cancela el 100% del valor total. No menciones la palabra anticipo; si hablas de la reserva de la fecha di "al recibir el pago".');
   }
 
@@ -695,6 +732,12 @@ export async function planTurn(params: {
     if (repeatsSummary()) {
       console.warn('📋 La IA insistió en repetir el resumen: se quitan esas líneas');
       parsed.reply = stripSummary(reply());
+    }
+    if (dateAlreadyGiven && reply().includes(formatDate(expectedDelivery))) {
+      console.warn('📅 La IA insistió en repetir la fecha de entrega: se quitan esas líneas');
+      parsed.reply = reply().split('\n')
+        .filter(line => !line.includes(formatDate(expectedDelivery)) && !/reservad|se reserva|orden de pago/i.test(line))
+        .join('\n').replace(/\n{3,}/g, '\n\n').trim();
     }
   }
 
@@ -782,7 +825,7 @@ Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."
           name: match.name,
           price: match.price,
           quantity: Number.isFinite(quantity) && quantity > 0 ? Math.ceil(quantity) : 1,
-          personalization: String(item.personalization || '').trim()
+          personalization: cleanPersonalization(item.personalization)
         };
       })
       .filter(Boolean) as OrderItem[];

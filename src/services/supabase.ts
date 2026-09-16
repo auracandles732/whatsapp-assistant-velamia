@@ -572,6 +572,21 @@ export async function hasRecentNotification(conversationId: string, eventType: s
   return (data || []).length > 0;
 }
 
+/** Textos de los avisos recientes de un tipo en un chat (por ejemplo las preguntas ya enviadas a la dueña). */
+export async function getRecentNotificationMessages(conversationId: string, eventType: string, hours: number = 24): Promise<string[]> {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('message')
+    .eq('conversation_id', conversationId)
+    .eq('event_type', eventType)
+    .gte('created_at', since)
+    .order('created_at', { ascending: true });
+
+  if (error) throw new Error(`Error consultando avisos: ${error.message}`);
+  return (data || []).map(n => String(n.message || '')).filter(Boolean);
+}
+
 export async function logNotification(conversationId: string, eventType: string, message: string) {
   const now = new Date().toISOString();
   const { error } = await supabase

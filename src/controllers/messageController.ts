@@ -21,7 +21,8 @@ import {
   updateQuotationStatus,
   productNameFromCaption,
   recordFollowUp,
-  hasRecentNotification
+  hasRecentNotification,
+  getRecentNotificationMessages
 } from '../db';
 import { FOLLOW_UP_MARKER } from '../services/followups';
 import {
@@ -110,7 +111,41 @@ export const likedSinglePhotoQuestions = () => {
   return withEmojis([`¿Te gusta este ${model}?`, '¿Qué te parece?', '¿Te gustó?']);
 };
 
+// Palabras que no dicen de qué trata una pregunta (se comparan por sus 4 primeras letras).
+const QUESTION_FILLER = new Set(['para', 'como', 'cual', 'este', 'esta', 'esto', 'esos', 'esas', 'dond', 'cuan', 'conf', 'veri', 'sobr', 'preg', 'clie', 'mode', 'prod', 'dese', 'quie', 'sabe', 'tien', 'pued', 'vien', 'hay', 'disp']);
+
+const questionStems = (text: string, exclude: Set<string>) => new Set(
+  text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().split(/[^a-zñ]+/)
+    .filter(word => word.length >= 4)
+    .map(word => word.slice(0, 4))
+    .filter(stem => !QUESTION_FILLER.has(stem) && !exclude.has(stem))
+);
+
+/** Compara por tema: se ignoran los nombres de productos, que harían parecer iguales dos preguntas distintas sobre el mismo modelo. */
+export function isRepeatedQuestion(question: string, previous: string[], catalog: { name: string }[] = []): boolean {
+  const productWords = questionStems(catalog.map(c => c.name).join(' '), new Set());
+  const current = questionStems(question, productWords);
+  if (current.size === 0) return previous.length > 0;
+  return previous.some(prev => {
+    const before = questionStems(prev, productWords);
+    if (before.size === 0) return false;
+    const shared = [...current].filter(stem => before.has(stem)).length;
+    // Casi todo lo que pregunta ahora ya estaba en una pregunta anterior; un tema nuevo ("presentación") sí se avisa.
+    return shared / current.size >= 0.75;
+  });
+}
+
 const pick = (options: string[]) => options[Math.floor(Math.random() * options.length)];
+
+/** Productos (sin envío ni fecha) guardados en un pedido o cotización anterior. */
+function savedItems(value: any): { name: string; personalization?: string }[] {
+  try {
+    const list = typeof value === 'string' ? JSON.parse(value || '[]') : (value || []);
+    return (Array.isArray(list) ? list : []).filter((i: any) => i && !i.type);
+  } catch {
+    return [];
+  }
+}
 
 /** Fecha de entrega guardada en un pedido o cotización anterior. */
 function deliveryDateFromProducts(value: any): string {
@@ -467,11 +502,13 @@ async function respondToBatch(batch: PendingBatch) {
       content: toAiText(msg)
     }));
 
-    const [catalog, customPrompt, sentProducts, bankDetails] = await Promise.all([
+    const [catalog, customPrompt, sentProducts, bankDetails, pendingOwnerQuestions, cardChosen] = await Promise.all([
       getAllProducts(),
       getConfig('system_prompt'),
       getSentProductNames(conversationId),
-      getConfig('payment_transfer_info')
+      getConfig('payment_transfer_info'),
+      getRecentNotificationMessages(conversationId, 'owner_question', 72),
+      hasRecentNotification(conversationId, 'card_payment', 24 * 30)
     ]);
 
     const aiContent = items.map(i => i.aiContent).join('\n');
@@ -491,7 +528,7 @@ async function respondToBatch(batch: PendingBatch) {
     try {
       plan = await planTurn({
         history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts,
-        recentEmojis: recentBotEmojis(history)
+        recentEmojis: recentBotEmojis(history), pendingOwnerQuestions, cardChosen
       });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
@@ -527,8 +564,11 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     // Pregunta que el bot no pudo contestar: la dueña recibe el aviso y el bot sigue atendiendo.
-    if (plan.owner_question) {
+    // La misma pregunta ("¿tienen aroma?") no se avisa dos veces aunque la IA la vuelva a marcar.
+    if (plan.owner_question && !isRepeatedQuestion(plan.owner_question, pendingOwnerQuestions, catalog)) {
       await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'owner_question', detail: plan.owner_question });
+    } else if (plan.owner_question) {
+      console.log(`❓ Pregunta ya avisada a la dueña, no se repite: ${plan.owner_question}`);
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.
@@ -683,6 +723,14 @@ async function registerSale(
       || deliveryDateFromProducts(existingOrder?.products)
       || deliveryDateFromProducts(pendingQuotation?.products);
 
+    // La IA no repite en cada mensaje lo que la clienta pidió ("bicolor"): si esta vez no lo dice, se conserva lo guardado.
+    const saved = savedItems(existingOrder?.products ?? pendingQuotation?.products);
+    for (const item of items) {
+      if (item.personalization) continue;
+      const previous = saved.find(s => s.name === item.name && s.personalization);
+      if (previous) item.personalization = previous.personalization || '';
+    }
+
     const products: any[] = [
       ...items,
       ...(shipping ? [{ type: 'shipping', name: `Envío a ${shipping.place}`, price: shipping.cost, quantity: 1 }] : []),
@@ -697,23 +745,33 @@ async function registerSale(
       + ` · Total $${totalAmount.toFixed(2)}`;
 
     const owner = { conversationId: ctx.conversationId, customerPhone: ctx.phoneNumber, customerName: ctx.customerName };
-    const signature = (value: any) => {
+    const parse = (value: any): any[] => {
       try {
-        return JSON.stringify(typeof value === 'string' ? JSON.parse(value || '[]') : (value || []));
+        const list = typeof value === 'string' ? JSON.parse(value || '[]') : (value || []);
+        return Array.isArray(list) ? list : [];
       } catch {
-        return '';
+        return [];
       }
+    };
+    // Qué cambió respecto de lo guardado: modelos, cantidades, envío, fecha y total pesan más que la redacción
+    // de la personalización, que la IA reescribe con otras palabras en casi cada mensaje.
+    const worthNotifying = async (previousProducts: any, previousTotal: any, event: 'new_quotation' | 'order_updated') => {
+      const core = (list: any[]) => JSON.stringify(list.map(i => [i.type || '', i.name, i.quantity, i.price, i.date || '']));
+      const details = (list: any[]) => JSON.stringify(list.map(i => i.personalization || ''));
+      const before = parse(previousProducts);
+      if (core(before) !== core(products) || Number(previousTotal) !== totalAmount) return true;
+      if (details(before) === details(products)) return false;
+      // Solo cambió la personalización: como mucho un aviso cada 30 minutos por chat.
+      return !(await hasRecentNotification(ctx.conversationId, event, 0.5));
     };
 
     if (kind === 'quotation') {
       // El cliente vuelve a pedir el total con otra cantidad: se actualiza la misma cotización.
       if (pendingQuotation) {
-        const changed = signature(pendingQuotation.products) !== signature(products)
-          || Number(pendingQuotation.total_amount) !== totalAmount;
+        const notify = await worthNotifying(pendingQuotation.products, pendingQuotation.total_amount, 'new_quotation');
         await updateQuotationItems(pendingQuotation.id, products, totalAmount);
         console.log(`📋 Cotización ${pendingQuotation.id.substring(0, 8)} actualizada: $${totalAmount.toFixed(2)}`);
-        // Sin cambios no se avisa dos veces por lo mismo.
-        if (!changed) return;
+        if (!notify) return;
       } else {
         await createQuotation(ctx.conversationId, ctx.phoneNumber, products, totalAmount);
         console.log(`📋 Cotización registrada: $${totalAmount.toFixed(2)}`);
@@ -732,12 +790,11 @@ async function registerSale(
     // Un cliente suele confirmar varias veces o ajustar detalles después de confirmar:
     // se actualiza el pedido pendiente reciente en lugar de duplicarlo o de dejarlo desactualizado.
     if (existingOrder) {
-      const changed = signature(existingOrder.products) !== signature(products)
-        || Number(existingOrder.total_amount) !== totalAmount;
+      const notify = await worthNotifying(existingOrder.products, existingOrder.total_amount, 'order_updated');
       await updateOrderItems(existingOrder.id, products, totalAmount, deliveryDate, shipping?.place);
       console.log(`🛍️ Pedido ${existingOrder.id.substring(0, 8)} actualizado: $${totalAmount.toFixed(2)}`);
       // La personalización y los cambios de cantidad suelen llegar después de confirmar.
-      if (changed) await notifyOwner({ ...owner, event: 'order_updated', detail });
+      if (notify) await notifyOwner({ ...owner, event: 'order_updated', detail });
       return;
     }
 
