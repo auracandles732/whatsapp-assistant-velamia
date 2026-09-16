@@ -22,6 +22,10 @@ import {
   deleteConversationCompletely,
   getAllQuotations,
   updateQuotationStatus,
+  getAllOrders,
+  updateOrderStatus,
+  ORDER_STATUSES,
+  OrderStatus,
   parseDbTimestamp
 } from './db';
 import { removeFilesByPublicUrls } from './services/storage';
@@ -298,18 +302,56 @@ app.patch('/api/quotations/:id', requireCrmSession, requireUuidParam, async (req
   }
 });
 
+// ---------- Pedidos ----------
+
+app.get('/api/orders', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await getAllOrders());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// La dueña marca el avance del pedido; el bot lo usa para responder "¿cómo va mi pedido?".
+app.patch('/api/orders/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body || {};
+    if (!ORDER_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'Estado inválido' });
+    }
+    const updated = await updateOrderStatus(req.params.id, status as OrderStatus);
+    if (!updated) return res.status(404).json({ error: 'Pedido no encontrado' });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ---------- Mensajería manual ----------
+
+/** El número se toma del chat guardado, nunca del navegador: así un mensaje no puede ir a otra persona. */
+async function conversationForSending(req: Request, res: Response) {
+  const conversationId = String(req.body?.conversationId || '');
+  if (!UUID_PATTERN.test(conversationId)) {
+    res.status(400).json({ error: 'Conversación inválida' });
+    return null;
+  }
+  const conv = await getConversationById(conversationId);
+  if (!conv) res.status(404).json({ error: 'Conversación no encontrada' });
+  return conv;
+}
 
 app.post('/api/send-message', requireCrmSession, async (req: Request, res: Response) => {
   try {
-    const { conversationId, phoneNumber, text } = req.body || {};
-    if (!conversationId || !phoneNumber || !String(text || '').trim()) {
-      return res.status(400).json({ error: 'conversationId, phoneNumber y text son requeridos' });
-    }
-    const sent = await sendTextMessage(phoneNumber, text);
-    await saveMessage(conversationId, 'bot', 'text', text, getSentMessageId(sent));
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ error: 'Escribe un mensaje' });
+    if (text.length > 4096) return res.status(400).json({ error: 'WhatsApp no permite mensajes de más de 4096 caracteres' });
+    const conv = await conversationForSending(req, res);
+    if (!conv) return;
+    const sent = await sendTextMessage(conv.phone_number, text);
+    await saveMessage(conv.id, 'bot', 'text', text, getSentMessageId(sent));
     // Una persona tomó el chat: el bot se calla aquí hasta que lo reactiven desde el CRM.
-    await pauseBot(conversationId);
+    await pauseBot(conv.id);
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando mensaje manual:', error.response?.data || error.message);
@@ -319,13 +361,15 @@ app.post('/api/send-message', requireCrmSession, async (req: Request, res: Respo
 
 app.post('/api/send-image', requireCrmSession, async (req: Request, res: Response) => {
   try {
-    const { conversationId, phoneNumber, imageUrl, caption } = req.body || {};
-    if (!conversationId || !phoneNumber || !/^https:\/\//.test(String(imageUrl || ''))) {
-      return res.status(400).json({ error: 'conversationId, phoneNumber y una URL https de la imagen son requeridos' });
+    const { imageUrl, caption } = req.body || {};
+    if (!/^https:\/\/\S+$/.test(String(imageUrl || ''))) {
+      return res.status(400).json({ error: 'La foto debe ser un enlace que empiece con https://' });
     }
-    const sent = await sendImageMessage(phoneNumber, imageUrl, caption);
-    await saveMessage(conversationId, 'bot', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl, getSentMessageId(sent));
-    await pauseBot(conversationId);
+    const conv = await conversationForSending(req, res);
+    if (!conv) return;
+    const sent = await sendImageMessage(conv.phone_number, imageUrl, caption);
+    await saveMessage(conv.id, 'bot', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl, getSentMessageId(sent));
+    await pauseBot(conv.id);
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.response?.data || error.message);
@@ -453,6 +497,9 @@ app.post('/api/products', requireCrmSession, async (req: Request, res: Response)
     }
     const pkg = packagingName(packaging);
     if (pkg === null) return res.status(400).json({ error: 'Ese empaque no está en el perfil del negocio' });
+    if (image_url && !/^https:\/\/\S+$/.test(String(image_url))) {
+      return res.status(400).json({ error: 'La foto del producto debe ser un enlace https' });
+    }
 
     res.json(await createProduct(cleanProductName(name), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined, pkg));
   } catch (error: any) {
@@ -477,7 +524,12 @@ app.put('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Re
       if (!updates.name) return res.status(400).json({ error: 'El nombre no puede quedar vacío' });
     }
     if (category !== undefined) updates.category = String(category).trim().toUpperCase();
-    if (image_url !== undefined) updates.image_url = image_url;
+    if (image_url !== undefined) {
+      if (image_url && !/^https:\/\/\S+$/.test(String(image_url))) {
+        return res.status(400).json({ error: 'La foto del producto debe ser un enlace https' });
+      }
+      updates.image_url = image_url;
+    }
     if (price !== undefined) {
       const parsedPrice = Number(price);
       if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {

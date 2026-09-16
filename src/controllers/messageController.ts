@@ -122,7 +122,7 @@ const questionStems = (text: string, exclude: Set<string>) => new Set(
 );
 
 /** Compara por tema: se ignoran los nombres de productos, que harían parecer iguales dos preguntas distintas sobre el mismo modelo. */
-export function isRepeatedQuestion(question: string, previous: string[], catalog: { name: string }[] = []): boolean {
+export function isRepeatedQuestion(question: string, previous: string[], catalog: { name: string }[] = [], threshold = 0.75): boolean {
   const productWords = questionStems(catalog.map(c => c.name).join(' '), new Set());
   const current = questionStems(question, productWords);
   if (current.size === 0) return previous.length > 0;
@@ -131,20 +131,32 @@ export function isRepeatedQuestion(question: string, previous: string[], catalog
     if (before.size === 0) return false;
     const shared = [...current].filter(stem => before.has(stem)).length;
     // Casi todo lo que pregunta ahora ya estaba en una pregunta anterior; un tema nuevo ("presentación") sí se avisa.
-    return shared / current.size >= 0.75;
+    return shared / current.size >= threshold;
   });
 }
 
 const pick = (options: string[]) => options[Math.floor(Math.random() * options.length)];
 
-/** Productos (sin envío ni fecha) guardados en un pedido o cotización anterior. */
-function savedItems(value: any): { name: string; personalization?: string }[] {
+/** Lista de productos guardada en un pedido o cotización (columna JSONB, a veces leída como texto). */
+function savedProducts(value: any): any[] {
   try {
     const list = typeof value === 'string' ? JSON.parse(value || '[]') : (value || []);
-    return (Array.isArray(list) ? list : []).filter((i: any) => i && !i.type);
+    return Array.isArray(list) ? list.filter(Boolean) : [];
   } catch {
     return [];
   }
+}
+
+/** Productos (sin envío ni fecha) guardados en un pedido o cotización anterior. */
+function savedItems(value: any): OrderItem[] {
+  return savedProducts(value).filter((i: any) => !i.type);
+}
+
+/** Destino y costo del envío guardados ("Envío a Quito, Pichincha"). */
+function savedShipping(value: any): { place: string; cost: number } | null {
+  const line = savedProducts(value).find((i: any) => i.type === 'shipping');
+  if (!line) return null;
+  return { place: String(line.name || '').replace(/^Envío a\s*/i, '').trim(), cost: Number(line.price) || 0 };
 }
 
 /** Fecha de entrega guardada en un pedido o cotización anterior. */
@@ -502,13 +514,16 @@ async function respondToBatch(batch: PendingBatch) {
       content: toAiText(msg)
     }));
 
-    const [catalog, customPrompt, sentProducts, bankDetails, pendingOwnerQuestions, cardChosen] = await Promise.all([
+    const [catalog, customPrompt, sentProducts, bankDetails, pendingOwnerQuestions, cardChosen, pendingCustomDesigns, orders] = await Promise.all([
       getAllProducts(),
       getConfig('system_prompt'),
       getSentProductNames(conversationId),
       getConfig('payment_transfer_info'),
       getRecentNotificationMessages(conversationId, 'owner_question', 72),
-      hasRecentNotification(conversationId, 'card_payment', 24 * 30)
+      // Solo la elección reciente: un pago con tarjeta de hace semanas no aplica a un pedido nuevo.
+      hasRecentNotification(conversationId, 'card_payment', 72),
+      getRecentNotificationMessages(conversationId, 'custom_design_request', 24 * 30),
+      getOrdersByConversation(conversationId)
     ]);
 
     const aiContent = items.map(i => i.aiContent).join('\n');
@@ -528,7 +543,8 @@ async function respondToBatch(batch: PendingBatch) {
     try {
       plan = await planTurn({
         history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts,
-        recentEmojis: recentBotEmojis(history), pendingOwnerQuestions, cardChosen
+        recentEmojis: recentBotEmojis(history), pendingOwnerQuestions, cardChosen, pendingCustomDesigns,
+        lastOrder: describeOrder(orders[0])
       });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
@@ -541,10 +557,18 @@ async function respondToBatch(batch: PendingBatch) {
     }
     console.log(`🎯 ${items.length} mensaje(s) | intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff} | datos bancarios: ${plan.send_bank_details}`);
 
+    // Ya eligió tarjeta y se avisó: un "gracias" posterior no debe volver a pausar el bot ni repetir el aviso.
+    if (plan.handoff === 'card_payment' && cardChosen && !/tarjeta|link|enlace|visa|mastercard/i.test(aiContent)) {
+      console.log('💳 Pago con tarjeta ya avisado en este chat: no se repite el aviso ni la pausa');
+      plan = { ...plan, handoff: 'none' };
+    }
+
     // Respuesta vacía y nada más que enviar: la clienta quedaría sin contestar.
     if (!plan.reply && plan.handoff === 'none' && plan.show_products.length === 0) {
       console.error('❌ La IA devolvió una respuesta vacía');
-      await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
+      if (!(await hasRecentNotification(conversationId, 'bot_error', 1))) {
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
+      }
       return;
     }
 
@@ -571,16 +595,25 @@ async function respondToBatch(batch: PendingBatch) {
       console.log(`❓ Pregunta ya avisada a la dueña, no se repite: ${plan.owner_question}`);
     }
 
-    // Diseño fuera del catálogo: se avisa UNA sola vez y solo cuando el resumen ya trae los datos clave
-    // (diseño + colores + empaque + cantidad, separados por "·"). Al enviar el aviso, el bot se pausa
-    // para que la dueña conteste con el precio; el cliente nunca se entera.
+    // "¿Cómo va mi pedido?" sin un pedido pagado registrado: la dueña se entera aunque la IA no lo marque.
+    const lastOrderStatus = orders[0]?.status;
+    if (plan.intent === 'delivery_status' && !plan.owner_question && (!lastOrderStatus || lastOrderStatus === 'pending')) {
+      const question = 'La clienta pregunta por el estado de su pedido';
+      if (!isRepeatedQuestion(question, pendingOwnerQuestions, catalog)) {
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'owner_question', detail: question });
+      }
+    }
+
+    // Diseño fuera del catálogo: se avisa cuando el resumen ya trae la cantidad (el último dato que se pide).
+    // Al avisar, el bot se pausa para que la dueña conteste con el precio; el cliente nunca se entera.
+    // El mismo diseño no se vuelve a avisar, pero uno distinto en otra ocasión sí.
     if (plan.custom_design_summary) {
-      const alreadyNotified = await hasRecentNotification(conversationId, 'custom_design_request', 24 * 30);
-      // Señal de "resumen completo": la clienta ya dijo la cantidad (número + unidad de venta).
-      const unitWords = [profile().sales.unitSingular, profile().sales.unitPlural].filter(Boolean).map(w => w.toLowerCase()).join('|');
-      const hasQuantity = new RegExp(`\\d+\\s*(${unitWords})`, 'i').test(plan.custom_design_summary);
+      // Umbral más bajo: la IA vuelve a redactar el mismo diseño con otras palabras en cada mensaje.
+      const alreadyNotified = isRepeatedQuestion(plan.custom_design_summary, pendingCustomDesigns, catalog, 0.6);
+      const hasQuantity = quantityPattern().test(plan.custom_design_summary);
       // Si la clienta envió una foto en el chat, se anota en el aviso para que la dueña abra el chat y la vea.
-      const clientSentPhoto = history.some((m: any) => m.sender === 'customer' && m.type === 'image');
+      const clientSentPhoto = history.some((m: any) => m.sender === 'customer' && m.type === 'image')
+        || items.some(i => i.messageType === 'image');
       const summaryConFoto = clientSentPhoto && !/foto|imagen|referencia/i.test(plan.custom_design_summary)
         ? `${plan.custom_design_summary} · con foto de referencia`
         : plan.custom_design_summary;
@@ -588,11 +621,11 @@ async function respondToBatch(batch: PendingBatch) {
         await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: summaryConFoto });
         await pauseBot(conversationId);
         console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${summaryConFoto}`);
-      } else if (!alreadyNotified) {
-        console.log(`🎨 Diseño fuera del catálogo detectado, aún faltan datos (falta la cantidad): ${plan.custom_design_summary}`);
-      } else {
-        console.log(`🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`);
+        return;
       }
+      console.log(alreadyNotified
+        ? `🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`
+        : `🎨 Diseño fuera del catálogo detectado, aún falta la cantidad: ${plan.custom_design_summary}`);
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.
@@ -638,9 +671,9 @@ async function respondToBatch(batch: PendingBatch) {
     // el bot se pausa y el pedido igual debe quedar anotado.
     if (saleIntent === 'quotation' || saleIntent === 'order') {
       const transcript = [
-        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : 'VELAMIA'}: ${t.content}`),
+        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : profile().business.name}: ${t.content}`),
         `Cliente: ${aiContent}`,
-        `VELAMIA: ${plan.reply}`
+        `${profile().business.name}: ${plan.reply}`
       ].join('\n');
 
       await registerSale(saleIntent, {
@@ -668,10 +701,6 @@ async function respondToBatch(batch: PendingBatch) {
       const photos = continuesPending ? pendingProducts : plan.show_products;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'));
-    }
-
-    if (plan.intent === 'delivery_status') {
-      await handleDeliveryStatusIntent(conversationId, phoneNumber);
     }
   } catch (error) {
     console.error('❌ Error respondiendo mensaje:', error);
@@ -726,29 +755,39 @@ async function registerSale(
   }
 ) {
   try {
+    const pendingQuotation = await getRecentPendingQuotation(ctx.conversationId);
+    const existingOrder = await getRecentPendingOrder(ctx.conversationId);
+    // Con un pedido en curso, lo que venga después (personalización, cambio de cantidad) actualiza ese pedido
+    // en lugar de abrir otra cotización: si no, la dueña vería el pedido sin los detalles finales.
+    if (kind === 'quotation' && existingOrder) kind = 'order';
+    const previous = existingOrder?.products ?? pendingQuotation?.products;
+
     // Los mismos modelos y docenas con que se calculó el valor que recibió la clienta, para que el CRM cuadre.
-    // Solo si la IA no los identificó en el turno se leen de nuevo de la conversación.
+    // Si en este turno la IA no los repitió, se usan los ya guardados ("confirmo" confirma lo cotizado);
+    // solo sin nada guardado se leen de nuevo de la conversación.
     const items: OrderItem[] = ctx.planItems.length > 0
       ? ctx.planItems.map(i => ({
         name: i.name, price: i.price, quantity: i.quantity, personalization: i.personalization,
         packaging: i.packaging, packagingChanged: i.packagingChanged
       }))
-      : await extractOrderItems(ctx.transcript, ctx.catalog);
+      : savedItems(previous).length > 0
+        ? savedItems(previous)
+        : await extractOrderItems(ctx.transcript, ctx.catalog);
     if (items.length === 0) {
       console.log(`📋 ${kind} sin productos claros del catálogo; no se registra`);
       return;
     }
 
     // La clienta ve un solo valor; en el CRM el envío queda como línea aparte para la dueña.
+    // Si en este turno no se repitió la ciudad, se conserva el envío ya guardado: el total nunca pierde el envío.
     const units = items.reduce((sum, i) => sum + i.quantity, 0);
-    const shipping = ctx.shippingPlace ? shippingCost(ctx.shippingPlace, units) : null;
+    const previousShipping = savedShipping(previous);
+    const shippingPlace = ctx.shippingPlace || previousShipping?.place || '';
+    const recalculated = shippingPlace ? shippingCost(shippingPlace, units) : null;
+    const shipping = recalculated
+      ? { place: [recalculated.place, recalculated.province].filter((v, i, all) => v && all.indexOf(v) === i).join(', '), cost: recalculated.cost }
+      : previousShipping && !ctx.shippingPlace ? previousShipping : null;
     const totalAmount = Math.round((items.reduce((sum, i) => sum + i.price * i.quantity, 0) + (shipping?.cost || 0)) * 100) / 100;
-
-    const pendingQuotation = await getRecentPendingQuotation(ctx.conversationId);
-    const existingOrder = await getRecentPendingOrder(ctx.conversationId);
-    // Con un pedido en curso, lo que venga después (personalización, cambio de cantidad) actualiza ese pedido
-    // en lugar de abrir otra cotización: si no, la dueña vería el pedido sin los detalles finales.
-    if (kind === 'quotation' && existingOrder) kind = 'order';
     // Si en este turno no se mencionó la fecha, se conserva la que ya tenía el pedido o la cotización.
     const deliveryDate = ctx.deliveryDate
       || deliveryDateFromProducts(existingOrder?.products)
@@ -838,23 +877,28 @@ async function registerSale(
   }
 }
 
-async function handleDeliveryStatusIntent(conversationId: string, phoneNumber: string) {
-  try {
-    const orders = await getOrdersByConversation(conversationId);
-    if (orders.length === 0) return;
+export const ORDER_STATUS_LABELS: Record<string, string> = {
+  pending: 'pendiente de pago',
+  confirmed: 'pago recibido, en preparación',
+  shipped: 'enviado, en camino',
+  delivered: 'entregado',
+  cancelled: 'cancelado'
+};
 
-    const lastOrder = orders[0];
-    const statusMap: { [key: string]: string } = {
-      pending: '⏳ Pendiente',
-      confirmed: '✅ Confirmado',
-      shipped: '📦 En camino',
-      delivered: '🎉 Entregado',
-      cancelled: '❌ Cancelado'
-    };
+/** Resumen del pedido para la IA: código, estado (lo marca la dueña en el CRM), total, entrega y destino. */
+export function describeOrder(order: any): string {
+  if (!order) return '';
+  const delivery = order.delivery_date ? ` · entrega ${formatDate(String(order.delivery_date).slice(0, 10))}` : '';
+  const place = order.customer_address ? ` · envío a ${order.customer_address}` : '';
+  return `código ${String(order.id).substring(0, 8).toUpperCase()} · estado: ${ORDER_STATUS_LABELS[order.status] || order.status}`
+    + ` · total $${Number(order.total_amount || 0).toFixed(2)}${delivery}${place}`;
+}
 
-    const statusMessage = `📦 *Estado de tu pedido*\n\nCódigo: ${lastOrder.id.substring(0, 8).toUpperCase()}\nEstado: ${statusMap[lastOrder.status] || lastOrder.status}`;
-    await sendAndSaveText(conversationId, phoneNumber, statusMessage);
-  } catch (error) {
-    console.error('❌ Error en handleDeliveryStatusIntent:', error);
-  }
+/** "3 docenas", "36 velas", "2 doc.": la clienta ya dijo cuántas quiere. */
+function quantityPattern(): RegExp {
+  const s = profile().sales;
+  const words = [s.unitSingular, s.unitPlural, s.goodsWord, s.unitSingular.slice(0, 3), 'unidad', 'unidades']
+    .filter(Boolean)
+    .map(w => w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`\\d+\\s*(${[...new Set(words)].join('|')})`, 'i');
 }

@@ -354,6 +354,32 @@ export async function createOrder(
   return data;
 }
 
+export const ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] as const;
+export type OrderStatus = typeof ORDER_STATUSES[number];
+
+/** Todos los pedidos con el nombre del cliente, del más reciente al más antiguo. */
+export async function getAllOrders() {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, conversations(customer_name, phone_number)')
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo pedidos: ${error.message}`);
+  return data || [];
+}
+
+export async function updateOrderStatus(orderId: string, status: OrderStatus) {
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ status })
+    .eq('id', orderId)
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(`Error actualizando pedido: ${error.message}`);
+  return data;
+}
+
 export async function getOrdersByConversation(conversationId: string) {
   const { data, error } = await supabase
     .from('orders')

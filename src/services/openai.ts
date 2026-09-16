@@ -6,7 +6,8 @@ import { BusinessProfile, profile, todayLocal, formatDate, findPackaging } from 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   timeout: 60_000,
-  maxRetries: 2
+  // Con muchas clientas a la vez OpenAI responde "límite por minuto" (429): el SDK espera y reintenta.
+  maxRetries: 4
 });
 
 const MODEL = 'gpt-5.4-mini';
@@ -227,7 +228,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     if (sh.mode === 'ecuador_table') add('- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.');
   }
   add(
-    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); anota lo que ya pidió aunque aún falten detalles (ejemplo: "bicolor" aunque no haya dicho los colores); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
+    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.unitDetail && /\d/.test(s.unitDetail) ? ` Si el cliente da la cantidad en piezas (1 ${unit} = ${s.unitDetail}), conviértela a ${units} (ejemplo: ${Number(s.unitDetail.match(/\d+/)![0]) * 4} ${s.unitDetail.replace(/\d+/g, '').trim()} = 4 ${units}) y en reply habla siempre en ${units}.` : ''}${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); anota lo que ya pidió aunque aún falten detalles (ejemplo: "bicolor" aunque no haya dicho los colores); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
     sh.mode === 'ecuador_table'
       ? '- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.'
       : sh.mode === 'flat'
@@ -299,6 +300,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     '- Deja order_items VACÍO mientras sea un diseño fuera del catálogo (no está en el catálogo, no lo pongas).',
     `- Cuando ya tengas al menos la descripción del diseño${s.personalization ? ', los colores' : ''}${packagingOn ? ', el empaque' : ''} y la cantidad, llena custom_design_summary con una sola línea que junte TODO lo que dijo (ejemplo: "${label} temático${s.personalization ? ' · colores' : ''}${packagingOn && p.packaging.types[0] ? ` · empaque ${p.packaging.types[0].name}` : ''} · nombre · 2 ${units}${hasShipping ? ' · ciudad' : ''}${d.enabled ? ` · ${d.eventLabel} DD/MM/YYYY` : ''}"). Antes de tener esos datos, custom_design_summary va vacío.`,
     '- Después de llenar custom_design_summary responde algo cálido y natural (por ejemplo: "Qué idea tan linda 🥰 En un momento te preparo la propuesta"), sin decir que consultas ni prometer una hora.',
+    '- Si el diseño ya está en DISEÑOS FUERA DEL CATÁLOGO YA ENVIADOS A LA DUEÑA, no vuelvas a preguntar sus datos: atiende lo que el cliente dice ahora. Si en la conversación ya se le dio un precio para ese diseño, puedes usar ese mismo precio y seguir con la forma de pago con normalidad.',
     '- En el resto de casos custom_design_requested = false y custom_design_summary = "".',
     ''
   );
@@ -358,7 +360,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     'INTENCIÓN (campo intent):',
     '- quotation: SOLO cuando el cliente pide explícitamente una cotización o el valor total de su pedido ("me cotizas", "cuánto sería en total", "cuánto me sale todo", "pásame la cotización"). Dar cantidad, fecha o colores, o preguntar el precio de un modelo, NO es quotation aunque tú menciones un total.',
     `- order: el cliente CONFIRMA explícitamente la compra con ${model} y cantidad ya definidos ("confirmo", "sí, hagamos el pedido", "lo quiero reservar"). Decir que un ${model} le gusta, dar ${model}, cantidad${s.personalization ? ', colores' : ''}${d.enabled ? ', fecha' : ''}${hasShipping ? ' o ciudad' : ''} (aunque diga "quiero 4 ${units}") o preguntar precios NO es order: usa product_inquiry u other. Elegir la forma de pago después de conocer el total sí confirma la compra.`,
-    '- delivery_status: pregunta por el estado de un pedido ya hecho.',
+    '- delivery_status: pregunta por el estado de un pedido ya hecho. Responde con ÚLTIMO PEDIDO DE ESTE CLIENTE (estado y fecha de entrega) sin inventar nada más. Si no tiene pedidos registrados o el estado es "pendiente de pago", dile que lo revisas y le confirmas pronto, y escribe en owner_question "Estado del pedido".',
     '- product_inquiry, greeting u other en los demás casos.'
   );
 
@@ -492,7 +494,6 @@ const GENERIC_PERSONALIZATION = /(se pued|puede[ns]? (adaptar|personalizar|cambi
 const FILLER = /\b(personalizaci[oó]n|pendientes?|(a|por|sin) (confirmar|definir|elegir)|no (confirmad|definid|elegid)[oa]s?)\b/gi;
 const GENERIC_WORD = /^(los |las |sus |tus |el |la )?(detalles|colores?|nombres?|frases?|personalizaci[oó]n|dise[ñn]os?|aroma|empaque)$/i;
 
-/** La personalización solo guarda lo que pidió la clienta: se quitan las partes genéricas que escribe el bot. */
 // Palabras que no identifican un detalle concreto: no sirven para saber si la clienta lo pidió.
 const DETAIL_FILLER = new Set(['color', 'colores', 'nombre', 'nombres', 'frase', 'frases', 'aroma', 'empaque', 'detalle', 'detalles', 'personalizacion', 'tono', 'tonos', 'para', 'como', 'vela', 'velas']);
 const normalizeWords = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -512,12 +513,46 @@ export function keepCustomerDetails(personalization: string, customerText: strin
     .join(', ');
 }
 
+/** La personalización solo guarda lo que pidió la clienta: se quitan las partes genéricas que escribe el bot. */
 export function cleanPersonalization(value: unknown): string {
   return String(value ?? '')
     .split(/,|;|\s+y\s+/)
     .map(part => part.replace(FILLER, '').replace(/\s+/g, ' ').replace(/^[\s:-]+|[\s:-]+$/g, '').trim())
     .filter(part => part && !GENERIC_PERSONALIZATION.test(part) && !GENERIC_WORD.test(part))
     .join(', ');
+}
+
+/** Piezas por unidad de venta según el perfil ("12 unidades" → 12); 1 si no aplica. */
+function piecesPerUnit(p: BusinessProfile): number {
+  const match = p.sales.unitDetail.match(/\d+/);
+  const pieces = match ? Number(match[0]) : 1;
+  return pieces > 1 ? pieces : 1;
+}
+
+/**
+ * La clienta suele pedir en piezas ("48 unidades", "36 velas") y la IA a veces copia ese número como
+ * cantidad de docenas: 48 docenas multiplicaría el total por 12. Si la clienta dijo ese número en piezas
+ * (y nunca en docenas), se convierte a la unidad de venta redondeando hacia arriba (50 velas → 5 docenas).
+ */
+export function normalizeQuantities(rawItems: any, customerText: string, p: BusinessProfile = profile()): any {
+  const per = piecesPerUnit(p);
+  if (per === 1 || !Array.isArray(rawItems)) return rawItems;
+  const text = normalizeWords(customerText);
+  const clean = (w: string) => escapeRegex(normalizeWords(w.trim()));
+  const pieceWords = ['unidad', 'unidades', 'pieza', 'piezas', 'vela', 'velas', 'velita', 'velitas',
+    ...p.sales.unitDetail.replace(/\d+/g, ' ').split(/\s+/), p.sales.goodsWord]
+    .filter(w => w && w.length >= 3).map(clean);
+  const unitWords = [p.sales.unitSingular, p.sales.unitPlural].filter(Boolean).map(clean);
+  return rawItems.map((item: any) => {
+    const quantity = Number(item?.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 1) return item;
+    const saidPieces = new RegExp(`(^|\\D)${quantity}\\s*(${[...new Set(pieceWords)].join('|')})\\b`, 'i').test(text);
+    const saidUnits = new RegExp(`(^|\\D)${quantity}\\s*(${unitWords.join('|')})\\b`, 'i').test(text);
+    if (!saidPieces || saidUnits) return item;
+    const converted = Math.ceil(quantity / per);
+    console.warn(`📦 Cantidad corregida: la clienta pidió ${quantity} piezas = ${converted} ${p.sales.unitPlural}`);
+    return { ...item, quantity: converted };
+  });
 }
 
 /**
@@ -655,10 +690,14 @@ export async function planTurn(params: {
   pendingOwnerQuestions?: string[];
   /** La clienta ya eligió pagar con tarjeta: se paga el total, no hay anticipo. */
   cardChosen?: boolean;
+  /** Diseños fuera del catálogo que ya se le enviaron a la dueña en este chat. */
+  pendingCustomDesigns?: string[];
+  /** Resumen del último pedido del chat con su estado, para responder "¿cómo va mi pedido?". */
+  lastOrder?: string;
 }): Promise<TurnPlan> {
   const {
     history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [], recentEmojis = [],
-    pendingOwnerQuestions = [], cardChosen = false
+    pendingOwnerQuestions = [], cardChosen: cardChosenBefore = false, pendingCustomDesigns = [], lastOrder = ''
   } = params;
   const p = profile();
   const pay = p.payments;
@@ -671,6 +710,8 @@ export async function planTurn(params: {
   const onlyTransfer = pay.transferEnabled && !pay.cardEnabled;
   const choseTransfer = pay.transferEnabled
     && (BANK_CHOICE_PATTERN.test(customerWords) || (onlyTransfer && CONFIRM_PATTERN.test(customerWords)));
+  // Si antes eligió tarjeta pero ahora elige transferencia, vuelve a haber anticipo.
+  const cardChosen = cardChosenBefore && !choseTransfer;
   const patterns = summaryPatterns(p);
 
   const baseMessages = [
@@ -679,6 +720,8 @@ export async function planTurn(params: {
       content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p)
         + `\nPREGUNTAS YA ENVIADAS A LA DUEÑA: ${pendingOwnerQuestions.length ? pendingOwnerQuestions.join(' | ') : 'ninguna'}`
         + (cardChosen && usesDeposit ? '\nFORMA DE PAGO ELEGIDA: tarjeta. Se paga el 100% del total: no menciones anticipo; la fecha se reserva "al recibir el pago".' : '')
+        + `\nDISEÑOS FUERA DEL CATÁLOGO YA ENVIADOS A LA DUEÑA: ${pendingCustomDesigns.length ? pendingCustomDesigns.join(' | ') : 'ninguno'}`
+        + `\nÚLTIMO PEDIDO DE ESTE CLIENTE: ${lastOrder || 'no tiene pedidos registrados'}`
     },
     ...history,
     { role: 'user' as const, content: userMessage }
@@ -775,14 +818,24 @@ export async function planTurn(params: {
 
   const quotedTotal = Number(parsed.quoted_total) || 0;
   const quotedDeposit = usesDeposit ? Number(parsed.quoted_deposit) || 0 : 0;
-  const firstOrder = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog, p);
+  const customerText = [...history.filter(m => m.role === 'user').map(m => m.content), userMessage].join('\n');
+  const firstOrder = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p), parsed.shipping_place, catalog, p);
   // Montos que aparecen escritos en la respuesta ("$30", "$127.00", "$63,50").
   const amountsInReply = (reply().match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || [])
     .map(a => Number(a.replace(/[$\s]/g, '').replace(',', '.')));
   // Sin montos todavía, pero la reserva de la fecha sí se puede mencionar para crear urgencia.
   const noAmountsYet = `No escribas ningún monto (ni valor total${usesDeposit ? ' ni valor del anticipo' : ''}) todavía${p.dates.enabled ? `; sí puedes decir que la fecha se reserva con el ${usesDeposit ? 'anticipo' : 'pago'}` : ''}.`;
 
-  if (quotedTotal > 0 || quotedDeposit > 0) {
+  // Un monto que el negocio ya le dio en este chat (por ejemplo el precio de un diseño personalizado que escribió
+  // la dueña) se puede repetir, igual que su anticipo, aunque ese producto no esté en el catálogo.
+  const amountsSaidBefore = history
+    .filter(m => m.role === 'assistant')
+    .flatMap(m => (String(m.content || '').match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || []).map(a => Number(a.replace(/[$\s]/g, '').replace(',', '.'))));
+  const saidBefore = (value: number) => amountsSaidBefore.some(v =>
+    Math.abs(v - value) < 0.009 || (usesDeposit && Math.abs(round2(v * pay.depositPercent / 100) - value) < 0.009));
+  const repeatsKnownPrice = firstOrder.missing === 'items' && amountsInReply.length > 0 && amountsInReply.every(saidBefore);
+
+  if ((quotedTotal > 0 || quotedDeposit > 0) && !repeatsKnownPrice) {
     if (firstOrder.missing === 'items') {
       corrections.push(`${noAmountsYet} Aún no está claro qué ${p.sales.productLabelPlural.toLowerCase()} y cuántas ${p.sales.unitPlural} quiere; pregúntale.`);
     } else if (firstOrder.missing === 'place') {
@@ -836,7 +889,7 @@ export async function planTurn(params: {
     }
   }
 
-  const order = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog, p);
+  const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p), parsed.shipping_place, catalog, p);
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
   const byName = new Map(catalog.map(c => [productKey(c.name), c.name]));
@@ -861,7 +914,7 @@ export async function planTurn(params: {
     delivery_date: expectedDelivery,
     order_items: order.items.map(i => ({
       ...i,
-      personalization: keepCustomerDetails(i.personalization, [...history.filter(m => m.role === 'user').map(m => m.content), userMessage].join('\n'))
+      personalization: keepCustomerDetails(i.personalization, customerText)
     })),
     shipping_place: order.place,
     order_total: order.total,

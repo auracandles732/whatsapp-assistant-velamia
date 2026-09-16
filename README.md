@@ -72,9 +72,34 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
   Nunca "te lo dejo anotado". Si la IA repite un emoji de adorno de los últimos 4 mensajes, `varyEmojis` lo cambia.
 - **Datos bancarios:** solo cuando la clienta elige transferencia o pide la cuenta (`BANK_CHOICE_PATTERN`);
   si no eligió forma de pago, el bot pregunta "transferencia o tarjeta".
-- Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido, reclamo**.
-  Solo avisa (sin pausar) con: **cotización enviada, pedido nuevo, pedido actualizado, comprobante de pago,
-  entrega muy justa, pregunta sin respuesta** o si la IA falla.
+- Nunca dice que es un bot. Se pausa y avisa a la dueña en: **pago con tarjeta elegido, reclamo, diseño fuera
+  del catálogo**. Solo avisa (sin pausar) con: **cotización enviada, pedido nuevo, pedido actualizado, comprobante
+  de pago, entrega muy justa, pregunta sin respuesta** o si la IA falla. Un "gracias" después de elegir tarjeta
+  no vuelve a pausar ni a avisar.
+- **Cantidades en piezas:** si la clienta pide "48 unidades" o "36 velas", el sistema lo convierte a docenas
+  (redondeando hacia arriba) aunque la IA copie el número: el total nunca se multiplica por 12.
+- Si la IA falla por el límite de uso de OpenAI, el SDK reintenta hasta 4 veces antes de avisar a la dueña.
+
+## Aromas, empaques y diseños fuera del catálogo
+
+- **Aromas** (Dulce y Tropical, sin costo, todas las velas llevan aroma): están en las instrucciones del CRM.
+- **Empaques** (Perfil del negocio → Empaques): Acetato, Tul, Kraft y Caja lazo personalizable. Cada producto
+  tiene su empaque incluido en el precio (Catálogo → lista en cada tarjeta; se guarda en `products.description`).
+  Si la clienta pide otro empaque, el total suma el "costo del cambio" por docena; si ese costo está vacío, el bot
+  no da total y avisa a la dueña. Tul y Caja lazo son personalizables: el bot pregunta el color sin ofrecer lista.
+- **Diseño fuera del catálogo** (cualquier modelo que no esté en el catálogo, o si no le gusta ninguno): el bot no
+  acepta ni rechaza, no da precio y nunca dice que consulta. Pregunta de a un dato: diseño (y foto de referencia),
+  colores, empaque, nombre, cantidad, ciudad y fecha. Con la cantidad ya dicha avisa a la dueña
+  (`custom_design_request`, con "con foto de referencia" si la envió) y se pausa. El mismo diseño no se vuelve a
+  avisar; si la dueña ya dio el precio en el chat, el bot puede repetirlo (y su anticipo) al cerrar la venta.
+
+## Pedidos (pestaña del CRM)
+
+- Lista todos los pedidos con productos, personalización, empaque, envío y entrega.
+- La dueña marca el estado: **Pendiente de pago → Pagado · en preparación → Enviado → Entregado** (o Cancelado).
+- Cuando la clienta pregunta "¿cómo va mi pedido?", la IA responde con ese estado real. Si el pedido sigue
+  "pendiente de pago" o no hay pedido, dice que lo revisa y la dueña recibe `owner_question`.
+- Si la clienta confirma sin repetir modelos ni ciudad, el pedido toma lo ya cotizado: nunca pierde productos ni envío.
 
 ## Pagos
 

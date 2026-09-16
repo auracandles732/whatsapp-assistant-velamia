@@ -119,9 +119,16 @@
             background: var(--crema);
             border-bottom: 1px solid var(--rosa-palo-suave);
             flex-shrink: 0;
+            /* En el celular las pestañas se deslizan de lado en vez de ensanchar la página. */
+            overflow-x: auto;
+            scrollbar-width: none;
         }
 
+        .nav-tabs::-webkit-scrollbar { display: none; }
+
         .nav-tab {
+            flex-shrink: 0;
+            white-space: nowrap;
             padding: 9px 16px;
             font-size: 13px;
             font-weight: 600;
@@ -380,6 +387,7 @@
 
         /* Botón de estadísticas dentro de la fila de pestañas: no ocupa una franja propia. */
         .stats-toggle {
+            flex-shrink: 0;
             margin-left: auto;
             padding: 5px 12px;
             cursor: pointer;
@@ -614,6 +622,10 @@
         .quote-status.pending { background: #fbeed3; color: #8a6420; }
         .quote-status.accepted { background: #dcefe3; color: #2f5540; }
         .quote-status.expired { background: #ece6e3; color: #7b6d68; }
+        .quote-status.confirmed { background: #dde9f6; color: #2d4d6e; }
+        .quote-status.shipped { background: #e9e1f3; color: #4f3b6b; }
+        .quote-status.delivered { background: #dcefe3; color: #2f5540; }
+        .quote-status.cancelled { background: #f6dede; color: #7a3232; }
 
         .quote-actions select {
             padding: 5px 8px;
@@ -768,6 +780,19 @@
 
         .btn-bot-control {
             font-size: 12px;
+        }
+
+        .btn-back {
+            display: none;
+            margin-right: 6px;
+            padding: 4px 10px;
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 8px;
+            background: var(--beige-claro);
+            color: var(--texto);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
         }
 
         .btn-bot-control.active {
@@ -979,9 +1004,17 @@
         }
 
         @media (max-width: 700px) {
+            .header { padding: 8px 12px; }
+            .nav-tabs { padding: 0 8px; }
+            .nav-tab { padding: 9px 10px; }
             .profile-grid { grid-template-columns: 1fr; }
             .stats { grid-template-columns: repeat(2, 1fr); }
-            .conversations-list { width: 220px; }
+            /* En el celular se ve la lista o el chat abierto, cada uno a pantalla completa. */
+            .conversations-list { width: 100%; border-right: none; }
+            .content.chat-open .conversations-list { display: none; }
+            .content:not(.chat-open) .empty-state { display: none; }
+            .btn-back { display: inline-block; }
+            .chat-header { flex-wrap: wrap; padding: 6px 10px; }
             .header-brand img { height: 32px; }
             .catalog-form { grid-template-columns: 1fr; }
             .photo-upload { width: 70px; height: 70px; }
@@ -1443,6 +1476,10 @@
             const [statsExpanded, setStatsExpanded] = useState(false);
             const [quotations, setQuotations] = useState([]);
             const [quoteFilter, setQuoteFilter] = useState('all');
+            const [orders, setOrders] = useState([]);
+            const [orderFilter, setOrderFilter] = useState('all');
+            // Chat abierto en este momento: una respuesta lenta de otro chat no debe reemplazar sus mensajes.
+            const openChatId = useRef(null);
             const [deletingChat, setDeletingChat] = useState(false);
             const [sending, setSending] = useState(false);
             const [biz, setBiz] = useState(null);
@@ -1666,6 +1703,32 @@
                 }
             }
 
+            async function loadOrders() {
+                try {
+                    const data = await api('/api/orders');
+                    setOrders(Array.isArray(data) ? data : []);
+                } catch (err) {
+                    console.error('Error cargando pedidos:', err);
+                }
+            }
+
+            async function changeOrderStatus(id, status) {
+                try {
+                    await api(`/api/orders/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+                    await Promise.all([loadOrders(), loadStats()]);
+                } catch (err) {
+                    alert('Error cambiando estado del pedido: ' + err.message);
+                }
+            }
+
+            // Los pedidos se actualizan solos mientras la pestaña está abierta.
+            useEffect(() => {
+                if (activeTab !== 'pedidos') return;
+                loadOrders();
+                const interval = setInterval(loadOrders, 5000);
+                return () => clearInterval(interval);
+            }, [activeTab]);
+
             async function changeQuotationStatus(id, status) {
                 try {
                     await api(`/api/quotations/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
@@ -1731,6 +1794,7 @@
                 // Al abrir otro chat no se muestran por un instante los mensajes del anterior.
                 stickToBottom.current = true;
                 setMessages([]);
+                openChatId.current = selectedConv ? selectedConv.id : null;
                 if (selectedConv) {
                     loadMessages(selectedConv.id);
                     const interval = setInterval(() => loadMessages(selectedConv.id), 3000);
@@ -1752,6 +1816,7 @@
             async function loadMessages(convId) {
                 try {
                     const data = await api(`/api/conversations/${convId}/messages`);
+                    if (openChatId.current !== convId) return;
                     setMessages(Array.isArray(data) ? data : []);
                 } catch (err) {
                     console.error('Error cargando mensajes:', err);
@@ -1825,6 +1890,7 @@
                         <div className="nav-tabs">
                             <div className={`nav-tab ${activeTab === 'conversaciones' ? 'active' : ''}`} onClick={() => setActiveTab('conversaciones')}>💬 Conversaciones</div>
                             <div className={`nav-tab ${activeTab === 'cotizaciones' ? 'active' : ''}`} onClick={() => setActiveTab('cotizaciones')}>🧾 Cotizaciones</div>
+                            <div className={`nav-tab ${activeTab === 'pedidos' ? 'active' : ''}`} onClick={() => setActiveTab('pedidos')}>🛍️ Pedidos</div>
                             <div className={`nav-tab ${activeTab === 'catalogo' ? 'active' : ''}`} onClick={() => setActiveTab('catalogo')}>{productEmoji} Catálogo</div>
                             <div className={`nav-tab ${activeTab === 'configuracion' ? 'active' : ''}`} onClick={() => setActiveTab('configuracion')}>⚙️ Configuración</div>
                             <div className={`stats-toggle ${statsExpanded ? 'open' : ''}`} onClick={() => setStatsExpanded(!statsExpanded)}>
@@ -1847,14 +1913,14 @@
                                     <div className="number">{stats.orders}</div>
                                 </div>
                                 <div className="stat-card">
-                                    <h4>Ventas en pedidos</h4>
+                                    <h4>Ventas en pedidos (sin cancelados)</h4>
                                     <div className="number">${stats.revenue.toFixed(2)}</div>
                                 </div>
                             </div>
                             )}
 
                         {activeTab === 'conversaciones' && (
-                        <div className="content">
+                        <div className={`content ${selectedConv ? 'chat-open' : ''}`}>
                             <div className="conversations-list">
                                 <div className="conversations-list-header">Conversaciones</div>
                                 {conversations.map(conv => (
@@ -1873,6 +1939,7 @@
                             {selectedConv ? (
                                 <div className="chat-area">
                                     <div className={`chat-header ${botPausedInChat ? 'paused' : ''}`}>
+                                        <button className="btn-back" onClick={() => setSelectedConv(null)}>← Chats</button>
                                         <span className="chat-name">
                                             {botPausedInChat
                                                 ? `⏸️ Bot pausado: atiendes tú a ${currentConv.customer_name || currentConv.phone_number}`
@@ -2056,6 +2123,62 @@
                                                     <option value="expired">Vencida</option>
                                                 </select>
                                                 <button className="btn-photo" onClick={() => openChatFromQuotation(q.conversation_id)}>💬 Ver chat</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            );
+                        })()}
+                        {activeTab === 'pedidos' && (() => {
+                            const orderLabels = { pending: 'Pendiente de pago', confirmed: 'Pagado · en preparación', shipped: 'Enviado', delivered: 'Entregado', cancelled: 'Cancelado' };
+                            const visible = orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter);
+                            const total = visible.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+                            return (
+                            <div className="quotes-container">
+                                <div className="quotes-toolbar">
+                                    <select value={orderFilter} onChange={e => setOrderFilter(e.target.value)}>
+                                        <option value="all">Todos</option>
+                                        {Object.entries(orderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                    </select>
+                                    <span>{visible.length} pedido(s) · ${total.toFixed(2)}</span>
+                                </div>
+                                <p className="hint" style={{ margin: '0 0 12px', fontSize: '12px', color: 'var(--texto-suave)' }}>Marca el avance de cada pedido: el asistente usa este estado cuando la clienta pregunta cómo va su pedido.</p>
+                                {visible.length === 0 ? (
+                                    <div className="empty-catalog"><p>Aún no hay pedidos. Se registran solos cuando una clienta confirma su compra o elige cómo pagar 🛍️</p></div>
+                                ) : visible.map(o => {
+                                    let items = [];
+                                    try { items = typeof o.products === 'string' ? JSON.parse(o.products) : (o.products || []); } catch { items = []; }
+                                    const customer = o.customer_name || o.conversations?.customer_name || o.conversations?.phone_number || o.customer_phone;
+                                    return (
+                                        <div key={o.id} className="quote-card">
+                                            <div className="quote-head">
+                                                <div>
+                                                    <div className="quote-customer">📱 {customer}</div>
+                                                    <div className="quote-meta">
+                                                        {formatDateTime(o.created_at)} · Código {o.id.substring(0, 8).toUpperCase()}
+                                                        {o.delivery_date ? ` · Entrega ${String(o.delivery_date).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                                                    </div>
+                                                </div>
+                                                <div className="quote-total">${Number(o.total_amount || 0).toFixed(2)}</div>
+                                            </div>
+                                            <ul className="quote-items">
+                                                {items.map((item, i) => item.type === 'delivery' ? null : item.type === 'shipping' ? (
+                                                    <li key={i}>🚚 {item.name} — ${Number(item.price).toFixed(2)}</li>
+                                                ) : (
+                                                    <li key={i}>
+                                                        {item.quantity} {Number(item.quantity) === 1 ? unit : unitPlural} × {item.name} — ${(Number(item.price) * Number(item.quantity)).toFixed(2)}
+                                                        {item.personalization ? <><br /><small>🎨 {item.personalization}</small></> : null}
+                                                        {item.packaging ? <><br /><small>🎁 Empaque {item.packaging}{item.packagingChanged ? ' (cambiado por la clienta)' : ''}</small></> : null}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            <div className="quote-actions">
+                                                <span className={`quote-status ${o.status}`}>{orderLabels[o.status] || o.status}</span>
+                                                <select value={o.status} onChange={e => changeOrderStatus(o.id, e.target.value)}>
+                                                    {Object.entries(orderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                                </select>
+                                                <button className="btn-photo" onClick={() => openChatFromQuotation(o.conversation_id)}>💬 Ver chat</button>
                                             </div>
                                         </div>
                                     );
