@@ -158,9 +158,9 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     enabled: true,
     types: [
       { name: 'Acetato', description: 'transparente, elegante y permite ver la vela', changeCost: null },
-      { name: 'Tul', description: 'delicado, ligero y decorativo', changeCost: null },
+      { name: 'Tul', description: 'delicado, ligero y decorativo, va con lazo; se personaliza el color del tul y del lazo', changeCost: null },
       { name: 'Kraft', description: 'natural, minimalista y brinda mayor protección', changeCost: null },
-      { name: 'Caja lazo personalizable', description: 'caja con lazo donde se personaliza el color del lazo y la portada frontal y trasera; es el único empaque personalizable', changeCost: null }
+      { name: 'Caja lazo personalizable', description: 'caja con lazo; se personaliza el color del lazo y la portada frontal y trasera', changeCost: null }
     ]
   }
 };

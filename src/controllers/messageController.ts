@@ -582,6 +582,8 @@ async function respondToBatch(batch: PendingBatch) {
 
     // Un pedido falso le avisaría a la dueña sin motivo y frenaría los seguimientos de la clienta.
     let saleIntent = plan.intent;
+    // Elegir la forma de pago con un total ya calculado es confirmar la compra, aunque la IA marque otra intención.
+    if (plan.order_total > 0 && (plan.send_bank_details || plan.handoff === 'card_payment')) saleIntent = 'order';
     const asksPrice = QUOTE_REQUEST_PATTERN.test(aiContent);
     const confirms = STRONG_CONFIRMATION.test(aiContent) || (WEAK_CONFIRMATION.test(aiContent) && !asksPrice);
     if (saleIntent === 'order' && !plan.send_bank_details && plan.handoff === 'none' && !confirms) {

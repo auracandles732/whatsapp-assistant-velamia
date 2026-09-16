@@ -227,7 +227,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     if (sh.mode === 'ecuador_table') add('- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.');
   }
   add(
-    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
+    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); anota lo que ya pidió aunque aún falten detalles (ejemplo: "bicolor" aunque no haya dicho los colores); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
     sh.mode === 'ecuador_table'
       ? '- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.'
       : sh.mode === 'flat'
@@ -273,6 +273,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       `- Si preguntan por la presentación o el empaque, dile el empaque del ${model} que le interesa y descríbelo en una frase. Si ese ${model} no tiene empaque en el catálogo, dile que lo verificas y escríbelo en owner_question.`,
       `- El cliente puede cambiar a otro empaque. Costo del cambio por ${unit}: ${p.packaging.types.map(t => `${t.name} (${cost(t.changeCost)})`).join(', ')}. No menciones estos costos si no pregunta por cambiar el empaque.`,
       `- Personalizar la vela (colores, nombres, frases) no es lo mismo que personalizar el empaque. Un empaque solo se personaliza si su descripción lo dice; si preguntan por personalizar otro empaque, aclara que ese empaque no se personaliza (la vela sí) y menciona el que sí se puede.`,
+      '- Si el cliente elige o pregunta por un empaque personalizable, pregúntale qué color le gustaría para cada parte que se personaliza. No ofrezcas una lista de colores: hay mucha variedad, así que deja que el cliente lo diga. Guarda los colores del empaque en personalization (ejemplo: "tul rosado con lazo blanco").',
       '- Si pide un cambio con "costo por confirmar", dile que lo verificas y le confirmas el valor (escríbelo en owner_question) y no des un total con ese cambio.',
       `- packaging: el empaque al que el cliente pidió cambiar ese ${model}, según toda la conversación (mantenlo en los mensajes siguientes); cadena vacía si se queda con el empaque del catálogo.`,
       ''
@@ -465,6 +466,25 @@ const FILLER = /\b(personalizaci[oó]n|pendientes?|(a|por|sin) (confirmar|defini
 const GENERIC_WORD = /^(los |las |sus |tus |el |la )?(detalles|colores?|nombres?|frases?|personalizaci[oó]n|dise[ñn]os?|aroma|empaque)$/i;
 
 /** La personalización solo guarda lo que pidió la clienta: se quitan las partes genéricas que escribe el bot. */
+// Palabras que no identifican un detalle concreto: no sirven para saber si la clienta lo pidió.
+const DETAIL_FILLER = new Set(['color', 'colores', 'nombre', 'nombres', 'frase', 'frases', 'aroma', 'empaque', 'detalle', 'detalles', 'personalizacion', 'tono', 'tonos', 'para', 'como', 'vela', 'velas']);
+const normalizeWords = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+/**
+ * La IA a veces supone detalles que la clienta nunca dijo ("aroma Dulce"). Cada parte de la personalización se conserva
+ * solo si alguna de sus palabras (de 4 letras o más) aparece en lo que escribió o dijo la clienta.
+ */
+export function keepCustomerDetails(personalization: string, customerText: string): string {
+  const said = normalizeWords(customerText);
+  return personalization
+    .split(/,\s*/)
+    .filter(part => {
+      const words = normalizeWords(part).split(/[^a-zñ]+/).filter(w => w.length >= 4 && !DETAIL_FILLER.has(w));
+      return words.length === 0 || words.some(w => said.includes(w.slice(0, 5)));
+    })
+    .join(', ');
+}
+
 export function cleanPersonalization(value: unknown): string {
   return String(value ?? '')
     .split(/,|;|\s+y\s+/)
@@ -810,7 +830,10 @@ export async function planTurn(params: {
     owner_question: String(parsed.owner_question || '').trim(),
     event_date: eventDate,
     delivery_date: expectedDelivery,
-    order_items: order.items,
+    order_items: order.items.map(i => ({
+      ...i,
+      personalization: keepCustomerDetails(i.personalization, [...history.filter(m => m.role === 'user').map(m => m.content), userMessage].join('\n'))
+    })),
     shipping_place: order.place,
     order_total: order.total,
     deposit: order.total ? order.deposit : 0
