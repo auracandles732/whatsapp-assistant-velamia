@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VELAMIA - CRM WhatsApp Assistant</title>
+    <title>CRM WhatsApp</title>
 
     <!-- Instalable como app (PWA) -->
     <link rel="manifest" href="manifest.json">
@@ -12,7 +12,7 @@
     <!-- iPhone -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="VELAMIA CRM">
+    <meta name="apple-mobile-web-app-title" content="CRM">
     <link rel="apple-touch-icon" href="logo.png">
     <link rel="icon" href="logo.png">
 
@@ -886,7 +886,88 @@
             align-items: center;
         }
 
+        .settings-card + .settings-card { margin-top: 18px; }
+
+        .profile-section {
+            border-top: 1px solid var(--rosa-palo-suave);
+            padding-top: 16px;
+            margin-top: 16px;
+        }
+
+        .profile-section h4 {
+            font-size: 13px;
+            color: var(--texto);
+            margin-bottom: 10px;
+        }
+
+        .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .profile-grid .wide { grid-column: 1 / -1; }
+
+        .field-hint {
+            font-size: 11px;
+            color: var(--texto-suave);
+        }
+
+        .check-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--texto);
+            cursor: pointer;
+        }
+
+        .step-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 70px auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .step-row input {
+            padding: 8px 10px;
+            border: 1px solid var(--rosa-palo-suave);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 13px;
+            background: var(--beige-claro);
+            color: var(--texto);
+            min-width: 0;
+        }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--terracota);
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 13px;
+            padding: 4px 0;
+        }
+
+        .logo-preview {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-preview img {
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+            border-radius: 8px;
+            background: var(--beige-claro);
+        }
+
         @media (max-width: 700px) {
+            .profile-grid { grid-template-columns: 1fr; }
             .stats { grid-template-columns: repeat(2, 1fr); }
             .conversations-list { width: 220px; }
             .header-brand img { height: 32px; }
@@ -966,7 +1047,19 @@
 
         // La base guarda las fechas en UTC sin zona horaria; sin la "Z" el navegador
         // las toma como hora local y en Ecuador aparecen 5 horas adelantadas.
-        const BUSINESS_TZ = 'America/Guayaquil';
+        let BUSINESS_TZ = 'America/Guayaquil';
+
+        // Nombre, color, logo y zona horaria del negocio (perfil del negocio).
+        function applyBranding(branding) {
+            if (!branding) return;
+            if (branding.name) document.title = `${branding.name} · CRM`;
+            if (/^#[0-9a-f]{6}$/i.test(branding.primaryColor || '')) {
+                document.documentElement.style.setProperty('--terracota', branding.primaryColor);
+            }
+            if (branding.timezone) BUSINESS_TZ = branding.timezone;
+        }
+
+        const logoOf = branding => (branding && branding.logoUrl) || 'logo.png';
 
         function parseTs(value) {
             if (!value) return null;
@@ -988,7 +1081,7 @@
             return !!until && until > new Date();
         }
 
-        function LoginScreen({ onLogin }) {
+        function LoginScreen({ onLogin, branding }) {
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
             const [checking, setChecking] = useState(false);
@@ -1017,7 +1110,7 @@
             return (
                 <div className="login-screen">
                     <div className="login-card">
-                        <img src="logo.png" alt="VELAMIA" />
+                        <img src={logoOf(branding)} alt={branding.name || 'Logo'} />
                         <input
                             type="password"
                             placeholder="Contraseña"
@@ -1035,7 +1128,267 @@
             );
         }
 
-        function App({ onLogout }) {
+        const TIMEZONES = ['America/Guayaquil', 'America/Bogota', 'America/Lima', 'America/Caracas', 'America/Panama', 'America/Mexico_City', 'America/Santiago', 'America/Argentina/Buenos_Aires', 'America/La_Paz', 'America/Asuncion', 'America/Montevideo', 'America/New_York', 'Europe/Madrid'];
+
+        function setIn(obj, path, value) {
+            const copy = JSON.parse(JSON.stringify(obj));
+            const keys = path.split('.');
+            let target = copy;
+            for (const key of keys.slice(0, -1)) target = target[key];
+            target[keys[keys.length - 1]] = value;
+            return copy;
+        }
+
+        const getIn = (obj, path) => path.split('.').reduce((o, key) => (o == null ? undefined : o[key]), obj);
+
+        function BusinessProfileForm({ onSaved }) {
+            const [form, setForm] = useState(null);
+            const [presets, setPresets] = useState([]);
+            const [saving, setSaving] = useState(false);
+            const [saved, setSaved] = useState(false);
+            const [uploadingLogo, setUploadingLogo] = useState(false);
+
+            useEffect(() => {
+                api('/api/business-profile').then(setForm).catch(err => alert('Error cargando el perfil: ' + err.message));
+                api('/api/business-profile/presets').then(setPresets).catch(() => {});
+            }, []);
+
+            if (!form) {
+                return <div className="settings-card"><h3>🏪 Perfil del negocio</h3><p className="hint">Cargando...</p></div>;
+            }
+
+            const set = (path, value) => {
+                setForm(prev => setIn(prev, path, value));
+                setSaved(false);
+            };
+
+            const text = (path, label, placeholder = '', hint = '', wide = false) => (
+                <div className={`form-field ${wide ? 'wide' : ''}`}>
+                    <label>{label}</label>
+                    <input type="text" value={getIn(form, path) ?? ''} placeholder={placeholder} onChange={e => set(path, e.target.value)} />
+                    {hint && <small className="field-hint">{hint}</small>}
+                </div>
+            );
+
+            const number = (path, label, hint = '', step = '1') => (
+                <div className="form-field">
+                    <label>{label}</label>
+                    <input type="number" min="0" step={step} value={getIn(form, path) ?? ''} onChange={e => set(path, e.target.value === '' ? '' : Number(e.target.value))} />
+                    {hint && <small className="field-hint">{hint}</small>}
+                </div>
+            );
+
+            const check = (path, label) => (
+                <label className="check-row wide">
+                    <input type="checkbox" checked={!!getIn(form, path)} onChange={e => set(path, e.target.checked)} /> {label}
+                </label>
+            );
+
+            function loadPreset(id) {
+                const preset = presets.find(item => item.id === id);
+                if (!preset) return;
+                if (!confirm(`¿Cargar la plantilla "${preset.label}"?\n\nReemplaza lo que ves en este formulario. No se guarda hasta que pulses "Guardar perfil".`)) return;
+                setForm(JSON.parse(JSON.stringify(preset.profile)));
+                setSaved(false);
+            }
+
+            function uploadLogo(e) {
+                const file = e.target.files[0];
+                e.target.value = '';
+                if (!file) return;
+                if (!/^image\/(jpeg|png)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+                    alert('El logo debe ser JPG o PNG de hasta 5 MB');
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    setUploadingLogo(true);
+                    try {
+                        const data = await api('/api/upload-image', { method: 'POST', body: JSON.stringify({ imageBase64: reader.result }) });
+                        set('branding.logoUrl', data.url);
+                    } catch (err) {
+                        alert('Error subiendo el logo: ' + err.message);
+                    } finally {
+                        setUploadingLogo(false);
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+
+            async function save() {
+                setSaving(true);
+                try {
+                    const result = await api('/api/business-profile', { method: 'PUT', body: JSON.stringify(form) });
+                    setForm(result);
+                    setSaved(true);
+                    onSaved(result);
+                } catch (err) {
+                    alert('Error guardando el perfil: ' + err.message);
+                } finally {
+                    setSaving(false);
+                }
+            }
+
+            const steps = form.followUps.steps || [];
+            const shippingMode = form.shipping.mode;
+
+            return (
+                <div className="settings-card">
+                    <h3>🏪 Perfil del negocio</h3>
+                    <p className="hint">Todo lo que hace único a tu negocio: cómo vende, cobra, envía y habla el asistente. Se aplica de inmediato en todos los chats y manda sobre las instrucciones de abajo.</p>
+
+                    {presets.length > 0 && (
+                        <div className="form-field">
+                            <label>Empezar desde una plantilla</label>
+                            <select value="" onChange={e => loadPreset(e.target.value)}>
+                                <option value="">Elegir plantilla…</option>
+                                {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                            </select>
+                        </div>
+                    )}
+
+                    <div className="profile-section">
+                        <h4>Negocio</h4>
+                        <div className="profile-grid">
+                            {text('business.name', 'Nombre', 'Ej: Dulce Hogar')}
+                            {text('business.productEmoji', 'Emoji de productos', '🛍️', 'Va en el pie de cada foto')}
+                            {text('business.description', 'Qué es tu negocio', 'Ej: una tienda de zapatos para dama', 'Completa la frase "Nombre es …"', true)}
+                            {text('business.city', 'Ciudad')}
+                            {text('business.country', 'País')}
+                            <div className="form-field">
+                                <label>Zona horaria</label>
+                                <select value={form.business.timezone} onChange={e => set('business.timezone', e.target.value)}>
+                                    {[...new Set([form.business.timezone, ...TIMEZONES])].map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-field">
+                                <label>Color principal</label>
+                                <input type="color" value={form.branding.primaryColor} onChange={e => set('branding.primaryColor', e.target.value)} />
+                            </div>
+                            <div className="form-field wide">
+                                <label>Logo</label>
+                                <div className="logo-preview">
+                                    <img src={form.branding.logoUrl || 'logo.png'} />
+                                    <label className="btn-link">
+                                        {uploadingLogo ? 'Subiendo…' : 'Cambiar logo'}
+                                        <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={uploadLogo} />
+                                    </label>
+                                    {form.branding.logoUrl && <button className="btn-link" onClick={() => set('branding.logoUrl', '')}>Quitar</button>}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="profile-section">
+                        <h4>Cómo vendes</h4>
+                        <div className="profile-grid">
+                            {text('sales.unitSingular', 'Unidad de venta', 'docena, par, unidad')}
+                            {text('sales.unitPlural', 'Unidad en plural', 'docenas, pares, unidades')}
+                            {text('sales.unitDetail', 'Qué incluye la unidad', 'Ej: 12 unidades', 'Déjalo vacío si no aplica')}
+                            {text('sales.priceSuffix', 'Texto del precio en fotos', 'la docena, el par, c/u')}
+                            {text('sales.productLabel', 'Cómo llamas a cada producto', 'Modelo, Producto, Diseño')}
+                            {text('sales.productLabelPlural', 'En plural', 'Modelos, Productos')}
+                            {text('sales.goodsWord', 'Qué vendes (para hablar del total)', 'velas, zapatos, productos')}
+                            {text('sales.minimumOrder', 'Pedido mínimo', 'Ej: 2 docenas', 'Vacío = sin mínimo')}
+                            {check('sales.personalization', 'Los productos se pueden personalizar')}
+                            {form.sales.personalization && text('sales.personalizationExamples', 'Qué se puede personalizar', 'Ej: colores, nombres y frases', '', true)}
+                        </div>
+                    </div>
+
+                    <div className="profile-section">
+                        <h4>Pagos</h4>
+                        <div className="profile-grid">
+                            {check('payments.transferEnabled', 'Acepto transferencia bancaria (el bot envía tus datos de pago)')}
+                            {form.payments.transferEnabled && number('payments.depositPercent', 'Anticipo por transferencia (%)', '100 = se paga todo al inicio')}
+                            {check('payments.cardEnabled', 'Acepto tarjeta (el bot se pausa y te avisa para que envíes el link)')}
+                            {form.payments.cardEnabled && text('payments.cardBrands', 'Tarjetas aceptadas', 'Ej: Visa y Mastercard')}
+                        </div>
+                    </div>
+
+                    <div className="profile-section">
+                        <h4>Fechas de entrega</h4>
+                        <div className="profile-grid">
+                            {check('dates.enabled', 'Trabajo con fecha de evento (el bot calcula la fecha de entrega)')}
+                            {form.dates.enabled && text('dates.eventLabel', 'Cómo se llama la fecha', 'evento, boda, fiesta')}
+                            {form.dates.enabled && number('dates.deliveryDaysBeforeEvent', 'Entrego días antes', '0 = el mismo día')}
+                            {form.dates.enabled && number('dates.urgentDays', 'Avisarme si la entrega es en (días)')}
+                            {form.dates.enabled && check('dates.alwaysAvailable', 'Siempre tengo disponibilidad (el bot no consulta fechas)')}
+                        </div>
+                    </div>
+
+                    <div className="profile-section">
+                        <h4>Envíos</h4>
+                        <div className="profile-grid">
+                            <div className="form-field wide">
+                                <label>Tipo de envío</label>
+                                <select value={shippingMode} onChange={e => set('shipping.mode', e.target.value)}>
+                                    <option value="ecuador_table">Tarifario Servientrega Ecuador (origen Guayaquil)</option>
+                                    <option value="flat">Tarifa fija a cualquier ciudad</option>
+                                    <option value="none">Sin envíos</option>
+                                </select>
+                            </div>
+                            {shippingMode === 'flat' && number('shipping.flatRate', 'Tarifa fija ($)', '', '0.01')}
+                            {shippingMode !== 'none' && text('shipping.carrier', 'Transportista', 'Ej: Servientrega')}
+                            {shippingMode !== 'none' && text('shipping.coverage', 'Cobertura', 'Ej: todo Ecuador')}
+                            {shippingMode !== 'none' && number('shipping.unitsIncludedInRate', 'Cantidad que cubre la tarifa', '0 = sin recargo por cantidad')}
+                            {shippingMode !== 'none' && number('shipping.extraCost', 'Recargo si supera esa cantidad ($)', '', '0.01')}
+                            {shippingMode !== 'none' && check('shipping.showSeparately', 'Mostrar el envío por separado (si no, el total es un solo valor)')}
+                            {check('shipping.pickupAvailable', 'Se puede retirar en el local')}
+                            {(form.shipping.pickupAvailable || shippingMode === 'none') && text('shipping.pickupAddress', 'Dirección para retirar', 'Ej: Av. 9 de Octubre 123', '', true)}
+                        </div>
+                    </div>
+
+                    <div className="profile-section">
+                        <h4>Seguimientos automáticos</h4>
+                        <div className="profile-grid">
+                            {check('followUps.enabled', 'Enviar seguimientos a clientas que no responden')}
+                        </div>
+                        {form.followUps.enabled && (
+                            <>
+                                <p className="hint">Cada seguimiento es una plantilla aprobada en Meta y se envía tras esos días sin respuesta.</p>
+                                {steps.map((step, i) => (
+                                    <div key={i} className="step-row">
+                                        <input type="text" placeholder="nombre_de_la_plantilla" value={step.template} onChange={e => set(`followUps.steps.${i}.template`, e.target.value.trim())} />
+                                        <input type="number" min="1" value={step.days} onChange={e => set(`followUps.steps.${i}.days`, Number(e.target.value))} />
+                                        <span>días</span>
+                                        <button className="btn-link" onClick={() => set('followUps.steps', steps.filter((_, j) => j !== i))}>Quitar</button>
+                                    </div>
+                                ))}
+                                <button className="btn-link" onClick={() => set('followUps.steps', [...steps, { template: '', days: (steps[steps.length - 1]?.days || 0) + 1 }])}>+ Agregar seguimiento</button>
+                                <div className="profile-grid" style={{ marginTop: '10px' }}>
+                                    {number('followUps.fromHour', 'Desde la hora (0-23)')}
+                                    {number('followUps.untilHour', 'Hasta la hora (1-24)')}
+                                    {text('followUps.optOutMessage', 'Respuesta si la clienta pide no recibir más', '', '', true)}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="profile-section">
+                        <h4>Avisos y estilo</h4>
+                        <div className="profile-grid">
+                            {text('alerts.ownerPhone', 'Tu WhatsApp para recibir avisos', 'Ej: 593991234567', 'Con código de país, sin + ni espacios', true)}
+                            {text('alerts.template', 'Plantilla de aviso para ti (Meta)', 'Ej: aviso_equipo', 'Vacío = aviso en texto libre (solo llega si escribiste al número en las últimas 24 h)', true)}
+                            <div className="form-field wide">
+                                <label>Emojis que usa el asistente</label>
+                                <input type="text" value={(form.style.decorativeEmojis || []).join(' ')} onChange={e => set('style.decorativeEmojis', e.target.value.split(' '))} />
+                                <small className="field-hint">Separados por espacio. El asistente los va rotando para no repetir.</small>
+                            </div>
+                            {check('style.humanPersona', 'Presentarse como una persona del equipo (nunca decir que es un asistente virtual)')}
+                        </div>
+                    </div>
+
+                    <div className="settings-actions">
+                        <span className="save-status">{saved ? '✅ Perfil guardado' : ''}</span>
+                        <button className="btn-save-prompt" onClick={save} disabled={saving}>
+                            {saving ? 'Guardando...' : '💾 Guardar perfil'}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function App({ onLogout, branding, onBrandingChange }) {
             const [conversations, setConversations] = useState([]);
             const [selectedConv, setSelectedConv] = useState(null);
             const [messages, setMessages] = useState([]);
@@ -1059,6 +1412,10 @@
             const [quoteFilter, setQuoteFilter] = useState('all');
             const [deletingChat, setDeletingChat] = useState(false);
             const [sending, setSending] = useState(false);
+            const [biz, setBiz] = useState(null);
+            const unit = biz?.sales.unitSingular || 'unidad';
+            const unitPlural = biz?.sales.unitPlural || 'unidades';
+            const productEmoji = biz?.business.productEmoji || '🛍️';
             const messagesRef = useRef(null);
             // Se sigue al último mensaje salvo que la dueña haya subido a leer mensajes anteriores.
             const stickToBottom = useRef(true);
@@ -1071,6 +1428,7 @@
                 loadSystemPrompt();
                 loadQuotations();
                 loadPaymentInfo();
+                api('/api/business-profile').then(setBiz).catch(err => console.error('Error cargando perfil:', err));
                 const interval = setInterval(() => {
                     loadConversations();
                     loadStats();
@@ -1407,9 +1765,9 @@
                     <div className="main">
                         <div className="header">
                             <div className="header-brand">
-                                <img src="logo.png" alt="VELAMIA" />
+                                <img src={logoOf(branding)} alt={branding.name || 'Logo'} />
                                 <div>
-                                    <div className="subtitle">CRM · Asistente WhatsApp</div>
+                                    <div className="subtitle">{branding.name ? `${branding.name} · ` : ''}CRM · Asistente WhatsApp</div>
                                 </div>
                             </div>
                             <div className="header-actions">
@@ -1423,7 +1781,7 @@
                         <div className="nav-tabs">
                             <div className={`nav-tab ${activeTab === 'conversaciones' ? 'active' : ''}`} onClick={() => setActiveTab('conversaciones')}>💬 Conversaciones</div>
                             <div className={`nav-tab ${activeTab === 'cotizaciones' ? 'active' : ''}`} onClick={() => setActiveTab('cotizaciones')}>🧾 Cotizaciones</div>
-                            <div className={`nav-tab ${activeTab === 'catalogo' ? 'active' : ''}`} onClick={() => setActiveTab('catalogo')}>🕯️ Catálogo</div>
+                            <div className={`nav-tab ${activeTab === 'catalogo' ? 'active' : ''}`} onClick={() => setActiveTab('catalogo')}>{productEmoji} Catálogo</div>
                             <div className={`nav-tab ${activeTab === 'configuracion' ? 'active' : ''}`} onClick={() => setActiveTab('configuracion')}>⚙️ Configuración</div>
                             <div className={`stats-toggle ${statsExpanded ? 'open' : ''}`} onClick={() => setStatsExpanded(!statsExpanded)}>
                                 📊 {statsExpanded ? 'Ocultar estadísticas' : 'Estadísticas'}
@@ -1550,15 +1908,15 @@
                                 </div>
                                 <div className="form-field">
                                     <label>Nombre del producto</label>
-                                    <input type="text" placeholder="Ej: Vela Aromática Lavanda" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                                    <input type="text" placeholder="Ej: nombre del producto" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
                                 </div>
                                 <div className="form-field">
-                                    <label>Precio por docena ($)</label>
+                                    <label>Precio por {unit} ($)</label>
                                     <input type="number" step="0.01" placeholder="Ej: 25.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
                                 </div>
                                 <div className="form-field">
-                                    <label>Categoría / Evento</label>
-                                    <input type="text" placeholder="Ej: Bautizo, Cumpleaños, XV años" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
+                                    <label>{biz?.dates.enabled ? `Categoría / ${biz.dates.eventLabel}` : 'Categoría'}</label>
+                                    <input type="text" placeholder="Ej: la categoría del producto" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
                                 </div>
                                 <button className="btn-add-product" onClick={addProduct} disabled={savingProduct}>
                                     {savingProduct ? 'Guardando...' : '+ Agregar'}
@@ -1567,7 +1925,7 @@
 
                             {products.length === 0 ? (
                                 <div className="empty-catalog">
-                                    <p>Aún no has agregado productos. Usa el formulario de arriba para empezar tu catálogo 🕯️</p>
+                                    <p>Aún no has agregado productos. Usa el formulario de arriba para empezar tu catálogo {productEmoji}</p>
                                 </div>
                             ) : (
                                 <div className="catalog-grid">
@@ -1577,7 +1935,7 @@
                                             <div className="info">
                                                 <span className="category-tag">{product.category}</span>
                                                 <h4>{product.name}</h4>
-                                                <div className="price">${product.price} <small>por docena</small></div>
+                                                <div className="price">${product.price} <small>por {unit}</small></div>
                                                 <button className="btn-delete-product" onClick={() => removeProduct(product.id)}>🗑️ Eliminar</button>
                                             </div>
                                         </div>
@@ -1625,7 +1983,7 @@
                                                     <li key={i}>🚚 {item.name} — ${Number(item.price).toFixed(2)}</li>
                                                 ) : (
                                                     <li key={i}>
-                                                        {item.quantity} doc. × {item.name} — ${(Number(item.price) * Number(item.quantity)).toFixed(2)}
+                                                        {item.quantity} {Number(item.quantity) === 1 ? unit : unitPlural} × {item.name} — ${(Number(item.price) * Number(item.quantity)).toFixed(2)}
                                                         {item.personalization ? <><br /><small>🎨 {item.personalization}</small></> : null}
                                                     </li>
                                                 ))}
@@ -1647,9 +2005,13 @@
                         })()}
                         {activeTab === 'configuracion' && (
                         <div className="settings-container">
+                            <BusinessProfileForm onSaved={saved => {
+                                setBiz(saved);
+                                onBrandingChange({ name: saved.business.name, primaryColor: saved.branding.primaryColor, logoUrl: saved.branding.logoUrl, timezone: saved.business.timezone });
+                            }} />
                             <div className="settings-card">
                                 <h3>🏦 Datos para transferencia</h3>
-                                <p className="hint">Cuando una clienta elige pagar por transferencia, el bot le indica el anticipo del 50% y le envía este texto exactamente como lo escribas. Con tarjeta, el bot indica el pago del total, se pausa y te avisa para que envíes el link de pago.</p>
+                                <p className="hint">Cuando una clienta elige pagar por transferencia, el bot le indica {biz && biz.payments.depositPercent < 100 ? `el anticipo del ${biz.payments.depositPercent}%` : 'el total a pagar'} y le envía este texto exactamente como lo escribas.{biz?.payments.cardEnabled ? ' Con tarjeta, el bot indica el pago del total, se pausa y te avisa para que envíes el link de pago.' : ''}</p>
                                 <textarea
                                     className="prompt-textarea"
                                     style={{ minHeight: '140px' }}
@@ -1666,10 +2028,10 @@
                             </div>
                             <div className="settings-card">
                                 <h3>🧠 Instrucciones del asistente (System Prompt)</h3>
-                                <p className="hint">Aquí defines el tono del bot y detalles de tu negocio. Se aplica de inmediato en todos los chats. Los precios por docena, pagos (anticipo 50% / tarjeta Visa y Mastercard), envíos por Servientrega y fechas de entrega ya están fijos en el sistema y mandan sobre lo que escribas aquí.</p>
+                                <p className="hint">Aquí defines el tono del asistente y detalles de tu negocio que no están en el perfil (horarios, políticas, preguntas frecuentes). Se aplica de inmediato en todos los chats. Precios, pagos, envíos y fechas vienen del Perfil del negocio y mandan sobre lo que escribas aquí.</p>
                                 <textarea
                                     className="prompt-textarea"
-                                    placeholder="Ej: Eres parte del equipo de VELAMIA. Responde siempre en español, de forma cálida y cercana, con mensajes cortos y algún emoji 🤍"
+                                    placeholder={`Ej: Eres parte del equipo de ${branding.name || 'mi negocio'}. Responde siempre en español, de forma cálida y cercana, con mensajes cortos y algún emoji.`}
                                     value={systemPrompt}
                                     onChange={e => setSystemPrompt(e.target.value)}
                                 ></textarea>
@@ -1689,16 +2051,26 @@
 
         function Root() {
             const [authenticated, setAuthenticated] = useState(!!getToken());
+            const [branding, setBranding] = useState({ name: '', primaryColor: '', logoUrl: '', timezone: '' });
 
             useEffect(() => {
                 onSessionExpired = () => setAuthenticated(false);
+                fetch(`${API_URL}/api/public/branding`)
+                    .then(res => res.json())
+                    .then(data => { applyBranding(data); setBranding(data); })
+                    .catch(() => {});
             }, []);
 
+            const changeBranding = data => {
+                applyBranding(data);
+                setBranding(data);
+            };
+
             if (!authenticated) {
-                return <LoginScreen onLogin={() => setAuthenticated(true)} />;
+                return <LoginScreen branding={branding} onLogin={() => setAuthenticated(true)} />;
             }
 
-            return <App onLogout={() => {
+            return <App branding={branding} onBrandingChange={changeBranding} onLogout={() => {
                 setToken(null);
                 setAuthenticated(false);
             }} />;

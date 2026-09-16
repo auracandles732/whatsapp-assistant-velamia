@@ -1,10 +1,12 @@
 /**
- * Tarifario referencial interno de envíos (Servientrega), origen Guayaquil, paquetes hasta 2 kg.
+ * Tarifario referencial de envíos (Servientrega), origen Guayaquil, paquetes hasta 2 kg.
+ * Se usa cuando el perfil del negocio tiene el modo de envío "ecuador_table".
  * Fuente: Tarifario_Envios_Ecuador_Hasta_2kg.pdf (24 provincias, 222 cantones).
  * No es una tabla oficial: pesos mayores, recargos o zonas especiales se confirman antes de cobrar.
  */
 
-export const SHIPPING_ORIGIN = 'Guayaquil';
+import { BusinessProfile, profile } from '../config/businessProfile';
+
 export const SHIPPING_MAX_WEIGHT_KG = 2;
 
 interface ProvinceRates {
@@ -171,24 +173,41 @@ export function findShippingRate(place: string): ShippingMatch | null {
   return matches.find(m => m.place !== m.province) || matches[0];
 }
 
-// Hasta 3 docenas el paquete pesa ~2 kg (tarifa de la tabla); más docenas suman $1.00 al envío.
-// Es interno: nunca se le menciona a la clienta.
-export const DOZENS_INCLUDED_IN_BASE_RATE = 3;
-export const EXTRA_SHIPPING_COST = 1.00;
+const PICKUP_PATTERN = /(?<!\p{L})(retir\p{L}*|recog\p{L}*)(?!\p{L})/iu;
 
-/** Costo real del envío según destino y cantidad de docenas, o null si el destino no se reconoce. */
-export function shippingCost(place: string, dozens: number): (ShippingMatch & { cost: number }) | null {
-  const match = findShippingRate(place);
+/**
+ * Costo del envío según el modo del perfil del negocio, o null si falta o no se reconoce el destino.
+ * El recargo por cantidad (más unidades que las que cubre la tarifa base) se suma una sola vez.
+ */
+export function shippingCost(place: string, units: number, p: BusinessProfile = profile()): (ShippingMatch & { cost: number }) | null {
+  const sh = p.shipping;
+  if (sh.mode === 'none') return null;
+
+  const raw = String(place || '').trim();
+  if (!raw) return null;
+  if (sh.pickupAvailable && PICKUP_PATTERN.test(raw)) {
+    return { place: 'Retiro en local', province: '', rate: 0, cost: 0 };
+  }
+
+  const extra = sh.unitsIncludedInRate > 0 && units > sh.unitsIncludedInRate ? sh.extraCost : 0;
+  const match: ShippingMatch | null = sh.mode === 'flat'
+    ? { place: raw, province: '', rate: sh.flatRate }
+    : findShippingRate(raw);
   if (!match) return null;
-  const extra = dozens > DOZENS_INCLUDED_IN_BASE_RATE ? EXTRA_SHIPPING_COST : 0;
   return { ...match, cost: Math.round((match.rate + extra) * 100) / 100 };
 }
 
 /** Resumen compacto para las instrucciones de la IA. */
-export function shippingRatesSummary(): string {
+export function shippingRatesSummary(p: BusinessProfile = profile()): string {
+  if (p.shipping.mode === 'flat') return `- Tarifa única a cualquier destino: $${p.shipping.flatRate.toFixed(2)}`;
+  if (p.shipping.mode === 'none') return '';
   const lines = Object.entries(SHIPPING_RATES).map(([province, data]) => {
-    if (province === 'Guayas') return `- Guayas: Guayaquil y Durán $3.00 · resto de cantones $5.25`;
-    return `- ${province}: $${data.rate.toFixed(2)}`;
+    if (!data.exceptions) return `- ${province}: $${data.rate.toFixed(2)}`;
+    // Cantones con la misma tarifa especial juntos: "Guayaquil y Durán $3.00".
+    const byRate = new Map<number, string[]>();
+    for (const [canton, rate] of Object.entries(data.exceptions)) byRate.set(rate, [...(byRate.get(rate) || []), canton]);
+    const special = [...byRate].map(([rate, cantons]) => `${cantons.join(' y ')} $${rate.toFixed(2)}`).join(' · ');
+    return `- ${province}: ${special} · resto de cantones $${data.rate.toFixed(2)}`;
   });
   return lines.join('\n');
 }

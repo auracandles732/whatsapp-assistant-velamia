@@ -37,10 +37,9 @@ import {
   describeImage,
   extractOrderItems,
   OrderItem,
-  TurnPlan,
-  todayInGuayaquil,
-  formatDateEc
+  TurnPlan
 } from '../services/openai';
+import { profile, todayLocal, formatDate, quantityText } from '../config/businessProfile';
 import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
@@ -95,20 +94,21 @@ const MAX_RESPONSE_WAIT_MS = 20000;
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
 export const PHOTO_BATCH_SIZE = 4;
-// La dueña revisa los pedidos cuya entrega cae dentro de estos días (o ya pasó).
-const URGENT_DELIVERY_DAYS = 3;
+// El emoji de cada variante es fijo para un mismo perfil: así se reconoce la pregunta al leer el historial.
+const withEmojis = (texts: string[]) => {
+  const emojis = profile().style.decorativeEmojis;
+  return texts.map((t, i) => `${t} ${emojis[(i + 1) % emojis.length]}`);
+};
 
 // Se pregunta DESPUÉS de las fotos: antes de verlas la clienta no puede elegir.
-export const LIKED_PHOTO_QUESTIONS = [
-  '¿Cuál te gustó más? 😊',
-  '¿Cuál de estos modelos te gusta más? 🌸',
-  '¿Cuál prefieres? 🎀'
-];
-export const LIKED_SINGLE_PHOTO_QUESTIONS = [
-  '¿Te gusta este modelo? 😊',
-  '¿Qué te parece? 🌸',
-  '¿Te gustó? 🎀'
-];
+export const likedPhotoQuestions = () => {
+  const models = profile().sales.productLabelPlural.toLowerCase();
+  return withEmojis(['¿Cuál te gustó más?', `¿Cuál de estos ${models} te gusta más?`, '¿Cuál prefieres?']);
+};
+export const likedSinglePhotoQuestions = () => {
+  const model = profile().sales.productLabel.toLowerCase();
+  return withEmojis([`¿Te gusta este ${model}?`, '¿Qué te parece?', '¿Te gustó?']);
+};
 
 const pick = (options: string[]) => options[Math.floor(Math.random() * options.length)];
 
@@ -134,15 +134,13 @@ function lastDeliveryDateFromHistory(history: any[]): string {
 }
 
 const daysUntil = (isoDate: string) =>
-  Math.round((Date.parse(`${isoDate}T00:00:00Z`) - Date.parse(`${todayInGuayaquil()}T00:00:00Z`)) / 86_400_000);
+  Math.round((Date.parse(`${isoDate}T00:00:00Z`) - Date.parse(`${todayLocal()}T00:00:00Z`)) / 86_400_000);
 
 // Varias formas de preguntar para no repetir siempre la misma frase y los mismos emojis.
-export const MORE_PHOTOS_QUESTIONS = [
-  '¿Te gustaría ver más modelos? 😊',
-  '¿Quieres que te muestre más modelos? 🌸',
-  '¿Te enseño más opciones? 🎀',
-  '¿Deseas ver más diseños? 💕'
-];
+export const morePhotosQuestions = () => {
+  const models = profile().sales.productLabelPlural.toLowerCase();
+  return withEmojis([`¿Te gustaría ver más ${models}?`, `¿Quieres que te muestre más ${models}?`, '¿Te enseño más opciones?', '¿Deseas ver más opciones?']);
+};
 
 // Emojis de las últimas respuestas del bot: la IA los evita para no repetir siempre los mismos.
 // Los emojis al inicio de cada línea de una lista (🕯️ Modelo, 💰 Total…) son etiquetas y no cuentan.
@@ -426,7 +424,7 @@ async function ingestMessage(message: any, value: any) {
       await recordFollowUp(conversationId, 'opt_out', 'La clienta respondió NO a los seguimientos');
       console.log(`🔕 ${phoneNumber} no quiere más seguimientos`);
       if ((await getConfig('bot_enabled')) !== 'false' && !(await isBotPaused(conversationId))) {
-        await sendAndSaveText(conversationId, phoneNumber, 'Listo 🤍 No te enviaré más mensajes de seguimiento. Si más adelante necesitas velitas para tu evento, aquí estaré ✨');
+        await sendAndSaveText(conversationId, phoneNumber, profile().followUps.optOutMessage);
       }
       return;
     }
@@ -484,7 +482,7 @@ async function respondToBatch(batch: PendingBatch) {
 
     // Solo cuentan como pendientes si la última pregunta del bot fue "¿más modelos?".
     const lastBot = [...history].reverse().find((m: any) => m.sender === 'bot');
-    const offeredMore = lastBot?.type === 'text' && MORE_PHOTOS_QUESTIONS.includes(String(lastBot.content || ''));
+    const offeredMore = lastBot?.type === 'text' && morePhotosQuestions().includes(String(lastBot.content || ''));
     const pendingProducts = offeredMore
       ? (pendingPhotos.get(conversationId) || []).filter(n => !sentProducts.includes(n))
       : [];
@@ -518,13 +516,13 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     // Siempre se confirma la fecha, pero una entrega muy justa la revisa la dueña (una vez al día por chat).
-    if (plan.delivery_date && daysUntil(plan.delivery_date) <= URGENT_DELIVERY_DAYS
+    if (plan.delivery_date && daysUntil(plan.delivery_date) <= profile().dates.urgentDays
       && !(await hasRecentNotification(conversationId, 'urgent_date'))) {
       const days = daysUntil(plan.delivery_date);
       const cuando = days < 0 ? 'ya pasó' : days === 0 ? 'es hoy' : days === 1 ? 'es mañana' : `faltan ${days} días`;
       await notifyOwner({
         conversationId, customerPhone: phoneNumber, customerName, event: 'urgent_date',
-        detail: `Evento ${formatDateEc(plan.event_date)} · entrega ${formatDateEc(plan.delivery_date)} (${cuando})`
+        detail: `${profile().dates.eventLabel.replace(/^./, c => c.toUpperCase())} ${formatDate(plan.event_date)} · entrega ${formatDate(plan.delivery_date)} (${cuando})`
       });
     }
 
@@ -621,12 +619,13 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
 
   const batch = products.slice(0, PHOTO_BATCH_SIZE);
   const rest = products.slice(PHOTO_BATCH_SIZE).map(p => p.name);
-  console.log(`🕯️ Enviando ${batch.length} foto(s) de productos${rest.length ? ` (quedan ${rest.length})` : ''}`);
+  console.log(`📸 Enviando ${batch.length} foto(s) de productos${rest.length ? ` (quedan ${rest.length})` : ''}`);
+  const { business, sales } = profile();
 
   // Una a una y en orden: si una falla, las demás igual se envían.
   for (const product of batch) {
     try {
-      const caption = `🕯️ *${product.name}*\n💰 $${Number(product.price).toFixed(2)} la docena`;
+      const caption = `${business.productEmoji} *${product.name}*\n💰 $${Number(product.price).toFixed(2)} ${sales.priceSuffix}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
       await saveMessage(conversationId, 'bot', 'image', `${product.image_url}\n${caption}`, getSentMessageId(sent));
@@ -637,12 +636,12 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
 
   if (rest.length > 0) {
     pendingPhotos.set(conversationId, rest);
-    await sendAndSaveText(conversationId, phoneNumber, pick(MORE_PHOTOS_QUESTIONS));
+    await sendAndSaveText(conversationId, phoneNumber, pick(morePhotosQuestions()));
   } else {
     pendingPhotos.delete(conversationId);
     // Ya vio las fotos: recién ahora tiene sentido preguntarle cuál le gustó.
     if (askAfter && batch.length > 0) {
-      await sendAndSaveText(conversationId, phoneNumber, pick(batch.length === 1 ? LIKED_SINGLE_PHOTO_QUESTIONS : LIKED_PHOTO_QUESTIONS));
+      await sendAndSaveText(conversationId, phoneNumber, pick(batch.length === 1 ? likedSinglePhotoQuestions() : likedPhotoQuestions()));
     }
   }
 }
@@ -662,7 +661,7 @@ async function registerSale(
     // Los mismos modelos y docenas con que se calculó el valor que recibió la clienta, para que el CRM cuadre.
     // Solo si la IA no los identificó en el turno se leen de nuevo de la conversación.
     const items: OrderItem[] = ctx.planItems.length > 0
-      ? ctx.planItems.map(i => ({ name: i.name, price: i.price, quantity: i.dozens, personalization: i.personalization }))
+      ? ctx.planItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity, personalization: i.personalization }))
       : await extractOrderItems(ctx.transcript, ctx.catalog);
     if (items.length === 0) {
       console.log(`📋 ${kind} sin productos claros del catálogo; no se registra`);
@@ -670,8 +669,8 @@ async function registerSale(
     }
 
     // La clienta ve un solo valor; en el CRM el envío queda como línea aparte para la dueña.
-    const dozens = items.reduce((sum, i) => sum + i.quantity, 0);
-    const shipping = ctx.shippingPlace ? shippingCost(ctx.shippingPlace, dozens) : null;
+    const units = items.reduce((sum, i) => sum + i.quantity, 0);
+    const shipping = ctx.shippingPlace ? shippingCost(ctx.shippingPlace, units) : null;
     const totalAmount = Math.round((items.reduce((sum, i) => sum + i.price * i.quantity, 0) + (shipping?.cost || 0)) * 100) / 100;
 
     const pendingQuotation = await getRecentPendingQuotation(ctx.conversationId);
@@ -691,10 +690,10 @@ async function registerSale(
     ];
 
     const detail = items
-      .map(i => `${i.quantity} doc. ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`)
+      .map(i => `${quantityText(i.quantity)} ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`)
       .join(', ')
       + (shipping ? ` · envío a ${shipping.place}` : ' · sin ciudad de envío')
-      + (deliveryDate ? ` · entrega ${formatDateEc(deliveryDate)}` : ' · sin fecha')
+      + (deliveryDate ? ` · entrega ${formatDate(deliveryDate)}` : profile().dates.enabled ? ' · sin fecha' : '')
       + ` · Total $${totalAmount.toFixed(2)}`;
 
     const owner = { conversationId: ctx.conversationId, customerPhone: ctx.phoneNumber, customerName: ctx.customerName };

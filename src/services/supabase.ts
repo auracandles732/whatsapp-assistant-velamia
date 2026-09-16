@@ -500,8 +500,10 @@ export async function setConfig(key: string, value: string) {
   return data;
 }
 
+/** El número del perfil del negocio manda; owner_phone queda para instalaciones anteriores al perfil. */
 export async function getOwnerPhone(): Promise<string | null> {
-  return (await getConfig('owner_phone')) || null;
+  const { profile } = await import('../config/businessProfile');
+  return profile().alerts.ownerPhone || (await getConfig('owner_phone')) || null;
 }
 
 // ---------- SEGUIMIENTOS AUTOMÁTICOS ----------

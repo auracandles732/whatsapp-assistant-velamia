@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-assistant-velamia",
   "version": "1.0.0",
-  "description": "Asistente WhatsApp para velas VELAMIA",
+  "description": "Asistente de ventas por WhatsApp con CRM, configurable para cualquier negocio (primera instalación: VELAMIA)",
   "license": "MIT",
   "main": "dist/index.js",
   "engines": {
@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "npm run build && node dist/index.js"
+    "start": "npm run build && node dist/index.js",
+    "perfil": "node scripts/perfil.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",

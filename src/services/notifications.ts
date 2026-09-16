@@ -1,5 +1,6 @@
 import { sendTextMessage, sendTemplateMessage } from './whatsapp';
 import { getOwnerPhone, logNotification } from './supabase';
+import { profile } from '../config/businessProfile';
 
 export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'new_quotation' | 'order_updated' | 'bot_error' | 'bank_details_missing' | 'owner_question' | 'urgent_date';
 
@@ -16,8 +17,7 @@ const EVENT_LABELS: Record<OwnerEvent, string> = {
   bot_error: '🤖 El bot no pudo responder, responde tú desde el CRM'
 };
 
-// Plantilla aprobada por Meta: llega aunque la dueña no haya escrito al bot en 24 horas.
-const ALERT_TEMPLATE = 'velamia_aviso_equipo';
+// Plantilla aprobada por Meta (nombre en el perfil del negocio): llega aunque la dueña no haya escrito al bot en 24 horas.
 const ALERT_TEMPLATE_LANGUAGE = 'es';
 
 /** WhatsApp rechaza variables de plantilla con saltos de línea, tabulaciones o muchos espacios. */
@@ -46,13 +46,15 @@ export async function notifyOwner(params: {
       return;
     }
 
+    const { alerts, business } = profile();
     try {
-      await sendTemplateMessage(ownerPhone, ALERT_TEMPLATE, ALERT_TEMPLATE_LANGUAGE,
+      if (!alerts.template) throw new Error('sin plantilla de aviso en el perfil');
+      await sendTemplateMessage(ownerPhone, alerts.template, ALERT_TEMPLATE_LANGUAGE,
         [EVENT_LABELS[event], customerName, `+${customerPhone}`, detail].map(toTemplateParam));
     } catch (templateError: any) {
       console.warn('⚠️ Plantilla de aviso no disponible, se envía texto libre:', templateError.response?.data?.error?.message || templateError.message);
       const crmUrl = process.env.RENDER_EXTERNAL_URL ? `\n\nResponder en el CRM: ${process.env.RENDER_EXTERNAL_URL}/crm` : '';
-      await sendTextMessage(ownerPhone, `🔔 *VELAMIA · Atención requerida*\n\n${EVENT_LABELS[event]}\n\n👤 ${customerName}\n📱 +${customerPhone}\n💬 "${detail.slice(0, 300)}"${crmUrl}`);
+      await sendTextMessage(ownerPhone, `🔔 *${business.name} · Atención requerida*\n\n${EVENT_LABELS[event]}\n\n👤 ${customerName}\n📱 +${customerPhone}\n💬 "${detail.slice(0, 300)}"${crmUrl}`);
     }
 
     await logNotification(conversationId, event, detail.slice(0, 500));

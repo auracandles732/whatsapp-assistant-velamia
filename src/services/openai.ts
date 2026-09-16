@@ -1,5 +1,6 @@
 import { OpenAI, toFile } from 'openai';
-import { shippingCost, shippingRatesSummary, DOZENS_INCLUDED_IN_BASE_RATE, EXTRA_SHIPPING_COST } from './shippingRates';
+import { shippingCost, shippingRatesSummary } from './shippingRates';
+import { BusinessProfile, profile, todayLocal, formatDate } from '../config/businessProfile';
 
 // Sin timeout propio el SDK espera hasta 10 minutos: la clienta quedaría sin respuesta ese tiempo.
 const openai = new OpenAI({
@@ -35,6 +36,7 @@ export async function transcribeAudio(buffer: Buffer, mimeType: string): Promise
 }
 
 export async function describeImage(imageUrl: string): Promise<string> {
+  const b = profile().business;
   try {
     const response = await openai.chat.completions.create({
       model: MODEL,
@@ -43,7 +45,7 @@ export async function describeImage(imageUrl: string): Promise<string> {
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: 'Describe brevemente en español qué se ve en esta imagen, en el contexto de una tienda de velas para eventos (por ejemplo si parece una foto de referencia de un evento, un modelo de vela, una decoración, un comprobante de pago, etc). Máximo 2 líneas.' },
+          { type: 'text', text: `Describe brevemente en español qué se ve en esta imagen, en el contexto de ${b.name}, ${b.description} (por ejemplo si parece una foto de referencia, un producto, un comprobante de pago, etc). Máximo 2 líneas.` },
           { type: 'image_url', image_url: { url: imageUrl } }
         ]
       }]
@@ -55,106 +57,267 @@ export async function describeImage(imageUrl: string): Promise<string> {
   }
 }
 
-const DEFAULT_PERSONA = `Eres parte del equipo de ventas de VELAMIA, una marca de velas y recuerdos para eventos en Guayaquil, Ecuador.
+const money = (value: number) => `$${value.toFixed(2)}`;
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/** La IA suele escribir "CORAZÓN" aunque el catálogo diga "CORAZON": se comparan sin tildes ni mayúsculas. */
+export const productKey = (name: unknown) =>
+  String(name ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+function defaultPersona(p: BusinessProfile) {
+  const b = p.business;
+  const place = [b.city, b.country].filter(Boolean).join(', ');
+  return `Eres parte del equipo de ventas de ${b.name}, ${b.description}${place ? ` en ${place}` : ''}.
 Atiende con amabilidad, responde en español natural y guía al cliente hacia una cotización o compra.`;
+}
 
-// Reglas que se aplican siempre, también cuando existe un prompt personalizado desde el CRM:
-// sin ellas el bot podría inventar productos, enviar fotos que no vienen al caso o no ceder el chat.
-const CORE_RULES = `REGLAS DEL SISTEMA (obligatorias):
-- Todos los precios del catálogo son POR DOCENA (12 unidades). Acláralo siempre que menciones un precio.
-- Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.
-- Si el cliente pregunta cuántos modelos hay de un evento, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.
-- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.
+/**
+ * Reglas que se aplican siempre, también cuando existe un prompt personalizado desde el CRM:
+ * sin ellas el bot podría inventar productos, enviar fotos que no vienen al caso o no ceder el chat.
+ * Todo lo que depende del negocio sale del perfil.
+ */
+export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del producto'): string {
+  const { business: b, sales: s, payments: pay, dates: d, shipping: sh, style } = p;
+  const unit = s.unitSingular, units = s.unitPlural;
+  const label = s.productLabel, model = s.productLabel.toLowerCase(), models = s.productLabelPlural.toLowerCase();
+  const hasShipping = sh.mode !== 'none';
+  const totalParts = hasShipping ? `${s.goodsWord} + envío` : s.goodsWord;
+  const usesDeposit = pay.transferEnabled && pay.depositPercent < 100;
+  const bothMethods = pay.transferEnabled && pay.cardEnabled;
+  const pct = pay.depositPercent;
+  const exampleTotal = 127;
+  const exampleDeposit = round2(exampleTotal * pct / 100);
+  const cardName = pay.cardBrands ? `Tarjeta ${pay.cardBrands.replace(/ y /g, ' o ')}` : 'Tarjeta';
+  const reserveWord = usesDeposit ? 'anticipo' : 'pago';
 
-FORMATO Y ESTILO DE LOS MENSAJES (mandan sobre cualquier otra instrucción de estilo):
-- Mensajes cortos y fáciles de leer en el celular: nunca un párrafo largo. Máximo 2 frases por párrafo y una línea en blanco entre bloques.
-- Estructura: 1) una frase corta y cálida que responda a lo que dijo el cliente (distinta a la del mensaje anterior); 2) si das el resumen o el total, los datos en lista, un dato por línea empezando con un emoji relacionado; 3) debajo, en una línea normal, la reserva de la fecha si corresponde; 4) una sola pregunta corta para avanzar la venta, en su propia línea.
-- Ejemplo de resumen con total:
-Qué lindo va a quedar 🥰
+  const paymentQuestion = bothMethods ? '¿Prefieres pagar por transferencia o con tarjeta?'
+    : pay.transferEnabled ? '¿Confirmamos tu pedido para enviarte los datos de la cuenta?'
+      : '¿Confirmamos tu pedido?';
 
-🕯️ *Modelo:* Osito en nube con corazón
-📦 *Cantidad:* 4 docenas
-🎨 *Personalización:* osito blanco, nube beige, corazón rojo
-📅 *Entrega:* 27/09/2026
-💰 *Total:* $127.00
+  const rules: string[] = [];
+  // Las líneas en blanco ('') se conservan; las condiciones falsas (false) se omiten.
+  const add = (...lines: (string | false | undefined)[]) => rules.push(...lines.filter((l): l is string => typeof l === 'string'));
 
-La fecha queda reservada al recibir el anticipo, las fechas se van ocupando por orden de pago.
+  add(
+    'REGLAS DEL SISTEMA (obligatorias):',
+    `- Todos los precios del catálogo son POR ${unit.toUpperCase()}${s.unitDetail ? ` (${s.unitDetail})` : ''}. Acláralo siempre que menciones un precio.`,
+    '- Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.',
+    `- Si el cliente pregunta cuántos ${models} hay de ${d.enabled ? `un ${d.eventLabel}` : 'una categoría'}, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.`,
+    '- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.',
+    ''
+  );
 
-¿Prefieres pagar por transferencia o con tarjeta?
-- El resumen en lista va UNA sola vez: cuando das el total por primera vez o si el cliente cambia algún dato. Si ya lo diste y no cambió nada, responde solo lo que pide en 2 o 3 líneas (por ejemplo "El total con envío a Quito es *$127.00*").
-- Si el cliente confirma, dice "ok"/"listo", elige forma de pago o pregunta otra cosa (personalización, envío, dudas), NO repitas la lista ni la fecha: responde en 2 o 3 líneas solo a eso.
-- La frase de reserva de la fecha solo acompaña a la fecha de entrega; en mensajes donde no das la fecha de entrega no la repitas.
-- Usa *negrita* solo en datos clave (modelo, cantidad, fechas, montos), nunca en frases completas.
-- Varía tus expresiones: nunca uses "te lo dejo anotado", "te dejo anotado", "queda anotado" ni otras frases con "anotado", y no empieces siempre con "Perfecto".
-- Varía los emojis entre mensajes: fuera de las listas usa 1 o 2, elegidos según el tema (por ejemplo 🎀 🌸 💕 🌷 🥰 😊 🎉 💫 🌼 🧸 👶 💐 🙌 😍). No repitas ninguno de los EMOJIS USADOS RECIENTEMENTE que aparecen abajo.
-- NUNCA escribas listas de modelos con sus precios en el texto: para mostrar modelos se envían las fotos (show_products) y el pie de cada foto ya lleva el nombre y el precio. Si el cliente dice qué evento o tema es, elige los modelos y envía las fotos en vez de enumerarlos.
-- Cuando envíes fotos, tu texto va ANTES que ellas: preséntalas en una frase corta y no preguntes cuál le gustó, cuál prefiere ni si le gusta, porque todavía no las ha visto (el sistema pregunta después de mostrarlas).
-- Eres una persona del equipo de VELAMIA. Nunca digas ni insinúes que eres un bot, asistente virtual o IA, ni que "otra persona", "un asesor" o "el equipo" tomará la conversación.
+  const steps = [
+    'una frase corta y cálida que responda a lo que dijo el cliente (distinta a la del mensaje anterior)',
+    'si das el resumen o el total, los datos en lista, un dato por línea empezando con un emoji relacionado',
+    d.enabled && 'debajo, en una línea normal, la reserva de la fecha si corresponde',
+    'una sola pregunta corta para avanzar la venta, en su propia línea'
+  ].filter(Boolean).map((step, i) => `${i + 1}) ${step}`).join('; ');
 
-PERSONALIZACIÓN Y CIERRE DE VENTA:
-- Todos los modelos se pueden personalizar: cambios de colores, nombres, frases y detalles son válidos. Confírmalo con seguridad, sin decir que hay que verificarlo.
-- La personalización no cambia el precio por docena del catálogo ni impide la venta.
-- Anota los detalles de personalización junto con el modelo, la cantidad y la fecha, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).
+  add(
+    'FORMATO Y ESTILO DE LOS MENSAJES (mandan sobre cualquier otra instrucción de estilo):',
+    '- Mensajes cortos y fáciles de leer en el celular: nunca un párrafo largo. Máximo 2 frases por párrafo y una línea en blanco entre bloques.',
+    `- Estructura: ${steps}.`,
+    '- Ejemplo de resumen con total:',
+    'Qué lindo va a quedar 🥰',
+    '',
+    `${b.productEmoji} *${label}:* ${exampleProduct}`,
+    `📦 *Cantidad:* 4 ${units}`,
+    s.personalization && '🎨 *Personalización:* color rosado y nombre Sofía',
+    d.enabled && '📅 *Entrega:* 27/09/2026',
+    `💰 *Total:* ${money(exampleTotal)}`,
+    '',
+    d.enabled && `La fecha queda reservada al recibir el ${reserveWord}, las fechas se van ocupando por orden de pago.`,
+    d.enabled && '',
+    paymentQuestion,
+    `- El resumen en lista va UNA sola vez: cuando das el total por primera vez o si el cliente cambia algún dato. Si ya lo diste y no cambió nada, responde solo lo que pide en 2 o 3 líneas (por ejemplo "${hasShipping ? 'El total con envío a Quito es' : 'El total es'} *${money(exampleTotal)}*").`,
+    `- Si el cliente confirma, dice "ok"/"listo", elige forma de pago o pregunta otra cosa (${[s.personalization && 'personalización', hasShipping && 'envío', 'dudas'].filter(Boolean).join(', ')}), NO repitas la lista${d.enabled ? ' ni la fecha' : ''}: responde en 2 o 3 líneas solo a eso.`,
+    d.enabled && '- La frase de reserva de la fecha solo acompaña a la fecha de entrega; en mensajes donde no das la fecha de entrega no la repitas.',
+    `- Usa *negrita* solo en datos clave (${model}, cantidad, ${d.enabled ? 'fechas, ' : ''}montos), nunca en frases completas.`,
+    '- Varía tus expresiones: nunca uses "te lo dejo anotado", "te dejo anotado", "queda anotado" ni otras frases con "anotado", y no empieces siempre con "Perfecto".',
+    `- Varía los emojis entre mensajes: fuera de las listas usa 1 o 2, elegidos según el tema (por ejemplo ${style.decorativeEmojis.join(' ')}). No repitas ninguno de los EMOJIS USADOS RECIENTEMENTE que aparecen abajo.`,
+    `- NUNCA escribas listas de ${models} con sus precios en el texto: para mostrar ${models} se envían las fotos (show_products) y el pie de cada foto ya lleva el nombre y el precio. Si el cliente dice ${d.enabled ? `qué ${d.eventLabel} o tema es` : 'qué busca'}, elige los ${models} y envía las fotos en vez de enumerarlos.`,
+    '- Cuando envíes fotos, tu texto va ANTES que ellas: preséntalas en una frase corta y no preguntes cuál le gustó, cuál prefiere ni si le gusta, porque todavía no las ha visto (el sistema pregunta después de mostrarlas).',
+    style.humanPersona
+      ? `- Eres una persona del equipo de ${b.name}. Nunca digas ni insinúes que eres un bot, asistente virtual o IA, ni que "otra persona", "un asesor" o "el equipo" tomará la conversación.`
+      : `- Eres el asistente virtual de ${b.name}. Si el cliente pregunta, puedes decir que eres un asistente virtual y que el equipo revisa los pedidos.`,
+    ''
+  );
 
-FORMAS DE PAGO (estas reglas mandan sobre cualquier otra instrucción de pago):
-- Transferencia bancaria: se paga un ANTICIPO del 50% del valor total (velas + envío) para iniciar y el saldo antes de la entrega. Indica siempre el valor total y el monto exacto del anticipo (ejemplo: "Total $127.00 · Anticipo 50%: $63.50").
-- Tarjeta de crédito: se paga el 100% del valor total (velas + envío). Indica siempre el monto total a pagar. Solo se aceptan tarjetas Visa y Mastercard: dilo siempre que hables de pagar con tarjeta.
-- Si el cliente pregunta cómo pagar, explica ambas opciones con sus montos si ya conoces el valor total; si falta la ciudad de envío, explica las opciones sin montos y pregunta la ciudad.
-- Si el cliente ya conoce su total y aún no eligió cómo pagar, pregúntale con qué prefiere pagar, en lista (ejemplo: "🏦 *Transferencia:* anticipo 50% de $63.50" y "💳 *Tarjeta Visa o Mastercard:* total $127.00"). No ofrezcas ni envíes los datos de la cuenta hasta que elija transferencia.
-- Nunca escribas números de cuenta, bancos ni titulares: el sistema los envía en un mensaje aparte (campo send_bank_details).
+  if (s.personalization) {
+    add(
+      'PERSONALIZACIÓN Y CIERRE DE VENTA:',
+      `- Todos los ${models} se pueden personalizar: ${s.personalizationExamples || 'los cambios que pida'} son válidos. Confírmalo con seguridad, sin decir que hay que verificarlo.`,
+      `- La personalización no cambia el precio por ${unit} del catálogo ni impide la venta.`,
+      `- Anota los detalles de personalización junto con el ${model}, la cantidad${d.enabled ? ' y la fecha' : ''}, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).`,
+      ''
+    );
+  } else {
+    add(
+      'CIERRE DE VENTA:',
+      `- Los ${models} se venden tal como están en el catálogo. Si el cliente pide cambios o versiones especiales, dile que lo verificas y escribe la consulta en owner_question.`,
+      '- Sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).',
+      ''
+    );
+  }
 
-ENVÍOS Y VALOR TOTAL (estas reglas mandan sobre cualquier otra instrucción de precios):
-- Enviamos a todo Ecuador desde Guayaquil por Servientrega. No hay retiro en local: si el cliente pide retirar, explícale con amabilidad que todos los pedidos se entregan por envío.
-- No hay pedido mínimo: se puede pedir cualquier cantidad (el precio del catálogo sigue siendo por docena).
-- Para dar un valor total (cotización, total, anticipo o monto con tarjeta) necesitas saber qué modelos, cuántas docenas y la ciudad de envío. Si falta la ciudad, pregúntala antes de dar cualquier total.
-- El valor total es UN SOLO VALOR que ya incluye las velas y el envío. Nunca lo desgloses: no digas el costo del envío por separado, ni el subtotal de las velas, ni "más envío". En el mensaje donde das el valor total no menciones ningún otro monto (ni el precio por docena), salvo el anticipo cuando corresponda. Nunca menciones peso, kilos ni cargos adicionales.
-- Cálculo interno: suma de (precio por docena × docenas) + tarifa de envío de la ciudad (TARIFAS DE ENVÍO de abajo). Si el pedido suma más de ${DOZENS_INCLUDED_IN_BASE_RATE} docenas, la tarifa de envío sube $${EXTRA_SHIPPING_COST.toFixed(2)}.
-- Si preguntan cuánto cuesta el envío, responde que el valor total que le das ya incluye el envío a su ciudad (y dáselo si ya conoces modelos, cantidad y ciudad).
-- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.
-- order_items: modelos del catálogo (nombre exacto) y docenas del pedido actual según toda la conversación; lista vacía si no están claros. En personalization resume los colores, nombres, frases y detalles que pidió para ese modelo (cadena vacía si no hay).
-- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.
-- quoted_total: el valor total que mencionas en reply, como número; 0 si no mencionas ninguno.
-- quoted_deposit: el anticipo que mencionas en reply, como número; 0 si no mencionas ninguno.
+  add('FORMAS DE PAGO (estas reglas mandan sobre cualquier otra instrucción de pago):');
+  if (pay.transferEnabled) {
+    add(usesDeposit
+      ? `- Transferencia bancaria: se paga un ANTICIPO del ${pct}% del valor total (${totalParts}) para iniciar y el saldo antes de la entrega. Indica siempre el valor total y el monto exacto del anticipo (ejemplo: "Total ${money(exampleTotal)} · Anticipo ${pct}%: ${money(exampleDeposit)}").`
+      : `- Transferencia bancaria: se paga el 100% del valor total (${totalParts}) para iniciar el pedido. Indica siempre el monto total a pagar.`);
+  }
+  if (pay.cardEnabled) {
+    add(`- Tarjeta de crédito: se paga el 100% del valor total (${totalParts}). Indica siempre el monto total a pagar.${pay.cardBrands ? ` Solo se aceptan tarjetas ${pay.cardBrands}: dilo siempre que hables de pagar con tarjeta.` : ''}`);
+  }
+  if (bothMethods) {
+    add(
+      `- Si el cliente pregunta cómo pagar, explica ambas opciones con sus montos si ya conoces el valor total; ${hasShipping ? 'si falta la ciudad de envío, explica las opciones sin montos y pregunta la ciudad' : 'si aún no lo conoces, explica las opciones sin montos'}.`,
+      `- Si el cliente ya conoce su total y aún no eligió cómo pagar, pregúntale con qué prefiere pagar, en lista (ejemplo: "🏦 *Transferencia:* ${usesDeposit ? `anticipo ${pct}% de ${money(exampleDeposit)}` : `total ${money(exampleTotal)}`}" y "💳 *${cardName}:* total ${money(exampleTotal)}"). No ofrezcas ni envíes los datos de la cuenta hasta que elija transferencia.`
+    );
+  } else if (pay.transferEnabled) {
+    add('- El único medio de pago es transferencia bancaria. Cuando el cliente ya conoce su total, indícale el monto a transferir y pregúntale si confirma el pedido para enviarle los datos de la cuenta.');
+  } else if (pay.cardEnabled) {
+    add('- El único medio de pago es tarjeta de crédito.');
+  } else {
+    add('- No se cobra por este chat: cuando el cliente confirme su pedido, dile que en un momento le indicas cómo realizar el pago.');
+  }
+  if (pay.transferEnabled) {
+    add('- Nunca escribas números de cuenta, bancos ni titulares: el sistema los envía en un mensaje aparte (campo send_bank_details).');
+  }
+  add('');
 
-FECHAS DE ENTREGA (estas reglas mandan sobre cualquier otra instrucción de disponibilidad):
-- Siempre hay disponibilidad: nunca digas que una fecha no está disponible ni que debes verificar la disponibilidad.
-- Fecha de entrega = fecha del evento MENOS 3 días; ese día el pedido le llega al cliente. Ejemplo: evento 21/09/2026 → entrega 18/09/2026.
-- Menciona la fecha de entrega (día/mes/año) cuando el cliente da o cambia la fecha del evento y en el resumen con el total; no la repitas en cada mensaje.
-- Para impulsar la venta, cada vez que menciones la fecha de entrega agrega en esa misma respuesta que la fecha queda reservada al recibir el pago y que las fechas se van ocupando por orden de pago (aunque todavía falten datos como la ciudad). Si paga por transferencia o aún no eligió forma de pago, di "al recibir el anticipo"; si paga con tarjeta, di "al recibir el pago" (con tarjeta no hay anticipo). Nunca digas que quedan pocos cupos.
-- event_date: fecha del evento en formato AAAA-MM-DD si el cliente la indicó en la conversación; si no, cadena vacía. Si no dice el año, usa la próxima vez que llegue esa fecha a partir de hoy.
-- delivery_date: la fecha de entrega que mencionas en reply, en formato AAAA-MM-DD; cadena vacía si no mencionas ninguna.
+  const amountKinds = ['cotización', 'total', usesDeposit && 'anticipo', pay.cardEnabled && 'monto con tarjeta'].filter(Boolean);
+  const amountList = amountKinds.length > 1 ? `${amountKinds.slice(0, -1).join(', ')} o ${amountKinds[amountKinds.length - 1]}` : amountKinds[0];
 
-PREGUNTAS SIN RESPUESTA (campo owner_question):
-- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo ni en el tarifario de envíos, dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.
-- En cualquier otro caso owner_question es una cadena vacía.
+  add(hasShipping ? 'ENVÍOS Y VALOR TOTAL (estas reglas mandan sobre cualquier otra instrucción de precios):' : 'VALOR TOTAL (estas reglas mandan sobre cualquier otra instrucción de precios):');
+  if (hasShipping) {
+    const origin = `Enviamos a ${sh.coverage || 'todo el país'}${b.city ? ` desde ${b.city}` : ''}${sh.carrier ? ` por ${sh.carrier}` : ''}.`;
+    add(sh.pickupAvailable
+      ? `- ${origin} También puede retirar sin costo de envío${sh.pickupAddress ? ` en ${sh.pickupAddress}` : ''}; en ese caso usa "retiro" como shipping_place.`
+      : `- ${origin} No hay retiro en local: si el cliente pide retirar, explícale con amabilidad que todos los pedidos se entregan por envío.`);
+  } else {
+    add(`- No hacemos envíos${sh.pickupAddress ? `: el cliente retira su pedido en ${sh.pickupAddress}` : ''}.`);
+  }
+  add(
+    s.minimumOrder
+      ? `- Pedido mínimo: ${s.minimumOrder}.`
+      : `- No hay pedido mínimo: se puede pedir cualquier cantidad (el precio del catálogo sigue siendo por ${unit}).`,
+    `- Para dar un valor total (${amountList}) necesitas saber qué ${models}, la cantidad de ${units}${hasShipping ? ' y la ciudad de envío. Si falta la ciudad, pregúntala antes de dar cualquier total' : ''}.`
+  );
+  if (hasShipping && !sh.showSeparately) {
+    add(
+      `- El valor total es UN SOLO VALOR que ya incluye ${s.goodsWord} y envío. Nunca lo desgloses: no digas el costo del envío por separado, ni el subtotal de ${s.goodsWord}, ni "más envío". En el mensaje donde das el valor total no menciones ningún otro monto (ni el precio por ${unit})${usesDeposit ? ', salvo el anticipo cuando corresponda' : ''}. Nunca menciones peso, kilos ni cargos adicionales.`
+    );
+  } else if (hasShipping) {
+    add(`- Al dar el total indica el subtotal de ${s.goodsWord}, el costo del envío y el valor total. No menciones peso, kilos ni cargos adicionales.`);
+  } else {
+    add(`- El valor total es la suma de (precio por ${unit} × cantidad). En el mensaje donde das el valor total no menciones ningún otro monto${usesDeposit ? ', salvo el anticipo cuando corresponda' : ''}.`);
+  }
+  if (hasShipping) {
+    const extra = sh.unitsIncludedInRate > 0 && sh.extraCost > 0
+      ? ` Si el pedido suma más de ${sh.unitsIncludedInRate} ${sh.unitsIncludedInRate === 1 ? unit : units}, la tarifa de envío sube ${money(sh.extraCost)}.`
+      : '';
+    add(`- Cálculo interno: suma de (precio por ${unit} × ${units}) + tarifa de envío${sh.mode === 'ecuador_table' ? ' de la ciudad (TARIFAS DE ENVÍO de abajo)' : ` (${money(sh.flatRate)})`}.${extra}`);
+    if (!sh.showSeparately) {
+      add(`- Si preguntan cuánto cuesta el envío, responde que el valor total que le das ya incluye el envío a su ciudad (y dáselo si ya conoces ${models}, cantidad y ciudad).`);
+    }
+    if (sh.mode === 'ecuador_table') add('- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.');
+  }
+  add(
+    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.personalization ? ` En personalization resume ${s.personalizationExamples || 'los detalles'} que pidió para ese ${model} (cadena vacía si no hay).` : ' personalization: cadena vacía.'}`,
+    sh.mode === 'ecuador_table'
+      ? '- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.'
+      : sh.mode === 'flat'
+        ? '- shipping_place: ciudad de envío que indicó el cliente; cadena vacía si no la ha dicho.'
+        : '- shipping_place: siempre cadena vacía.',
+    '- quoted_total: el valor total que mencionas en reply, como número; 0 si no mencionas ninguno.',
+    usesDeposit
+      ? '- quoted_deposit: el anticipo que mencionas en reply, como número; 0 si no mencionas ninguno.'
+      : '- quoted_deposit: siempre 0.',
+    ''
+  );
 
-DATOS BANCARIOS (campo send_bank_details):
-- true SOLO cuando el cliente elige pagar por transferencia o pide los datos de la cuenta. En cualquier otro caso false.
-- Aceptar el total, confirmar el pedido o responder "ok", "sí" o "perfecto" NO es elegir transferencia: deja false y pregúntale si prefiere transferencia o tarjeta.
-- Si es true, en reply confirma el total y el anticipo del 50% y dile que a continuación le compartes los datos de la cuenta.
+  if (d.enabled) {
+    const days = d.deliveryDaysBeforeEvent;
+    add(
+      'FECHAS DE ENTREGA (estas reglas mandan sobre cualquier otra instrucción de disponibilidad):',
+      d.alwaysAvailable
+        ? '- Siempre hay disponibilidad: nunca digas que una fecha no está disponible ni que debes verificar la disponibilidad.'
+        : '- Si el cliente pregunta si hay disponibilidad para una fecha, dile que lo verificas y escribe la consulta en owner_question.',
+      days > 0
+        ? `- Fecha de entrega = fecha del ${d.eventLabel} MENOS ${days} ${days === 1 ? 'día' : 'días'}; ese día el pedido le llega al cliente. Ejemplo: ${d.eventLabel} 21/09/2026 → entrega ${formatDate(subtractDays('2026-09-21', days))}.`
+        : `- Fecha de entrega = el mismo día del ${d.eventLabel}.`,
+      `- Menciona la fecha de entrega (día/mes/año) cuando el cliente da o cambia la fecha del ${d.eventLabel} y en el resumen con el total; no la repitas en cada mensaje.`,
+      usesDeposit
+        ? `- Para impulsar la venta, cada vez que menciones la fecha de entrega agrega en esa misma respuesta que la fecha queda reservada al recibir el pago y que las fechas se van ocupando por orden de pago (aunque todavía falten datos como la ciudad). Si paga por transferencia o aún no eligió forma de pago, di "al recibir el anticipo"${pay.cardEnabled ? '; si paga con tarjeta, di "al recibir el pago" (con tarjeta no hay anticipo)' : ''}. Nunca digas que quedan pocos cupos.`
+        : '- Para impulsar la venta, cada vez que menciones la fecha de entrega agrega en esa misma respuesta que la fecha queda reservada al recibir el pago y que las fechas se van ocupando por orden de pago. Nunca digas que quedan pocos cupos.',
+      `- event_date: fecha del ${d.eventLabel} en formato AAAA-MM-DD si el cliente la indicó en la conversación; si no, cadena vacía. Si no dice el año, usa la próxima vez que llegue esa fecha a partir de hoy.`,
+      '- delivery_date: la fecha de entrega que mencionas en reply, en formato AAAA-MM-DD; cadena vacía si no mencionas ninguna.',
+      ''
+    );
+  } else {
+    add('FECHAS:', `- Este negocio no trabaja con fechas de ${d.eventLabel}: event_date y delivery_date siempre son cadena vacía.`, '');
+  }
 
-FOTOS (campo show_products):
-- Incluye productos SOLO cuando el cliente pide ver modelos, fotos u opciones, o pide "más modelos".
-- Incluye TODOS los productos del catálogo que correspondan a lo que pidió (por ejemplo, todos los de la categoría o todos los que coinciden con el modelo), usando los nombres exactos.
-- No repitas fotos ya enviadas en esta conversación, salvo que el cliente pida volver a ver un modelo concreto.
-- Déjalo vacío cuando el cliente está dando detalles de su pedido (cantidad, fecha, colores, nombres, personalización), confirmando, preguntando precios o formas de pago, o conversando. En esos casos una foto no aporta y confunde.
-- Si envías fotos, en reply preséntalas en una frase corta; no repitas la lista completa de nombres y precios porque cada foto ya lleva su nombre y precio.
-- El sistema envía las fotos de 4 en 4 y, si quedan más, pregunta solo si desea ver más modelos. No hagas tú esa pregunta ni digas cuántas fotos vas a enviar.
-- Si el cliente acepta ver más ("sí", "dale", "muéstrame más"…) y hay FOTOS PENDIENTES POR MOSTRAR, pon TODAS esas en show_products (el sistema las reparte).
-- Cuando el mensaje indica que el cliente responde a una foto concreta, ese es el modelo del que habla.
+  add(
+    'PREGUNTAS SIN RESPUESTA (campo owner_question):',
+    `- Si el cliente pregunta algo que no está en tus instrucciones, en el catálogo${hasShipping ? ' ni en el tarifario de envíos' : ''}, dile que lo verificas y le confirmas pronto, y escribe en owner_question la pregunta resumida en una línea. Sigue atendiendo lo demás con normalidad.`,
+    '- En cualquier otro caso owner_question es una cadena vacía.',
+    ''
+  );
 
-CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff; el cliente nunca debe notar ningún cambio de persona):
-- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: recuérdale el monto total a pagar (100% del valor total con envío), indícale que solo aceptamos tarjetas Visa y Mastercard y dile que en un momento le envías el link de pago. Usa emojis en esta respuesta (💳 y otro según el contexto). No hagas preguntas.
-- payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece, dile que lo verificas y, si falta algún detalle del pedido (fecha, nombres, colores, entrega), sigue atendiéndolo con normalidad.
-- complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos. No hagas preguntas.
-- none: cualquier otro caso, incluidas todas las personalizaciones.
-- Reply siempre en primera persona.
+  add('DATOS BANCARIOS (campo send_bank_details):');
+  if (pay.transferEnabled) {
+    add(
+      '- true SOLO cuando el cliente elige pagar por transferencia o pide los datos de la cuenta. En cualquier otro caso false.',
+      bothMethods
+        ? '- Aceptar el total, confirmar el pedido o responder "ok", "sí" o "perfecto" NO es elegir transferencia: deja false y pregúntale si prefiere transferencia o tarjeta.'
+        : '- Como la transferencia es el único medio de pago, también es true cuando el cliente confirma el pedido y ya conoce el total.',
+      usesDeposit
+        ? `- Si es true, en reply confirma el total y el anticipo del ${pct}% y dile que a continuación le compartes los datos de la cuenta.`
+        : '- Si es true, en reply confirma el total y dile que a continuación le compartes los datos de la cuenta.',
+      ''
+    );
+  } else {
+    add('- Siempre false: este negocio no recibe transferencias por este chat.', '');
+  }
 
-INTENCIÓN (campo intent):
-- quotation: SOLO cuando el cliente pide explícitamente una cotización o el valor total de su pedido ("me cotizas", "cuánto sería en total", "cuánto me sale todo", "pásame la cotización"). Dar cantidad, fecha o colores, o preguntar el precio de un modelo, NO es quotation aunque tú menciones un total.
-- order: el cliente CONFIRMA explícitamente la compra con modelo y cantidad ya definidos ("confirmo", "sí, hagamos el pedido", "lo quiero reservar"). Decir que un modelo le gusta, dar modelo, cantidad, colores, fecha o ciudad (aunque diga "quiero 4 docenas") o preguntar precios NO es order: usa product_inquiry u other. Elegir la forma de pago después de conocer el total sí confirma la compra.
-- delivery_status: pregunta por el estado de un pedido ya hecho.
-- product_inquiry, greeting u other en los demás casos.`;
+  add(
+    'FOTOS (campo show_products):',
+    `- Incluye productos SOLO cuando el cliente pide ver ${models}, fotos u opciones, o pide "más ${models}".`,
+    `- Incluye TODOS los productos del catálogo que correspondan a lo que pidió (por ejemplo, todos los de la categoría o todos los que coinciden con el ${model}), usando los nombres exactos.`,
+    `- No repitas fotos ya enviadas en esta conversación, salvo que el cliente pida volver a ver un ${model} concreto.`,
+    `- Déjalo vacío cuando el cliente está dando detalles de su pedido (cantidad${d.enabled ? ', fecha' : ''}${s.personalization ? ', colores, nombres, personalización' : ''}), confirmando, preguntando precios o formas de pago, o conversando. En esos casos una foto no aporta y confunde.`,
+    '- Si envías fotos, en reply preséntalas en una frase corta; no repitas la lista completa de nombres y precios porque cada foto ya lleva su nombre y precio.',
+    `- El sistema envía las fotos de 4 en 4 y, si quedan más, pregunta solo si desea ver más ${models}. No hagas tú esa pregunta ni digas cuántas fotos vas a enviar.`,
+    '- Si el cliente acepta ver más ("sí", "dale", "muéstrame más"…) y hay FOTOS PENDIENTES POR MOSTRAR, pon TODAS esas en show_products (el sistema las reparte).',
+    `- Cuando el mensaje indica que el cliente responde a una foto concreta, ese es el ${model} del que habla.`,
+    ''
+  );
+
+  add(
+    `CASOS QUE REQUIEREN REVISIÓN MANUAL (campo handoff${style.humanPersona ? '; el cliente nunca debe notar ningún cambio de persona' : ''}):`,
+    pay.cardEnabled
+      ? `- card_payment: el cliente ELIGE explícitamente pagar con tarjeta ("pago con tarjeta", "prefiero tarjeta"). Preguntar cómo pagar o qué formas de pago hay NO es card_payment. Reply: recuérdale el monto total a pagar (100% del valor total${hasShipping ? ' con envío' : ''}),${pay.cardBrands ? ` indícale que solo aceptamos tarjetas ${pay.cardBrands} y` : ''} dile que en un momento le envías el link de pago. Usa emojis en esta respuesta (💳 y otro según el contexto). No hagas preguntas.`
+      : '- card_payment: no se usa, este negocio no acepta tarjeta por este chat.',
+    '- payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece, dile que lo verificas y, si falta algún detalle del pedido, sigue atendiéndolo con normalidad.',
+    '- complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos. No hagas preguntas.',
+    `- none: cualquier otro caso${s.personalization ? ', incluidas todas las personalizaciones' : ''}.`,
+    '- Reply siempre en primera persona.',
+    ''
+  );
+
+  add(
+    'INTENCIÓN (campo intent):',
+    '- quotation: SOLO cuando el cliente pide explícitamente una cotización o el valor total de su pedido ("me cotizas", "cuánto sería en total", "cuánto me sale todo", "pásame la cotización"). Dar cantidad, fecha o colores, o preguntar el precio de un modelo, NO es quotation aunque tú menciones un total.',
+    `- order: el cliente CONFIRMA explícitamente la compra con ${model} y cantidad ya definidos ("confirmo", "sí, hagamos el pedido", "lo quiero reservar"). Decir que un ${model} le gusta, dar ${model}, cantidad${s.personalization ? ', colores' : ''}${d.enabled ? ', fecha' : ''}${hasShipping ? ' o ciudad' : ''} (aunque diga "quiero 4 ${units}") o preguntar precios NO es order: usa product_inquiry u other. Elegir la forma de pago después de conocer el total sí confirma la compra.`,
+    '- delivery_status: pregunta por el estado de un pedido ya hecho.',
+    '- product_inquiry, greeting u other en los demás casos.'
+  );
+
+  return rules.join('\n');
+}
 
 interface Message {
   role: 'user' | 'assistant';
@@ -178,14 +341,14 @@ export interface TurnPlan {
   owner_question: string;
   /** Fecha del evento (AAAA-MM-DD) o cadena vacía. */
   event_date: string;
-  /** Fecha de entrega calculada por el sistema (evento − 3 días) o cadena vacía. */
+  /** Fecha de entrega calculada por el sistema o cadena vacía. */
   delivery_date: string;
-  /** Modelos reales del catálogo con sus docenas, según la conversación. */
-  order_items: { name: string; price: number; dozens: number; personalization: string }[];
+  /** Productos reales del catálogo con su cantidad (en la unidad de venta del negocio). */
+  order_items: { name: string; price: number; quantity: number; personalization: string }[];
   shipping_place: string;
-  /** Valor total calculado por el sistema (velas + envío) o 0 si falta información. */
+  /** Valor total calculado por el sistema (productos + envío) o 0 si falta información. */
   order_total: number;
-  /** Anticipo del 50% del valor total o 0. */
+  /** Monto a transferir para iniciar (anticipo o total) o 0. */
   deposit: number;
 }
 
@@ -207,8 +370,8 @@ const TURN_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'dozens', 'personalization'],
-        properties: { name: { type: 'string' }, dozens: { type: 'number' }, personalization: { type: 'string' } }
+        required: ['name', 'quantity', 'personalization'],
+        properties: { name: { type: 'string' }, quantity: { type: 'number' }, personalization: { type: 'string' } }
       }
     },
     shipping_place: { type: 'string' },
@@ -217,33 +380,53 @@ const TURN_SCHEMA = {
   }
 };
 
-const round2 = (value: number) => Math.round(value * 100) / 100;
-
 // La clienta elige transferencia o pide la cuenta con alguna de estas palabras.
 const BANK_CHOICE_PATTERN = /(?<!\p{L})(transfer\p{L}*|dep[oó]sit\p{L}*|cuentas?|banc\p{L}*)(?!\p{L})/iu;
+// Con la transferencia como único medio de pago, confirmar el pedido ya es pedir la cuenta.
+const CONFIRM_PATTERN = /(?<!\p{L})(confirm\p{L}*|s[ií]|ok|okey|listo|dale|de acuerdo|hag[aá]mos\p{L}*|lo quiero|la quiero|los quiero|las quiero)(?!\p{L})/iu;
 
 // Frases que la dueña pidió no usar porque se repetían en cada respuesta.
 const BANNED_PHRASES = /anotad[oa]s?/i;
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // El resumen del pedido en lista y los casos en que sí corresponde volver a darlo.
 // Solo cuenta como "ya dado" el resumen completo (con el total): antes de eso todavía se está armando el pedido.
-const SUMMARY_PATTERN = /\*Modelo:\*/i;
-const FULL_SUMMARY_PATTERN = /\*Modelo:\*[\s\S]*\*Total:\*/i;
-const TOTAL_OR_CHANGE_PATTERN = /(total|cotiz\p{L}*|precio|valor|cu[aá]nt\p{L}*|docen\p{L}*|fecha|evento|ciudad|env[ií]\p{L}*|cambi\p{L}*|mejor|prefiero|agreg\p{L}*|a[ñn]ad\p{L}*|quit\p{L}*|resum\p{L}*)/iu;
+function summaryPatterns(p: BusinessProfile) {
+  const label = escapeRegex(p.sales.productLabel);
+  const unitStem = escapeRegex(p.sales.unitSingular.slice(0, Math.max(3, p.sales.unitSingular.length - 1)));
+  return {
+    summary: new RegExp(`\\*${label}:\\*`, 'i'),
+    fullSummary: new RegExp(`\\*${label}:\\*[\\s\\S]*\\*Total:\\*`, 'i'),
+    totalOrChange: new RegExp(
+      `(total|cotiz\\p{L}*|precio|valor|cu[aá]nt\\p{L}*|cantidad|${unitStem}\\p{L}*|fecha|${escapeRegex(p.dates.eventLabel)}|ciudad|env[ií]\\p{L}*|cambi\\p{L}*|mejor|prefiero|agreg\\p{L}*|a[ñn]ad\\p{L}*|quit\\p{L}*|resum\\p{L}*)`,
+      'iu'
+    )
+  };
+}
 
-// Emojis de adorno intercambiables. La IA tiende a usar siempre 🤍 y ✨: si repite uno de los últimos
-// mensajes, el sistema lo cambia por otro de esta lista que no se haya usado.
-const DECORATIVE_EMOJIS = ['🤍', '✨', '💕', '🌸', '🎀', '🌷', '💫', '🥰', '😊', '🌼', '💖', '🫶', '😍', '🙌', '🌺', '💐'];
+/** Quita las líneas del resumen ("🕯️ *Modelo:* …") y la frase de reserva de la fecha, dejando el resto del mensaje. */
+function stripSummary(text: string): string {
+  return text
+    .split('\n')
+    .filter(line => !/^\s*\p{Extended_Pictographic}️?\s*\*[^*\n]+:\*/u.test(line) && !/reservad|se reserva/i.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
-export function varyEmojis(reply: string, recentEmojis: string[]): string {
-  const used = new Set(recentEmojis.map(e => e.replace(/️/g, '')));
+/** Si la IA repite un emoji de adorno de los últimos mensajes, se cambia por otro de la lista que no se haya usado. */
+export function varyEmojis(reply: string, recentEmojis: string[], decorative: string[] = profile().style.decorativeEmojis): string {
+  const clean = (e: string) => e.replace(/️/g, '');
+  const pool = decorative.map(clean);
+  const used = new Set(recentEmojis.map(clean));
   return reply.replace(/\p{Extended_Pictographic}️?/gu, match => {
-    const base = match.replace(/️/g, '');
-    if (!DECORATIVE_EMOJIS.includes(base) || !used.has(base)) {
+    const base = clean(match);
+    if (!pool.includes(base) || !used.has(base)) {
       used.add(base);
       return match;
     }
-    const options = DECORATIVE_EMOJIS.filter(e => !used.has(e));
+    const options = pool.filter(e => !used.has(e));
     if (options.length === 0) return match;
     const replacement = options[Math.floor(Math.random() * options.length)];
     used.add(replacement);
@@ -252,35 +435,35 @@ export function varyEmojis(reply: string, recentEmojis: string[]): string {
 }
 
 /**
- * Calcula el valor total con envío a partir de lo que la IA entendió de la conversación.
- * Los precios salen del catálogo y la tarifa del tarifario: la IA no hace las cuentas.
+ * Calcula el valor total a partir de lo que la IA entendió de la conversación.
+ * Los precios salen del catálogo y el envío del perfil del negocio: la IA no hace las cuentas.
  */
-export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: CatalogProduct[]) {
-  const byName = new Map(catalog.map(p => [p.name.trim().toLowerCase(), p]));
+export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: CatalogProduct[], p: BusinessProfile = profile()) {
+  const byName = new Map(catalog.map(c => [productKey(c.name), c]));
   const items = (Array.isArray(rawItems) ? rawItems : [])
     .map((i: any) => ({
-      product: byName.get(String(i?.name || '').trim().toLowerCase()),
-      dozens: Number(i?.dozens),
+      product: byName.get(productKey(i?.name)),
+      quantity: Number(i?.quantity),
       personalization: String(i?.personalization || '').trim()
     }))
-    .filter((i: any) => i.product && Number.isFinite(i.dozens) && i.dozens > 0)
-    .map((i: any) => ({ name: i.product.name, price: Number(i.product.price), dozens: i.dozens, personalization: i.personalization }));
+    .filter((i: any) => i.product && Number.isFinite(i.quantity) && i.quantity > 0)
+    .map((i: any) => ({ name: i.product.name, price: Number(i.product.price), quantity: i.quantity, personalization: i.personalization }));
 
-  const place = String(rawPlace || '').trim();
-  const dozens = items.reduce((sum: number, i: any) => sum + i.dozens, 0);
-  const shipping = place ? shippingCost(place, dozens) : null;
+  const needsPlace = p.shipping.mode !== 'none';
+  const place = needsPlace ? String(rawPlace || '').trim() : '';
+  const units = items.reduce((sum: number, i: any) => sum + i.quantity, 0);
+  const shipping = place ? shippingCost(place, units, p) : null;
 
   let missing: '' | 'items' | 'place' | 'unknown_place' = '';
   if (items.length === 0) missing = 'items';
-  else if (!place) missing = 'place';
-  else if (!shipping) missing = 'unknown_place';
+  else if (needsPlace && !place) missing = 'place';
+  else if (needsPlace && !shipping) missing = 'unknown_place';
 
-  const total = missing ? 0 : round2(items.reduce((sum: number, i: any) => sum + i.price * i.dozens, 0) + shipping!.cost);
-  return { items, place, shipping, missing, total, deposit: round2(total / 2) };
+  const subtotal = round2(items.reduce((sum: number, i: any) => sum + i.price * i.quantity, 0));
+  const total = missing ? 0 : round2(subtotal + (shipping?.cost || 0));
+  const depositPercent = p.payments.transferEnabled ? p.payments.depositPercent : 100;
+  return { items, place, shipping, missing, subtotal, total, deposit: round2(total * depositPercent / 100) };
 }
-
-// Días antes del evento en que el pedido le llega a la clienta.
-export const DELIVERY_DAYS_BEFORE_EVENT = 3;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -291,15 +474,6 @@ export function subtractDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function formatDateEc(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-');
-  return `${d}/${m}/${y}`;
-}
-
-export function todayInGuayaquil(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date());
-}
-
 function isValidIsoDate(value: string): boolean {
   if (!ISO_DATE.test(value)) return false;
   const [y, m, d] = value.split('-').map(Number);
@@ -307,25 +481,28 @@ function isValidIsoDate(value: string): boolean {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
-function buildSystemPrompt(
+export function buildSystemPrompt(
   catalog: CatalogProduct[],
   customPrompt: string | undefined,
   sentProducts: string[],
   bankDetailsSent: boolean,
   pendingProducts: string[] = [],
-  recentEmojis: string[] = []
+  recentEmojis: string[] = [],
+  p: BusinessProfile = profile()
 ) {
-  const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_PERSONA;
+  const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : defaultPersona(p);
+  const { unitSingular: unit } = p.sales;
+  const models = p.sales.productLabelPlural.toLowerCase();
 
   let catalogText = 'CATÁLOGO: todavía no hay productos cargados. Si el cliente pregunta por productos, indícale que en breve le compartes las opciones.';
   if (catalog.length > 0) {
     const byCategory: { [key: string]: CatalogProduct[] } = {};
-    for (const p of catalog) {
-      if (!byCategory[p.category]) byCategory[p.category] = [];
-      byCategory[p.category].push(p);
+    for (const c of catalog) {
+      if (!byCategory[c.category]) byCategory[c.category] = [];
+      byCategory[c.category].push(c);
     }
-    catalogText = 'CATÁLOGO ACTUAL DE VELAMIA (precios por docena):\n\n' + Object.entries(byCategory)
-      .map(([cat, items]) => `${cat} (${items.length} modelos):\n` + items.map(i => `  - ${i.name}: $${Number(i.price).toFixed(2)} por docena`).join('\n'))
+    catalogText = `CATÁLOGO ACTUAL DE ${p.business.name.toUpperCase()} (precios por ${unit}):\n\n` + Object.entries(byCategory)
+      .map(([cat, items]) => `${cat} (${items.length} ${models}):\n` + items.map(i => `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${unit}`).join('\n'))
       .join('\n\n');
   }
 
@@ -333,21 +510,26 @@ function buildSystemPrompt(
     ? `FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ${sentProducts.join(', ')}`
     : 'FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ninguna';
   const pendingText = pendingProducts.length > 0
-    ? `\nFOTOS PENDIENTES POR MOSTRAR (ya se le preguntó si desea ver más modelos): ${pendingProducts.join(', ')}`
+    ? `\nFOTOS PENDIENTES POR MOSTRAR (ya se le preguntó si desea ver más ${models}): ${pendingProducts.join(', ')}`
     : '';
 
   // Sin la fecha la IA no puede saber si "el 18" ya pasó ni qué año corresponde.
   const today = new Date().toLocaleDateString('es-EC', {
-    timeZone: 'America/Guayaquil', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    timeZone: p.business.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   });
 
-  const bankText = bankDetailsSent
-    ? 'DATOS BANCARIOS: ya se enviaron en esta conversación; vuelve a marcar send_bank_details solo si el cliente los pide de nuevo.'
-    : 'DATOS BANCARIOS: aún no se han enviado en esta conversación.';
+  const bankText = !p.payments.transferEnabled ? ''
+    : bankDetailsSent
+      ? '\nDATOS BANCARIOS: ya se enviaron en esta conversación; vuelve a marcar send_bank_details solo si el cliente los pide de nuevo.'
+      : '\nDATOS BANCARIOS: aún no se han enviado en esta conversación.';
 
-  const shippingText = `TARIFAS DE ENVÍO DESDE GUAYAQUIL (uso interno, todos los cantones de la provincia cuestan igual):\n${shippingRatesSummary()}`;
+  const summary = shippingRatesSummary(p);
+  const shippingText = p.shipping.mode === 'ecuador_table'
+    ? `TARIFAS DE ENVÍO DESDE ${p.business.city.toUpperCase()} (uso interno, todos los cantones de la provincia cuestan igual):\n${summary}\n\n`
+    : p.shipping.mode === 'flat' ? `TARIFA DE ENVÍO (uso interno):\n${summary}\n\n` : '';
 
-  return `${persona}\n\n${CORE_RULES}\n\nFECHA DE HOY (Guayaquil): ${today}\n\n${shippingText}\n\n${catalogText}\n\n${sentText}${pendingText}\n${bankText}\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`;
+  const rules = buildCoreRules(p, catalog[0]?.name);
+  return `${persona}\n\n${rules}\n\nFECHA DE HOY (${p.business.city || p.business.timezone}): ${today}\n\n${shippingText}${catalogText}\n\n${sentText}${pendingText}${bankText}\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`;
 }
 
 /**
@@ -365,12 +547,21 @@ export async function planTurn(params: {
   recentEmojis?: string[];
 }): Promise<TurnPlan> {
   const { history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [], recentEmojis = [] } = params;
+  const p = profile();
+  const pay = p.payments;
+  const usesDeposit = pay.transferEnabled && pay.depositPercent < 100;
+  const hasShipping = p.shipping.mode !== 'none';
+  const goods = hasShipping ? `${p.sales.goodsWord} + envío` : p.sales.goodsWord;
+
   // Lo que escribió la clienta, sin el texto citado de otro mensaje (que puede decir "transferencia").
   const customerWords = userMessage.replace(/\[El cliente responde a [^\]]*\]/g, '');
-  const choseTransfer = BANK_CHOICE_PATTERN.test(customerWords);
+  const onlyTransfer = pay.transferEnabled && !pay.cardEnabled;
+  const choseTransfer = pay.transferEnabled
+    && (BANK_CHOICE_PATTERN.test(customerWords) || (onlyTransfer && CONFIRM_PATTERN.test(customerWords)));
+  const patterns = summaryPatterns(p);
 
   const baseMessages = [
-    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts, recentEmojis) },
+    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p) },
     ...history,
     { role: 'user' as const, content: userMessage }
   ];
@@ -394,49 +585,57 @@ export async function planTurn(params: {
   // Fechas y montos los calcula el sistema. Si la IA escribió otros, se rehace la respuesta
   // una sola vez con todas las correcciones juntas.
   const corrections: string[] = [];
+  const reply = () => String(parsed.reply || '');
 
-  const eventDate = isValidIsoDate(String(parsed.event_date || '')) ? parsed.event_date : '';
-  const expectedDelivery = eventDate ? subtractDays(eventDate, DELIVERY_DAYS_BEFORE_EVENT) : '';
+  const days = p.dates.deliveryDaysBeforeEvent;
+  const eventDate = p.dates.enabled && isValidIsoDate(String(parsed.event_date || '')) ? parsed.event_date : '';
+  const expectedDelivery = eventDate ? subtractDays(eventDate, days) : '';
   const mentioned = String(parsed.delivery_date || '');
-  if (expectedDelivery && mentioned && expectedDelivery <= todayInGuayaquil()) {
+  const ev = p.dates.eventLabel;
+  if (expectedDelivery && mentioned && expectedDelivery <= todayLocal(p)) {
     // Evento muy cercano: siempre se atiende, pero decirle una fecha de entrega ya pasada no tiene sentido.
     console.warn(`📅 Entrega calculada ${expectedDelivery} es hoy o ya pasó: se pide no mencionarla`);
     corrections.push(
-      `El evento es el ${formatDateEc(eventDate)} y la entrega calculada (${DELIVERY_DAYS_BEFORE_EVENT} días antes) ya pasó o es hoy. ` +
-      'No menciones ninguna fecha de entrega. Confirma con seguridad que sí atendemos su pedido para su evento y dile que en un momento le confirmas el día exacto de entrega.'
+      `El ${ev} es el ${formatDate(eventDate)} y la entrega calculada (${days} días antes) ya pasó o es hoy. ` +
+      `No menciones ninguna fecha de entrega. Confirma con seguridad que sí atendemos su pedido para su ${ev} y dile que en un momento le confirmas el día exacto de entrega.`
     );
   } else if (expectedDelivery && mentioned && mentioned !== expectedDelivery) {
     console.warn(`📅 Fecha de entrega corregida: la IA dijo ${mentioned}, corresponde ${expectedDelivery}`);
     corrections.push(
-      `El evento es el ${formatDateEc(eventDate)} y la fecha de entrega correcta es el ${formatDateEc(expectedDelivery)} ` +
-      `(${DELIVERY_DAYS_BEFORE_EVENT} días antes). Usa exactamente esa fecha de entrega y di que la fecha se reserva al recibir el anticipo.`
+      `El ${ev} es el ${formatDate(eventDate)} y la fecha de entrega correcta es el ${formatDate(expectedDelivery)} ` +
+      `(${days} días antes). Usa exactamente esa fecha de entrega y di que la fecha se reserva al recibir el ${usesDeposit ? 'anticipo' : 'pago'}.`
     );
-  } else if (expectedDelivery && mentioned && !(parsed.handoff === 'card_payment'
-    ? /recibir el pago|confirmar el pago/i
-    : /anticipo/i).test(String(parsed.reply || ''))) {
-    // La fecha es correcta, pero sin la reserva por pago se pierde la urgencia que pidió la dueña.
-    corrections.push(parsed.handoff === 'card_payment'
-      ? 'Mantén la misma fecha de entrega y agrega que la fecha queda reservada al recibir el pago, ya que las fechas se van ocupando por orden de pago. No menciones anticipo: con tarjeta se paga el total.'
-      : 'Mantén la misma fecha de entrega y agrega que la fecha queda reservada al recibir el anticipo, ya que las fechas se van ocupando por orden de pago.');
+  } else if (expectedDelivery && mentioned) {
+    // La fecha es correcta, pero sin la reserva por pago se pierde la urgencia.
+    const payByCard = parsed.handoff === 'card_payment' || !usesDeposit;
+    if (!(payByCard ? /recibir el pago|confirmar el pago/i : /anticipo/i).test(reply())) {
+      corrections.push(payByCard
+        ? `Mantén la misma fecha de entrega y agrega que la fecha queda reservada al recibir el pago, ya que las fechas se van ocupando por orden de pago.${usesDeposit ? ' No menciones anticipo: con tarjeta se paga el total.' : ''}`
+        : 'Mantén la misma fecha de entrega y agrega que la fecha queda reservada al recibir el anticipo, ya que las fechas se van ocupando por orden de pago.');
+    }
   }
 
   // Con tarjeta se paga el 100%: hablar de anticipo confunde a la clienta.
-  if (parsed.handoff === 'card_payment' && /anticipo/i.test(String(parsed.reply || ''))) {
+  if (usesDeposit && parsed.handoff === 'card_payment' && /anticipo/i.test(reply())) {
     corrections.push('La clienta paga con tarjeta: se cancela el 100% del valor total. No menciones la palabra anticipo; si hablas de la reserva de la fecha di "al recibir el pago".');
   }
 
   // Los datos bancarios solo salen cuando la clienta eligió transferencia o pidió la cuenta.
   if (parsed.send_bank_details === true && !choseTransfer) {
     console.warn('🏦 La IA quiso enviar datos bancarios sin que la clienta eligiera transferencia');
+    const options = pay.cardEnabled
+      ? ` Pregúntale con qué prefiere pagar, en lista: transferencia (${usesDeposit ? `anticipo ${pay.depositPercent}%` : '100% del total'}) o tarjeta${pay.cardBrands ? ` ${pay.cardBrands.replace(/ y /g, ' o ')}` : ''} (100% del total).`
+      : ' Pregúntale si confirma el pedido.';
     corrections.push(
       'La clienta todavía NO eligió pagar por transferencia ni pidió los datos de la cuenta: send_bank_details debe ser false. ' +
-      'No digas que le envías ni que le compartes los datos de la cuenta. Pregúntale con qué prefiere pagar, en lista: transferencia (anticipo 50%) o tarjeta Visa o Mastercard (100% del total).'
+      `No digas que le envías ni que le compartes los datos de la cuenta.${options}`
     );
   }
 
   // El resumen en lista solo se repite si vuelve a pedir el total o cambia algo del pedido.
-  const summaryAlreadySent = history.some(m => m.role === 'assistant' && FULL_SUMMARY_PATTERN.test(String(m.content || '')));
-  if (summaryAlreadySent && SUMMARY_PATTERN.test(String(parsed.reply || '')) && !TOTAL_OR_CHANGE_PATTERN.test(customerWords)) {
+  const summaryAlreadySent = history.some(m => m.role === 'assistant' && patterns.fullSummary.test(String(m.content || '')));
+  const repeatsSummary = () => summaryAlreadySent && patterns.summary.test(reply()) && !patterns.totalOrChange.test(customerWords);
+  if (repeatsSummary()) {
     console.warn('📋 La IA repitió el resumen sin que la clienta cambiara nada');
     corrections.push(
       'Ya le diste el resumen en lista antes y no cambió ningún dato: no lo repitas. ' +
@@ -444,22 +643,22 @@ export async function planTurn(params: {
     );
   }
 
-  if (BANNED_PHRASES.test(String(parsed.reply || ''))) {
+  if (BANNED_PHRASES.test(reply())) {
     corrections.push('No uses "te lo dejo anotado" ni ninguna frase con "anotado"; exprésalo de otra forma.');
   }
 
   const quotedTotal = Number(parsed.quoted_total) || 0;
-  const quotedDeposit = Number(parsed.quoted_deposit) || 0;
-  const firstOrder = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog);
+  const quotedDeposit = usesDeposit ? Number(parsed.quoted_deposit) || 0 : 0;
+  const firstOrder = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog, p);
   // Montos que aparecen escritos en la respuesta ("$30", "$127.00", "$63,50").
-  const amountsInReply = (String(parsed.reply || '').match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || [])
+  const amountsInReply = (reply().match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || [])
     .map(a => Number(a.replace(/[$\s]/g, '').replace(',', '.')));
-  // Sin montos todavía, pero la reserva con anticipo sí se puede mencionar para crear urgencia.
-  const noAmountsYet = 'No escribas ningún monto (ni valor total ni valor del anticipo) todavía; sí puedes decir que la fecha se reserva con el anticipo.';
+  // Sin montos todavía, pero la reserva de la fecha sí se puede mencionar para crear urgencia.
+  const noAmountsYet = `No escribas ningún monto (ni valor total${usesDeposit ? ' ni valor del anticipo' : ''}) todavía${p.dates.enabled ? `; sí puedes decir que la fecha se reserva con el ${usesDeposit ? 'anticipo' : 'pago'}` : ''}.`;
 
   if (quotedTotal > 0 || quotedDeposit > 0) {
     if (firstOrder.missing === 'items') {
-      corrections.push(`${noAmountsYet} Aún no está claro qué modelos y cuántas docenas quiere; pregúntale.`);
+      corrections.push(`${noAmountsYet} Aún no está claro qué ${p.sales.productLabelPlural.toLowerCase()} y cuántas ${p.sales.unitPlural} quiere; pregúntale.`);
     } else if (firstOrder.missing === 'place') {
       corrections.push(`${noAmountsYet} Pregunta primero a qué ciudad se envía el pedido.`);
     } else if (firstOrder.missing === 'unknown_place') {
@@ -467,46 +666,54 @@ export async function planTurn(params: {
     }
   }
 
-  // Si ya se conocen modelos, cantidad y ciudad, cualquier monto escrito debe cuadrar con el cálculo del sistema,
+  // Si ya se conoce todo lo necesario, cualquier monto escrito debe cuadrar con el cálculo del sistema,
   // aunque la IA no lo haya declarado en quoted_total (por ejemplo "$123.00" en lugar de "$124.00").
   if (!firstOrder.missing && amountsInReply.length > 0) {
-    const allowed = [firstOrder.total, firstOrder.deposit];
-    const catalogPrices = catalog.map(p => Number(p.price));
-    const givesTotal = quotedTotal > 0 || quotedDeposit > 0 || amountsInReply.some(a => allowed.some(v => Math.abs(a - v) < 0.009));
+    const showSeparately = hasShipping && p.shipping.showSeparately;
+    const allowed = [firstOrder.total, firstOrder.deposit, ...(showSeparately ? [firstOrder.subtotal, firstOrder.shipping?.cost || 0] : [])];
+    const catalogPrices = catalog.map(c => Number(c.price));
+    const givesTotal = quotedTotal > 0 || quotedDeposit > 0 || amountsInReply.some(a => [firstOrder.total, firstOrder.deposit].some(v => Math.abs(a - v) < 0.009));
     const wrongTotal = (quotedTotal > 0 && Math.abs(quotedTotal - firstOrder.total) > 0.009)
       || (quotedDeposit > 0 && Math.abs(quotedDeposit - firstOrder.deposit) > 0.009);
-    // Al dar el total solo valen total y anticipo; en otros mensajes también se permite el precio de catálogo.
+    // Al dar el total solo valen los montos del cálculo; en otros mensajes también se permite el precio de catálogo.
     const accepted = givesTotal ? allowed : [...allowed, ...catalogPrices];
     const extraAmounts = amountsInReply.some(a => !accepted.some(v => Math.abs(a - v) < 0.009));
     if (wrongTotal || extraAmounts) {
       console.warn(`💲 Montos corregidos: la IA dijo ${quotedTotal}/${quotedDeposit} (${amountsInReply.join(', ')}), corresponde ${firstOrder.total}/${firstOrder.deposit}`);
-      corrections.push(
-        `El valor total correcto del pedido (velas + envío a ${firstOrder.shipping!.place}) es $${firstOrder.total.toFixed(2)} ` +
-        `y el anticipo del 50% es $${firstOrder.deposit.toFixed(2)}. Escribe solo esos montos, como un solo valor: ` +
-        'sin precio por docena, sin subtotal de velas y sin mencionar el envío por separado.'
+      const where = firstOrder.shipping ? `${p.sales.goodsWord} + envío a ${firstOrder.shipping.place}` : goods;
+      const depositText = usesDeposit ? ` y el anticipo del ${pay.depositPercent}% es ${money(firstOrder.deposit)}` : '';
+      corrections.push(showSeparately
+        ? `El subtotal de ${p.sales.goodsWord} es ${money(firstOrder.subtotal)}, el envío a ${firstOrder.shipping!.place} cuesta ${money(firstOrder.shipping!.cost)} y el valor total es ${money(firstOrder.total)}${depositText}. Usa exactamente esos montos.`
+        : `El valor total correcto del pedido (${where}) es ${money(firstOrder.total)}${depositText}. Escribe solo ${usesDeposit ? 'esos montos' : 'ese monto'}, como un solo valor: ` +
+          `sin precio por ${p.sales.unitSingular}${hasShipping ? `, sin subtotal de ${p.sales.goodsWord} y sin mencionar el envío por separado` : ''}.`
       );
     }
   }
 
   if (corrections.length > 0) {
     parsed = await ask(`CORRECCIÓN (obligatoria):\n- ${corrections.join('\n- ')}\nRehaz la respuesta aplicando estas correcciones.`);
+    if (repeatsSummary()) {
+      console.warn('📋 La IA insistió en repetir el resumen: se quitan esas líneas');
+      parsed.reply = stripSummary(reply());
+    }
   }
 
-  const order = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog);
+  const order = computeOrderTotal(parsed.order_items, parsed.shipping_place, catalog, p);
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
-  const byName = new Map(catalog.map(p => [p.name.trim().toLowerCase(), p.name]));
+  const byName = new Map(catalog.map(c => [productKey(c.name), c.name]));
   const showProducts = [...new Set(
     (Array.isArray(parsed.show_products) ? parsed.show_products : [])
-      .map((n: any) => byName.get(String(n).trim().toLowerCase()))
+      .map((n: any) => byName.get(productKey(n)))
       .filter(Boolean) as string[]
   )].slice(0, MAX_PHOTOS_PER_TURN);
 
   return {
-    reply: varyEmojis(String(parsed.reply || '').trim(), recentEmojis),
+    reply: varyEmojis(String(parsed.reply || '').trim(), recentEmojis, p.style.decorativeEmojis),
     intent: parsed.intent || 'other',
     show_products: showProducts,
-    handoff: parsed.handoff || 'none',
+    // Sin tarjeta habilitada no hay pago con tarjeta que derivar.
+    handoff: parsed.handoff === 'card_payment' && !pay.cardEnabled ? 'none' : parsed.handoff || 'none',
     // Aunque la corrección falle, sin elección de transferencia nunca se envían las cuentas.
     send_bank_details: parsed.send_bank_details === true && choseTransfer,
     owner_question: String(parsed.owner_question || '').trim(),
@@ -519,11 +726,6 @@ export async function planTurn(params: {
   };
 }
 
-/**
- * Extrae qué productos del catálogo quiere el cliente y cuántas docenas, leyendo la conversación
- * reciente (el cliente suele decir "de ese modelo" sin repetir el nombre).
- * Devuelve solo coincidencias reales del catálogo: nunca inventa productos ni precios.
- */
 export interface OrderItem {
   name: string;
   price: number;
@@ -531,27 +733,32 @@ export interface OrderItem {
   personalization: string;
 }
 
+/**
+ * Extrae qué productos del catálogo quiere el cliente y en qué cantidad, leyendo la conversación
+ * reciente (el cliente suele decir "de ese modelo" sin repetir el nombre).
+ * Devuelve solo coincidencias reales del catálogo: nunca inventa productos ni precios.
+ */
 export async function extractOrderItems(
   conversationText: string,
   catalog: { name: string; price: number; category: string }[]
 ): Promise<OrderItem[]> {
   if (!catalog || catalog.length === 0) return [];
+  const s = profile().sales;
 
   try {
-    const catalogNames = catalog.map(p => p.name).join('\n');
+    const catalogNames = catalog.map(c => c.name).join('\n');
     const prompt = `Catálogo disponible (un producto por línea):
 ${catalogNames}
 
 Conversación reciente con el cliente:
 ${conversationText}
 
-Identifica qué productos del catálogo quiere el cliente en este momento y cuántas DOCENAS de cada uno.
+Identifica qué productos del catálogo quiere el cliente en este momento y cuántas ${s.unitPlural.toUpperCase()} de cada uno.
 Reglas:
 - Usa EXACTAMENTE los nombres del catálogo.
 - Si no queda claro ningún producto del catálogo, devuelve una lista vacía.
-- Si da la cantidad en unidades, conviértela a docenas (redondea hacia arriba).
-- Si no especifica cantidad, asume 1 docena.
-- En personalization resume colores, nombres, frases y fecha del evento que pidió para ese producto; cadena vacía si no hay.
+${s.unitDetail ? `- Si da la cantidad en otra medida, conviértela a ${s.unitPlural} (1 ${s.unitSingular} = ${s.unitDetail}), redondeando hacia arriba.\n` : ''}- Si no especifica cantidad, asume 1 ${s.unitSingular}.
+- En personalization resume los detalles especiales que pidió para ese producto (colores, nombres, frases, fecha); cadena vacía si no hay.
 
 Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."}]}`;
 
@@ -568,7 +775,7 @@ Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."
 
     return items
       .map((item: any) => {
-        const match = catalog.find(p => p.name.toLowerCase() === String(item.name || '').toLowerCase());
+        const match = catalog.find(c => productKey(c.name) === productKey(item.name));
         if (!match) return null;
         const quantity = Number(item.quantity);
         return {

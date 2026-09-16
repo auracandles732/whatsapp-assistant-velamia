@@ -34,6 +34,7 @@ import {
 } from './middleware/auth';
 import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
+import { loadBusinessProfile, saveBusinessProfile, profile, PROFILE_PRESETS } from './config/businessProfile';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +47,23 @@ app.use(express.json({
   limit: '15mb',
   verify: (req, _res, buf) => { (req as any).rawBody = buf; }
 }));
+
+// El nombre y el color de la app instalable salen del perfil del negocio.
+app.get('/crm/manifest.json', (_req: Request, res: Response) => {
+  const { business, branding } = profile();
+  res.json({
+    name: `${business.name} CRM`,
+    short_name: business.name.slice(0, 12),
+    description: `Panel de control del asistente WhatsApp de ${business.name}`,
+    start_url: '/crm/index.html',
+    scope: '/crm/',
+    display: 'standalone',
+    background_color: '#F7EFEA',
+    theme_color: branding.primaryColor,
+    orientation: 'portrait',
+    icons: [{ src: branding.logoUrl || 'logo.png', sizes: branding.logoUrl ? 'any' : '1920x1920', type: 'image/png', purpose: 'any' }]
+  });
+});
 
 app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard')));
 app.get('/', (_req: Request, res: Response) => res.redirect('/crm/'));
@@ -135,6 +153,33 @@ app.post('/api/login', (req: Request, res: Response) => {
 
   loginFailures.delete(ip);
   res.json({ token: issueSessionToken() });
+});
+
+// La pantalla de ingreso muestra el nombre y el logo antes de iniciar sesión: solo datos públicos.
+app.get('/api/public/branding', (_req: Request, res: Response) => {
+  const { business, branding } = profile();
+  res.json({ name: business.name, primaryColor: branding.primaryColor, logoUrl: branding.logoUrl, timezone: business.timezone });
+});
+
+// ---------- Perfil del negocio ----------
+
+app.get('/api/business-profile', requireCrmSession, (_req: Request, res: Response) => {
+  res.json(profile());
+});
+
+app.get('/api/business-profile/presets', requireCrmSession, (_req: Request, res: Response) => {
+  res.json(Object.entries(PROFILE_PRESETS).map(([id, preset]) => ({ id, label: preset.label, profile: preset.profile })));
+});
+
+app.put('/api/business-profile', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Perfil inválido' });
+    const saved = await saveBusinessProfile(req.body);
+    console.log(`🏪 Perfil del negocio actualizado: ${saved.business.name}`);
+    res.json(saved);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ---------- Conversaciones ----------
@@ -501,7 +546,18 @@ process.on('SIGTERM', () => {
 
 initDatabase().catch(error => console.error('❌', error.message));
 
-app.listen(PORT, () => {
+// El perfil se lee antes de atender: sin él el bot respondería con las reglas de otro negocio.
+async function start() {
+  try {
+    const loaded = await loadBusinessProfile();
+    console.log(`🏪 Perfil del negocio: ${loaded.business.name}`);
+  } catch (error: any) {
+    console.error('❌ No se pudo leer el perfil del negocio:', error.message);
+  }
+  // Si otra instancia (por ejemplo durante un despliegue) guarda cambios, se toman en pocos minutos.
+  setInterval(() => loadBusinessProfile().catch(error => console.error('❌ Perfil del negocio:', error.message)), 5 * 60 * 1000);
+
+  app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
 
   const missing = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID', 'WHATSAPP_BUSINESS_ACCOUNT_ID', 'OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'WEBHOOK_VERIFY_TOKEN', 'CRM_PASSWORD', 'META_APP_SECRET']
@@ -512,4 +568,7 @@ app.listen(PORT, () => {
 
   keepAwake();
   startFollowUpScheduler();
-});
+  });
+}
+
+start();

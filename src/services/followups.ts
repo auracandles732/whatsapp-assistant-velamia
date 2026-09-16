@@ -7,45 +7,35 @@ import {
   getFollowUpActivity,
   recordFollowUp
 } from './supabase';
+import { profile, hourLocal } from '../config/businessProfile';
 
 /** Inicio del texto guardado de cada seguimiento: el CRM y la IA lo reconocen por esto. */
 export const FOLLOW_UP_MARKER = '📩 Seguimiento automático';
 
-/** Plantillas aprobadas en Meta y días sin respuesta de la clienta para enviar cada una. */
-export const FOLLOW_UP_STEPS = [
-  { template: 'velamia_seguimiento_01', days: 1 },
-  { template: 'velamia_seguimiento_02', days: 2 },
-  { template: 'velamia_seguimiento_03', days: 4 },
-  { template: 'velamia_seguimiento_04_v2', days: 7 },
-  { template: 'velamia_seguimiento_05_v2', days: 14 }
-];
+/** Plantillas aprobadas en Meta y días sin respuesta de la clienta para enviar cada una (perfil del negocio). */
+export const followUpSteps = () => profile().followUps.steps;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SEND_FROM_HOUR = 9;
-const SEND_UNTIL_HOUR = 19;
 // Tras un reinicio pueden "vencer" varios pasos a la vez: nunca dos seguimientos seguidos el mismo día.
 const MIN_GAP_MS = 20 * 60 * 60 * 1000;
 const CHECK_EVERY_MS = 15 * 60 * 1000;
 const TEMPLATE_CACHE_MS = 30 * 60 * 1000;
-// Pedido reciente = la clienta ya compró, no se le insiste.
-const ACTIVITY_WINDOW_DAYS = 60;
-// Pasado el último paso (14 días) más un margen, ya no se escribe. Debe ser menor que ACTIVITY_WINDOW_DAYS:
+// Pasado el último paso más una semana, ya no se escribe.
+const maxSilenceDays = () => Math.max(0, ...followUpSteps().map(step => step.days)) + 7;
+// Pedido reciente = la clienta ya compró, no se le insiste. Debe superar maxSilenceDays:
 // si no, los seguimientos viejos saldrían de la consulta y la serie volvería a empezar.
-const MAX_SILENCE_DAYS = 21;
-
-export function hourInGuayaquil(date: Date): number {
-  return Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Guayaquil', hour: 'numeric', hourCycle: 'h23' }).format(date));
-}
+const activityWindowDays = () => Math.max(60, maxSilenceDays() + 30);
 
 /**
  * Decide qué seguimiento le toca a un chat. Sin efectos, para poder probarla.
  * sentSinceLast: fechas de seguimientos enviados después del último mensaje de la clienta.
  */
 export function nextFollowUp(lastCustomerAt: Date, sentSinceLast: Date[], now: Date) {
+  const steps = followUpSteps();
   const index = sentSinceLast.length;
-  if (index >= FOLLOW_UP_STEPS.length) return null;
+  if (index >= steps.length) return null;
 
-  const step = FOLLOW_UP_STEPS[index];
+  const step = steps[index];
   if (now.getTime() - lastCustomerAt.getTime() < step.days * DAY_MS) return null;
 
   const lastSent = sentSinceLast[sentSinceLast.length - 1];
@@ -78,14 +68,16 @@ export async function runFollowUps(now: Date = new Date()): Promise<{ sent: numb
   running = true;
 
   try {
-    const hour = hourInGuayaquil(now);
-    if (hour < SEND_FROM_HOUR || hour >= SEND_UNTIL_HOUR) return { sent: 0, skipped: 'fuera de horario' };
+    const { enabled, steps, fromHour, untilHour } = profile().followUps;
+    if (!enabled || steps.length === 0) return { sent: 0, skipped: 'seguimientos desactivados en el perfil' };
+    const hour = hourLocal(now);
+    if (hour < fromHour || hour >= untilHour) return { sent: 0, skipped: 'fuera de horario' };
     if ((await getConfig('bot_enabled')) === 'false') return { sent: 0, skipped: 'bot apagado' };
 
     const [templates, conversations, activity] = await Promise.all([
       getApprovedTemplates(),
       getAllConversations(),
-      getFollowUpActivity(ACTIVITY_WINDOW_DAYS)
+      getFollowUpActivity(activityWindowDays())
     ]);
 
     let sent = 0;
@@ -96,7 +88,7 @@ export async function runFollowUps(now: Date = new Date()): Promise<{ sent: numb
 
       // last_message_time solo cambia con mensajes de la clienta: es su última respuesta.
       const lastCustomerAt = parseDbTimestamp(conv.last_message_time);
-      if (now.getTime() - lastCustomerAt.getTime() > MAX_SILENCE_DAYS * DAY_MS) continue;
+      if (now.getTime() - lastCustomerAt.getTime() > maxSilenceDays() * DAY_MS) continue;
       const sentSinceLast = (activity.followUps.get(conv.id) || [])
         .filter(date => date > lastCustomerAt)
         .sort((a, b) => a.getTime() - b.getTime());
@@ -112,7 +104,7 @@ export async function runFollowUps(now: Date = new Date()): Promise<{ sent: numb
 
       try {
         const response = await sendTemplateMessage(conv.phone_number, step.template, template.language);
-        await saveMessage(conv.id, 'bot', 'text', `${FOLLOW_UP_MARKER} ${step.index + 1}/${FOLLOW_UP_STEPS.length}\n${template.text}`, getSentMessageId(response));
+        await saveMessage(conv.id, 'bot', 'text', `${FOLLOW_UP_MARKER} ${step.index + 1}/${steps.length}\n${template.text}`, getSentMessageId(response));
         await recordFollowUp(conv.id, 'auto_followup', step.template);
         sent++;
       } catch (error: any) {
@@ -137,5 +129,8 @@ export function startFollowUpScheduler() {
 
   setTimeout(tick, 60 * 1000);
   setInterval(tick, CHECK_EVERY_MS);
-  console.log('📩 Seguimientos automáticos activos (1, 2, 4, 7 y 14 días · 9:00-19:00)');
+  const { enabled, steps, fromHour, untilHour } = profile().followUps;
+  console.log(enabled && steps.length
+    ? `📩 Seguimientos automáticos activos (días ${steps.map(step => step.days).join(', ')} · ${fromHour}:00-${untilHour}:00)`
+    : '📩 Seguimientos automáticos desactivados en el perfil del negocio');
 }

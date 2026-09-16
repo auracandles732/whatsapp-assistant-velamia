@@ -1,6 +1,7 @@
 -- ⚠️  HISTÓRICA — NO VOLVER A EJECUTAR EN PRODUCCIÓN.
 -- Esta migración BORRA todas las tablas y sus datos (DROP TABLE). Solo sirve para crear
 -- una base nueva desde cero; después se aplican 003, 004, 005 y 006 en orden.
+-- Para instalar un negocio nuevo usa setup/base_nueva.sql (no borra nada ni trae datos de VELAMIA).
 
 DROP TABLE IF EXISTS followups CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;

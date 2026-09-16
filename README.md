@@ -1,6 +1,14 @@
-# Asistente WhatsApp VELAMIA 🕯️
+# Asistente de ventas por WhatsApp
 
-Bot de ventas por WhatsApp para VELAMIA (velas para eventos, Guayaquil) con CRM web instalable como app.
+Asistente de ventas por WhatsApp con CRM web instalable como app, **configurable para cualquier negocio**
+desde el CRM (Configuración → Perfil del negocio). La primera instalación es VELAMIA (velas para eventos, Guayaquil):
+lo que este README describe como comportamiento es el de su perfil.
+
+- **Instalar para otro negocio:** [docs/NUEVO_NEGOCIO.md](docs/NUEVO_NEGOCIO.md)
+- **Perfil del negocio:** `src/config/businessProfile.ts` (tipos, validación y plantillas `VELAMIA_PROFILE`, `EVENTS_PROFILE`, `STORE_PROFILE`).
+  Se guarda en `business_config` (clave `business_profile`) y define unidad de venta, pagos, fechas, envíos,
+  seguimientos, avisos, emojis, nombre, logo y color. Las reglas de la IA se arman con `buildCoreRules(perfil)`.
+- **Cargar un perfil por consola:** `npm run build && npm run perfil -- velamia` (o `eventos`, `tienda`, `archivo.json`; `--ver` para mostrarlo).
 
 ## Arquitectura
 
@@ -26,7 +34,8 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 
 | Archivo | Responsabilidad |
 |---|---|
-| `src/index.ts` | Rutas HTTP: webhook de Meta, login, API del CRM |
+| `src/index.ts` | Rutas HTTP: webhook de Meta, login, API del CRM y perfil del negocio |
+| `src/config/businessProfile.ts` | Perfil del negocio: todo lo que cambia de un negocio a otro |
 | `src/middleware/auth.ts` | Firma del webhook (HMAC) y sesiones del CRM |
 | `src/controllers/messageController.ts` | Procesa cada mensaje entrante (en fila por cliente) |
 | `src/services/openai.ts` | Reglas del bot, `planTurn`, extracción de pedidos, audio e imágenes |
@@ -34,7 +43,9 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 | `src/services/whatsapp.ts` | Envío de mensajes y descarga de archivos (Graph API v25.0) |
 | `src/services/storage.ts` | Subida y borrado de archivos en Supabase Storage |
 | `src/services/notifications.ts` | Avisos a la dueña por WhatsApp |
-| `migrations/` | SQL en orden. **002 borra todo: no re-ejecutar en producción** |
+| `migrations/` | Historial de VELAMIA. **002 borra todo: no re-ejecutar en producción** |
+| `setup/base_nueva.sql` | Instalación completa de la base para un negocio nuevo |
+| `scripts/perfil.js` | Carga o muestra el perfil del negocio desde la consola |
 
 ## Comportamiento del bot
 
