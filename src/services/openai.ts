@@ -1,5 +1,6 @@
 import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
+import { recordAiUsage } from './supabase';
 import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel } from '../config/businessProfile';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
@@ -24,6 +25,19 @@ const REASONING_EFFORT = 'low' as const;
 
 // Solo los modelos de razonamiento (gpt-5, o-series) aceptan reasoning_effort; otro modelo elegido por un negocio lo rechazaría.
 const reasoningFor = (model: string) => (/^(gpt-5|o\d)/.test(model) ? { reasoning_effort: REASONING_EFFORT } : {});
+
+/** Anota lo que consumió la llamada para poder ver después cuánto gasta cada empresa. */
+function track(purpose: string, model: string, response: any) {
+  const u = response?.usage;
+  if (!u) return;
+  void recordAiUsage({
+    model,
+    purpose,
+    input: u.prompt_tokens || 0,
+    cached: u.prompt_tokens_details?.cached_tokens || 0,
+    output: u.completion_tokens || 0
+  });
+}
 
 // Máximo de fotos que la IA puede elegir en un turno; el controlador las envía de 4 en 4.
 export const MAX_PHOTOS_PER_TURN = 40;
@@ -62,6 +76,7 @@ export async function describeImage(imageUrl: string, p: BusinessProfile = profi
         ]
       }]
     });
+    track('foto', model, response);
     return response.choices[0]?.message?.content || '';
   } catch (error: any) {
     console.error('Error describiendo imagen:', error.message);
@@ -816,6 +831,7 @@ export async function planTurn(params: {
       },
       messages: extraSystem ? [...baseMessages, { role: 'system' as const, content: extraSystem }] : baseMessages
     });
+    track('respuesta', model, response);
     return JSON.parse(response.choices[0]?.message?.content || '{}');
   };
 
@@ -1049,6 +1065,7 @@ Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."
       messages: [{ role: 'user', content: prompt }]
     });
 
+    track('pedido', model, response);
     const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
     const items = Array.isArray(parsed.items) ? parsed.items : [];
 

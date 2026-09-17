@@ -36,6 +36,8 @@ import {
   deleteBusinessCompletely,
   getBusinessReadiness,
   markWebhookConnected,
+  getUsageByBusiness,
+  getTenantUsage,
   BusinessCredentials,
   BusinessRow,
   createBusinessUser,
@@ -61,6 +63,7 @@ import {
 } from './middleware/auth';
 import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
+import { testBusinessCredentials, startHealthCheck, runHealthCheck } from './services/health';
 import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging } from './config/businessProfile';
 
 const app = express();
@@ -924,6 +927,35 @@ app.get('/api/session', requireCrmSession, async (req: Request, res: Response) =
   }
 });
 
+/** Cuánto consumió de OpenAI cada empresa en los últimos 30 días (para saber qué cuesta cada cliente). */
+app.get('/api/businesses/usage', requireAdminSession, async (req: Request, res: Response) => {
+  try {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    res.json({ days, usage: await getUsageByBusiness(days) });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Consumo de la empresa con la que se está trabajando. */
+app.get('/api/me/usage', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    res.json(await getTenantUsage(days));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Revisa ahora mismo todas las empresas y avisa por WhatsApp si alguna dejó de poder atender. */
+app.post('/api/health-check', requireAdminSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await runHealthCheck(true));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/me/business', requireCrmSession, async (_req: Request, res: Response) => {
   try {
     const tenant = currentTenant();
@@ -960,49 +992,6 @@ app.post('/api/me/test-credentials', requireCrmSession, requireOwnerRole, async 
     sendBusinessError(res, error);
   }
 });
-
-/** Consulta a Meta y a OpenAI con las claves del negocio; devuelve qué funciona y qué no, en español. */
-async function testBusinessCredentials(row: BusinessRow) {
-  const result: { whatsapp: { ok: boolean; detail: string }; openai: { ok: boolean; detail: string } } = {
-    whatsapp: { ok: false, detail: '' },
-    openai: { ok: false, detail: '' }
-  };
-
-  const token = decryptSecret(row.meta_access_token);
-  if (!token || !row.meta_phone_number_id) {
-    result.whatsapp.detail = 'Falta el token de Meta o el Phone Number ID';
-  } else {
-    try {
-      const response = await fetch(`https://graph.facebook.com/v25.0/${row.meta_phone_number_id}?fields=display_phone_number,verified_name`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data: any = await response.json();
-      // Si Meta rechaza el token, ayuda saber cómo llegó: los suyos empiezan con "EAA" y son largos.
-      const shape = `token guardado: empieza con "${token.slice(0, 3)}", ${token.length} caracteres`;
-      result.whatsapp = response.ok
-        ? { ok: true, detail: `Conectado: ${data.verified_name || ''} ${data.display_phone_number || ''}`.trim() }
-        : { ok: false, detail: `${data?.error?.message || `Meta respondió ${response.status}`} (${shape})` };
-    } catch (error: any) {
-      result.whatsapp.detail = `No se pudo consultar a Meta: ${error.message}`;
-    }
-  }
-
-  const openaiKey = decryptSecret(row.openai_api_key);
-  if (!openaiKey) {
-    result.openai.detail = 'Falta la clave de OpenAI';
-  } else {
-    try {
-      const response = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${openaiKey}` } });
-      result.openai = response.ok
-        ? { ok: true, detail: 'Clave válida' }
-        : { ok: false, detail: response.status === 401 ? 'Clave inválida o revocada' : `OpenAI respondió ${response.status}` };
-    } catch (error: any) {
-      result.openai.detail = `No se pudo consultar a OpenAI: ${error.message}`;
-    }
-  }
-
-  return result;
-}
 
 /**
  * Conecta el número de la empresa al bot: suscribe su cuenta de WhatsApp (WABA) a la App de Meta de esta
@@ -1159,6 +1148,7 @@ async function start() {
 
   keepAwake();
   startFollowUpScheduler();
+  startHealthCheck();
   });
 }
 

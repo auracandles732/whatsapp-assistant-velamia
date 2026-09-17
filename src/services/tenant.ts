@@ -17,6 +17,12 @@ export interface TenantContext {
   openaiApiKey: string;
 }
 
+/**
+ * Id con que el CRM nombra a VELAMIA. VELAMIA es una empresa más en la plataforma, pero sus datos siguen
+ * guardados como siempre (sin business_id y con las variables de entorno): no se migró nada.
+ */
+export const VELAMIA_ID = 'velamia';
+
 const storage = new AsyncLocalStorage<TenantContext>();
 
 export function currentTenant(): TenantContext | undefined {

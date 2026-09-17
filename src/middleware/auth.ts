@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { runWithTenant } from '../services/tenant';
+import { runWithTenant, VELAMIA_ID } from '../services/tenant';
 
 const CRM_PASSWORD = process.env.CRM_PASSWORD || '';
 const APP_SECRET = process.env.META_APP_SECRET || '';
@@ -65,11 +65,8 @@ export function getCrmSession(req: Request): CrmSession {
   return (req as any).crmSession;
 }
 
-/**
- * Id con que el CRM nombra a VELAMIA. VELAMIA es una empresa más en la plataforma, pero sus datos siguen
- * guardados como siempre (sin business_id y con las variables de entorno): no se migró nada.
- */
-export const VELAMIA_ID = 'velamia';
+// Definido junto al contexto de empresa para que también lo pueda usar la capa de datos.
+export { VELAMIA_ID };
 
 /**
  * Acceso al CRM. El administrador primero elige empresa (cabecera X-Business-Id: un id de negocio o "velamia");

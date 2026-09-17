@@ -1323,7 +1323,7 @@
             );
         }
 
-        function BusinessCard({ business, selected, onSelect, onChanged }) {
+        function BusinessCard({ business, selected, onSelect, onChanged, usage }) {
             const [mode, setMode] = useState(null); // 'keys' | 'access'
             const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
             const [busy, setBusy] = useState(false);
@@ -1408,6 +1408,7 @@
                             {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
                         </div>
                     ) : <ReadinessList readiness={business.readiness} />}
+                    <UsageLine usage={usage} />
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
                         {business.active && <button style={buttonStyle} onClick={() => onSelect(business.id)}>Entrar</button>}
                         {!business.legacy && <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>}
@@ -1449,10 +1450,49 @@
             );
         }
 
+        /** Tokens en miles: 1.234.567 → "1,2 M". */
+        function shortTokens(n) {
+            if (!n) return '0';
+            if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.', ',') + ' M';
+            if (n >= 1000) return Math.round(n / 1000) + ' mil';
+            return String(n);
+        }
+
+        function UsageLine({ usage }) {
+            if (!usage || !usage.calls) return <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px' }}>🧮 Sin consumo registrado en 30 días</div>;
+            const cachePct = usage.input ? Math.round(usage.cached * 100 / usage.input) : 0;
+            return (
+                <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px' }}>
+                    🧮 30 días: {usage.calls} respuestas · {shortTokens(usage.input)} de entrada ({cachePct}% en caché) · {shortTokens(usage.output)} de salida
+                </div>
+            );
+        }
+
         function BusinessesPanel({ businesses, currentBusinessId, onSelect, onChanged }) {
             const [showForm, setShowForm] = useState(false);
             const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
             const [saving, setSaving] = useState(false);
+            const [usage, setUsage] = useState({});
+            const [checking, setChecking] = useState(false);
+
+            useEffect(() => {
+                api('/api/businesses/usage').then(data => setUsage(data.usage || {})).catch(err => console.error('Error cargando consumo:', err));
+            }, []);
+
+            async function checkNow() {
+                setChecking(true);
+                try {
+                    const result = await api('/api/health-check', { method: 'POST' });
+                    alert(result.alerts && result.alerts.length
+                        ? `Revisión de ${result.checked} empresas:\n\n` + result.alerts.join('\n')
+                        : `Revisión de ${result.checked} empresas: todas siguen igual que ayer.`);
+                    onChanged();
+                } catch (err) {
+                    alert('Error revisando: ' + err.message);
+                } finally {
+                    setChecking(false);
+                }
+            }
 
             async function create() {
                 if (!form.name.trim()) return alert('Escribe el nombre del negocio');
@@ -1478,12 +1518,15 @@
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px', marginBottom: '30px' }}>
                         {businesses.map(b => (
-                            <BusinessCard key={b.id} business={b} selected={currentBusinessId === b.id} onSelect={onSelect} onChanged={onChanged} />
+                            <BusinessCard key={b.id} business={b} selected={currentBusinessId === b.id} onSelect={onSelect} onChanged={onChanged} usage={usage[b.id]} />
                         ))}
                     </div>
 
                     {!showForm ? (
-                        <button style={buttonStyle} onClick={() => setShowForm(true)}>+ Nueva empresa</button>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button style={buttonStyle} onClick={() => setShowForm(true)}>+ Nueva empresa</button>
+                            <button style={secondaryButtonStyle} disabled={checking} onClick={checkNow}>{checking ? 'Revisando...' : '🩺 Revisar todas ahora'}</button>
+                        </div>
                     ) : (
                         <div style={{ background: 'var(--beige-claro)', padding: '20px', borderRadius: '8px', maxWidth: '520px' }}>
                             <h3 style={{ marginBottom: '12px' }}>Nuevo negocio</h3>

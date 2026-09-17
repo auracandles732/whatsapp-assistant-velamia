@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
-import { currentTenant, TenantContext, encryptSecret, decryptSecret, maskSecret } from './tenant';
+import { currentTenant, TenantContext, encryptSecret, decryptSecret, maskSecret, VELAMIA_ID } from './tenant';
 import { normalizeProfile, BusinessProfile, STORE_PROFILE } from '../config/businessProfile';
 
 // Cliente único con la service key: ignora RLS, por eso solo se usa en el servidor.
@@ -473,6 +473,83 @@ export async function getSalesMetrics(days: number = 30) {
     totalOrders: orders.length,
     totalRevenue: orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0)
   };
+}
+
+// ---------- CONSUMO DE IA ----------
+
+/**
+ * Deja registrado lo que costó una llamada a OpenAI, para saber cuánto consume cada empresa.
+ * Nunca interrumpe la atención: si falla el registro, solo se anota en el log.
+ */
+export async function recordAiUsage(usage: { model: string; purpose: string; input: number; cached: number; output: number }) {
+  try {
+    const { error } = await supabase.from('ai_usage').insert([{
+      id: randomUUID(),
+      ...tenantColumns(),
+      created_at: new Date().toISOString(),
+      model: usage.model,
+      purpose: usage.purpose,
+      input_tokens: usage.input,
+      cached_tokens: usage.cached,
+      output_tokens: usage.output
+    }]);
+    if (error) throw new Error(error.message);
+  } catch (error: any) {
+    console.warn('⚠️ No se pudo registrar el consumo de IA:', error.message);
+  }
+}
+
+export interface AiUsageSummary {
+  calls: number;
+  input: number;
+  cached: number;
+  output: number;
+}
+
+const EMPTY_USAGE = (): AiUsageSummary => ({ calls: 0, input: 0, cached: 0, output: 0 });
+
+function addUsage(summary: AiUsageSummary, row: any) {
+  summary.calls++;
+  summary.input += row.input_tokens || 0;
+  summary.cached += row.cached_tokens || 0;
+  summary.output += row.output_tokens || 0;
+  return summary;
+}
+
+/** Consumo de los últimos días agrupado por empresa (clave VELAMIA_ID para la instalación original). */
+export async function getUsageByBusiness(days = 30): Promise<Record<string, AiUsageSummary>> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('ai_usage')
+    .select('business_id,input_tokens,cached_tokens,output_tokens')
+    .gte('created_at', since);
+
+  if (error) throw new Error(`Error obteniendo consumo: ${error.message}`);
+  const totals: Record<string, AiUsageSummary> = {};
+  for (const row of data || []) {
+    const key = row.business_id || VELAMIA_ID;
+    addUsage((totals[key] ||= EMPTY_USAGE()), row);
+  }
+  return totals;
+}
+
+/** Consumo de la empresa actual, con el detalle por día para ver la tendencia. */
+export async function getTenantUsage(days = 30) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('ai_usage')
+    .select('created_at,input_tokens,cached_tokens,output_tokens')
+    .filter('business_id', tenantOp(), tenantValue())
+    .gte('created_at', since);
+
+  if (error) throw new Error(`Error obteniendo consumo: ${error.message}`);
+  const total = EMPTY_USAGE();
+  const byDay: Record<string, AiUsageSummary> = {};
+  for (const row of data || []) {
+    addUsage(total, row);
+    addUsage((byDay[String(row.created_at).slice(0, 10)] ||= EMPTY_USAGE()), row);
+  }
+  return { days, total, byDay };
 }
 
 // ---------- PRODUCTOS ----------
