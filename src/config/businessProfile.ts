@@ -100,6 +100,12 @@ export interface BusinessProfile {
     enabled: boolean;
     types: PackagingType[];
   };
+  ai: {
+    /** OpenAI API key específica del negocio. Si está vacía, usa la global (process.env.OPENAI_API_KEY). */
+    openai_api_key?: string;
+    /** Modelo OpenAI para este negocio; default = gpt-4o-mini. */
+    model?: string;
+  };
 }
 
 export interface PackagingType {
@@ -174,6 +180,10 @@ export const VELAMIA_PROFILE: BusinessProfile = {
       { name: 'Kraft', description: 'natural, minimalista y brinda mayor protección', changeCost: null },
       { name: 'Caja lazo personalizable', description: 'caja con lazo; se personaliza el color del lazo y la portada frontal y trasera', changeCost: null }
     ]
+  },
+  ai: {
+    openai_api_key: process.env.OPENAI_API_KEY || '',
+    model: 'gpt-4o-mini'
   }
 };
 
@@ -229,7 +239,11 @@ export const STORE_PROFILE: BusinessProfile = {
     decorativeEmojis: ['😊', '✨', '🙌', '👌', '💫', '🎉', '👍', '🛍️', '📦', '🤩']
   },
   branding: { primaryColor: '#B96B4F', logoUrl: '' },
-  packaging: { enabled: false, types: [] }
+  packaging: { enabled: false, types: [] },
+  ai: {
+    openai_api_key: process.env.OPENAI_API_KEY || '',
+    model: 'gpt-4o-mini'
+  }
 };
 
 /** Mismo funcionamiento que VELAMIA, sin su nombre, plantillas de Meta ni logo. */
@@ -272,7 +286,7 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
   const r = raw && typeof raw === 'object' ? raw : {};
   const b = r.business || {}, s = r.sales || {}, p = r.payments || {}, d = r.dates || {};
   const sh = r.shipping || {}, f = r.followUps || {}, a = r.alerts || {}, st = r.style || {}, br = r.branding || {};
-  const pk = r.packaging || {};
+  const pk = r.packaging || {}, ai = r.ai || {};
 
   const timezone = text(b.timezone, base.business.timezone, 60);
   const mode = ['ecuador_table', 'flat', 'none'].includes(sh.mode) ? sh.mode : base.shipping.mode;
@@ -373,6 +387,10 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
           .filter((t: PackagingType) => t.name)
           .slice(0, 10)
         : base.packaging.types
+    },
+    ai: {
+      openai_api_key: typeof ai.openai_api_key === 'string' && ai.openai_api_key.length > 0 ? ai.openai_api_key : (base.ai?.openai_api_key || ''),
+      model: typeof ai.model === 'string' && ai.model.length > 0 ? ai.model : (base.ai?.model || 'gpt-4o-mini')
     }
   };
 }
@@ -468,4 +486,14 @@ export function calculateCustomShippingCost(
 /** Obtiene el peso de un producto para cálculos de envío custom. */
 export function getProductWeight(productId: string, p: BusinessProfile = current): number {
   return p.shipping.productWeights?.[productId] ?? 0;
+}
+
+/** Obtiene la OpenAI API key del negocio. Si está vacía, usa la global (process.env.OPENAI_API_KEY). */
+export function getOpenAIKey(p: BusinessProfile = current): string {
+  return (p.ai?.openai_api_key || process.env.OPENAI_API_KEY || '').trim();
+}
+
+/** Obtiene el modelo OpenAI del negocio. Default = gpt-4o-mini. */
+export function getOpenAIModel(p: BusinessProfile = current): string {
+  return (p.ai?.model || 'gpt-4o-mini').trim();
 }

@@ -326,8 +326,11 @@ async function storeIncomingMedia(mediaId: string) {
  * Traduce cada tipo de mensaje de WhatsApp a lo que se guarda en el CRM (userContent)
  * y a lo que entiende la IA (aiContent). Devuelve null si el mensaje no requiere atención.
  */
-async function readIncomingContent(message: any): Promise<{ userContent: string; aiContent: string } | null> {
+async function readIncomingContent(message: any, batchProfile?: Record<string, any>): Promise<{ userContent: string; aiContent: string } | null> {
   const type = message.type;
+  // Normalizar profile del batch para pasarlo a OpenAI
+  const { normalizeProfile } = require('../config/businessProfile');
+  const p = batchProfile ? normalizeProfile(batchProfile) : profile();
 
   try {
     switch (type) {
@@ -336,7 +339,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
 
       case 'image': {
         const { publicUrl } = await storeIncomingMedia(message.image.id);
-        const description = await describeImage(publicUrl);
+        const description = await describeImage(publicUrl, p);
         const caption = message.image.caption;
         return {
           userContent: `${publicUrl}\n${caption || description}`,
@@ -346,7 +349,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
 
       case 'audio': {
         const { publicUrl, buffer, mimeType } = await storeIncomingMedia(message.audio.id);
-        const transcript = await transcribeAudio(buffer, mimeType);
+        const transcript = await transcribeAudio(buffer, mimeType, p);
         return {
           userContent: `${publicUrl}\n🎤 "${transcript}"`,
           aiContent: `[El cliente envió un audio que dice]: "${transcript}"`
@@ -431,13 +434,6 @@ async function ingestMessage(message: any, value: any) {
       return;
     }
 
-    const content = await readIncomingContent(message);
-    if (!content) {
-      console.log(`↪️  Mensaje ${messageType} de ${phoneNumber} ignorado`);
-      return;
-    }
-    let { userContent, aiContent } = content;
-
     console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
 
     // Multi-tenant: buscar negocio por teléfono (NULL si es VELAMIA)
@@ -453,6 +449,13 @@ async function ingestMessage(message: any, value: any) {
     } catch (err) {
       console.warn('⚠️  Error buscando negocio (usando VELAMIA):', (err as Error).message);
     }
+
+    const content = await readIncomingContent(message, businessProfile);
+    if (!content) {
+      console.log(`↪️  Mensaje ${messageType} de ${phoneNumber} ignorado`);
+      return;
+    }
+    let { userContent, aiContent } = content;
 
     let conversation = await getConversation(phoneNumber);
     if (!conversation) {
@@ -567,10 +570,12 @@ async function respondToBatch(batch: PendingBatch) {
 
     let plan: TurnPlan;
     try {
+      const { normalizeProfile } = require('../config/businessProfile');
+      const batchProfile = batch.businessProfile ? normalizeProfile(batch.businessProfile) : undefined;
       plan = await planTurn({
         history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts,
         recentEmojis: recentBotEmojis(history), pendingOwnerQuestions, cardChosen, pendingCustomDesigns,
-        lastOrder: describeOrder(orders[0])
+        lastOrder: describeOrder(orders[0]), profile: batchProfile
       });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
@@ -706,7 +711,8 @@ async function respondToBatch(batch: PendingBatch) {
       await registerSale(saleIntent, {
         conversationId, phoneNumber, customerName, transcript, catalog,
         shippingPlace: plan.shipping_place, planItems: plan.order_items,
-        deliveryDate: plan.delivery_date || lastDeliveryDateFromHistory(history)
+        deliveryDate: plan.delivery_date || lastDeliveryDateFromHistory(history),
+        businessProfile: batch.businessProfile
       });
     }
 
@@ -780,6 +786,7 @@ async function registerSale(
   ctx: {
     conversationId: string; phoneNumber: string; customerName: string; transcript: string;
     catalog: any[]; shippingPlace: string; planItems: TurnPlan['order_items']; deliveryDate: string;
+    businessProfile?: Record<string, any>;
   }
 ) {
   try {
@@ -793,6 +800,8 @@ async function registerSale(
     // Los mismos modelos y docenas con que se calculó el valor que recibió la clienta, para que el CRM cuadre.
     // Si en este turno la IA no los repitió, se usan los ya guardados ("confirmo" confirma lo cotizado);
     // solo sin nada guardado se leen de nuevo de la conversación.
+    const { normalizeProfile } = require('../config/businessProfile');
+    const extractProfile = ctx.businessProfile ? normalizeProfile(ctx.businessProfile) : undefined;
     const items: OrderItem[] = ctx.planItems.length > 0
       ? ctx.planItems.map(i => ({
         name: i.name, price: i.price, quantity: i.quantity, personalization: i.personalization,
@@ -800,7 +809,7 @@ async function registerSale(
       }))
       : savedItems(previous).length > 0
         ? savedItems(previous)
-        : await extractOrderItems(ctx.transcript, ctx.catalog);
+        : await extractOrderItems(ctx.transcript, ctx.catalog, extractProfile);
     if (items.length === 0) {
       console.log(`📋 ${kind} sin productos claros del catálogo; no se registra`);
       return;
