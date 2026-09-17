@@ -629,3 +629,98 @@ export async function logNotification(conversationId: string, eventType: string,
 
   if (error) throw new Error(`Error registrando aviso: ${error.message}`);
 }
+
+// ---------- NEGOCIOS (MULTI-TENANT) ----------
+
+export interface Business {
+  id: string;
+  name: string;
+  meta_phone_number: string;
+  meta_access_token: string;
+  meta_business_account_id: string | null;
+  business_profile: Record<string, any>;
+  active: boolean;
+  owner_phone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Busca un negocio por el número de teléfono de Meta. */
+export async function getBusinessByPhoneNumber(phoneNumber: string): Promise<Business | null> {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('meta_phone_number', phoneNumber)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error buscando negocio: ${error.message}`);
+  return data;
+}
+
+/** Crea un nuevo negocio en multi-tenant. */
+export async function createBusiness(
+  name: string,
+  phoneNumber: string,
+  accessToken: string,
+  businessProfile: Record<string, any>,
+  ownerPhone?: string
+): Promise<Business> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('businesses')
+    .insert([{
+      id: randomUUID(),
+      name,
+      meta_phone_number: phoneNumber,
+      meta_access_token: accessToken,
+      business_profile: businessProfile,
+      active: true,
+      owner_phone: ownerPhone || null,
+      created_at: now,
+      updated_at: now
+    }])
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error creando negocio: ${error.message}`);
+  return data;
+}
+
+/** Actualiza un negocio existente. */
+export async function updateBusiness(businessId: string, updates: Partial<Business>) {
+  const { data, error } = await supabase
+    .from('businesses')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', businessId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error actualizando negocio: ${error.message}`);
+  return data;
+}
+
+/** Obtiene todos los negocios activos. */
+export async function getAllBusinesses(): Promise<Business[]> {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo negocios: ${error.message}`);
+  return data || [];
+}
+
+/** Desactiva un negocio (soft delete). */
+export async function deactivateBusiness(businessId: string) {
+  const { data, error } = await supabase
+    .from('businesses')
+    .update({ active: false, updated_at: new Date().toISOString() })
+    .eq('id', businessId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error desactivando negocio: ${error.message}`);
+  return data;
+}

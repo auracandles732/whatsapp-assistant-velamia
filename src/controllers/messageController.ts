@@ -22,7 +22,8 @@ import {
   productNameFromCaption,
   recordFollowUp,
   hasRecentNotification,
-  getRecentNotificationMessages
+  getRecentNotificationMessages,
+  getBusinessByPhoneNumber
 } from '../db';
 import { FOLLOW_UP_MARKER } from '../services/followups';
 import {
@@ -44,6 +45,15 @@ import { profile, todayLocal, formatDate, quantityText } from '../config/busines
 import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
+
+// Obtiene el perfil del negocio si es multi-tenant, sino usa el perfil global (VELAMIA).
+function getProfileForBatch(batch: PendingBatch) {
+  if (batch.businessProfile) {
+    const { normalizeProfile } = require('../config/businessProfile');
+    return normalizeProfile(batch.businessProfile);
+  }
+  return profile();
+}
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -208,6 +218,8 @@ type PendingBatch = {
   items: IncomingItem[];
   firstAt: number;
   timer?: NodeJS.Timeout;
+  businessId?: string;
+  businessProfile?: Record<string, any>;
 };
 
 /**
@@ -428,6 +440,20 @@ async function ingestMessage(message: any, value: any) {
 
     console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
 
+    // Multi-tenant: buscar negocio por teléfono (NULL si es VELAMIA)
+    let businessId: string | undefined;
+    let businessProfile: Record<string, any> | undefined;
+    try {
+      const business = await getBusinessByPhoneNumber(phoneNumber);
+      if (business) {
+        businessId = business.id;
+        businessProfile = business.business_profile;
+        console.log(`🏢 Negocio encontrado: ${business.name}`);
+      }
+    } catch (err) {
+      console.warn('⚠️  Error buscando negocio (usando VELAMIA):', (err as Error).message);
+    }
+
     let conversation = await getConversation(phoneNumber);
     if (!conversation) {
       conversation = await createConversation(phoneNumber, value?.contacts?.[0]?.profile?.name);
@@ -479,7 +505,7 @@ async function ingestMessage(message: any, value: any) {
     const key = String(phoneNumber);
     let batch = pendingBatches.get(key);
     if (!batch) {
-      batch = { conversationId, phoneNumber, customerName, items: [], firstAt: Date.now() };
+      batch = { conversationId, phoneNumber, customerName, items: [], firstAt: Date.now(), businessId, businessProfile };
       pendingBatches.set(key, batch);
     }
     batch.items.push({ aiContent, storedContent, messageType, waMessageId });
