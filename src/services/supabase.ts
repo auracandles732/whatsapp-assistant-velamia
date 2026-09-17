@@ -800,8 +800,10 @@ function credentialColumns(c: BusinessCredentials) {
   if (clean(c.displayPhoneNumber)) columns.meta_phone_number = clean(c.displayPhoneNumber).replace(/[^\d+]/g, '');
   if (clean(c.phoneNumberId)) columns.meta_phone_number_id = clean(c.phoneNumberId).replace(/\D/g, '');
   if (clean(c.wabaId)) columns.meta_business_account_id = clean(c.wabaId).replace(/\D/g, '');
-  if (clean(c.metaAccessToken)) columns.meta_access_token = encryptSecret(clean(c.metaAccessToken));
-  if (clean(c.openaiApiKey)) columns.openai_api_key = encryptSecret(clean(c.openaiApiKey));
+  // Al copiar de Meta o de OpenAI se cuelan saltos de línea y espacios: dejarlos rompe la clave.
+  const cleanSecret = (v?: string) => clean(v).replace(/\s+/g, '');
+  if (cleanSecret(c.metaAccessToken)) columns.meta_access_token = encryptSecret(cleanSecret(c.metaAccessToken));
+  if (cleanSecret(c.openaiApiKey)) columns.openai_api_key = encryptSecret(cleanSecret(c.openaiApiKey));
   return columns;
 }
 

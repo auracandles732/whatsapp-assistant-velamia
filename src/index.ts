@@ -953,9 +953,11 @@ async function testBusinessCredentials(row: BusinessRow) {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data: any = await response.json();
+      // Si Meta rechaza el token, ayuda saber cómo llegó: los suyos empiezan con "EAA" y son largos.
+      const shape = `token guardado: empieza con "${token.slice(0, 3)}", ${token.length} caracteres`;
       result.whatsapp = response.ok
         ? { ok: true, detail: `Conectado: ${data.verified_name || ''} ${data.display_phone_number || ''}`.trim() }
-        : { ok: false, detail: data?.error?.message || `Meta respondió ${response.status}` };
+        : { ok: false, detail: `${data?.error?.message || `Meta respondió ${response.status}`} (${shape})` };
     } catch (error: any) {
       result.whatsapp.detail = `No se pudo consultar a Meta: ${error.message}`;
     }
