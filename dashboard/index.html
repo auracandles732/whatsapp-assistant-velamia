@@ -1154,17 +1154,33 @@
         const buttonStyle = { padding: '8px 14px', background: 'var(--terracota)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' };
         const secondaryButtonStyle = { ...buttonStyle, background: 'var(--rosa-palo-suave)', color: 'var(--texto)' };
 
+        /** Avisa antes de guardar algo que Meta u OpenAI van a rechazar (típico: el navegador rellenó el campo). */
+        function credentialProblem(form) {
+            const token = (form.metaAccessToken || '').trim();
+            const key = (form.openaiApiKey || '').trim();
+            if (token && !(token.startsWith('EAA') && token.length > 100)) {
+                return `El token de Meta se ve incorrecto: los de Meta empiezan con "EAA" y son muy largos, y este empieza con "${token.slice(0, 3)}" y tiene ${token.length} caracteres.\n\nSuele pasar cuando el navegador rellena el campo con una contraseña guardada: borra el campo, pégalo de nuevo y revisa que quede completo.\n\n¿Guardar de todos modos?`;
+            }
+            if (key && !(key.startsWith('sk-') && key.length > 20)) {
+                return `La clave de OpenAI se ve incorrecta: empiezan con "sk-" y esta empieza con "${key.slice(0, 3)}".\n\n¿Guardar de todos modos?`;
+            }
+            return null;
+        }
+
         function CredentialFields({ form, setForm, business }) {
             const field = (key, label, placeholder, secret, hint) => (
                 <div style={{ marginBottom: '12px' }}>
                     <label style={labelStyle}>{label}</label>
                     <input
-                        type={secret ? 'password' : 'text'}
+                        type="text"
+                        name={`campo-${key}`}
                         autoComplete="off"
+                        data-lpignore="true"
+                        spellCheck={false}
+                        style={secret ? { ...fieldStyle, WebkitTextSecurity: 'disc' } : fieldStyle}
                         value={form[key]}
                         onChange={e => setForm({ ...form, [key]: e.target.value })}
                         placeholder={hint ? `Guardado ${hint} · déjalo vacío para conservarlo` : placeholder}
-                        style={fieldStyle}
                     />
                 </div>
             );
@@ -1309,6 +1325,8 @@
             const [connectResult, setConnectResult] = useState(null);
 
             async function saveKeys() {
+                const problem = credentialProblem(form);
+                if (problem && !confirm(problem)) return;
                 setBusy(true);
                 try {
                     await api(`/api/businesses/${business.id}/credentials`, { method: 'PUT', body: JSON.stringify(form) });
@@ -1561,6 +1579,8 @@
             }
 
             async function save() {
+                const problem = credentialProblem(form);
+                if (problem && !confirm(problem)) return;
                 setBusy(true);
                 try {
                     await api('/api/me/credentials', { method: 'PUT', body: JSON.stringify(form) });
