@@ -740,9 +740,10 @@ export function generateBusinessAccessToken(): { plaintoken: string; hash: strin
 }
 
 /**
- * Crea un token de acceso para un negocio. Devuelve plaintoken (guardar en cliente).
+ * Crea un token de acceso para un usuario específico de un negocio.
+ * Devuelve plaintoken (mostrar UNA VEZ al admin).
  */
-export async function createBusinessAccessToken(businessId: string): Promise<string> {
+export async function createBusinessAccessToken(businessId: string, businessUserId?: string): Promise<string> {
   const { plaintoken, hash } = generateBusinessAccessToken();
 
   const { error } = await supabase
@@ -750,6 +751,7 @@ export async function createBusinessAccessToken(businessId: string): Promise<str
     .insert([{
       id: randomUUID(),
       business_id: businessId,
+      business_user_id: businessUserId || null,
       token_hash: hash,
       created_at: new Date().toISOString()
     }]);
@@ -761,12 +763,12 @@ export async function createBusinessAccessToken(businessId: string): Promise<str
 /**
  * Valida un token plaintext y devuelve el business_id si es válido.
  */
-export async function validateBusinessAccessToken(plaintoken: string): Promise<string | null> {
+export async function validateBusinessAccessToken(plaintoken: string): Promise<{ businessId: string; userId: string } | null> {
   const hash = crypto.createHash('sha256').update(plaintoken).digest('hex');
 
   const { data, error } = await supabase
     .from('business_access_tokens')
-    .select('business_id')
+    .select('business_id, business_user_id')
     .eq('token_hash', hash)
     .eq('active', true)
     .maybeSingle();
@@ -780,5 +782,94 @@ export async function validateBusinessAccessToken(plaintoken: string): Promise<s
     .update({ last_used: new Date().toISOString() })
     .eq('token_hash', hash);
 
-  return data.business_id;
+  return {
+    businessId: data.business_id,
+    userId: data.business_user_id || ''
+  };
+}
+
+// ---------- BUSINESS USERS ----------
+
+export interface BusinessUser {
+  id: string;
+  business_id: string;
+  email: string;
+  full_name: string;
+  role: 'owner' | 'manager' | 'staff';
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Crea un nuevo usuario para un negocio. */
+export async function createBusinessUser(
+  businessId: string,
+  email: string,
+  fullName: string,
+  role: 'owner' | 'manager' | 'staff' = 'owner'
+): Promise<BusinessUser> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('business_users')
+    .insert([{
+      id: randomUUID(),
+      business_id: businessId,
+      email,
+      full_name: fullName,
+      role,
+      active: true,
+      created_at: now,
+      updated_at: now
+    }])
+    .select()
+    .single();
+
+  if (error?.code === UNIQUE_VIOLATION) {
+    throw new Error(`El email ${email} ya existe en este negocio`);
+  }
+  if (error) throw new Error(`Error creando usuario: ${error.message}`);
+  return data;
+}
+
+/** Obtiene todos los usuarios de un negocio. */
+export async function getBusinessUsers(businessId: string): Promise<BusinessUser[]> {
+  const { data, error } = await supabase
+    .from('business_users')
+    .select('*')
+    .eq('business_id', businessId)
+    .eq('active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo usuarios: ${error.message}`);
+  return data || [];
+}
+
+/** Obtiene un usuario específico. */
+export async function getBusinessUser(userId: string): Promise<BusinessUser | null> {
+  const { data, error } = await supabase
+    .from('business_users')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error obteniendo usuario: ${error.message}`);
+  return data || null;
+}
+
+/** Actualiza un usuario. */
+export async function updateBusinessUser(userId: string, updates: Partial<BusinessUser>) {
+  const { data, error } = await supabase
+    .from('business_users')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error actualizando usuario: ${error.message}`);
+  return data;
+}
+
+/** Desactiva un usuario (soft delete). */
+export async function deactivateBusinessUser(userId: string) {
+  return updateBusinessUser(userId, { active: false });
 }

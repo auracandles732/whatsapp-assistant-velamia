@@ -81,13 +81,14 @@ export async function requireBusinessSession(req: Request, res: Response, next: 
     }
 
     const { validateBusinessAccessToken } = await import('../services/supabase');
-    const businessId = await validateBusinessAccessToken(token);
-    if (!businessId) {
+    const result = await validateBusinessAccessToken(token);
+    if (!result) {
       return res.status(401).json({ error: 'Token de acceso inválido o expirado' });
     }
 
     (req as any).businessSession = true;
-    (req as any).businessId = businessId;
+    (req as any).businessId = result.businessId;
+    (req as any).userId = result.userId;
     next();
   } catch (error: any) {
     res.status(500).json({ error: 'Error validando token de acceso: ' + error.message });

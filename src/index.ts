@@ -29,7 +29,13 @@ import {
   parseDbTimestamp,
   getBusinessByPhoneNumber,
   createBusiness,
-  getAllBusinesses
+  getAllBusinesses,
+  createBusinessUser,
+  getBusinessUsers,
+  getBusinessUser,
+  updateBusinessUser,
+  deactivateBusinessUser,
+  createBusinessAccessToken
 } from './db';
 import { removeFilesByPublicUrls } from './services/storage';
 import { handleWebhookMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
@@ -673,6 +679,124 @@ app.get('/api/me/business', requireBusinessSession, async (req: Request, res: Re
     res.json(data);
   } catch (error: any) {
     console.error('Error obteniendo negocio:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- USUARIOS DE NEGOCIO ----------
+
+// ADMIN: Listar usuarios de un negocio
+app.get('/api/businesses/:businessId/users', requireAdminSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const users = await getBusinessUsers(businessId);
+    res.json(users);
+  } catch (error: any) {
+    console.error('Error cargando usuarios:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ADMIN: Crear nuevo usuario en un negocio
+app.post('/api/businesses/:businessId/users', requireAdminSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { email, fullName, role } = req.body;
+
+    if (!email || !fullName) {
+      return res.status(400).json({ error: 'Email y nombre son requeridos' });
+    }
+
+    if (!['owner', 'manager', 'staff'].includes(role || 'owner')) {
+      return res.status(400).json({ error: 'Rol inválido: owner | manager | staff' });
+    }
+
+    const user = await createBusinessUser(businessId, email, fullName, role || 'owner');
+    console.log(`👤 Usuario creado: ${email} en negocio ${businessId}`);
+    res.status(201).json(user);
+  } catch (error: any) {
+    console.error('Error creando usuario:', error.message);
+    res.status(error.message.includes('ya existe') ? 409 : 500).json({ error: error.message });
+  }
+});
+
+// ADMIN: Generar token para un usuario específico
+app.post('/api/businesses/:businessId/users/:userId/generate-token', requireAdminSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    const { businessId, userId } = req.params;
+    if (!UUID_PATTERN.test(userId)) {
+      return res.status(400).json({ error: 'ID de usuario inválido' });
+    }
+
+    // Verificar que el usuario pertenece al negocio
+    const user = await getBusinessUser(userId);
+    if (!user || user.business_id !== businessId) {
+      return res.status(404).json({ error: 'Usuario no encontrado en este negocio' });
+    }
+
+    const plaintoken = await createBusinessAccessToken(businessId, userId);
+    console.log(`🔐 Token generado para usuario ${user.email} (${businessId})`);
+
+    res.status(201).json({
+      accessToken: plaintoken,
+      user: { id: user.id, email: user.email, fullName: user.full_name },
+      message: `✅ Token para ${user.email}. Guárdalo de forma segura, solo se muestra una vez.`
+    });
+  } catch (error: any) {
+    console.error('Error generando token:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ADMIN: Actualizar usuario
+app.patch('/api/businesses/:businessId/users/:userId', requireAdminSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    const { businessId, userId } = req.params;
+    const { fullName, email, role, active } = req.body;
+
+    if (!UUID_PATTERN.test(userId)) {
+      return res.status(400).json({ error: 'ID de usuario inválido' });
+    }
+
+    // Verificar que el usuario pertenece al negocio
+    const user = await getBusinessUser(userId);
+    if (!user || user.business_id !== businessId) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const updates: any = {};
+    if (fullName) updates.full_name = fullName;
+    if (role) updates.role = role;
+    if (typeof active === 'boolean') updates.active = active;
+
+    const updated = await updateBusinessUser(userId, updates);
+    console.log(`👤 Usuario actualizado: ${user.email}`);
+    res.json(updated);
+  } catch (error: any) {
+    console.error('Error actualizando usuario:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ADMIN: Desactivar usuario
+app.delete('/api/businesses/:businessId/users/:userId', requireAdminSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    const { businessId, userId } = req.params;
+
+    if (!UUID_PATTERN.test(userId)) {
+      return res.status(400).json({ error: 'ID de usuario inválido' });
+    }
+
+    const user = await getBusinessUser(userId);
+    if (!user || user.business_id !== businessId) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    await deactivateBusinessUser(userId);
+    console.log(`👤 Usuario desactivado: ${user.email}`);
+    res.json({ message: `Usuario ${user.email} desactivado` });
+  } catch (error: any) {
+    console.error('Error desactivando usuario:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
