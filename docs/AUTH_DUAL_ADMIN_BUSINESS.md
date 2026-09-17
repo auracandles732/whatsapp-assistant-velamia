@@ -91,8 +91,25 @@ POST /api/businesses
      Crear nuevo negocio
      Requiere: admin session
 
-POST /api/businesses/:businessId/generate-access-token
-     Generar token para un Business Owner
+GET  /api/businesses/:businessId/users
+     Listar usuarios (owners, managers, staff) de un negocio
+     Requiere: admin session
+
+POST /api/businesses/:businessId/users
+     Crear nuevo usuario en un negocio
+     Body: { email, fullName, role: "owner"|"manager"|"staff" }
+     Requiere: admin session
+
+PATCH /api/businesses/:businessId/users/:userId
+     Actualizar usuario (nombre, rol, estado)
+     Requiere: admin session
+
+DELETE /api/businesses/:businessId/users/:userId
+     Desactivar usuario (soft delete)
+     Requiere: admin session
+
+POST /api/businesses/:businessId/users/:userId/generate-token
+     Generar token de acceso para UN usuario específico
      Requiere: admin session
      ⚠️ Solo se muestra UNA VEZ
 ```
@@ -121,12 +138,34 @@ PATCH /api/me/business
 
 ## 💾 Base de Datos
 
-Tabla `business_access_tokens`:
+### Tabla `business_users` (Nuevo)
+
+```sql
+CREATE TABLE business_users (
+  id UUID PRIMARY KEY,
+  business_id UUID REFERENCES businesses(id),
+  email TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  role TEXT DEFAULT 'owner',  -- 'owner' | 'manager' | 'staff'
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  UNIQUE(business_id, email)  -- Un email por negocio
+);
+```
+
+**Roles:**
+- `owner` — Acceso total (agregar catálogo, stock, configuración)
+- `manager` — Acceso moderado (ver catálogo, agregar stock)
+- `staff` — Acceso limitado (solo consultar)
+
+### Tabla `business_access_tokens` (Actualizada)
 
 ```sql
 CREATE TABLE business_access_tokens (
   id UUID PRIMARY KEY,
   business_id UUID REFERENCES businesses(id),
+  business_user_id UUID REFERENCES business_users(id),  -- NUEVO: asociar a usuario
   token_hash TEXT NOT NULL UNIQUE,  -- SHA256 del token plaintext
   created_at TIMESTAMP,
   last_used TIMESTAMP,              -- Registra último uso
@@ -138,7 +177,8 @@ CREATE TABLE business_access_tokens (
 - Token nunca se guarda plaintext en BD
 - Se guarda el HASH SHA256
 - Solo se devuelve UNA VEZ al crear
-- `last_used` permite auditoría de acceso
+- `last_used` permite auditoría de acceso por usuario
+- Cada usuario puede tener múltiples tokens (activos o revocados)
 
 ---
 
@@ -160,32 +200,60 @@ curl -X POST http://localhost:3000/api/businesses \
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "TiendaUnidades",
-  "meta_phone_number": "+593999888777",
-  "business_profile": { ... },
+  ...
+}
+```
+
+### Paso 2: Admin Crea Usuario(s) para ese Negocio
+
+```bash
+curl -X POST http://localhost:3000/api/businesses/550e8400-e29b-41d4-a716-446655440000/users \
+  -H "Authorization: Bearer {admin_token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "juan@tiendaunidades.com",
+    "fullName": "Juan García",
+    "role": "owner"  # owner | manager | staff
+  }'
+
+# Respuesta:
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "business_id": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "juan@tiendaunidades.com",
+  "full_name": "Juan García",
+  "role": "owner",
   "active": true,
   "created_at": "2026-09-17T..."
 }
 ```
 
-### Paso 2: Admin Genera Token para Cliente
+**Opcional:** Crear más usuarios (managers, staff) con diferentes roles.
+
+### Paso 3: Admin Genera Token para ese Usuario
 
 ```bash
-curl -X POST http://localhost:3000/api/businesses/550e8400-e29b-41d4-a716-446655440000/generate-access-token \
+curl -X POST http://localhost:3000/api/businesses/550e8400-e29b-41d4-a716-446655440000/users/f47ac10b-58cc-4372-a567-0e02b2c3d479/generate-token \
   -H "Authorization: Bearer {admin_token}"
 
-# Respuesta (⚠️ Única vez):
+# Respuesta (⚠️ Única vez, solo para Juan):
 {
   "accessToken": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6",
-  "message": "Guarda este token de forma segura. Solo se muestra una vez."
+  "user": {
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "email": "juan@tiendaunidades.com",
+    "fullName": "Juan García"
+  },
+  "message": "✅ Token para juan@tiendaunidades.com. Guárdalo de forma segura, solo se muestra una vez."
 }
 ```
 
-**Cliente recibe:** `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6`
+**Juan recibe:** `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6`
 
-### Paso 3: Business Owner Entra a su Plataforma
+### Paso 4: Business Owner (Juan) Entra a su Plataforma
 
 ```bash
-# Business Owner: entrada a portal
+# Juan: entrada a portal
 curl -X POST http://localhost:3000/api/auth/login/business \
   -H "Content-Type: application/json" \
   -d '{
@@ -199,10 +267,10 @@ curl -X POST http://localhost:3000/api/auth/login/business \
 }
 ```
 
-### Paso 4: Business Owner Accede a su Negocio
+### Paso 5: Business Owner (Juan) Accede a su Negocio
 
 ```bash
-# Ver su perfil
+# Ver su perfil (solo TiendaUnidades, no otros negocios)
 curl -X GET http://localhost:3000/api/me/business \
   -H "Authorization: Bearer a1b2c3d4e5f6..."
 
@@ -213,6 +281,10 @@ curl -X GET http://localhost:3000/api/me/business \
   "business_profile": { ... },
   "active": true
 }
+
+# Ver/agregar productos de su catálogo
+curl -X GET http://localhost:3000/api/me/products \
+  -H "Authorization: Bearer a1b2c3d4e5f6..."
 ```
 
 ---
