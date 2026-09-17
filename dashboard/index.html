@@ -1458,12 +1458,23 @@
             return String(n);
         }
 
+        /** Montos chicos: $0,0043 se lee mejor que $0,00. */
+        function money(value) {
+            if (!value) return '$0';
+            const decimals = value < 0.01 ? 4 : 2;
+            return '$' + value.toFixed(decimals).replace('.', ',');
+        }
+
         function UsageLine({ usage }) {
-            if (!usage || !usage.calls) return <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px' }}>🧮 Sin consumo registrado en 30 días</div>;
-            const cachePct = usage.input ? Math.round(usage.cached * 100 / usage.input) : 0;
+            if (!usage || !usage.month?.calls) {
+                return <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px' }}>🧮 Sin consumo de IA registrado</div>;
+            }
+            const { today, week, month } = usage;
+            const cachePct = month.input ? Math.round(month.cached * 100 / month.input) : 0;
             return (
-                <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px' }}>
-                    🧮 30 días: {usage.calls} respuestas · {shortTokens(usage.input)} de entrada ({cachePct}% en caché) · {shortTokens(usage.output)} de salida
+                <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px', lineHeight: 1.5 }}>
+                    <div>💵 Gasto de IA: hoy <b>{money(today.cost)}</b> · 7 días <b>{money(week.cost)}</b> · 30 días <b>{money(month.cost)}</b></div>
+                    <div>🧮 {month.calls} respuestas en 30 días · {shortTokens(month.input)} de entrada ({cachePct}% en caché) · {shortTokens(month.output)} de salida</div>
                 </div>
             );
         }

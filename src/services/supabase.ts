@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { currentTenant, TenantContext, encryptSecret, decryptSecret, maskSecret, VELAMIA_ID } from './tenant';
+import { costOf } from './aiPrices';
 import { normalizeProfile, BusinessProfile, STORE_PROFILE } from '../config/businessProfile';
 
 // Cliente único con la service key: ignora RLS, por eso solo se usa en el servidor.
@@ -504,52 +505,80 @@ export interface AiUsageSummary {
   input: number;
   cached: number;
   output: number;
+  /** Costo estimado en dólares con los precios publicados por OpenAI. */
+  cost: number;
 }
 
-const EMPTY_USAGE = (): AiUsageSummary => ({ calls: 0, input: 0, cached: 0, output: 0 });
+const EMPTY_USAGE = (): AiUsageSummary => ({ calls: 0, input: 0, cached: 0, output: 0, cost: 0 });
 
 function addUsage(summary: AiUsageSummary, row: any) {
   summary.calls++;
   summary.input += row.input_tokens || 0;
   summary.cached += row.cached_tokens || 0;
   summary.output += row.output_tokens || 0;
+  summary.cost = Math.round((summary.cost + costOf(row)) * 1e6) / 1e6;
   return summary;
 }
 
-/** Consumo de los últimos días agrupado por empresa (clave VELAMIA_ID para la instalación original). */
-export async function getUsageByBusiness(days = 30): Promise<Record<string, AiUsageSummary>> {
+/** Consumo de una empresa en tres periodos, para ver el gasto de hoy, de la semana y del mes. */
+export interface UsagePeriods {
+  today: AiUsageSummary;
+  week: AiUsageSummary;
+  month: AiUsageSummary;
+}
+
+const emptyPeriods = (): UsagePeriods => ({ today: EMPTY_USAGE(), week: EMPTY_USAGE(), month: EMPTY_USAGE() });
+
+/** Suma la fila a los periodos que le corresponden según su fecha. */
+function addToPeriods(periods: UsagePeriods, row: any, startOfToday: number, weekAgo: number) {
+  const at = new Date(row.created_at).getTime();
+  addUsage(periods.month, row);
+  if (at >= weekAgo) addUsage(periods.week, row);
+  if (at >= startOfToday) addUsage(periods.today, row);
+}
+
+function periodLimits() {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return { startOfToday, weekAgo: now.getTime() - 7 * 24 * 60 * 60 * 1000 };
+}
+
+/** Consumo de los últimos 30 días por empresa (clave VELAMIA_ID para la instalación original). */
+export async function getUsageByBusiness(days = 30): Promise<Record<string, UsagePeriods>> {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('ai_usage')
-    .select('business_id,input_tokens,cached_tokens,output_tokens')
+    .select('business_id,created_at,model,input_tokens,cached_tokens,output_tokens')
     .gte('created_at', since);
 
   if (error) throw new Error(`Error obteniendo consumo: ${error.message}`);
-  const totals: Record<string, AiUsageSummary> = {};
+  const { startOfToday, weekAgo } = periodLimits();
+  const totals: Record<string, UsagePeriods> = {};
   for (const row of data || []) {
     const key = row.business_id || VELAMIA_ID;
-    addUsage((totals[key] ||= EMPTY_USAGE()), row);
+    addToPeriods((totals[key] ||= emptyPeriods()), row, startOfToday, weekAgo);
   }
   return totals;
 }
 
-/** Consumo de la empresa actual, con el detalle por día para ver la tendencia. */
+/** Consumo de la empresa actual: hoy, semana, mes y el detalle por día. */
 export async function getTenantUsage(days = 30) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('ai_usage')
-    .select('created_at,input_tokens,cached_tokens,output_tokens')
+    .select('created_at,model,input_tokens,cached_tokens,output_tokens')
     .filter('business_id', tenantOp(), tenantValue())
     .gte('created_at', since);
 
   if (error) throw new Error(`Error obteniendo consumo: ${error.message}`);
-  const total = EMPTY_USAGE();
+  const { startOfToday, weekAgo } = periodLimits();
+  const periods = emptyPeriods();
   const byDay: Record<string, AiUsageSummary> = {};
   for (const row of data || []) {
-    addUsage(total, row);
+    addToPeriods(periods, row, startOfToday, weekAgo);
     addUsage((byDay[String(row.created_at).slice(0, 10)] ||= EMPTY_USAGE()), row);
   }
-  return { days, total, byDay };
+  return { days, ...periods, byDay };
 }
 
 // ---------- PRODUCTOS ----------
