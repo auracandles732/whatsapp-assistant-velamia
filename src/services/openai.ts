@@ -660,13 +660,13 @@ function isValidIsoDate(value: string): boolean {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
+/**
+ * Parte fija del prompt: persona, reglas, envíos y catálogo. Solo cambia si cambia la configuración
+ * o el catálogo, así OpenAI la cobra como entrada en caché en vez de como entrada nueva.
+ */
 export function buildSystemPrompt(
   catalog: CatalogProduct[],
   customPrompt: string | undefined,
-  sentProducts: string[],
-  bankDetailsSent: boolean,
-  pendingProducts: string[] = [],
-  recentEmojis: string[] = [],
   p: BusinessProfile = profile()
 ) {
   const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : defaultPersona(p);
@@ -692,22 +692,10 @@ export function buildSystemPrompt(
       .join('\n\n');
   }
 
-  const sentText = sentProducts.length > 0
-    ? `FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ${sentProducts.join(', ')}`
-    : 'FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ninguna';
-  const pendingText = pendingProducts.length > 0
-    ? `\nFOTOS PENDIENTES POR MOSTRAR (ya se le preguntó si desea ver más ${models}): ${pendingProducts.join(', ')}`
-    : '';
-
   // Sin la fecha la IA no puede saber si "el 18" ya pasó ni qué año corresponde.
   const today = new Date().toLocaleDateString('es-EC', {
     timeZone: p.business.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   });
-
-  const bankText = !p.payments.transferEnabled ? ''
-    : bankDetailsSent
-      ? '\nDATOS BANCARIOS: ya se enviaron en esta conversación; vuelve a marcar send_bank_details solo si el cliente los pide de nuevo.'
-      : '\nDATOS BANCARIOS: aún no se han enviado en esta conversación.';
 
   const summary = shippingRatesSummary(p);
   const shippingText = p.shipping.mode === 'ecuador_table'
@@ -715,7 +703,31 @@ export function buildSystemPrompt(
     : p.shipping.mode === 'flat' ? `TARIFA DE ENVÍO (uso interno):\n${summary}\n\n` : '';
 
   const rules = buildCoreRules(p, catalog[0]?.name, catalog.some(c => c.sale_unit));
-  return `${persona}\n\n${rules}\n\nFECHA DE HOY (${p.business.city || p.business.timezone}): ${today}\n\n${shippingText}${catalogText}\n\n${sentText}${pendingText}${bankText}\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`;
+  return `${persona}\n\n${rules}\n\nFECHA DE HOY (${p.business.city || p.business.timezone}): ${today}\n\n${shippingText}${catalogText}`;
+}
+
+/**
+ * Lo que cambia en cada mensaje. Va después del historial: si fuera antes, OpenAI dejaría de
+ * reconocer como repetido todo lo que viene detrás y se cobraría el historial completo cada vez.
+ */
+export function buildTurnContext(
+  sentProducts: string[],
+  bankDetailsSent: boolean,
+  pendingProducts: string[],
+  recentEmojis: string[],
+  p: BusinessProfile = profile()
+) {
+  const models = p.sales.productLabelPlural.toLowerCase();
+  const pendingText = pendingProducts.length > 0
+    ? `\nFOTOS PENDIENTES POR MOSTRAR (ya se le preguntó si desea ver más ${models}): ${pendingProducts.join(', ')}`
+    : '';
+  const bankText = !p.payments.transferEnabled ? ''
+    : bankDetailsSent
+      ? '\nDATOS BANCARIOS: ya se enviaron en esta conversación; vuelve a marcar send_bank_details solo si el cliente los pide de nuevo.'
+      : '\nDATOS BANCARIOS: aún no se han enviado en esta conversación.';
+  return `FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ${sentProducts.length ? sentProducts.join(', ') : 'ninguna'}`
+    + pendingText + bankText
+    + `\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`;
 }
 
 /**
@@ -762,15 +774,16 @@ export async function planTurn(params: {
   const patterns = summaryPatterns(p);
 
   const baseMessages = [
+    { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, p) },
+    ...history,
     {
       role: 'system' as const,
-      content: buildSystemPrompt(catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p)
+      content: buildTurnContext(sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p)
         + `\nPREGUNTAS YA ENVIADAS A LA DUEÑA: ${pendingOwnerQuestions.length ? pendingOwnerQuestions.join(' | ') : 'ninguna'}`
         + (cardChosen && usesDeposit ? '\nFORMA DE PAGO ELEGIDA: tarjeta. Se paga el 100% del total: no menciones anticipo; la fecha se reserva "al recibir el pago".' : '')
         + `\nDISEÑOS FUERA DEL CATÁLOGO YA ENVIADOS A LA DUEÑA: ${pendingCustomDesigns.length ? pendingCustomDesigns.join(' | ') : 'ninguno'}`
         + `\nÚLTIMO PEDIDO DE ESTE CLIENTE: ${lastOrder || 'no tiene pedidos registrados'}`
     },
-    ...history,
     { role: 'user' as const, content: userMessage }
   ];
 
