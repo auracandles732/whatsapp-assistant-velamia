@@ -35,6 +35,8 @@ import { removeFilesByPublicUrls } from './services/storage';
 import { handleWebhookMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
 import {
   requireCrmSession,
+  requireAdminSession,
+  requireBusinessSession,
   isPasswordValid,
   issueSessionToken,
   verifyWebhookSignature
@@ -574,7 +576,8 @@ app.delete('/api/products/:id', requireCrmSession, requireUuidParam, async (req:
 
 // ---------- MULTI-TENANT: NEGOCIOS ----------
 
-app.get('/api/businesses', requireCrmSession, async (_req: Request, res: Response) => {
+// ADMIN: Ver todos los negocios
+app.get('/api/businesses', requireAdminSession, async (_req: Request, res: Response) => {
   try {
     const businesses = await getAllBusinesses();
     res.json(businesses);
@@ -584,7 +587,8 @@ app.get('/api/businesses', requireCrmSession, async (_req: Request, res: Respons
   }
 });
 
-app.post('/api/businesses', requireCrmSession, async (req: Request, res: Response) => {
+// ADMIN: Crear nuevo negocio
+app.post('/api/businesses', requireAdminSession, async (req: Request, res: Response) => {
   try {
     const { name, phoneNumber, accessToken } = req.body;
 
@@ -592,7 +596,6 @@ app.post('/api/businesses', requireCrmSession, async (req: Request, res: Respons
       return res.status(400).json({ error: 'Nombre, teléfono y token son requeridos' });
     }
 
-    // Crear negocio con perfil por defecto (copia del perfil global de VELAMIA)
     const defaultProfile = profile();
     const business = await createBusiness(name, phoneNumber, accessToken, defaultProfile);
 
@@ -600,6 +603,76 @@ app.post('/api/businesses', requireCrmSession, async (req: Request, res: Respons
     res.status(201).json(business);
   } catch (error: any) {
     console.error('Error creando negocio:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ADMIN: Generar token de acceso para un negocio (Business Owner lo recibe una sola vez)
+app.post('/api/businesses/:businessId/generate-access-token', requireAdminSession, async (req: Request, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    if (!UUID_PATTERN.test(businessId)) {
+      return res.status(400).json({ error: 'ID de negocio inválido' });
+    }
+
+    const { createBusinessAccessToken } = await import('./services/supabase');
+    const plaintoken = await createBusinessAccessToken(businessId);
+
+    console.log(`🔐 Token de acceso generado para negocio: ${businessId}`);
+    res.status(201).json({
+      accessToken: plaintoken,
+      message: 'Guarda este token de forma segura. Solo se muestra una vez. Úsalo como Bearer token en Authorization header.'
+    });
+  } catch (error: any) {
+    console.error('Error generando token:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// BUSINESS OWNER: Login con token
+app.post('/api/auth/login/business', async (req: Request, res: Response) => {
+  try {
+    const token = req.body?.accessToken || '';
+    if (!token) {
+      return res.status(400).json({ error: 'Token de acceso requerido' });
+    }
+
+    const { validateBusinessAccessToken } = await import('./services/supabase');
+    const businessId = await validateBusinessAccessToken(token);
+    if (!businessId) {
+      return res.status(401).json({ error: 'Token de acceso inválido o expirado' });
+    }
+
+    res.json({
+      accessToken: token,
+      businessId,
+      message: '✅ Acceso de negocio otorgado. Usa este token en Authorization header.'
+    });
+  } catch (error: any) {
+    console.error('Error en login de negocio:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// BUSINESS OWNER: Ver su propio negocio
+app.get('/api/me/business', requireBusinessSession, async (req: Request, res: Response) => {
+  try {
+    const businessId = (req as any).businessId;
+    const { supabase } = await import('./services/supabase');
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('id', businessId)
+      .eq('active', true)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
+
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error obteniendo negocio:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

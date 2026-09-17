@@ -724,3 +724,61 @@ export async function deactivateBusiness(businessId: string) {
   if (error) throw new Error(`Error desactivando negocio: ${error.message}`);
   return data;
 }
+
+// ---------- BUSINESS ACCESS TOKENS ----------
+
+import crypto from 'crypto';
+
+/**
+ * Genera un token plaintext único para Business Owner.
+ * Devuelve: { plaintoken (mostrar UNA VEZ al usuario), hash (guardar en BD) }
+ */
+export function generateBusinessAccessToken(): { plaintoken: string; hash: string } {
+  const plaintoken = crypto.randomBytes(32).toString('hex');
+  const hash = crypto.createHash('sha256').update(plaintoken).digest('hex');
+  return { plaintoken, hash };
+}
+
+/**
+ * Crea un token de acceso para un negocio. Devuelve plaintoken (guardar en cliente).
+ */
+export async function createBusinessAccessToken(businessId: string): Promise<string> {
+  const { plaintoken, hash } = generateBusinessAccessToken();
+
+  const { error } = await supabase
+    .from('business_access_tokens')
+    .insert([{
+      id: randomUUID(),
+      business_id: businessId,
+      token_hash: hash,
+      created_at: new Date().toISOString()
+    }]);
+
+  if (error) throw new Error(`Error creando token de acceso: ${error.message}`);
+  return plaintoken;
+}
+
+/**
+ * Valida un token plaintext y devuelve el business_id si es válido.
+ */
+export async function validateBusinessAccessToken(plaintoken: string): Promise<string | null> {
+  const hash = crypto.createHash('sha256').update(plaintoken).digest('hex');
+
+  const { data, error } = await supabase
+    .from('business_access_tokens')
+    .select('business_id')
+    .eq('token_hash', hash)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error validando token: ${error.message}`);
+  if (!data) return null;
+
+  // Actualizar last_used
+  await supabase
+    .from('business_access_tokens')
+    .update({ last_used: new Date().toISOString() })
+    .eq('token_hash', hash);
+
+  return data.business_id;
+}

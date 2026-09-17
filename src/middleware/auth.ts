@@ -54,6 +54,47 @@ export function requireCrmSession(req: Request, res: Response, next: NextFunctio
 }
 
 /**
+ * Admin/Owner access: sesión con contraseña maestra para ver TODOS los negocios.
+ */
+export function requireAdminSession(req: Request, res: Response, next: NextFunction) {
+  if (!CRM_PASSWORD) {
+    return res.status(503).json({ error: 'CRM sin configurar: falta la variable CRM_PASSWORD en el servidor' });
+  }
+
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token || !isSessionTokenValid(token)) {
+    return res.status(401).json({ error: 'Sesión de admin inválida o expirada' });
+  }
+
+  (req as any).adminSession = true;
+  next();
+}
+
+/**
+ * Business Owner access: sesión con token único del negocio para ver SOLO su negocio.
+ */
+export async function requireBusinessSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token) {
+      return res.status(401).json({ error: 'Token de acceso requerido' });
+    }
+
+    const { validateBusinessAccessToken } = await import('../services/supabase');
+    const businessId = await validateBusinessAccessToken(token);
+    if (!businessId) {
+      return res.status(401).json({ error: 'Token de acceso inválido o expirado' });
+    }
+
+    (req as any).businessSession = true;
+    (req as any).businessId = businessId;
+    next();
+  } catch (error: any) {
+    res.status(500).json({ error: 'Error validando token de acceso: ' + error.message });
+  }
+}
+
+/**
  * Meta firma cada webhook con el App Secret. Sin esta verificación cualquiera
  * podría inyectar mensajes falsos y disparar respuestas (y costos) de OpenAI.
  */
