@@ -478,7 +478,14 @@ export async function getSalesMetrics(days: number = 30) {
 // ---------- PRODUCTOS ----------
 
 // El empaque del producto se guarda en la columna description (existía sin uso): así no hace falta migrar la base.
-export async function createProduct(name: string, price: number, category: string, imageUrl?: string, packaging?: string) {
+/** Unidad de venta, medida y piezas por unidad de un producto: vacíos = se usa la unidad del negocio. */
+export interface ProductUnit {
+  sale_unit?: string | null;
+  measure?: string | null;
+  pieces_per_unit?: number | null;
+}
+
+export async function createProduct(name: string, price: number, category: string, imageUrl?: string, packaging?: string, unit: ProductUnit = {}) {
   const { data, error } = await supabase
     .from('products')
     .insert([{
@@ -490,6 +497,9 @@ export async function createProduct(name: string, price: number, category: strin
       stock: 999,
       category,
       image_url: imageUrl,
+      sale_unit: unit.sale_unit || null,
+      measure: unit.measure || null,
+      pieces_per_unit: unit.pieces_per_unit || null,
       created_at: new Date().toISOString()
     }])
     .select()
@@ -511,7 +521,7 @@ export async function getAllProducts() {
   return data || [];
 }
 
-export async function updateProduct(productId: string, updates: { name?: string; price?: number; category?: string; image_url?: string; description?: string }) {
+export async function updateProduct(productId: string, updates: { name?: string; price?: number; category?: string; image_url?: string; description?: string } & ProductUnit) {
   const { data, error } = await supabase
     .from('products')
     .update(updates)

@@ -60,4 +60,4 @@ la dueña le escribió al número en las últimas 24 horas).
 - Token de Meta y clave de OpenAI se guardan cifrados (AES-256-GCM) con `BUSINESS_SECRETS_KEY`.
   **No cambiar ni perder esa variable**: las claves guardadas quedarían ilegibles.
 - Configuración por empresa en `business_config` con claves `business:<id>:<clave>`; archivos en la carpeta `<id>/` de cada bucket.
-- Migraciones de la plataforma: `007` a `017`.
+- Migraciones de la plataforma: `007` a `018`.

@@ -498,6 +498,22 @@ function cleanProductName(value: unknown): string {
   return String(value ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Unidad de venta ("caja de 10", "tubo", "metro"), medida y piezas por unidad de un producto.
+ * Al editar solo se tocan los campos enviados; vacíos = el producto usa la unidad del negocio.
+ */
+function productUnit(body: any, isUpdate = false) {
+  const unit: { sale_unit?: string | null; measure?: string | null; pieces_per_unit?: number | null } = {};
+  const text = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
+  if (!isUpdate || body?.sale_unit !== undefined) unit.sale_unit = text(body?.sale_unit);
+  if (!isUpdate || body?.measure !== undefined) unit.measure = text(body?.measure);
+  if (!isUpdate || body?.pieces_per_unit !== undefined) {
+    const pieces = Math.floor(Number(body?.pieces_per_unit));
+    unit.pieces_per_unit = Number.isFinite(pieces) && pieces > 1 ? pieces : null;
+  }
+  return unit;
+}
+
 /** Nombre oficial del empaque (tal como está en el perfil), '' para ninguno, o null si no existe. */
 function packagingName(value: unknown): string | null {
   if (value === undefined || value === null || String(value).trim() === '') return '';
@@ -553,7 +569,10 @@ app.post('/api/products', requireCrmSession, async (req: Request, res: Response)
       return res.status(400).json({ error: 'La foto del producto debe ser un enlace https' });
     }
 
-    res.json(await createProduct(cleanProductName(name), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined, pkg));
+    res.json(await createProduct(
+      cleanProductName(name), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined, pkg,
+      productUnit(req.body)
+    ));
   } catch (error: any) {
     console.error('Error creando producto:', error.message);
     res.status(500).json({ error: error.message });
@@ -563,7 +582,7 @@ app.post('/api/products', requireCrmSession, async (req: Request, res: Response)
 app.put('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
   try {
     const { name, price, category, image_url, packaging } = req.body || {};
-    const updates: { name?: string; price?: number; category?: string; image_url?: string; description?: string } = {};
+    const updates: Parameters<typeof updateProduct>[1] = { ...productUnit(req.body, true) };
 
     if (packaging !== undefined) {
       const pkg = packagingName(packaging);

@@ -88,7 +88,7 @@ Atiende con amabilidad, responde en español natural y guía al cliente hacia un
  * sin ellas el bot podría inventar productos, enviar fotos que no vienen al caso o no ceder el chat.
  * Todo lo que depende del negocio sale del perfil.
  */
-export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del producto'): string {
+export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del producto', ownUnits = false): string {
   const { business: b, sales: s, payments: pay, dates: d, shipping: sh, style } = p;
   const unit = s.unitSingular, units = s.unitPlural;
   const label = s.productLabel, model = s.productLabel.toLowerCase(), models = s.productLabelPlural.toLowerCase();
@@ -112,7 +112,9 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
 
   add(
     'REGLAS DEL SISTEMA (obligatorias):',
-    `- Todos los precios del catálogo son POR ${unit.toUpperCase()}${s.unitDetail ? ` (${s.unitDetail})` : ''}. Acláralo siempre que menciones un precio.`,
+    ownUnits
+      ? '- Cada producto del catálogo se vende en la unidad que dice su línea (caja, tubo, plancha, metro...). Usa la unidad de ESE producto al dar su precio y nunca la de otro. Si la línea dice cuántas unidades trae, tenlo en cuenta al calcular cuántas necesita el cliente.'
+      : `- Todos los precios del catálogo son POR ${unit.toUpperCase()}${s.unitDetail ? ` (${s.unitDetail})` : ''}. Acláralo siempre que menciones un precio.`,
     '- Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.',
     `- Si el cliente pregunta cuántos ${models} hay de ${d.enabled ? `un ${d.eventLabel}` : 'una categoría'}, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.`,
     '- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.',
@@ -389,6 +391,17 @@ interface CatalogProduct {
   category: string;
   /** Empaque incluido en el precio (se guarda en la columna description). */
   description?: string | null;
+  /** Unidad propia del producto ("caja de 10", "tubo", "metro"); vacía = la del negocio. */
+  sale_unit?: string | null;
+  /** Medida del producto ("2,95 m x 0,17 m"); vacía = no se menciona. */
+  measure?: string | null;
+  /** Piezas que trae esa unidad (10 = caja de 10); vacío = la del negocio. */
+  pieces_per_unit?: number | null;
+}
+
+/** Unidad en la que se vende y se cotiza un producto: la suya si la tiene, si no la del negocio. */
+export function unitOf(product: { sale_unit?: string | null } | undefined, p: BusinessProfile): string {
+  return product?.sale_unit?.trim() || p.sales.unitSingular;
 }
 
 export type HandoffReason = 'none' | 'card_payment' | 'payment_proof' | 'complaint';
@@ -550,18 +563,27 @@ function piecesPerUnit(p: BusinessProfile): number {
  * cantidad de docenas: 48 docenas multiplicaría el total por 12. Si la clienta dijo ese número en piezas
  * (y nunca en docenas), se convierte a la unidad de venta redondeando hacia arriba (50 velas → 5 docenas).
  */
-export function normalizeQuantities(rawItems: any, customerText: string, p: BusinessProfile = profile()): any {
-  const per = piecesPerUnit(p);
-  if (per === 1 || !Array.isArray(rawItems)) return rawItems;
+export function normalizeQuantities(rawItems: any, customerText: string, p: BusinessProfile = profile(), catalog: CatalogProduct[] = []): any {
+  if (!Array.isArray(rawItems)) return rawItems;
+  const globalPer = piecesPerUnit(p);
+  // Un producto puede traer sus propias piezas por unidad (una caja de 10, un tubo suelto).
+  const piecesOf = (name: unknown) => {
+    const own = catalog.find(c => c.name === name)?.pieces_per_unit;
+    return Number(own) > 1 ? Number(own) : globalPer;
+  };
+  if (globalPer === 1 && !catalog.some(c => Number(c.pieces_per_unit) > 1)) return rawItems;
   const text = normalizeWords(customerText);
   const clean = (w: string) => escapeRegex(normalizeWords(w.trim()));
   const pieceWords = ['unidad', 'unidades', 'pieza', 'piezas', 'vela', 'velas', 'velita', 'velitas',
     ...p.sales.unitDetail.replace(/\d+/g, ' ').split(/\s+/), p.sales.goodsWord]
     .filter(w => w && w.length >= 3).map(clean);
-  const unitWords = [p.sales.unitSingular, p.sales.unitPlural].filter(Boolean).map(clean);
   return rawItems.map((item: any) => {
     const quantity = Number(item?.quantity);
-    if (!Number.isFinite(quantity) || quantity <= 1) return item;
+    const per = piecesOf(item?.name);
+    if (per === 1 || !Number.isFinite(quantity) || quantity <= 1) return item;
+    const own = catalog.find(c => c.name === item?.name)?.sale_unit || '';
+    const unitWords = [p.sales.unitSingular, p.sales.unitPlural, ...own.split(/\s+/)]
+      .filter(w => w && w.length >= 3).map(clean);
     const saidPieces = new RegExp(`(^|\\D)${quantity}\\s*(${[...new Set(pieceWords)].join('|')})\\b`, 'i').test(text);
     const saidUnits = new RegExp(`(^|\\D)${quantity}\\s*(${unitWords.join('|')})\\b`, 'i').test(text);
     if (!saidPieces || saidUnits) return item;
@@ -658,8 +680,12 @@ export function buildSystemPrompt(
       if (!byCategory[c.category]) byCategory[c.category] = [];
       byCategory[c.category].push(c);
     }
-    catalogText = `CATÁLOGO ACTUAL DE ${p.business.name.toUpperCase()} (precios por ${unit}):\n\n` + Object.entries(byCategory)
-      .map(([cat, items]) => `${cat} (${items.length} ${models}):\n` + items.map(i => `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${unit}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`).join('\n'))
+    catalogText = `CATÁLOGO ACTUAL DE ${p.business.name.toUpperCase()} (cada precio es por la unidad indicada):\n\n` + Object.entries(byCategory)
+      .map(([cat, items]) => `${cat} (${items.length} ${models}):\n` + items.map(i => {
+        const pieces = Number(i.pieces_per_unit) > 1 ? ` = ${i.pieces_per_unit} unidades` : '';
+        const measure = i.measure ? ` · mide ${i.measure}` : '';
+        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${unitOf(i, p)}${pieces}${measure}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`;
+      }).join('\n'))
       .join('\n\n');
   }
 
@@ -685,7 +711,7 @@ export function buildSystemPrompt(
     ? `TARIFAS DE ENVÍO DESDE ${p.business.city.toUpperCase()} (uso interno, todos los cantones de la provincia cuestan igual):\n${summary}\n\n`
     : p.shipping.mode === 'flat' ? `TARIFA DE ENVÍO (uso interno):\n${summary}\n\n` : '';
 
-  const rules = buildCoreRules(p, catalog[0]?.name);
+  const rules = buildCoreRules(p, catalog[0]?.name, catalog.some(c => c.sale_unit));
   return `${persona}\n\n${rules}\n\nFECHA DE HOY (${p.business.city || p.business.timezone}): ${today}\n\n${shippingText}${catalogText}\n\n${sentText}${pendingText}${bankText}\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`;
 }
 
@@ -839,7 +865,7 @@ export async function planTurn(params: {
   const quotedTotal = Number(parsed.quoted_total) || 0;
   const quotedDeposit = usesDeposit ? Number(parsed.quoted_deposit) || 0 : 0;
   const customerText = [...history.filter(m => m.role === 'user').map(m => m.content), userMessage].join('\n');
-  const firstOrder = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p), parsed.shipping_place, catalog, p);
+  const firstOrder = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
   // Montos que aparecen escritos en la respuesta ("$30", "$127.00", "$63,50").
   const amountsInReply = (reply().match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || [])
     .map(a => Number(a.replace(/[$\s]/g, '').replace(',', '.')));
@@ -909,7 +935,7 @@ export async function planTurn(params: {
     }
   }
 
-  const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p), parsed.shipping_place, catalog, p);
+  const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
   const byName = new Map(catalog.map(c => [productKey(c.name), c.name]));

@@ -759,7 +759,10 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
   for (const product of batch) {
     try {
       const packaging = profToUse.packaging.enabled && product.description ? `\n🎁 Empaque: ${product.description}` : '';
-      const caption = `${business.productEmoji} *${product.name}*\n💰 $${Number(product.price).toFixed(2)} ${sales.priceSuffix}${packaging}`;
+      // Si el producto tiene su propia unidad (caja, tubo, metro), el precio se muestra con esa y no con la del negocio.
+      const priceUnit = product.sale_unit ? `por ${product.sale_unit}` : sales.priceSuffix;
+      const measure = product.measure ? `\n📏 ${product.measure}` : '';
+      const caption = `${business.productEmoji} *${product.name}*${measure}\n💰 $${Number(product.price).toFixed(2)} ${priceUnit}${packaging}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
       await saveMessage(conversationId, 'bot', 'image', `${product.image_url}\n${caption}`, getSentMessageId(sent));

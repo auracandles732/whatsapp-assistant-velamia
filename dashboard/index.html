@@ -1995,7 +1995,7 @@
             const [loading, setLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('conversaciones');
             const [products, setProducts] = useState([]);
-            const [newProduct, setNewProduct] = useState({ name: '', price: '', category: '', packaging: '', photoBase64: '', photoPreview: '' });
+            const [newProduct, setNewProduct] = useState({ name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', photoBase64: '', photoPreview: '' });
             const [savingProduct, setSavingProduct] = useState(false);
             const [systemPrompt, setSystemPrompt] = useState('');
             const [savingPrompt, setSavingPrompt] = useState(false);
@@ -2153,11 +2153,14 @@
                             price: parseFloat(newProduct.price),
                             category: newProduct.category,
                             packaging: newProduct.packaging,
+                            sale_unit: newProduct.sale_unit,
+                            measure: newProduct.measure,
+                            pieces_per_unit: newProduct.pieces_per_unit,
                             image_url: imageUrl
                         })
                     });
 
-                    setNewProduct({ name: '', price: '', category: '', packaging: '', photoBase64: '', photoPreview: '' });
+                    setNewProduct({ name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', photoBase64: '', photoPreview: '' });
                     loadProducts();
                 } catch (err) {
                     alert('Error agregando producto: ' + err.message);
@@ -2172,6 +2175,16 @@
                     setProducts(prev => prev.map(p => p.id === id ? { ...p, description: packaging } : p));
                 } catch (err) {
                     alert('Error cambiando el empaque: ' + err.message);
+                }
+            }
+
+            /** Guarda la unidad, la medida o las piezas de un producto ya creado. */
+            async function changeProductField(id, field, value) {
+                try {
+                    const saved = await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+                    setProducts(prev => prev.map(x => x.id === id ? saved : x));
+                } catch (err) {
+                    alert('Error guardando el producto: ' + err.message);
                 }
             }
 
@@ -2610,6 +2623,18 @@
                                     <label>{biz?.dates.enabled ? `Categoría / ${biz.dates.eventLabel}` : 'Categoría'}</label>
                                     <input type="text" placeholder="Ej: la categoría del producto" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
                                 </div>
+                                <div className="form-field">
+                                    <label>Unidad de venta (opcional)</label>
+                                    <input type="text" placeholder="Ej: caja de 10, tubo, metro" value={newProduct.sale_unit} onChange={e => setNewProduct({...newProduct, sale_unit: e.target.value})} />
+                                </div>
+                                <div className="form-field">
+                                    <label>Medida (opcional)</label>
+                                    <input type="text" placeholder="Ej: 2,95 m x 0,17 m" value={newProduct.measure} onChange={e => setNewProduct({...newProduct, measure: e.target.value})} />
+                                </div>
+                                <div className="form-field">
+                                    <label>Unidades que trae (opcional)</label>
+                                    <input type="number" min="2" step="1" placeholder="Ej: 10 si la caja trae 10" value={newProduct.pieces_per_unit} onChange={e => setNewProduct({...newProduct, pieces_per_unit: e.target.value})} />
+                                </div>
                                 {packagingTypes.length > 0 && (
                                     <div className="form-field">
                                         <label>Empaque incluido</label>
@@ -2636,7 +2661,15 @@
                                             <div className="info">
                                                 <span className="category-tag">{product.category}</span>
                                                 <h4>{product.name}</h4>
-                                                <div className="price">${product.price} <small>por {unit}</small></div>
+                                                <div className="price">${product.price} <small>por {product.sale_unit || unit}</small></div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', margin: '6px 0' }}>
+                                                    <input type="text" defaultValue={product.sale_unit || ''} placeholder="Unidad de venta (caja de 10, tubo...)"
+                                                        onBlur={e => e.target.value !== (product.sale_unit || '') && changeProductField(product.id, 'sale_unit', e.target.value)} />
+                                                    <input type="text" defaultValue={product.measure || ''} placeholder="Medida (2,95 m x 0,17 m)"
+                                                        onBlur={e => e.target.value !== (product.measure || '') && changeProductField(product.id, 'measure', e.target.value)} />
+                                                    <input type="number" min="2" step="1" defaultValue={product.pieces_per_unit || ''} placeholder="Unidades que trae"
+                                                        onBlur={e => e.target.value !== String(product.pieces_per_unit || '') && changeProductField(product.id, 'pieces_per_unit', e.target.value)} />
+                                                </div>
                                                 {packagingTypes.length > 0 && (
                                                     <select className="packaging-select" value={product.description || ''} onChange={e => changeProductPackaging(product.id, e.target.value)}>
                                                         <option value="">🎁 Empaque sin definir</option>
