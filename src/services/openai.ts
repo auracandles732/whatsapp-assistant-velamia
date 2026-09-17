@@ -589,7 +589,9 @@ export function normalizeQuantities(rawItems: any, customerText: string, p: Busi
     if (per === 1 || !Number.isFinite(quantity) || quantity <= 1) return item;
 
     // La IA avisa cuando contó piezas sueltas (18 paneles) en vez de unidades de venta (2 cajas).
-    if (item?.quantity_in_pieces === true) {
+    // Solo se aplica a productos con su propia unidad; los demás siguen con la corrección por texto.
+    const ownPieces = Number(catalog.find(c => c.name === item?.name)?.pieces_per_unit) > 1;
+    if (ownPieces && item?.quantity_in_pieces === true) {
       const units = Math.ceil(quantity / per);
       console.warn(`📦 Cantidad convertida: ${quantity} piezas = ${units} x ${catalog.find(c => c.name === item.name)?.sale_unit || 'unidad'}`);
       return { ...item, quantity: units, quantity_in_pieces: false };
