@@ -33,6 +33,7 @@ import {
   toPublicBusiness,
   updateBusinessCredentials,
   updateBusinessInfo,
+  deleteBusinessCompletely,
   BusinessCredentials,
   BusinessRow,
   createBusinessUser,
@@ -727,9 +728,32 @@ app.patch('/api/businesses/:businessId', requireAdminSession, requireUuidParams,
 
     const updated = await updateBusinessInfo(req.params.businessId, updates);
     if (!updated) return res.status(404).json({ error: 'Negocio no encontrado' });
+    if (updates.active !== undefined) console.log(`🏢 ${updated.name} ${updates.active ? 'reactivada' : 'suspendida'}`);
     res.json(updated);
   } catch (error: any) {
     sendBusinessError(res, error);
+  }
+});
+
+/**
+ * Elimina la empresa y todo lo suyo, sin residuos. Para evitar accidentes hay que enviar su nombre exacto
+ * y la empresa debe estar suspendida antes (así el bot ya no está atendiendo mientras se borra).
+ */
+app.delete('/api/businesses/:businessId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const row = await getBusinessRow(req.params.businessId);
+    if (!row) return res.status(404).json({ error: 'Empresa no encontrada' });
+    if (row.active) return res.status(400).json({ error: 'Primero suspende la empresa y luego elimínala' });
+    if (String(req.body?.confirmName || '').trim() !== row.name) {
+      return res.status(400).json({ error: 'El nombre escrito no coincide con el de la empresa' });
+    }
+
+    const result = await deleteBusinessCompletely(row.id);
+    console.log(`🗑️ Empresa eliminada por completo: ${row.name}`, JSON.stringify(result?.summary));
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('Error eliminando empresa:', error.message);
+    res.status(500).json({ error: `No se pudo eliminar por completo: ${error.message}. Puedes intentar de nuevo; lo ya borrado no vuelve.` });
   }
 });
 

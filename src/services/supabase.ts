@@ -856,9 +856,85 @@ export async function updateBusinessInfo(businessId: string, updates: { name?: s
     .maybeSingle();
 
   if (error) throw friendlyBusinessError(error, 'actualizando');
+  // Suspender surte efecto al instante: sin caché, el bot deja de responder y sus usuarios quedan fuera.
   invalidateTenantCache();
   accessCache.clear();
+  userAccessCache.clear();
   return data ? toPublicBusiness(data) : null;
+}
+
+/** Borra todos los archivos de la carpeta de la empresa en un bucket (fotos del catálogo o archivos de clientes). */
+async function removeCompanyFolder(bucket: string, businessId: string): Promise<number> {
+  let removed = 0;
+  // Se lista y borra por tandas hasta vaciar la carpeta.
+  for (let round = 0; round < 1000; round++) {
+    const { data, error } = await supabase.storage.from(bucket).list(businessId, { limit: 1000 });
+    if (error) throw new Error(`Error listando archivos de ${bucket}: ${error.message}`);
+    const paths = (data || []).filter(f => f.name).map(f => `${businessId}/${f.name}`);
+    if (paths.length === 0) break;
+    const { error: removeError } = await supabase.storage.from(bucket).remove(paths);
+    if (removeError) throw new Error(`Error borrando archivos de ${bucket}: ${removeError.message}`);
+    removed += paths.length;
+  }
+  return removed;
+}
+
+/**
+ * Elimina una empresa por completo y sin residuos: chats, mensajes, seguimientos, avisos, cotizaciones,
+ * pedidos, catálogo, usuarios, accesos, configuración, archivos y claves. No se puede deshacer.
+ * Solo acepta el id de un negocio: VELAMIA (sin business_id) nunca entra aquí.
+ */
+export async function deleteBusinessCompletely(businessId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(businessId)) throw new Error('Id de empresa inválido');
+  const row = await getBusinessRow(businessId);
+  if (!row) return null;
+
+  const summary: Record<string, number> = {};
+  const count = (key: string, n: number) => { summary[key] = (summary[key] || 0) + n; };
+
+  // 1) Todo lo que cuelga de sus conversaciones.
+  const { data: conversations, error: convError } = await supabase.from('conversations').select('id').eq('business_id', businessId);
+  if (convError) throw new Error(`Error leyendo conversaciones: ${convError.message}`);
+  const conversationIds = (conversations || []).map(c => c.id);
+  for (let i = 0; i < conversationIds.length; i += 100) {
+    const chunk = conversationIds.slice(i, i + 100);
+    // Orden: primero lo que depende de otras tablas (followups apunta a orders).
+    for (const table of ['followups', 'notifications', 'quotations', 'orders', 'messages']) {
+      const { data, error } = await supabase.from(table).delete().in('conversation_id', chunk).select('id');
+      if (error) throw new Error(`Error borrando ${table}: ${error.message}`);
+      count(table, (data || []).length);
+    }
+  }
+
+  // 2) Tablas con business_id propio.
+  for (const table of ['quotations', 'orders', 'conversations', 'products', 'business_access_tokens', 'business_users']) {
+    const { data, error } = await supabase.from(table).delete().eq('business_id', businessId).select('id');
+    if (error) throw new Error(`Error borrando ${table}: ${error.message}`);
+    count(table, (data || []).length);
+  }
+
+  // 3) Su configuración (prompt, datos bancarios, estado del bot).
+  const { data: configRows, error: configError } = await supabase
+    .from('business_config')
+    .delete()
+    .like('key', `business:${businessId}:%`)
+    .select('key');
+  if (configError) throw new Error(`Error borrando configuración: ${configError.message}`);
+  count('business_config', (configRows || []).length);
+
+  // 4) Sus archivos: fotos del catálogo y archivos que enviaron sus clientes.
+  for (const bucket of ['product-images', 'chat-media']) {
+    count(`archivos_${bucket}`, await removeCompanyFolder(bucket, businessId));
+  }
+
+  // 5) La empresa (perfil y claves cifradas).
+  const { error } = await supabase.from('businesses').delete().eq('id', businessId);
+  if (error) throw new Error(`Error borrando la empresa: ${error.message}`);
+
+  invalidateTenantCache();
+  accessCache.clear();
+  userAccessCache.clear();
+  return { name: row.name, summary };
 }
 
 export async function saveTenantProfile(businessId: string, businessProfile: BusinessProfile) {

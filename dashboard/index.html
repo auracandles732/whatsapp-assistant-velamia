@@ -1302,8 +1302,10 @@
             }
 
             async function toggleActive() {
-                const action = business.active ? 'desactivar' : 'activar';
-                if (!confirm(`¿Seguro que quieres ${action} ${business.name}? ${business.active ? 'El bot dejará de responder en su número y su acceso al CRM se cerrará.' : ''}`)) return;
+                const message = business.active
+                    ? `¿Suspender ${business.name}?\n\n• El bot deja de responder en su número de WhatsApp.\n• Se detienen sus seguimientos automáticos.\n• Sus usuarios no pueden entrar al CRM.\n\nNo se borra nada: al reactivarla vuelve todo como estaba.`
+                    : `¿Reactivar ${business.name}? El bot vuelve a responder y sus usuarios pueden entrar de nuevo.`;
+                if (!confirm(message)) return;
                 try {
                     await api(`/api/businesses/${business.id}`, { method: 'PATCH', body: JSON.stringify({ active: !business.active }) });
                     onChanged();
@@ -1312,11 +1314,36 @@
                 }
             }
 
+            async function deleteCompany() {
+                if (business.active) {
+                    return alert(`Para eliminar ${business.name}, primero suspéndela.`);
+                }
+                const typed = prompt(
+                    `⚠️ ELIMINAR ${business.name} PARA SIEMPRE\n\n` +
+                    'Se borrarán todos sus chats, mensajes, cotizaciones, pedidos, catálogo, fotos, archivos, usuarios, configuración y claves. No se puede deshacer.\n\n' +
+                    `Para confirmar, escribe el nombre exacto de la empresa: ${business.name}`
+                );
+                if (typed === null) return;
+                if (typed.trim() !== business.name) return alert('El nombre no coincide. No se eliminó nada.');
+                setBusy(true);
+                try {
+                    const result = await api(`/api/businesses/${business.id}`, { method: 'DELETE', body: JSON.stringify({ confirmName: typed.trim() }) });
+                    const s = result.summary || {};
+                    const files = (s['archivos_product-images'] || 0) + (s['archivos_chat-media'] || 0);
+                    alert(`${business.name} fue eliminada por completo.\n\nChats: ${s.conversations || 0} · Mensajes: ${s.messages || 0} · Pedidos: ${s.orders || 0} · Cotizaciones: ${s.quotations || 0} · Productos: ${s.products || 0} · Usuarios: ${s.business_users || 0} · Archivos: ${files}`);
+                    onChanged();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
             const status = (ok, text) => <span style={{ fontSize: '12px', color: ok ? '#2e7d32' : '#c62828' }}>{ok ? '✅' : '⚠️'} {text}</span>;
 
             return (
                 <div style={{ border: '1px solid var(--rosa-palo-suave)', borderRadius: '8px', padding: '15px', background: selected ? 'var(--rosa-palo-suave)' : 'white', opacity: business.active ? 1 : 0.6 }}>
-                    <h4 style={{ marginBottom: '6px' }}>🏢 {business.name}{business.active ? '' : ' (desactivado)'}</h4>
+                    <h4 style={{ marginBottom: '6px' }}>🏢 {business.name}{business.active ? '' : ' (suspendida)'}</h4>
                     <p style={{ fontSize: '12px', color: 'var(--texto-suave)' }}>{business.legacy ? '🔒 Claves en el servidor (instalación original)' : `📱 ${business.meta_phone_number || 'Sin número'}`}</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '8px 0' }}>
                         {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
@@ -1326,7 +1353,8 @@
                         {business.active && <button style={buttonStyle} onClick={() => onSelect(business.id)}>Entrar</button>}
                         {!business.legacy && <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>}
                         <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'access' ? null : 'access')}>👤 Usuarios</button>
-                        {!business.legacy && <button style={secondaryButtonStyle} onClick={toggleActive}>{business.active ? 'Desactivar' : 'Activar'}</button>}
+                        {!business.legacy && <button style={secondaryButtonStyle} onClick={toggleActive}>{business.active ? '⏸️ Suspender' : '▶️ Reactivar'}</button>}
+                        {!business.legacy && <button style={{ ...secondaryButtonStyle, background: '#fdecea', color: '#c62828' }} disabled={busy} onClick={deleteCompany}>🗑️ Eliminar</button>}
                     </div>
 
                     {mode === 'keys' && (
