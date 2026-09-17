@@ -26,7 +26,10 @@ import {
   updateOrderStatus,
   ORDER_STATUSES,
   OrderStatus,
-  parseDbTimestamp
+  parseDbTimestamp,
+  getBusinessByPhoneNumber,
+  createBusiness,
+  getAllBusinesses
 } from './db';
 import { removeFilesByPublicUrls } from './services/storage';
 import { handleWebhookMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
@@ -565,6 +568,38 @@ app.delete('/api/products/:id', requireCrmSession, requireUuidParam, async (req:
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error eliminando producto:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- MULTI-TENANT: NEGOCIOS ----------
+
+app.get('/api/businesses', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    const businesses = await getAllBusinesses();
+    res.json(businesses);
+  } catch (error: any) {
+    console.error('Error cargando negocios:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/businesses', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const { name, phoneNumber, accessToken } = req.body;
+
+    if (!name || !phoneNumber || !accessToken) {
+      return res.status(400).json({ error: 'Nombre, teléfono y token son requeridos' });
+    }
+
+    // Crear negocio con perfil por defecto (copia del perfil global de VELAMIA)
+    const defaultProfile = profile();
+    const business = await createBusiness(name, phoneNumber, accessToken, defaultProfile);
+
+    console.log(`🏢 Negocio creado: ${business.name} (${business.meta_phone_number})`);
+    res.status(201).json(business);
+  } catch (error: any) {
+    console.error('Error creando negocio:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

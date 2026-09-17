@@ -610,7 +610,7 @@ async function respondToBatch(batch: PendingBatch) {
       const cuando = days < 0 ? 'ya pasó' : days === 0 ? 'es hoy' : days === 1 ? 'es mañana' : `faltan ${days} días`;
       await notifyOwner({
         conversationId, customerPhone: phoneNumber, customerName, event: 'urgent_date',
-        detail: `${batchProfile.dates.eventLabel.replace(/^./, c => c.toUpperCase())} ${formatDate(plan.event_date)} · entrega ${formatDate(plan.delivery_date)} (${cuando})`
+        detail: `${batchProfile.dates.eventLabel.replace(/^./, (c: string) => c.toUpperCase())} ${formatDate(plan.event_date)} · entrega ${formatDate(plan.delivery_date)} (${cuando})`
       });
     }
 
