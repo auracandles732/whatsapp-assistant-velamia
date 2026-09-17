@@ -92,7 +92,12 @@ app.get('/crm/manifest.json', (_req: Request, res: Response) => {
   });
 });
 
-app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard')));
+// Sin esto el navegador se queda con la versión vieja del CRM después de publicar cambios.
+app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
+  }
+}));
 app.get('/', (_req: Request, res: Response) => res.redirect('/crm/'));
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
