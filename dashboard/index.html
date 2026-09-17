@@ -1182,6 +1182,11 @@
                         onChange={e => setForm({ ...form, [key]: e.target.value })}
                         placeholder={hint ? `Guardado ${hint} · déjalo vacío para conservarlo` : placeholder}
                     />
+                    {secret && form[key] && (
+                        <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginTop: '2px' }}>
+                            Pegado: {form[key].trim().length} caracteres, empieza con "{form[key].trim().slice(0, 3)}"
+                        </div>
+                    )}
                 </div>
             );
             return (
@@ -1191,6 +1196,7 @@
                     {field('wabaId', 'WhatsApp Business Account ID (Meta)', business?.meta_business_account_id || 'Ej: 109876543210987')}
                     {field('metaAccessToken', 'Token de acceso de Meta', 'Token permanente del usuario del sistema', true, business?.meta_access_token_hint)}
                     {field('openaiApiKey', 'Clave de OpenAI (API key)', 'sk-...', true, business?.openai_api_key_hint)}
+                    <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '8px' }}>Panel de claves v3</div>
                 </div>
             );
         }
