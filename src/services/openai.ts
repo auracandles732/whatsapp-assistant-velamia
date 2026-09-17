@@ -113,7 +113,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
   add(
     'REGLAS DEL SISTEMA (obligatorias):',
     ownUnits
-      ? '- Cada producto del catálogo se vende en la unidad que dice su línea (caja, tubo, plancha, metro...). Usa la unidad de ESE producto al dar su precio y nunca la de otro. Si la línea dice cuántas unidades trae, tenlo en cuenta al calcular cuántas necesita el cliente.'
+      ? '- Cada producto del catálogo se vende en la unidad que dice su línea (caja, tubo, plancha, metro...). Usa la unidad de ESE producto al dar su precio y nunca la de otro. Si el cliente necesita una cantidad de piezas sueltas, conviértela a esa unidad redondeando hacia arriba y habla siempre en la unidad de venta (ejemplo: necesita 18 piezas de un producto que va en caja de 10 → son 2 cajas; dile "2 cajas (20 piezas)").'
       : `- Todos los precios del catálogo son POR ${unit.toUpperCase()}${s.unitDetail ? ` (${s.unitDetail})` : ''}. Acláralo siempre que menciones un precio.`,
     '- Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.',
     `- Si el cliente pregunta cuántos ${models} hay de ${d.enabled ? `un ${d.eventLabel}` : 'una categoría'}, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.`,
@@ -241,7 +241,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     if (sh.mode === 'ecuador_table') add('- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.');
   }
   add(
-    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad de ${units} del pedido actual según toda la conversación; lista vacía si no están claros.${s.unitDetail && /\d/.test(s.unitDetail) ? ` Si el cliente da la cantidad en piezas (1 ${unit} = ${s.unitDetail}), conviértela a ${units} (ejemplo: ${Number(s.unitDetail.match(/\d+/)![0]) * 4} ${s.unitDetail.replace(/\d+/g, '').trim()} = 4 ${units}) y en reply habla siempre en ${units}.` : ''}${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); anota lo que ya pidió aunque aún falten detalles (ejemplo: "bicolor" aunque no haya dicho los colores); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
+    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad del pedido actual según toda la conversación, ${ownUnits ? 'en la unidad de venta de ESE producto (cajas, tubos, metros)' : `cantidad de ${units}`}; lista vacía si no están claros. quantity_in_pieces: true SOLO si esa cantidad son piezas sueltas y no unidades de venta (ejemplo: 18 paneles de un producto que va en caja de 10 → quantity 18 con quantity_in_pieces true); false en cualquier otro caso.${!ownUnits && s.unitDetail && /\d/.test(s.unitDetail) ? ` Si el cliente da la cantidad en piezas (1 ${unit} = ${s.unitDetail}), conviértela a ${units} (ejemplo: ${Number(s.unitDetail.match(/\d+/)![0]) * 4} ${s.unitDetail.replace(/\d+/g, '').trim()} = 4 ${units}) y en reply habla siempre en ${units}.` : ''}${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); anota lo que ya pidió aunque aún falten detalles (ejemplo: "bicolor" aunque no haya dicho los colores); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
     sh.mode === 'ecuador_table'
       ? '- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.'
       : sh.mode === 'flat'
@@ -448,8 +448,14 @@ const TURN_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'quantity', 'personalization', 'packaging'],
-        properties: { name: { type: 'string' }, quantity: { type: 'number' }, personalization: { type: 'string' }, packaging: { type: 'string' } }
+        required: ['name', 'quantity', 'quantity_in_pieces', 'personalization', 'packaging'],
+        properties: {
+          name: { type: 'string' },
+          quantity: { type: 'number' },
+          quantity_in_pieces: { type: 'boolean' },
+          personalization: { type: 'string' },
+          packaging: { type: 'string' }
+        }
       }
     },
     shipping_place: { type: 'string' },
@@ -581,6 +587,14 @@ export function normalizeQuantities(rawItems: any, customerText: string, p: Busi
     const quantity = Number(item?.quantity);
     const per = piecesOf(item?.name);
     if (per === 1 || !Number.isFinite(quantity) || quantity <= 1) return item;
+
+    // La IA avisa cuando contó piezas sueltas (18 paneles) en vez de unidades de venta (2 cajas).
+    if (item?.quantity_in_pieces === true) {
+      const units = Math.ceil(quantity / per);
+      console.warn(`📦 Cantidad convertida: ${quantity} piezas = ${units} x ${catalog.find(c => c.name === item.name)?.sale_unit || 'unidad'}`);
+      return { ...item, quantity: units, quantity_in_pieces: false };
+    }
+
     const own = catalog.find(c => c.name === item?.name)?.sale_unit || '';
     const unitWords = [p.sales.unitSingular, p.sales.unitPlural, ...own.split(/\s+/)]
       .filter(w => w && w.length >= 3).map(clean);
