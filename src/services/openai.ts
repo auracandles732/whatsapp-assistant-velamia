@@ -682,9 +682,12 @@ export function buildSystemPrompt(
     }
     catalogText = `CATÁLOGO ACTUAL DE ${p.business.name.toUpperCase()} (cada precio es por la unidad indicada):\n\n` + Object.entries(byCategory)
       .map(([cat, items]) => `${cat} (${items.length} ${models}):\n` + items.map(i => {
-        const pieces = Number(i.pieces_per_unit) > 1 ? ` = ${i.pieces_per_unit} unidades` : '';
+        // "caja de 10" ya dice cuántas trae: no repetirlo.
+        const own = unitOf(i, p);
+        const pieces = Number(i.pieces_per_unit) > 1 && !own.includes(String(i.pieces_per_unit))
+          ? ` = ${i.pieces_per_unit} unidades` : '';
         const measure = i.measure ? ` · mide ${i.measure}` : '';
-        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${unitOf(i, p)}${pieces}${measure}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`;
+        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${own}${pieces}${measure}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`;
       }).join('\n'))
       .join('\n\n');
   }
