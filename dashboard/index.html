@@ -1483,6 +1483,11 @@
             const [deletingChat, setDeletingChat] = useState(false);
             const [sending, setSending] = useState(false);
             const [biz, setBiz] = useState(null);
+            const [businesses, setBusinesses] = useState([]);
+            const [currentBusinessId, setCurrentBusinessId] = useState(() => localStorage.getItem('currentBusinessId') || null);
+            const [showNewBusinessForm, setShowNewBusinessForm] = useState(false);
+            const [newBusinessForm, setNewBusinessForm] = useState({ name: '', phoneNumber: '', accessToken: '' });
+            const [savingBusiness, setSavingBusiness] = useState(false);
             const unit = biz?.sales.unitSingular || 'unidad';
             const unitPlural = biz?.sales.unitPlural || 'unidades';
             const productEmoji = biz?.business.productEmoji || '🛍️';
@@ -1492,6 +1497,7 @@
             const stickToBottom = useRef(true);
 
             useEffect(() => {
+                loadBusinesses();
                 loadConversations();
                 loadStats();
                 loadBotStatus();
@@ -1663,6 +1669,51 @@
                 } catch (err) {
                     alert('Error cambiando estado del bot: ' + err.message);
                     setBotEnabled(!newValue);
+                }
+            }
+
+            async function loadBusinesses() {
+                try {
+                    const data = await api('/api/businesses');
+                    setBusinesses(Array.isArray(data) ? data : []);
+                } catch (err) {
+                    console.error('Error cargando negocios:', err);
+                }
+            }
+
+            async function selectBusiness(businessId) {
+                setCurrentBusinessId(businessId);
+                localStorage.setItem('currentBusinessId', businessId || '');
+                // Recargar datos del negocio seleccionado
+                loadConversations();
+                loadProducts();
+                loadQuotations();
+                loadStats();
+            }
+
+            async function createNewBusiness() {
+                if (!newBusinessForm.name || !newBusinessForm.phoneNumber || !newBusinessForm.accessToken) {
+                    alert('Todos los campos son requeridos');
+                    return;
+                }
+                setSavingBusiness(true);
+                try {
+                    const created = await api('/api/businesses', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name: newBusinessForm.name,
+                            phoneNumber: newBusinessForm.phoneNumber,
+                            accessToken: newBusinessForm.accessToken
+                        })
+                    });
+                    setNewBusinessForm({ name: '', phoneNumber: '', accessToken: '' });
+                    setShowNewBusinessForm(false);
+                    loadBusinesses();
+                    selectBusiness(created.id);
+                } catch (err) {
+                    alert('Error creando negocio: ' + err.message);
+                } finally {
+                    setSavingBusiness(false);
                 }
             }
 
@@ -1880,6 +1931,12 @@
                                 </div>
                             </div>
                             <div className="header-actions">
+                                {businesses.length > 0 && (
+                                    <select value={currentBusinessId || ''} onChange={(e) => selectBusiness(e.target.value || null)} style={{ padding: '7px 14px', borderRadius: '4px', border: '1px solid var(--rosa-palo-suave)', fontSize: '13px', marginRight: '10px' }}>
+                                        <option value="">🏢 VELAMIA (predeterminado)</option>
+                                        {businesses.map(b => <option key={b.id} value={b.id}>🏢 {b.name}</option>)}
+                                    </select>
+                                )}
                                 <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
                                     <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
                                 </div>
@@ -1888,6 +1945,7 @@
                         </div>
 
                         <div className="nav-tabs">
+                            <div className={`nav-tab ${activeTab === 'negocios' ? 'active' : ''}`} onClick={() => setActiveTab('negocios')}>🏢 Negocios</div>
                             <div className={`nav-tab ${activeTab === 'conversaciones' ? 'active' : ''}`} onClick={() => setActiveTab('conversaciones')}>💬 Conversaciones</div>
                             <div className={`nav-tab ${activeTab === 'cotizaciones' ? 'active' : ''}`} onClick={() => setActiveTab('cotizaciones')}>🧾 Cotizaciones</div>
                             <div className={`nav-tab ${activeTab === 'pedidos' ? 'active' : ''}`} onClick={() => setActiveTab('pedidos')}>🛍️ Pedidos</div>
@@ -1918,6 +1976,59 @@
                                 </div>
                             </div>
                             )}
+
+                        {activeTab === 'negocios' && (
+                        <div className="content">
+                            <div style={{ padding: '20px' }}>
+                                <h2 style={{ marginBottom: '20px' }}>🏢 Negocios</h2>
+
+                                <div style={{ marginBottom: '30px' }}>
+                                    <h3>Negocios Activos</h3>
+                                    {businesses.length === 0 ? (
+                                        <p style={{ color: 'var(--texto-suave)' }}>No hay negocios creados aún. Crea uno para empezar.</p>
+                                    ) : (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '15px', marginTop: '15px' }}>
+                                            {businesses.map(b => (
+                                                <div key={b.id} style={{ border: '1px solid var(--rosa-palo-suave)', borderRadius: '8px', padding: '15px', cursor: 'pointer', background: currentBusinessId === b.id ? 'var(--rosa-palo-suave)' : 'white' }} onClick={() => selectBusiness(b.id)}>
+                                                    <h4>🏢 {b.name}</h4>
+                                                    <p style={{ fontSize: '12px', color: 'var(--texto-suave)' }}>📱 {b.meta_phone_number}</p>
+                                                    <p style={{ fontSize: '12px', marginTop: '8px' }}>{currentBusinessId === b.id ? '✅ Seleccionado' : 'Click para seleccionar'}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <h3 style={{ marginBottom: '15px' }}>Crear Nuevo Negocio</h3>
+                                    {!showNewBusinessForm ? (
+                                        <button onClick={() => setShowNewBusinessForm(true)} style={{ padding: '10px 20px', background: 'var(--terracota)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>+ Nuevo Negocio</button>
+                                    ) : (
+                                        <div style={{ background: 'var(--beige-claro)', padding: '20px', borderRadius: '8px', maxWidth: '500px' }}>
+                                            <div style={{ marginBottom: '15px' }}>
+                                                <label style={{ display: 'block', fontSize: '13px', marginBottom: '5px', fontWeight: '600' }}>Nombre del Negocio</label>
+                                                <input type="text" value={newBusinessForm.name} onChange={(e) => setNewBusinessForm({...newBusinessForm, name: e.target.value})} placeholder="Ej: Tienda X" style={{ width: '100%', padding: '8px', border: '1px solid var(--rosa-palo-suave)', borderRadius: '4px', boxSizing: 'border-box' }} />
+                                            </div>
+                                            <div style={{ marginBottom: '15px' }}>
+                                                <label style={{ display: 'block', fontSize: '13px', marginBottom: '5px', fontWeight: '600' }}>Teléfono de Meta (número del bot)</label>
+                                                <input type="text" value={newBusinessForm.phoneNumber} onChange={(e) => setNewBusinessForm({...newBusinessForm, phoneNumber: e.target.value})} placeholder="Ej: +593 99 732 9187" style={{ width: '100%', padding: '8px', border: '1px solid var(--rosa-palo-suave)', borderRadius: '4px', boxSizing: 'border-box' }} />
+                                            </div>
+                                            <div style={{ marginBottom: '15px' }}>
+                                                <label style={{ display: 'block', fontSize: '13px', marginBottom: '5px', fontWeight: '600' }}>Token de Acceso Meta</label>
+                                                <input type="password" value={newBusinessForm.accessToken} onChange={(e) => setNewBusinessForm({...newBusinessForm, accessToken: e.target.value})} placeholder="Token" style={{ width: '100%', padding: '8px', border: '1px solid var(--rosa-palo-suave)', borderRadius: '4px', boxSizing: 'border-box' }} />
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '10px' }}>
+                                                <button onClick={createNewBusiness} disabled={savingBusiness} style={{ flex: 1, padding: '10px', background: 'var(--terracota)', color: 'white', border: 'none', borderRadius: '4px', cursor: savingBusiness ? 'not-allowed' : 'pointer', opacity: savingBusiness ? 0.6 : 1 }}>
+                                                    {savingBusiness ? 'Guardando...' : 'Crear Negocio'}
+                                                </button>
+                                                <button onClick={() => { setShowNewBusinessForm(false); setNewBusinessForm({ name: '', phoneNumber: '', accessToken: '' }); }} style={{ flex: 1, padding: '10px', background: 'var(--rosa-palo-suave)', color: 'var(--texto)', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancelar</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        )}
 
                         {activeTab === 'conversaciones' && (
                         <div className={`content ${selectedConv ? 'chat-open' : ''}`}>
