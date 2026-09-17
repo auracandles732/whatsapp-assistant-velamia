@@ -31,6 +31,8 @@ export interface BusinessProfile {
     productLabelPlural: string;
     /** Qué se vende, para hablar del total: "velas", "zapatos", "productos". */
     goodsWord: string;
+    /** Cuántas "piezas" = 1 unidad de venta. VELAMIA=12, individual=1, caja=100. */
+    piecesPerUnit: number;
     personalization: boolean;
     personalizationExamples: string;
     /** Vacío = sin pedido mínimo. */
@@ -64,6 +66,12 @@ export interface BusinessProfile {
     showSeparately: boolean;
     pickupAvailable: boolean;
     pickupAddress: string;
+    /** true = usar customRates en lugar de tarifa del carrier. */
+    useCustomRates: boolean;
+    /** Zonas personalizadas con costo por kg: [{zone: "Guayaquil", costPerKg: 0.5}]. */
+    customRates: Array<{ zone: string; costPerKg: number }>;
+    /** Pesos de productos para cálculo con customRates: {productId: peso_kg}. */
+    productWeights: Record<string, number>;
   };
   followUps: {
     enabled: boolean;
@@ -118,6 +126,7 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     productLabel: 'Modelo',
     productLabelPlural: 'Modelos',
     goodsWord: 'velas',
+    piecesPerUnit: 12,
     personalization: true,
     personalizationExamples: 'cambios de colores, nombres, frases y detalles',
     minimumOrder: ''
@@ -133,7 +142,10 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     extraCost: 1,
     showSeparately: false,
     pickupAvailable: false,
-    pickupAddress: ''
+    pickupAddress: '',
+    useCustomRates: false,
+    customRates: [],
+    productWeights: {}
   },
   followUps: {
     enabled: true,
@@ -183,6 +195,7 @@ export const STORE_PROFILE: BusinessProfile = {
     productLabel: 'Producto',
     productLabelPlural: 'Productos',
     goodsWord: 'productos',
+    piecesPerUnit: 1,
     personalization: false,
     personalizationExamples: '',
     minimumOrder: ''
@@ -198,7 +211,10 @@ export const STORE_PROFILE: BusinessProfile = {
     extraCost: 0,
     showSeparately: false,
     pickupAvailable: false,
-    pickupAddress: ''
+    pickupAddress: '',
+    useCustomRates: false,
+    customRates: [],
+    productWeights: {}
   },
   followUps: {
     enabled: false,
@@ -290,6 +306,7 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       productLabel: (text(s.productLabel, base.sales.productLabel, 40) || base.sales.productLabel).replace(/\*/g, ''),
       productLabelPlural: text(s.productLabelPlural, base.sales.productLabelPlural, 40) || base.sales.productLabelPlural,
       goodsWord: text(s.goodsWord, base.sales.goodsWord, 40) || base.sales.goodsWord,
+      piecesPerUnit: typeof s.piecesPerUnit === 'number' && s.piecesPerUnit > 0 ? s.piecesPerUnit : (base.sales.piecesPerUnit ?? 12),
       personalization: bool(s.personalization, base.sales.personalization),
       personalizationExamples: text(s.personalizationExamples, base.sales.personalizationExamples),
       minimumOrder: text(s.minimumOrder, base.sales.minimumOrder, 120)
@@ -316,7 +333,10 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       extraCost: num(sh.extraCost, base.shipping.extraCost, 0, 10000),
       showSeparately: bool(sh.showSeparately, base.shipping.showSeparately),
       pickupAvailable: bool(sh.pickupAvailable, base.shipping.pickupAvailable),
-      pickupAddress: text(sh.pickupAddress, base.shipping.pickupAddress)
+      pickupAddress: text(sh.pickupAddress, base.shipping.pickupAddress),
+      useCustomRates: bool(sh.useCustomRates, base.shipping.useCustomRates),
+      customRates: Array.isArray(sh.customRates) ? sh.customRates.filter((r: any) => typeof r.zone === 'string' && typeof r.costPerKg === 'number') : base.shipping.customRates,
+      productWeights: typeof sh.productWeights === 'object' && sh.productWeights !== null ? sh.productWeights : base.shipping.productWeights
     },
     followUps: {
       enabled: bool(f.enabled, base.followUps.enabled),
@@ -423,4 +443,29 @@ export function hourLocal(date: Date, p: BusinessProfile = current): number {
 export function formatDate(isoDate: string): string {
   const [y, m, d] = isoDate.split('-');
   return `${d}/${m}/${y}`;
+}
+
+// ---------- Helpers Multi-Tenant ----------
+
+/** Obtiene el factor de conversión de piezas a unidades de venta. VELAMIA=12, individual=1. */
+export function getPiecesPerUnit(p: BusinessProfile = current): number {
+  return p.sales.piecesPerUnit ?? 12;
+}
+
+/** Calcula el costo de envío custom (por peso) basado en zona. Usado por negocios con tarifa propia. */
+export function calculateCustomShippingCost(
+  zone: string,
+  totalWeightKg: number,
+  p: BusinessProfile = current
+): number {
+  if (!p.shipping.useCustomRates || p.shipping.customRates.length === 0) {
+    return 0;
+  }
+  const rate = p.shipping.customRates.find(r => r.zone.toLowerCase() === zone.toLowerCase());
+  return rate ? rate.costPerKg * totalWeightKg : 0;
+}
+
+/** Obtiene el peso de un producto para cálculos de envío custom. */
+export function getProductWeight(productId: string, p: BusinessProfile = current): number {
+  return p.shipping.productWeights?.[productId] ?? 0;
 }

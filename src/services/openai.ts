@@ -524,6 +524,11 @@ export function cleanPersonalization(value: unknown): string {
 
 /** Piezas por unidad de venta según el perfil ("12 unidades" → 12); 1 si no aplica. */
 function piecesPerUnit(p: BusinessProfile): number {
+  // Si el perfil tiene piecesPerUnit definido, usarlo
+  if (p.sales.piecesPerUnit !== undefined && p.sales.piecesPerUnit > 0) {
+    return p.sales.piecesPerUnit;
+  }
+  // Fallback: extraer del unitDetail (ej: "12 unidades" → 12)
   const match = p.sales.unitDetail.match(/\d+/);
   const pieces = match ? Number(match[0]) : 1;
   return pieces > 1 ? pieces : 1;
