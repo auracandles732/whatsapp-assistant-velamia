@@ -1261,16 +1261,16 @@
             return (
                 <div style={{ border: '1px solid var(--rosa-palo-suave)', borderRadius: '8px', padding: '15px', background: selected ? 'var(--rosa-palo-suave)' : 'white', opacity: business.active ? 1 : 0.6 }}>
                     <h4 style={{ marginBottom: '6px' }}>🏢 {business.name}{business.active ? '' : ' (desactivado)'}</h4>
-                    <p style={{ fontSize: '12px', color: 'var(--texto-suave)' }}>📱 {business.meta_phone_number || 'Sin número'}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--texto-suave)' }}>{business.legacy ? '🔒 Claves en el servidor (instalación original)' : `📱 ${business.meta_phone_number || 'Sin número'}`}</p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '8px 0' }}>
                         {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
                         {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-                        {business.active && <button style={buttonStyle} onClick={() => onSelect(selected ? null : business.id)}>{selected ? 'Volver a VELAMIA' : 'Trabajar en este negocio'}</button>}
-                        <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>
+                        {business.active && <button style={buttonStyle} onClick={() => onSelect(business.id)}>Entrar</button>}
+                        {!business.legacy && <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>}
                         <button style={secondaryButtonStyle} onClick={() => { setMode(mode === 'access' ? null : 'access'); if (mode !== 'access') loadTokens(); }}>👤 Accesos</button>
-                        <button style={secondaryButtonStyle} onClick={toggleActive}>{business.active ? 'Desactivar' : 'Activar'}</button>
+                        {!business.legacy && <button style={secondaryButtonStyle} onClick={toggleActive}>{business.active ? 'Desactivar' : 'Activar'}</button>}
                     </div>
 
                     {mode === 'keys' && (
@@ -1340,24 +1340,19 @@
 
             return (
                 <div style={{ padding: '20px' }}>
-                    <h2 style={{ marginBottom: '8px' }}>🏢 Negocios</h2>
+                    <h2 style={{ marginBottom: '8px' }}>🏢 Empresas</h2>
                     <p style={{ color: 'var(--texto-suave)', fontSize: '13px', marginBottom: '20px' }}>
-                        Cada negocio tiene su propio número de WhatsApp, su clave de OpenAI, su catálogo, sus chats y su configuración. Nada se comparte con VELAMIA.
-                        {currentBusinessId ? '' : ' Ahora estás trabajando en VELAMIA.'}
+                        Elige con qué empresa quieres trabajar. Cada una tiene su propio número de WhatsApp, su clave de OpenAI, su catálogo, sus chats y su configuración; nada se comparte entre ellas.
                     </p>
 
-                    {businesses.length === 0 ? (
-                        <p style={{ color: 'var(--texto-suave)' }}>No hay negocios creados aún.</p>
-                    ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px', marginBottom: '30px' }}>
-                            {businesses.map(b => (
-                                <BusinessCard key={b.id} business={b} selected={currentBusinessId === b.id} onSelect={onSelect} onChanged={onChanged} />
-                            ))}
-                        </div>
-                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px', marginBottom: '30px' }}>
+                        {businesses.map(b => (
+                            <BusinessCard key={b.id} business={b} selected={currentBusinessId === b.id} onSelect={onSelect} onChanged={onChanged} />
+                        ))}
+                    </div>
 
                     {!showForm ? (
-                        <button style={buttonStyle} onClick={() => setShowForm(true)}>+ Nuevo negocio</button>
+                        <button style={buttonStyle} onClick={() => setShowForm(true)}>+ Nueva empresa</button>
                     ) : (
                         <div style={{ background: 'var(--beige-claro)', padding: '20px', borderRadius: '8px', maxWidth: '520px' }}>
                             <h3 style={{ marginBottom: '12px' }}>Nuevo negocio</h3>
@@ -1380,6 +1375,57 @@
                             </div>
                         </div>
                     )}
+                </div>
+            );
+        }
+
+        // ---------- Pantalla general de la plataforma (administradora, antes de elegir empresa) ----------
+        const VELAMIA_ID = 'velamia';
+
+        function CompanyHome({ onLogout }) {
+            const [companies, setCompanies] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            async function load() {
+                try {
+                    const [velamia, others] = await Promise.all([
+                        api('/api/me/business', { headers: { 'X-Business-Id': VELAMIA_ID } }),
+                        api('/api/businesses')
+                    ]);
+                    setCompanies([velamia, ...(Array.isArray(others) ? others : [])]);
+                } catch (err) {
+                    alert('Error cargando empresas: ' + err.message);
+                } finally {
+                    setLoading(false);
+                }
+            }
+
+            useEffect(() => { load(); }, []);
+
+            function enter(companyId) {
+                setCurrentBusinessId(companyId);
+                window.location.reload();
+            }
+
+            return (
+                <div className="container">
+                    <div className="main">
+                        <div className="header">
+                            <div className="header-brand">
+                                <div>
+                                    <div className="subtitle">Plataforma · Asistentes de WhatsApp</div>
+                                </div>
+                            </div>
+                            <div className="header-actions">
+                                <button className="btn-logout" onClick={onLogout}>Salir</button>
+                            </div>
+                        </div>
+                        <div className="content" style={{ display: 'block', overflowY: 'auto' }}>
+                            {loading
+                                ? <p style={{ padding: '20px' }}>Cargando empresas...</p>
+                                : <BusinessesPanel businesses={companies} currentBusinessId={null} onSelect={enter} onChanged={load} />}
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -1476,10 +1522,11 @@
             return (
                 <div className="login-screen">
                     <div className="login-card">
-                        <img src={logoOf(branding)} alt={branding.name || 'Logo'} />
+                        <h2 style={{ marginBottom: '6px' }}>CRM</h2>
+                        <p style={{ fontSize: '13px', color: 'var(--texto-suave)', marginBottom: '16px' }}>Asistentes de WhatsApp</p>
                         <input
                             type="password"
-                            placeholder="Contraseña o token de tu negocio"
+                            placeholder="Contraseña o token de tu empresa"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && submit()}
@@ -1825,7 +1872,13 @@
                 loadSystemPrompt();
                 loadQuotations();
                 loadPaymentInfo();
-                api('/api/business-profile').then(setBiz).catch(err => console.error('Error cargando perfil:', err));
+                api('/api/business-profile')
+                    .then(data => {
+                        setBiz(data);
+                        // Nombre, color, logo y zona horaria de la empresa en que se trabaja.
+                        onBrandingChange({ name: data.business.name, primaryColor: data.branding.primaryColor, logoUrl: data.branding.logoUrl, timezone: data.business.timezone });
+                    })
+                    .catch(err => console.error('Error cargando perfil:', err));
                 const interval = setInterval(() => {
                     loadConversations();
                     loadStats();
@@ -1994,31 +2047,15 @@
 
             async function loadSession() {
                 try {
-                    const data = await api('/api/session');
-                    setSession(data);
-                    if (data.role === 'admin') loadBusinesses();
+                    setSession(await api('/api/session'));
                 } catch (err) {
-                    // El negocio elegido ya no existe o fue desactivado: se vuelve a VELAMIA.
-                    if (getCurrentBusinessId()) {
-                        setCurrentBusinessId('');
-                        window.location.reload();
-                    }
                     console.error('Error cargando sesión:', err);
                 }
             }
 
-            async function loadBusinesses() {
-                try {
-                    const data = await api('/api/businesses');
-                    setBusinesses(Array.isArray(data) ? data : []);
-                } catch (err) {
-                    console.error('Error cargando negocios:', err);
-                }
-            }
-
-            // Cambiar de negocio recarga todo el CRM: chats, catálogo, perfil y configuración son de ese negocio.
-            function selectBusiness(businessId) {
-                setCurrentBusinessId(businessId || '');
+            // Volver a la pantalla general de empresas (solo administradora).
+            function changeCompany() {
+                setCurrentBusinessId('');
                 window.location.reload();
             }
 
@@ -2230,19 +2267,15 @@
                     <div className="main">
                         <div className="header">
                             <div className="header-brand">
-                                <img src={logoOf(branding)} alt={branding.name || 'Logo'} />
+                                {/* El logo por defecto (logo.png) es de VELAMIA: otra empresa sin logo propio no lo muestra. */}
+                                {(branding.logoUrl || session?.business?.legacy) && <img src={logoOf(branding)} alt={branding.name || 'Logo'} />}
                                 <div>
                                     <div className="subtitle">{branding.name ? `${branding.name} · ` : ''}CRM · Asistente WhatsApp</div>
                                 </div>
                             </div>
                             <div className="header-actions">
-                                {isAdmin && businesses.length > 0 && (
-                                    <select value={currentBusinessId || ''} onChange={(e) => selectBusiness(e.target.value || null)} style={{ padding: '7px 14px', borderRadius: '4px', border: '1px solid var(--rosa-palo-suave)', fontSize: '13px', marginRight: '10px' }}>
-                                        <option value="">🏢 VELAMIA (predeterminado)</option>
-                                        {businesses.filter(b => b.active).map(b => <option key={b.id} value={b.id}>🏢 {b.name}</option>)}
-                                    </select>
-                                )}
-                                {session && !isAdmin && <span style={{ fontSize: '13px', marginRight: '10px' }}>🏢 {session.business?.name}</span>}
+                                {session?.business && <span style={{ fontSize: '13px', marginRight: '10px' }}>🏢 {session.business.name}</span>}
+                                {isAdmin && <button className="btn-logout" style={{ marginRight: '8px' }} onClick={changeCompany}>Cambiar empresa</button>}
                                 <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
                                     <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
                                 </div>
@@ -2251,8 +2284,7 @@
                         </div>
 
                         <div className="nav-tabs">
-                            {isAdmin && <div className={`nav-tab ${activeTab === 'negocios' ? 'active' : ''}`} onClick={() => setActiveTab('negocios')}>🏢 Negocios</div>}
-                            {session && session.role === 'owner' && <div className={`nav-tab ${activeTab === 'claves' ? 'active' : ''}`} onClick={() => setActiveTab('claves')}>🔑 Claves</div>}
+                            {session && session.role === 'owner' && !session.business?.legacy && <div className={`nav-tab ${activeTab === 'claves' ? 'active' : ''}`} onClick={() => setActiveTab('claves')}>🔑 Claves</div>}
                             <div className={`nav-tab ${activeTab === 'conversaciones' ? 'active' : ''}`} onClick={() => setActiveTab('conversaciones')}>💬 Conversaciones</div>
                             <div className={`nav-tab ${activeTab === 'cotizaciones' ? 'active' : ''}`} onClick={() => setActiveTab('cotizaciones')}>🧾 Cotizaciones</div>
                             <div className={`nav-tab ${activeTab === 'pedidos' ? 'active' : ''}`} onClick={() => setActiveTab('pedidos')}>🛍️ Pedidos</div>
@@ -2284,13 +2316,7 @@
                             </div>
                             )}
 
-                        {activeTab === 'negocios' && isAdmin && (
-                        <div className="content">
-                            <BusinessesPanel businesses={businesses} currentBusinessId={currentBusinessId} onSelect={selectBusiness} onChanged={loadBusinesses} />
-                        </div>
-                        )}
-
-                        {activeTab === 'claves' && session?.business && (
+                        {activeTab === 'claves' && session?.business && !session.business.legacy && (
                         <div className="content">
                             <OwnerKeysPanel business={session.business} onChanged={loadSession} />
                         </div>
@@ -2609,32 +2635,54 @@
             );
         }
 
+        // Plataforma general: la marca de cada empresa se aplica recién al entrar en ella.
+        const PLATFORM_BRANDING = { name: '', primaryColor: '', logoUrl: '', timezone: '' };
+
         function Root() {
             const [authenticated, setAuthenticated] = useState(!!getToken());
-            const [branding, setBranding] = useState({ name: '', primaryColor: '', logoUrl: '', timezone: '' });
+            const [role, setRole] = useState(null);
+            const [branding, setBranding] = useState(PLATFORM_BRANDING);
 
             useEffect(() => {
-                onSessionExpired = () => setAuthenticated(false);
-                fetch(`${API_URL}/api/public/branding`)
-                    .then(res => res.json())
-                    .then(data => { applyBranding(data); setBranding(data); })
-                    .catch(() => {});
+                onSessionExpired = () => { setRole(null); setAuthenticated(false); };
+                document.title = 'CRM · Asistentes de WhatsApp';
             }, []);
+
+            // Quién entró: la administradora sin empresa elegida ve la pantalla general de empresas.
+            useEffect(() => {
+                if (!authenticated) return;
+                api('/api/session')
+                    .then(data => setRole(data.role))
+                    .catch(() => {
+                        // La empresa elegida ya no existe o está desactivada: se vuelve a la pantalla general.
+                        if (getCurrentBusinessId()) {
+                            setCurrentBusinessId('');
+                            window.location.reload();
+                        }
+                    });
+            }, [authenticated]);
 
             const changeBranding = data => {
                 applyBranding(data);
                 setBranding(data);
             };
 
-            if (!authenticated) {
-                return <LoginScreen branding={branding} onLogin={() => setAuthenticated(true)} />;
-            }
-
-            return <App branding={branding} onBrandingChange={changeBranding} onLogout={() => {
+            const logout = () => {
                 setToken(null);
                 setCurrentBusinessId('');
+                setRole(null);
                 setAuthenticated(false);
-            }} />;
+            };
+
+            if (!authenticated) {
+                return <LoginScreen branding={PLATFORM_BRANDING} onLogin={() => setAuthenticated(true)} />;
+            }
+            if (!role) return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>;
+            if (role === 'admin' && !getCurrentBusinessId()) {
+                return <CompanyHome onLogout={logout} />;
+            }
+
+            return <App branding={branding} onBrandingChange={changeBranding} onLogout={logout} />;
         }
 
         ReactDOM.render(<Root />, document.getElementById('root'));

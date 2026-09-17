@@ -53,6 +53,7 @@ import {
   requireAdminSession,
   requireOwnerRole,
   getCrmSession,
+  VELAMIA_ID,
   isPasswordValid,
   issueSessionToken,
   verifyWebhookSignature
@@ -619,6 +620,30 @@ function requireUuidParams(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+/** Como requireUuidParams, pero la empresa también puede ser VELAMIA (solo para sus accesos). */
+function requireCompanyParams(req: Request, res: Response, next: NextFunction) {
+  if (req.params.businessId !== VELAMIA_ID) return requireUuidParams(req, res, next);
+  if (req.params.tokenId !== undefined && !UUID_PATTERN.test(req.params.tokenId)) {
+    return res.status(400).json({ error: 'Id inválido (tokenId)' });
+  }
+  next();
+}
+
+/** VELAMIA en la plataforma: sus datos siguen guardados como siempre y sus claves están en las variables del servidor. */
+function velamiaCompany() {
+  return {
+    id: VELAMIA_ID,
+    name: 'VELAMIA',
+    meta_phone_number: '',
+    active: true,
+    legacy: true,
+    whatsapp_configured: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID),
+    openai_configured: !!process.env.OPENAI_API_KEY
+  };
+}
+
+const companyIdOf = (req: Request) => (req.params.businessId === VELAMIA_ID ? null : req.params.businessId);
+
 const ROLES = ['owner', 'manager', 'staff'];
 
 /** Claves que llegan del CRM; se aceptan con los nombres del formulario. */
@@ -711,13 +736,14 @@ app.post('/api/businesses/:businessId/test-credentials', requireAdminSession, re
   }
 });
 
-app.post('/api/businesses/:businessId/generate-access-token', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+app.post('/api/businesses/:businessId/generate-access-token', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
   try {
-    const row = await getBusinessRow(req.params.businessId);
-    if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
+    const businessId = companyIdOf(req);
+    const row = businessId ? await getBusinessRow(businessId) : null;
+    if (businessId && !row) return res.status(404).json({ error: 'Negocio no encontrado' });
 
-    const { plaintoken, expiresAt } = await createBusinessAccessToken(row.id);
-    console.log(`🔐 Token de acceso generado para el negocio ${row.name}`);
+    const { plaintoken, expiresAt } = await createBusinessAccessToken(businessId);
+    console.log(`🔐 Token de acceso generado para ${row ? row.name : 'VELAMIA'}`);
     res.status(201).json({
       accessToken: plaintoken,
       expiresAt,
@@ -728,17 +754,17 @@ app.post('/api/businesses/:businessId/generate-access-token', requireAdminSessio
   }
 });
 
-app.get('/api/businesses/:businessId/tokens', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+app.get('/api/businesses/:businessId/tokens', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
   try {
-    res.json(await listBusinessAccessTokens(req.params.businessId));
+    res.json(await listBusinessAccessTokens(companyIdOf(req)));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.delete('/api/businesses/:businessId/tokens/:tokenId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+app.delete('/api/businesses/:businessId/tokens/:tokenId', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
   try {
-    const revoked = await revokeBusinessAccessToken(req.params.businessId, req.params.tokenId);
+    const revoked = await revokeBusinessAccessToken(companyIdOf(req), req.params.tokenId);
     if (!revoked) return res.status(404).json({ error: 'Token no encontrado en este negocio' });
     res.json({ success: true });
   } catch (error: any) {
@@ -859,11 +885,9 @@ app.get('/api/session', requireCrmSession, async (req: Request, res: Response) =
     const session = getCrmSession(req);
     const tenant = currentTenant();
     const row = tenant ? await getBusinessRow(tenant.businessId) : null;
-    res.json({
-      role: session.role,
-      business: row ? toPublicBusiness(row) : null,
-      businessName: tenant ? tenant.profile.business.name : profile().business.name
-    });
+    // Sin empresa elegida (administradora en la pantalla general) no hay empresa que devolver.
+    const business = row ? toPublicBusiness(row) : session.businessId === VELAMIA_ID ? velamiaCompany() : null;
+    res.json({ role: session.role, business });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -872,7 +896,7 @@ app.get('/api/session', requireCrmSession, async (req: Request, res: Response) =
 app.get('/api/me/business', requireCrmSession, async (_req: Request, res: Response) => {
   try {
     const tenant = currentTenant();
-    if (!tenant) return res.status(400).json({ error: 'Elige un negocio primero' });
+    if (!tenant) return res.json(velamiaCompany());
     const row = await getBusinessRow(tenant.businessId);
     if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
     res.json(toPublicBusiness(row));

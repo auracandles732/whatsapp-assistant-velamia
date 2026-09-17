@@ -892,12 +892,13 @@ export type BusinessRole = 'owner' | 'manager' | 'staff';
 
 export interface BusinessAccess {
   tokenId: string;
-  businessId: string;
+  /** null = VELAMIA (sus datos no llevan business_id). */
+  businessId: string | null;
   userId: string | null;
   role: BusinessRole;
 }
 
-export async function createBusinessAccessToken(businessId: string, businessUserId?: string) {
+export async function createBusinessAccessToken(businessId: string | null, businessUserId?: string) {
   const plaintoken = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
@@ -932,7 +933,8 @@ async function checkAccess(column: 'token_hash' | 'id', value: string): Promise<
   if (data.expires_at && parseDbTimestamp(data.expires_at) < new Date()) return null;
 
   const business: any = Array.isArray(data.businesses) ? data.businesses[0] : data.businesses;
-  if (!business?.active) return null;
+  // Los accesos de VELAMIA no tienen negocio en la tabla: VELAMIA siempre está activa.
+  if (data.business_id && !business?.active) return null;
 
   const user: any = Array.isArray(data.business_users) ? data.business_users[0] : data.business_users;
   if (data.business_user_id && !user?.active) return null;
@@ -968,23 +970,23 @@ export async function getActiveAccessById(tokenId: string): Promise<BusinessAcce
   return access;
 }
 
-export async function listBusinessAccessTokens(businessId: string) {
+export async function listBusinessAccessTokens(businessId: string | null) {
   const { data, error } = await supabase
     .from('business_access_tokens')
     .select('id, business_user_id, created_at, last_used, expires_at, active, business_users(email, full_name)')
-    .eq('business_id', businessId)
+    .filter('business_id', businessId ? 'eq' : 'is', businessId)
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(`Error obteniendo tokens: ${error.message}`);
   return data || [];
 }
 
-export async function revokeBusinessAccessToken(businessId: string, tokenId: string): Promise<boolean> {
+export async function revokeBusinessAccessToken(businessId: string | null, tokenId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('business_access_tokens')
     .update({ active: false })
     .eq('id', tokenId)
-    .eq('business_id', businessId)
+    .filter('business_id', businessId ? 'eq' : 'is', businessId)
     .select('id');
 
   if (error) throw new Error(`Error revocando token: ${error.message}`);

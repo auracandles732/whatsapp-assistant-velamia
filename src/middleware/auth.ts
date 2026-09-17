@@ -34,7 +34,7 @@ export function isPasswordValid(password: string): boolean {
  * Sesión firmada. Sin "tid" es la del administrador (contraseña maestra); con "tid" es la de un negocio,
  * atada al token con que entró: si ese token se revoca o vence, la sesión deja de valer.
  */
-export function issueSessionToken(access?: { tokenId: string; businessId: string }): string {
+export function issueSessionToken(access?: { tokenId: string; businessId: string | null }): string {
   const data: Record<string, any> = { exp: Date.now() + SESSION_DURATION_MS };
   if (access) {
     data.tid = access.tokenId;
@@ -45,7 +45,7 @@ export function issueSessionToken(access?: { tokenId: string; businessId: string
   return `${payload}.${signature}`;
 }
 
-function readSessionToken(token: string): { exp: number; tid?: string; bid?: string } | null {
+function readSessionToken(token: string): { exp: number; tid?: string; bid?: string | null } | null {
   if (!CRM_PASSWORD) return null;
 
   const [payload, signature] = token.split('.');
@@ -67,9 +67,15 @@ export function getCrmSession(req: Request): CrmSession {
 }
 
 /**
- * Acceso al CRM. El administrador trabaja en VELAMIA o, con la cabecera X-Business-Id, en el negocio elegido.
- * El dueño de un negocio trabaja siempre y solo en el suyo. Todo lo que sigue (consultas, envíos por
- * WhatsApp, IA) corre dentro de ese negocio.
+ * Id con que el CRM nombra a VELAMIA. VELAMIA es una empresa más en la plataforma, pero sus datos siguen
+ * guardados como siempre (sin business_id y con las variables de entorno): no se migró nada.
+ */
+export const VELAMIA_ID = 'velamia';
+
+/**
+ * Acceso al CRM. El administrador primero elige empresa (cabecera X-Business-Id: un id de negocio o "velamia");
+ * sin elegir solo puede ver la plataforma general. El acceso de una empresa (token) trabaja siempre y solo
+ * en la suya. Todo lo que sigue (consultas, envíos por WhatsApp, IA) corre dentro de esa empresa.
  */
 export async function requireCrmSession(req: Request, res: Response, next: NextFunction) {
   if (!CRM_PASSWORD) {
@@ -85,26 +91,33 @@ export async function requireCrmSession(req: Request, res: Response, next: NextF
   try {
     const { loadTenant, getActiveAccessById } = await import('../services/supabase');
     let session: CrmSession;
+    // undefined = sin empresa elegida; VELAMIA_ID = VELAMIA; otro = id del negocio.
     let businessId: string | undefined;
 
     if (data.tid) {
       const access = await getActiveAccessById(data.tid);
-      if (!access || access.businessId !== data.bid) {
+      if (!access || (access.businessId ?? null) !== (data.bid ?? null)) {
         return res.status(401).json({ error: 'Tu acceso fue revocado o venció. Pide un nuevo token.' });
       }
-      businessId = access.businessId;
+      businessId = access.businessId ?? VELAMIA_ID;
       session = { role: access.role, businessId, tokenId: access.tokenId, userId: access.userId };
     } else {
-      const requested = String(req.headers['x-business-id'] || '').trim();
-      if (requested && !UUID_PATTERN.test(requested)) {
-        return res.status(400).json({ error: 'Negocio inválido' });
+      const requested = String(req.headers['x-business-id'] || '').trim().toLowerCase();
+      if (requested && requested !== VELAMIA_ID && !UUID_PATTERN.test(requested)) {
+        return res.status(400).json({ error: 'Empresa inválida' });
       }
       businessId = requested || undefined;
       session = { role: 'admin', businessId };
     }
 
-    const tenant = businessId ? await loadTenant(businessId) : undefined;
-    if (businessId && !tenant) {
+    // Sin empresa elegida no hay datos que mostrar: solo la pantalla general de la plataforma.
+    if (!businessId && req.path !== '/api/session') {
+      return res.status(400).json({ error: 'Elige una empresa para trabajar', code: 'NO_BUSINESS' });
+    }
+
+    const isTenant = !!businessId && businessId !== VELAMIA_ID;
+    const tenant = isTenant ? await loadTenant(businessId!) : undefined;
+    if (isTenant && !tenant) {
       return res.status(404).json({ error: 'Negocio no encontrado o desactivado' });
     }
 
