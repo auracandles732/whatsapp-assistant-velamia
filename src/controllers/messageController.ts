@@ -22,8 +22,10 @@ import {
   productNameFromCaption,
   recordFollowUp,
   hasRecentNotification,
-  getRecentNotificationMessages
+  getRecentNotificationMessages,
+  getTenantByPhoneNumberId
 } from '../db';
+import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
 import { FOLLOW_UP_MARKER } from '../services/followups';
 import {
   sendTextMessage,
@@ -208,6 +210,8 @@ type PendingBatch = {
   items: IncomingItem[];
   firstAt: number;
   timer?: NodeJS.Timeout;
+  /** Negocio que recibió los mensajes; sin negocio = VELAMIA. */
+  tenant?: TenantContext;
 };
 
 /**
@@ -232,9 +236,38 @@ function enqueue(key: string, task: () => Promise<void>): Promise<void> {
   return current;
 }
 
+/** Clave de la fila de un cliente: el mismo número puede escribirle a VELAMIA y a otro negocio. */
+function customerKey(phoneNumber: string, tenant: TenantContext | undefined = currentTenant()) {
+  return `${tenant?.businessId || 'velamia'}:${phoneNumber}`;
+}
+
+/**
+ * A qué negocio le escribieron: Meta envía en cada mensaje el Phone Number ID del número que lo recibió.
+ * undefined = VELAMIA; null = número que no pertenece a ningún negocio activo (no se responde).
+ */
+async function resolveTenant(value: any): Promise<TenantContext | undefined | null> {
+  const phoneNumberId = String(value?.metadata?.phone_number_id || '');
+  if (!phoneNumberId || phoneNumberId === process.env.WHATSAPP_PHONE_ID) return undefined;
+
+  const tenant = await getTenantByPhoneNumberId(phoneNumberId);
+  if (tenant) return tenant;
+  if (!process.env.WHATSAPP_PHONE_ID) return undefined;
+  console.warn(`⚠️ Mensaje recibido en el número ${phoneNumberId}, que no pertenece a ningún negocio activo: se ignora`);
+  return null;
+}
+
 export function handleWebhookMessage(message: any, value: any): Promise<void> {
-  const key = String(message?.from || 'desconocido');
-  return enqueue(key, () => ingestMessage(message, value));
+  const from = String(message?.from || 'desconocido');
+  // Se ubica el negocio en fila por cliente: así dos mensajes seguidos nunca cambian de orden.
+  const routeKey = `route:${value?.metadata?.phone_number_id || ''}:${from}`;
+  return enqueue(routeKey, async () => {
+    const tenant = await resolveTenant(value);
+    if (tenant === null) return;
+    if (tenant) console.log(`🏢 Negocio: ${tenant.name}`);
+    runWithTenant(tenant, () => {
+      enqueue(customerKey(from, tenant), () => ingestMessage(message, value));
+    });
+  });
 }
 
 /** Programa (o reprograma) la respuesta: se envía tras RESPONSE_DELAY_MS sin mensajes nuevos. */
@@ -263,7 +296,7 @@ export async function flushPendingResponses(timeoutMs: number) {
   for (const [key, batch] of [...pendingBatches]) {
     if (batch.timer) clearTimeout(batch.timer);
     pendingBatches.delete(key);
-    enqueue(key, () => respondToBatch(batch));
+    runWithTenant(batch.tenant, () => enqueue(key, () => respondToBatch(batch)));
   }
   await Promise.race([
     Promise.allSettled([...queues.values()]),
@@ -273,10 +306,11 @@ export async function flushPendingResponses(timeoutMs: number) {
 
 /** Olvida lo que estaba en memoria de un chat eliminado desde el CRM. */
 export function forgetConversation(phoneNumber: string, conversationId: string) {
-  const batch = pendingBatches.get(String(phoneNumber));
+  const key = customerKey(String(phoneNumber));
+  const batch = pendingBatches.get(key);
   if (batch?.conversationId === conversationId) {
     if (batch.timer) clearTimeout(batch.timer);
-    pendingBatches.delete(String(phoneNumber));
+    pendingBatches.delete(key);
   }
   pendingPhotos.delete(conversationId);
 }
@@ -316,6 +350,7 @@ async function storeIncomingMedia(mediaId: string) {
  */
 async function readIncomingContent(message: any): Promise<{ userContent: string; aiContent: string } | null> {
   const type = message.type;
+  const p = profile();
 
   try {
     switch (type) {
@@ -324,7 +359,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
 
       case 'image': {
         const { publicUrl } = await storeIncomingMedia(message.image.id);
-        const description = await describeImage(publicUrl);
+        const description = await describeImage(publicUrl, p);
         const caption = message.image.caption;
         return {
           userContent: `${publicUrl}\n${caption || description}`,
@@ -334,7 +369,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
 
       case 'audio': {
         const { publicUrl, buffer, mimeType } = await storeIncomingMedia(message.audio.id);
-        const transcript = await transcribeAudio(buffer, mimeType);
+        const transcript = await transcribeAudio(buffer, mimeType, p);
         return {
           userContent: `${publicUrl}\n🎤 "${transcript}"`,
           aiContent: `[El cliente envió un audio que dice]: "${transcript}"`
@@ -419,14 +454,14 @@ async function ingestMessage(message: any, value: any) {
       return;
     }
 
+    console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
+
     const content = await readIncomingContent(message);
     if (!content) {
       console.log(`↪️  Mensaje ${messageType} de ${phoneNumber} ignorado`);
       return;
     }
     let { userContent, aiContent } = content;
-
-    console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
 
     let conversation = await getConversation(phoneNumber);
     if (!conversation) {
@@ -476,10 +511,10 @@ async function ingestMessage(message: any, value: any) {
       return;
     }
 
-    const key = String(phoneNumber);
+    const key = customerKey(phoneNumber);
     let batch = pendingBatches.get(key);
     if (!batch) {
-      batch = { conversationId, phoneNumber, customerName, items: [], firstAt: Date.now() };
+      batch = { conversationId, phoneNumber, customerName, items: [], firstAt: Date.now(), tenant: currentTenant() };
       pendingBatches.set(key, batch);
     }
     batch.items.push({ aiContent, storedContent, messageType, waMessageId });
@@ -577,13 +612,14 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     // Siempre se confirma la fecha, pero una entrega muy justa la revisa la dueña (una vez al día por chat).
-    if (plan.delivery_date && daysUntil(plan.delivery_date) <= profile().dates.urgentDays
+    const batchProfile = profile();
+    if (plan.delivery_date && daysUntil(plan.delivery_date) <= batchProfile.dates.urgentDays
       && !(await hasRecentNotification(conversationId, 'urgent_date'))) {
       const days = daysUntil(plan.delivery_date);
       const cuando = days < 0 ? 'ya pasó' : days === 0 ? 'es hoy' : days === 1 ? 'es mañana' : `faltan ${days} días`;
       await notifyOwner({
         conversationId, customerPhone: phoneNumber, customerName, event: 'urgent_date',
-        detail: `${profile().dates.eventLabel.replace(/^./, c => c.toUpperCase())} ${formatDate(plan.event_date)} · entrega ${formatDate(plan.delivery_date)} (${cuando})`
+        detail: `${batchProfile.dates.eventLabel.replace(/^./, (c: string) => c.toUpperCase())} ${formatDate(plan.event_date)} · entrega ${formatDate(plan.delivery_date)} (${cuando})`
       });
     }
 
@@ -671,9 +707,9 @@ async function respondToBatch(batch: PendingBatch) {
     // el bot se pausa y el pedido igual debe quedar anotado.
     if (saleIntent === 'quotation' || saleIntent === 'order') {
       const transcript = [
-        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : profile().business.name}: ${t.content}`),
+        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : batchProfile.business.name}: ${t.content}`),
         `Cliente: ${aiContent}`,
-        `${profile().business.name}: ${plan.reply}`
+        `${batchProfile.business.name}: ${plan.reply}`
       ].join('\n');
 
       await registerSale(saleIntent, {
@@ -700,7 +736,7 @@ async function respondToBatch(batch: PendingBatch) {
         && plan.show_products.every(n => pendingProducts.includes(n));
       const photos = continuesPending ? pendingProducts : plan.show_products;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
-      await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'));
+      await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile);
     }
   } catch (error) {
     console.error('❌ Error respondiendo mensaje:', error);
@@ -708,7 +744,7 @@ async function respondToBatch(batch: PendingBatch) {
 }
 
 /** Envía hasta PHOTO_BATCH_SIZE fotos; si quedan más, las guarda y pregunta si desea verlas. */
-async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true) {
+async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true, batchProfile?: any) {
   const products = names
     .map(name => catalog.find(p => p.name === name))
     .filter(p => p && p.image_url);
@@ -716,12 +752,13 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
   const batch = products.slice(0, PHOTO_BATCH_SIZE);
   const rest = products.slice(PHOTO_BATCH_SIZE).map(p => p.name);
   console.log(`📸 Enviando ${batch.length} foto(s) de productos${rest.length ? ` (quedan ${rest.length})` : ''}`);
-  const { business, sales } = profile();
+  const profToUse = batchProfile || profile();
+  const { business, sales } = profToUse;
 
   // Una a una y en orden: si una falla, las demás igual se envían.
   for (const product of batch) {
     try {
-      const packaging = profile().packaging.enabled && product.description ? `\n🎁 Empaque: ${product.description}` : '';
+      const packaging = profToUse.packaging.enabled && product.description ? `\n🎁 Empaque: ${product.description}` : '';
       const caption = `${business.productEmoji} *${product.name}*\n💰 $${Number(product.price).toFixed(2)} ${sales.priceSuffix}${packaging}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);

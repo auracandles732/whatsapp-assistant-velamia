@@ -1,3 +1,4 @@
+import { currentTenant } from '../services/tenant';
 /**
  * Todo lo que cambia de un negocio a otro. Se guarda en business_config (clave business_profile)
  * y se edita desde el CRM; el código del bot, del CRM y de los seguimientos lo lee de aquí.
@@ -31,6 +32,8 @@ export interface BusinessProfile {
     productLabelPlural: string;
     /** Qué se vende, para hablar del total: "velas", "zapatos", "productos". */
     goodsWord: string;
+    /** Cuántas "piezas" = 1 unidad de venta. VELAMIA=12, individual=1, caja=100. */
+    piecesPerUnit: number;
     personalization: boolean;
     personalizationExamples: string;
     /** Vacío = sin pedido mínimo. */
@@ -64,6 +67,12 @@ export interface BusinessProfile {
     showSeparately: boolean;
     pickupAvailable: boolean;
     pickupAddress: string;
+    /** true = usar customRates en lugar de tarifa del carrier. */
+    useCustomRates: boolean;
+    /** Zonas personalizadas con costo por kg: [{zone: "Guayaquil", costPerKg: 0.5}]. */
+    customRates: Array<{ zone: string; costPerKg: number }>;
+    /** Pesos de productos para cálculo con customRates: {productId: peso_kg}. */
+    productWeights: Record<string, number>;
   };
   followUps: {
     enabled: boolean;
@@ -92,6 +101,12 @@ export interface BusinessProfile {
     enabled: boolean;
     types: PackagingType[];
   };
+  ai: {
+    /** OpenAI API key específica del negocio. Si está vacía, usa la global (process.env.OPENAI_API_KEY). */
+    openai_api_key?: string;
+    /** Modelo OpenAI para este negocio; default = gpt-5.4-mini. */
+    model?: string;
+  };
 }
 
 export interface PackagingType {
@@ -118,6 +133,7 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     productLabel: 'Modelo',
     productLabelPlural: 'Modelos',
     goodsWord: 'velas',
+    piecesPerUnit: 12,
     personalization: true,
     personalizationExamples: 'cambios de colores, nombres, frases y detalles',
     minimumOrder: ''
@@ -133,7 +149,10 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     extraCost: 1,
     showSeparately: false,
     pickupAvailable: false,
-    pickupAddress: ''
+    pickupAddress: '',
+    useCustomRates: false,
+    customRates: [],
+    productWeights: {}
   },
   followUps: {
     enabled: true,
@@ -162,6 +181,10 @@ export const VELAMIA_PROFILE: BusinessProfile = {
       { name: 'Kraft', description: 'natural, minimalista y brinda mayor protección', changeCost: null },
       { name: 'Caja lazo personalizable', description: 'caja con lazo; se personaliza el color del lazo y la portada frontal y trasera', changeCost: null }
     ]
+  },
+  ai: {
+    openai_api_key: process.env.OPENAI_API_KEY || '',
+    model: 'gpt-5.4-mini'
   }
 };
 
@@ -183,6 +206,7 @@ export const STORE_PROFILE: BusinessProfile = {
     productLabel: 'Producto',
     productLabelPlural: 'Productos',
     goodsWord: 'productos',
+    piecesPerUnit: 1,
     personalization: false,
     personalizationExamples: '',
     minimumOrder: ''
@@ -198,7 +222,10 @@ export const STORE_PROFILE: BusinessProfile = {
     extraCost: 0,
     showSeparately: false,
     pickupAvailable: false,
-    pickupAddress: ''
+    pickupAddress: '',
+    useCustomRates: false,
+    customRates: [],
+    productWeights: {}
   },
   followUps: {
     enabled: false,
@@ -213,7 +240,11 @@ export const STORE_PROFILE: BusinessProfile = {
     decorativeEmojis: ['😊', '✨', '🙌', '👌', '💫', '🎉', '👍', '🛍️', '📦', '🤩']
   },
   branding: { primaryColor: '#B96B4F', logoUrl: '' },
-  packaging: { enabled: false, types: [] }
+  packaging: { enabled: false, types: [] },
+  ai: {
+    openai_api_key: process.env.OPENAI_API_KEY || '',
+    model: 'gpt-5.4-mini'
+  }
 };
 
 /** Mismo funcionamiento que VELAMIA, sin su nombre, plantillas de Meta ni logo. */
@@ -256,7 +287,7 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
   const r = raw && typeof raw === 'object' ? raw : {};
   const b = r.business || {}, s = r.sales || {}, p = r.payments || {}, d = r.dates || {};
   const sh = r.shipping || {}, f = r.followUps || {}, a = r.alerts || {}, st = r.style || {}, br = r.branding || {};
-  const pk = r.packaging || {};
+  const pk = r.packaging || {}, ai = r.ai || {};
 
   const timezone = text(b.timezone, base.business.timezone, 60);
   const mode = ['ecuador_table', 'flat', 'none'].includes(sh.mode) ? sh.mode : base.shipping.mode;
@@ -290,6 +321,10 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       productLabel: (text(s.productLabel, base.sales.productLabel, 40) || base.sales.productLabel).replace(/\*/g, ''),
       productLabelPlural: text(s.productLabelPlural, base.sales.productLabelPlural, 40) || base.sales.productLabelPlural,
       goodsWord: text(s.goodsWord, base.sales.goodsWord, 40) || base.sales.goodsWord,
+      // Perfiles guardados antes de este campo: se deduce de la aclaración ('12 unidades' = 12), como siempre funcionó VELAMIA.
+      piecesPerUnit: typeof s.piecesPerUnit === 'number' && s.piecesPerUnit > 0
+        ? s.piecesPerUnit
+        : Math.max(1, Number(String(s.unitDetail ?? base.sales.unitDetail).match(/\d+/)?.[0]) || 1),
       personalization: bool(s.personalization, base.sales.personalization),
       personalizationExamples: text(s.personalizationExamples, base.sales.personalizationExamples),
       minimumOrder: text(s.minimumOrder, base.sales.minimumOrder, 120)
@@ -316,7 +351,10 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       extraCost: num(sh.extraCost, base.shipping.extraCost, 0, 10000),
       showSeparately: bool(sh.showSeparately, base.shipping.showSeparately),
       pickupAvailable: bool(sh.pickupAvailable, base.shipping.pickupAvailable),
-      pickupAddress: text(sh.pickupAddress, base.shipping.pickupAddress)
+      pickupAddress: text(sh.pickupAddress, base.shipping.pickupAddress),
+      useCustomRates: bool(sh.useCustomRates, base.shipping.useCustomRates),
+      customRates: Array.isArray(sh.customRates) ? sh.customRates.filter((r: any) => typeof r.zone === 'string' && typeof r.costPerKg === 'number') : base.shipping.customRates,
+      productWeights: typeof sh.productWeights === 'object' && sh.productWeights !== null ? sh.productWeights : base.shipping.productWeights
     },
     followUps: {
       enabled: bool(f.enabled, base.followUps.enabled),
@@ -353,12 +391,16 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
           .filter((t: PackagingType) => t.name)
           .slice(0, 10)
         : base.packaging.types
+    },
+    ai: {
+      openai_api_key: typeof ai.openai_api_key === 'string' && ai.openai_api_key.length > 0 ? ai.openai_api_key : (base.ai?.openai_api_key || ''),
+      model: typeof ai.model === 'string' && ai.model.length > 0 ? ai.model : (base.ai?.model || 'gpt-5.4-mini')
     }
   };
 }
 
 /** Tipo de empaque por nombre, sin importar mayúsculas ni tildes. */
-export function findPackaging(name: unknown, p: BusinessProfile = current): PackagingType | undefined {
+export function findPackaging(name: unknown, p: BusinessProfile = profile()): PackagingType | undefined {
   const key = (v: unknown) => String(v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
   const wanted = key(name);
   return wanted ? p.packaging.types.find(t => key(t.name) === wanted) : undefined;
@@ -368,9 +410,17 @@ export function findPackaging(name: unknown, p: BusinessProfile = current): Pack
 
 let current: BusinessProfile = STORE_PROFILE;
 
-/** Perfil vigente. Se carga al iniciar el servidor y se refresca al guardarlo desde el CRM. */
+/**
+ * Perfil vigente. Dentro de un negocio (multi-negocio) es el de ese negocio; fuera, el de VELAMIA,
+ * que se carga al iniciar el servidor y se refresca al guardarlo desde el CRM.
+ */
 export function profile(): BusinessProfile {
-  return current;
+  return currentTenant()?.profile ?? current;
+}
+
+/** El perfil tal como lo ve el CRM: sin la clave de OpenAI. */
+export function publicProfile(p: BusinessProfile = profile()): BusinessProfile {
+  return { ...p, ai: { model: p.ai?.model } };
 }
 
 // La base se importa al usarla: así el tarifario y las pruebas pueden usar el perfil sin conexión.
@@ -391,7 +441,22 @@ export async function loadBusinessProfile(): Promise<BusinessProfile> {
 }
 
 export async function saveBusinessProfile(raw: unknown): Promise<BusinessProfile> {
+  const tenant = currentTenant();
+  if (tenant) {
+    // La clave de OpenAI de un negocio va cifrada en su propia columna, nunca dentro del perfil.
+    const normalized = normalizeProfile(raw, tenant.profile);
+    normalized.ai = { model: normalized.ai?.model || 'gpt-5.4-mini' };
+    const { saveTenantProfile } = await import('../services/supabase');
+    await saveTenantProfile(tenant.businessId, normalized);
+    tenant.profile = normalized;
+    return normalized;
+  }
+
   const { setConfig } = await import('../services/supabase');
+  // El CRM no recibe la clave de OpenAI: se conserva la que ya tenía el perfil.
+  if (raw && typeof raw === 'object' && !(raw as any).ai?.openai_api_key) {
+    raw = { ...(raw as any), ai: { ...(raw as any).ai, openai_api_key: current.ai?.openai_api_key } };
+  }
   const normalized = normalizeProfile(raw, current);
   await setConfig(PROFILE_KEY, JSON.stringify(normalized));
   current = normalized;
@@ -405,22 +470,65 @@ export function useProfile(p: BusinessProfile) {
 
 // ---------- Textos derivados ----------
 
-export const unitWord = (quantity: number, p: BusinessProfile = current) =>
+export const unitWord = (quantity: number, p: BusinessProfile = profile()) =>
   quantity === 1 ? p.sales.unitSingular : p.sales.unitPlural;
 
-export const quantityText = (quantity: number, p: BusinessProfile = current) =>
+export const quantityText = (quantity: number, p: BusinessProfile = profile()) =>
   `${quantity} ${unitWord(quantity, p)}`;
 
 /** Fecha de hoy (AAAA-MM-DD) en la zona horaria del negocio. */
-export function todayLocal(p: BusinessProfile = current): string {
+export function todayLocal(p: BusinessProfile = profile()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: p.business.timezone }).format(new Date());
 }
 
-export function hourLocal(date: Date, p: BusinessProfile = current): number {
+export function hourLocal(date: Date, p: BusinessProfile = profile()): number {
   return Number(new Intl.DateTimeFormat('en-US', { timeZone: p.business.timezone, hour: 'numeric', hourCycle: 'h23' }).format(date));
 }
 
 export function formatDate(isoDate: string): string {
   const [y, m, d] = isoDate.split('-');
   return `${d}/${m}/${y}`;
+}
+
+// ---------- Helpers Multi-Tenant ----------
+
+/** Obtiene el factor de conversión de piezas a unidades de venta. VELAMIA=12, individual=1. */
+export function getPiecesPerUnit(p: BusinessProfile = profile()): number {
+  return p.sales.piecesPerUnit ?? 12;
+}
+
+/** Calcula el costo de envío custom (por peso) basado en zona. Usado por negocios con tarifa propia. */
+export function calculateCustomShippingCost(
+  zone: string,
+  totalWeightKg: number,
+  p: BusinessProfile = profile()
+): number {
+  if (!p.shipping.useCustomRates || p.shipping.customRates.length === 0) {
+    return 0;
+  }
+  const rate = p.shipping.customRates.find(r => r.zone.toLowerCase() === zone.toLowerCase());
+  return rate ? rate.costPerKg * totalWeightKg : 0;
+}
+
+/** Obtiene el peso de un producto para cálculos de envío custom. */
+export function getProductWeight(productId: string, p: BusinessProfile = profile()): number {
+  return p.shipping.productWeights?.[productId] ?? 0;
+}
+
+/**
+ * Clave de OpenAI. Un negocio usa siempre la suya (cada uno paga su consumo, sin respaldo en la de VELAMIA);
+ * VELAMIA usa la de su perfil o la global (process.env.OPENAI_API_KEY).
+ */
+export function getOpenAIKey(p: BusinessProfile = profile()): string {
+  const tenant = currentTenant();
+  if (tenant) {
+    if (!tenant.openaiApiKey) throw new Error(`El negocio ${tenant.name} no tiene clave de OpenAI configurada`);
+    return tenant.openaiApiKey;
+  }
+  return (p.ai?.openai_api_key || process.env.OPENAI_API_KEY || '').trim();
+}
+
+/** Obtiene el modelo OpenAI del negocio. Default = gpt-5.4-mini. */
+export function getOpenAIModel(p: BusinessProfile = profile()): string {
+  return (p.ai?.model || 'gpt-5.4-mini').trim();
 }

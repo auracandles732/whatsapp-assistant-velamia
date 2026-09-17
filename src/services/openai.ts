@@ -1,30 +1,39 @@
 import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
-import { BusinessProfile, profile, todayLocal, formatDate, findPackaging } from '../config/businessProfile';
+import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel } from '../config/businessProfile';
 
-// Sin timeout propio el SDK espera hasta 10 minutos: la clienta quedaría sin respuesta ese tiempo.
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 60_000,
-  // Con muchas clientas a la vez OpenAI responde "límite por minuto" (429): el SDK espera y reintenta.
-  maxRetries: 4
-});
+// Cache de clientes OpenAI por API key (uno por negocio)
+const openaiClients = new Map<string, OpenAI>();
 
-const MODEL = 'gpt-5.4-mini';
+function getOpenAIClient(p: BusinessProfile = profile()): OpenAI {
+  const key = getOpenAIKey(p);
+  if (!openaiClients.has(key)) {
+    openaiClients.set(key, new OpenAI({
+      apiKey: key,
+      timeout: 60_000,
+      maxRetries: 4
+    }));
+  }
+  return openaiClients.get(key)!;
+}
 
 // GPT-5.4 es un modelo de razonamiento: los tokens de razonamiento cuentan dentro de
 // max_completion_tokens, por eso los límites llevan margen y el esfuerzo va en "low"
 // para responder rápido por WhatsApp.
 const REASONING_EFFORT = 'low' as const;
 
+// Solo los modelos de razonamiento (gpt-5, o-series) aceptan reasoning_effort; otro modelo elegido por un negocio lo rechazaría.
+const reasoningFor = (model: string) => (/^(gpt-5|o\d)/.test(model) ? { reasoning_effort: REASONING_EFFORT } : {});
+
 // Máximo de fotos que la IA puede elegir en un turno; el controlador las envía de 4 en 4.
 export const MAX_PHOTOS_PER_TURN = 40;
 
-export async function transcribeAudio(buffer: Buffer, mimeType: string): Promise<string> {
+export async function transcribeAudio(buffer: Buffer, mimeType: string, p: BusinessProfile = profile()): Promise<string> {
   try {
     const ext = mimeType.split('/')[1]?.split(';')[0] || 'ogg';
     const file = await toFile(buffer, `audio.${ext}`, { type: mimeType });
-    const transcription = await openai.audio.transcriptions.create({
+    const client = getOpenAIClient(p);
+    const transcription = await client.audio.transcriptions.create({
       file,
       model: 'whisper-1',
       language: 'es'
@@ -36,12 +45,14 @@ export async function transcribeAudio(buffer: Buffer, mimeType: string): Promise
   }
 }
 
-export async function describeImage(imageUrl: string): Promise<string> {
-  const b = profile().business;
+export async function describeImage(imageUrl: string, p: BusinessProfile = profile()): Promise<string> {
+  const b = p.business;
   try {
-    const response = await openai.chat.completions.create({
-      model: MODEL,
-      reasoning_effort: REASONING_EFFORT,
+    const client = getOpenAIClient(p);
+    const model = getOpenAIModel(p);
+    const response = await client.chat.completions.create({
+      model,
+      ...reasoningFor(model),
       max_completion_tokens: 600,
       messages: [{
         role: 'user',
@@ -524,6 +535,11 @@ export function cleanPersonalization(value: unknown): string {
 
 /** Piezas por unidad de venta según el perfil ("12 unidades" → 12); 1 si no aplica. */
 function piecesPerUnit(p: BusinessProfile): number {
+  // Si el perfil tiene piecesPerUnit definido, usarlo
+  if (p.sales.piecesPerUnit !== undefined && p.sales.piecesPerUnit > 0) {
+    return p.sales.piecesPerUnit;
+  }
+  // Fallback: extraer del unitDetail (ej: "12 unidades" → 12)
   const match = p.sales.unitDetail.match(/\d+/);
   const pieces = match ? Number(match[0]) : 1;
   return pieces > 1 ? pieces : 1;
@@ -694,12 +710,14 @@ export async function planTurn(params: {
   pendingCustomDesigns?: string[];
   /** Resumen del último pedido del chat con su estado, para responder "¿cómo va mi pedido?". */
   lastOrder?: string;
+  /** Perfil del negocio; si no viene, usa el global. */
+  profile?: BusinessProfile;
 }): Promise<TurnPlan> {
   const {
     history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [], recentEmojis = [],
-    pendingOwnerQuestions = [], cardChosen: cardChosenBefore = false, pendingCustomDesigns = [], lastOrder = ''
+    pendingOwnerQuestions = [], cardChosen: cardChosenBefore = false, pendingCustomDesigns = [], lastOrder = '', profile: profileParam
   } = params;
-  const p = profile();
+  const p = profileParam || profile();
   const pay = p.payments;
   const usesDeposit = pay.transferEnabled && pay.depositPercent < 100;
   const hasShipping = p.shipping.mode !== 'none';
@@ -728,9 +746,11 @@ export async function planTurn(params: {
   ];
 
   const ask = async (extraSystem?: string) => {
-    const response = await openai.chat.completions.create({
-      model: MODEL,
-      reasoning_effort: REASONING_EFFORT,
+    const client = getOpenAIClient(p);
+    const model = getOpenAIModel(p);
+    const response = await client.chat.completions.create({
+      model,
+      ...reasoningFor(model),
       max_completion_tokens: 3000,
       response_format: {
         type: 'json_schema',
@@ -938,10 +958,11 @@ export interface OrderItem {
  */
 export async function extractOrderItems(
   conversationText: string,
-  catalog: { name: string; price: number; category: string }[]
+  catalog: { name: string; price: number; category: string }[],
+  p: BusinessProfile = profile()
 ): Promise<OrderItem[]> {
   if (!catalog || catalog.length === 0) return [];
-  const s = profile().sales;
+  const s = p.sales;
 
   try {
     const catalogNames = catalog.map(c => c.name).join('\n');
@@ -960,9 +981,11 @@ ${s.unitDetail ? `- Si da la cantidad en otra medida, conviértela a ${s.unitPlu
 
 Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."}]}`;
 
-    const response = await openai.chat.completions.create({
-      model: MODEL,
-      reasoning_effort: REASONING_EFFORT,
+    const client = getOpenAIClient(p);
+    const model = getOpenAIModel(p);
+    const response = await client.chat.completions.create({
+      model,
+      ...reasoningFor(model),
       max_completion_tokens: 1000,
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: prompt }]

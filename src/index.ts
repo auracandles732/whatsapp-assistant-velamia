@@ -26,19 +26,40 @@ import {
   updateOrderStatus,
   ORDER_STATUSES,
   OrderStatus,
-  parseDbTimestamp
+  parseDbTimestamp,
+  createBusiness,
+  getAllBusinesses,
+  getBusinessRow,
+  toPublicBusiness,
+  updateBusinessCredentials,
+  updateBusinessInfo,
+  BusinessCredentials,
+  BusinessRow,
+  createBusinessUser,
+  getBusinessUsers,
+  getBusinessUser,
+  updateBusinessUser,
+  deactivateBusinessUser,
+  createBusinessAccessToken,
+  validateBusinessAccessToken,
+  listBusinessAccessTokens,
+  revokeBusinessAccessToken
 } from './db';
-import { removeFilesByPublicUrls } from './services/storage';
+import { removeFilesByPublicUrls, storagePath } from './services/storage';
+import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
 import {
   requireCrmSession,
+  requireAdminSession,
+  requireOwnerRole,
+  getCrmSession,
   isPasswordValid,
   issueSessionToken,
   verifyWebhookSignature
 } from './middleware/auth';
 import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
-import { loadBusinessProfile, saveBusinessProfile, profile, PROFILE_PRESETS, findPackaging } from './config/businessProfile';
+import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging } from './config/businessProfile';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -135,7 +156,11 @@ const LOGIN_MAX_FAILURES = 10;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const loginFailures = new Map<string, { count: number; resetAt: number }>();
 
-app.post('/api/login', (req: Request, res: Response) => {
+/**
+ * Una sola pantalla de ingreso: con la contraseña maestra entra el administrador; con el token de un negocio
+ * (64 caracteres) entra su dueño o personal, que solo verá su negocio.
+ */
+app.post(['/api/login', '/api/auth/login/business'], async (req: Request, res: Response) => {
   if (!process.env.CRM_PASSWORD) {
     return res.status(503).json({ error: 'Falta configurar la variable CRM_PASSWORD en el servidor' });
   }
@@ -150,13 +175,25 @@ app.post('/api/login', (req: Request, res: Response) => {
     return res.status(429).json({ error: 'Demasiados intentos. Espera 15 minutos e intenta de nuevo.' });
   }
 
-  if (!isPasswordValid(String(req.body?.password || ''))) {
-    loginFailures.set(ip, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + LOGIN_WINDOW_MS });
-    return res.status(401).json({ error: 'Contraseña incorrecta' });
+  const secret = String(req.body?.password || req.body?.accessToken || '').trim();
+  if (isPasswordValid(secret)) {
+    loginFailures.delete(ip);
+    return res.json({ token: issueSessionToken(), role: 'admin' });
   }
 
-  loginFailures.delete(ip);
-  res.json({ token: issueSessionToken() });
+  try {
+    const access = await validateBusinessAccessToken(secret);
+    if (access) {
+      loginFailures.delete(ip);
+      return res.json({ token: issueSessionToken(access), role: access.role, businessId: access.businessId });
+    }
+  } catch (error: any) {
+    console.error('Error validando token de negocio:', error.message);
+    return res.status(500).json({ error: 'No se pudo validar el acceso, intenta de nuevo' });
+  }
+
+  loginFailures.set(ip, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + LOGIN_WINDOW_MS });
+  res.status(401).json({ error: 'Contraseña o token incorrecto' });
 });
 
 // La pantalla de ingreso muestra el nombre y el logo antes de iniciar sesión: solo datos públicos.
@@ -168,19 +205,19 @@ app.get('/api/public/branding', (_req: Request, res: Response) => {
 // ---------- Perfil del negocio ----------
 
 app.get('/api/business-profile', requireCrmSession, (_req: Request, res: Response) => {
-  res.json(profile());
+  res.json(publicProfile());
 });
 
 app.get('/api/business-profile/presets', requireCrmSession, (_req: Request, res: Response) => {
-  res.json(Object.entries(PROFILE_PRESETS).map(([id, preset]) => ({ id, label: preset.label, profile: preset.profile })));
+  res.json(Object.entries(PROFILE_PRESETS).map(([id, preset]) => ({ id, label: preset.label, profile: publicProfile(preset.profile) })));
 });
 
-app.put('/api/business-profile', requireCrmSession, async (req: Request, res: Response) => {
+app.put('/api/business-profile', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
   try {
     if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Perfil inválido' });
     const saved = await saveBusinessProfile(req.body);
     console.log(`🏪 Perfil del negocio actualizado: ${saved.business.name}`);
-    res.json(saved);
+    res.json(publicProfile(saved));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -199,6 +236,8 @@ app.get('/api/conversations', requireCrmSession, async (_req: Request, res: Resp
 
 app.get('/api/conversations/:id/messages', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
   try {
+    // El chat debe ser del negocio en que se trabaja: los mensajes no llevan business_id propio.
+    if (!(await getConversationById(req.params.id))) return res.status(404).json({ error: 'Conversación no encontrada' });
     res.json(await getMessages(req.params.id));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -387,7 +426,7 @@ app.get('/api/bot-status', requireCrmSession, async (_req: Request, res: Respons
   }
 });
 
-app.post('/api/bot-status', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/bot-status', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
   try {
     const enabled = !!req.body?.enabled;
     await setConfig('bot_enabled', enabled ? 'true' : 'false');
@@ -405,7 +444,7 @@ app.get('/api/system-prompt', requireCrmSession, async (_req: Request, res: Resp
   }
 });
 
-app.post('/api/system-prompt', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/system-prompt', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
   try {
     await setConfig('system_prompt', String(req.body?.prompt || ''));
     res.json({ success: true });
@@ -425,7 +464,7 @@ app.get('/api/payment-info', requireCrmSession, async (_req: Request, res: Respo
   }
 });
 
-app.post('/api/payment-info', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/payment-info', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
   try {
     const transfer = String(req.body?.transfer || '').trim();
     if (transfer.length > 1500) {
@@ -466,7 +505,7 @@ app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Respo
     }
 
     const contentType = matches[1] === 'image/jpg' ? 'image/jpeg' : matches[1];
-    const finalName = `${randomUUID()}.${contentType === 'image/png' ? 'png' : 'jpg'}`;
+    const finalName = storagePath(contentType === 'image/png' ? 'png' : 'jpg');
 
     const { error } = await supabase.storage.from('product-images').upload(finalName, buffer, { contentType });
     if (error) throw error;
@@ -569,6 +608,345 @@ app.delete('/api/products/:id', requireCrmSession, requireUuidParam, async (req:
   }
 });
 
+// ---------- MULTI-NEGOCIO: ADMINISTRACIÓN (solo contraseña maestra) ----------
+
+/** Valida los ids de negocio, usuario y token que vienen en la ruta. */
+function requireUuidParams(req: Request, res: Response, next: NextFunction) {
+  for (const name of ['businessId', 'userId', 'tokenId']) {
+    const value = req.params[name];
+    if (value !== undefined && !UUID_PATTERN.test(value)) return res.status(400).json({ error: `Id inválido (${name})` });
+  }
+  next();
+}
+
+const ROLES = ['owner', 'manager', 'staff'];
+
+/** Claves que llegan del CRM; se aceptan con los nombres del formulario. */
+function credentialsFromBody(body: any): BusinessCredentials {
+  const b = body || {};
+  return {
+    displayPhoneNumber: b.displayPhoneNumber,
+    phoneNumberId: b.phoneNumberId,
+    wabaId: b.wabaId,
+    metaAccessToken: b.metaAccessToken,
+    openaiApiKey: b.openaiApiKey
+  };
+}
+
+function sendBusinessError(res: Response, error: any) {
+  const message = String(error.message || error);
+  const status = /ya está asignado/.test(message) ? 409 : /BUSINESS_SECRETS_KEY|No se envió/.test(message) ? 400 : 500;
+  res.status(status).json({ error: message });
+}
+
+app.get('/api/businesses', requireAdminSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await getAllBusinesses());
+  } catch (error: any) {
+    console.error('Error cargando negocios:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Crea un negocio. El perfil parte de una plantilla (tienda o eventos) con el nombre del negocio;
+ * las claves de WhatsApp y OpenAI son opcionales aquí y se pueden cargar después.
+ */
+app.post('/api/businesses', requireAdminSession, async (req: Request, res: Response) => {
+  try {
+    const name = String(req.body?.name || '').trim().slice(0, 80);
+    if (!name) return res.status(400).json({ error: 'El nombre del negocio es requerido' });
+
+    const preset = PROFILE_PRESETS[String(req.body?.preset || 'tienda')] || PROFILE_PRESETS.tienda;
+    const base = normalizeProfile(preset.profile, preset.profile);
+    const initialProfile = normalizeProfile({ ...base, business: { ...base.business, name } }, base);
+
+    const business = await createBusiness(name, initialProfile, credentialsFromBody(req.body));
+    console.log(`🏢 Negocio creado: ${business.name}`);
+    res.status(201).json(business);
+  } catch (error: any) {
+    console.error('Error creando negocio:', error.message);
+    sendBusinessError(res, error);
+  }
+});
+
+app.patch('/api/businesses/:businessId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const updates: { name?: string; active?: boolean } = {};
+    if (req.body?.name !== undefined) {
+      updates.name = String(req.body.name).trim().slice(0, 80);
+      if (!updates.name) return res.status(400).json({ error: 'El nombre no puede quedar vacío' });
+    }
+    if (typeof req.body?.active === 'boolean') updates.active = req.body.active;
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nada para actualizar' });
+
+    const updated = await updateBusinessInfo(req.params.businessId, updates);
+    if (!updated) return res.status(404).json({ error: 'Negocio no encontrado' });
+    res.json(updated);
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+/** Carga o cambia las claves del negocio. Los campos vacíos conservan lo que ya estaba guardado. */
+app.put('/api/businesses/:businessId/credentials', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const updated = await updateBusinessCredentials(req.params.businessId, credentialsFromBody(req.body));
+    if (!updated) return res.status(404).json({ error: 'Negocio no encontrado' });
+    console.log(`🔑 Claves actualizadas del negocio ${updated.name}`);
+    res.json(updated);
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+/** Prueba las claves guardadas contra Meta y OpenAI, sin enviar mensajes. */
+app.post('/api/businesses/:businessId/test-credentials', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const row = await getBusinessRow(req.params.businessId);
+    if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
+    res.json(await testBusinessCredentials(row));
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+app.post('/api/businesses/:businessId/generate-access-token', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const row = await getBusinessRow(req.params.businessId);
+    if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    const { plaintoken, expiresAt } = await createBusinessAccessToken(row.id);
+    console.log(`🔐 Token de acceso generado para el negocio ${row.name}`);
+    res.status(201).json({
+      accessToken: plaintoken,
+      expiresAt,
+      message: 'Guarda este token: solo se muestra una vez. El dueño lo escribe en la pantalla de ingreso del CRM.'
+    });
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+app.get('/api/businesses/:businessId/tokens', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    res.json(await listBusinessAccessTokens(req.params.businessId));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/businesses/:businessId/tokens/:tokenId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const revoked = await revokeBusinessAccessToken(req.params.businessId, req.params.tokenId);
+    if (!revoked) return res.status(404).json({ error: 'Token no encontrado en este negocio' });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- USUARIOS DE NEGOCIO (solo admin) ----------
+
+app.get('/api/businesses/:businessId/users', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    res.json(await getBusinessUsers(req.params.businessId));
+  } catch (error: any) {
+    console.error('Error cargando usuarios:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/businesses/:businessId/users', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const fullName = String(req.body?.fullName || '').trim();
+    const role = req.body?.role || 'owner';
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !fullName) {
+      return res.status(400).json({ error: 'Email válido y nombre son requeridos' });
+    }
+    if (!ROLES.includes(role)) {
+      return res.status(400).json({ error: 'Rol inválido: owner | manager | staff' });
+    }
+    if (!(await getBusinessRow(businessId))) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    const user = await createBusinessUser(businessId, email, fullName, role);
+    console.log(`👤 Usuario creado: ${email}`);
+    res.status(201).json(user);
+  } catch (error: any) {
+    console.error('Error creando usuario:', error.message);
+    res.status(error.message.includes('ya existe') ? 409 : 500).json({ error: error.message });
+  }
+});
+
+/** El usuario debe pertenecer al negocio de la ruta: así no se toca un usuario de otro negocio. */
+async function userOfBusiness(req: Request, res: Response) {
+  const user = await getBusinessUser(req.params.userId);
+  if (!user || user.business_id !== req.params.businessId) {
+    res.status(404).json({ error: 'Usuario no encontrado en este negocio' });
+    return null;
+  }
+  return user;
+}
+
+app.post('/api/businesses/:businessId/users/:userId/generate-token', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const user = await userOfBusiness(req, res);
+    if (!user) return;
+    if (!user.active) return res.status(400).json({ error: 'El usuario está desactivado' });
+
+    const { plaintoken, expiresAt } = await createBusinessAccessToken(user.business_id, user.id);
+    console.log(`🔐 Token generado para ${user.email}`);
+    res.status(201).json({
+      accessToken: plaintoken,
+      expiresAt,
+      user: { id: user.id, email: user.email, fullName: user.full_name, role: user.role },
+      message: `Token para ${user.email}. Solo se muestra una vez.`
+    });
+  } catch (error: any) {
+    console.error('Error generando token:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/businesses/:businessId/users/:userId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const user = await userOfBusiness(req, res);
+    if (!user) return;
+
+    const { fullName, role, active } = req.body || {};
+    const updates: any = {};
+    if (fullName) updates.full_name = String(fullName).trim();
+    if (role !== undefined) {
+      if (!ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido: owner | manager | staff' });
+      updates.role = role;
+    }
+    if (active === false) {
+      await deactivateBusinessUser(user.id);
+      delete updates.active;
+    } else if (active === true) {
+      updates.active = true;
+    }
+
+    const updated = Object.keys(updates).length ? await updateBusinessUser(user.id, updates) : await getBusinessUser(user.id);
+    res.json(updated);
+  } catch (error: any) {
+    console.error('Error actualizando usuario:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/businesses/:businessId/users/:userId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const user = await userOfBusiness(req, res);
+    if (!user) return;
+    await deactivateBusinessUser(user.id);
+    console.log(`👤 Usuario desactivado y tokens revocados: ${user.email}`);
+    res.json({ message: `Usuario ${user.email} desactivado` });
+  } catch (error: any) {
+    console.error('Error desactivando usuario:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- MULTI-NEGOCIO: EL NEGOCIO EN QUE SE TRABAJA ----------
+
+/** Quién entró y en qué negocio trabaja: el CRM lo usa para mostrar u ocultar la administración. */
+app.get('/api/session', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const session = getCrmSession(req);
+    const tenant = currentTenant();
+    const row = tenant ? await getBusinessRow(tenant.businessId) : null;
+    res.json({
+      role: session.role,
+      business: row ? toPublicBusiness(row) : null,
+      businessName: tenant ? tenant.profile.business.name : profile().business.name
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/me/business', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    if (!tenant) return res.status(400).json({ error: 'Elige un negocio primero' });
+    const row = await getBusinessRow(tenant.businessId);
+    if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
+    res.json(toPublicBusiness(row));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** El dueño carga o cambia las claves de SU negocio (WhatsApp y OpenAI). */
+app.put('/api/me/credentials', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    if (!tenant) return res.status(400).json({ error: 'Las claves de VELAMIA se configuran en las variables del servidor' });
+    const updated = await updateBusinessCredentials(tenant.businessId, credentialsFromBody(req.body));
+    console.log(`🔑 Claves actualizadas por el negocio ${tenant.name}`);
+    res.json(updated);
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+app.post('/api/me/test-credentials', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    if (!tenant) return res.status(400).json({ error: 'Elige un negocio primero' });
+    const row = await getBusinessRow(tenant.businessId);
+    if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
+    res.json(await testBusinessCredentials(row));
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+/** Consulta a Meta y a OpenAI con las claves del negocio; devuelve qué funciona y qué no, en español. */
+async function testBusinessCredentials(row: BusinessRow) {
+  const result: { whatsapp: { ok: boolean; detail: string }; openai: { ok: boolean; detail: string } } = {
+    whatsapp: { ok: false, detail: '' },
+    openai: { ok: false, detail: '' }
+  };
+
+  const token = decryptSecret(row.meta_access_token);
+  if (!token || !row.meta_phone_number_id) {
+    result.whatsapp.detail = 'Falta el token de Meta o el Phone Number ID';
+  } else {
+    try {
+      const response = await fetch(`https://graph.facebook.com/v25.0/${row.meta_phone_number_id}?fields=display_phone_number,verified_name`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data: any = await response.json();
+      result.whatsapp = response.ok
+        ? { ok: true, detail: `Conectado: ${data.verified_name || ''} ${data.display_phone_number || ''}`.trim() }
+        : { ok: false, detail: data?.error?.message || `Meta respondió ${response.status}` };
+    } catch (error: any) {
+      result.whatsapp.detail = `No se pudo consultar a Meta: ${error.message}`;
+    }
+  }
+
+  const openaiKey = decryptSecret(row.openai_api_key);
+  if (!openaiKey) {
+    result.openai.detail = 'Falta la clave de OpenAI';
+  } else {
+    try {
+      const response = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${openaiKey}` } });
+      result.openai = response.ok
+        ? { ok: true, detail: 'Clave válida' }
+        : { ok: false, detail: response.status === 401 ? 'Clave inválida o revocada' : `OpenAI respondió ${response.status}` };
+    } catch (error: any) {
+      result.openai.detail = `No se pudo consultar a OpenAI: ${error.message}`;
+    }
+  }
+
+  return result;
+}
+
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
@@ -626,7 +1004,7 @@ async function start() {
   app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
 
-  const missing = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID', 'WHATSAPP_BUSINESS_ACCOUNT_ID', 'OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'WEBHOOK_VERIFY_TOKEN', 'CRM_PASSWORD', 'META_APP_SECRET']
+  const missing = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID', 'WHATSAPP_BUSINESS_ACCOUNT_ID', 'OPENAI_API_KEY', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'WEBHOOK_VERIFY_TOKEN', 'CRM_PASSWORD', 'META_APP_SECRET', 'BUSINESS_SECRETS_KEY']
     .filter(key => !process.env[key]);
   if (missing.length > 0) {
     console.warn(`⚠️  Variables de entorno sin configurar: ${missing.join(', ')}`);

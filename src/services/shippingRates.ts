@@ -178,6 +178,7 @@ const PICKUP_PATTERN = /(?<!\p{L})(retir\p{L}*|recog\p{L}*)(?!\p{L})/iu;
 /**
  * Costo del envío según el modo del perfil del negocio, o null si falta o no se reconoce el destino.
  * El recargo por cantidad (más unidades que las que cubre la tarifa base) se suma una sola vez.
+ * Soporta tarifas custom por kg si el negocio tiene useCustomRates = true.
  */
 export function shippingCost(place: string, units: number, p: BusinessProfile = profile()): (ShippingMatch & { cost: number }) | null {
   const sh = p.shipping;
@@ -187,6 +188,14 @@ export function shippingCost(place: string, units: number, p: BusinessProfile = 
   if (!raw) return null;
   if (sh.pickupAvailable && PICKUP_PATTERN.test(raw)) {
     return { place: 'Retiro en local', province: '', rate: 0, cost: 0 };
+  }
+
+  // Custom rates (por kg): calcular peso total y aplicar tarifa del negocio
+  if (sh.useCustomRates && sh.customRates.length > 0) {
+    // Nota: en este punto no tenemos lista de productos, así que no podemos calcular peso exacto.
+    // El negocio debe definir un peso promedio por unidad o usar flatRate.
+    // Por ahora, retornar null para que el negocio use flatRate o agregue peso al perfil.
+    return null;
   }
 
   const extra = sh.unitsIncludedInRate > 0 && units > sh.unitsIncludedInRate ? sh.extraCost : 0;

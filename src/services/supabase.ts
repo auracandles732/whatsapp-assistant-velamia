@@ -1,5 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes, createHash } from 'crypto';
+import { currentTenant, TenantContext, encryptSecret, decryptSecret, maskSecret } from './tenant';
+import { normalizeProfile, BusinessProfile, STORE_PROFILE } from '../config/businessProfile';
 
 // Cliente único con la service key: ignora RLS, por eso solo se usa en el servidor.
 // supabase-js ya reintenta las lecturas ante cortes de red (hasta 4 intentos) y no repite escrituras.
@@ -16,6 +18,18 @@ export function parseDbTimestamp(value: string): Date {
   return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value}Z`);
 }
 
+// ---------- SEPARACIÓN POR NEGOCIO ----------
+// Conversaciones, productos, cotizaciones y pedidos llevan business_id. Dentro de un negocio solo se ven
+// y tocan sus filas; fuera de un negocio (VELAMIA) solo las que no tienen business_id.
+// Mensajes, seguimientos y avisos cuelgan de una conversación, así que quedan separados a través de ella.
+
+const tenantOp = () => (currentTenant() ? 'eq' : 'is');
+const tenantValue = () => currentTenant()?.businessId ?? null;
+const tenantColumns = () => {
+  const tenant = currentTenant();
+  return tenant ? { business_id: tenant.businessId } : {};
+};
+
 // ---------- CONVERSACIONES ----------
 
 export async function getConversation(phoneNumber: string) {
@@ -23,6 +37,7 @@ export async function getConversation(phoneNumber: string) {
     .from('conversations')
     .select('*')
     .eq('phone_number', phoneNumber)
+    .filter('business_id', tenantOp(), tenantValue())
     .maybeSingle();
 
   if (error) throw new Error(`Error obteniendo conversación: ${error.message}`);
@@ -35,6 +50,7 @@ export async function createConversation(phoneNumber: string, customerName?: str
     .from('conversations')
     .insert([{
       id: randomUUID(),
+      ...tenantColumns(),
       phone_number: phoneNumber,
       customer_name: customerName,
       status: 'active',
@@ -56,6 +72,7 @@ export async function getConversationById(conversationId: string) {
     .from('conversations')
     .select('*')
     .eq('id', conversationId)
+    .filter('business_id', tenantOp(), tenantValue())
     .maybeSingle();
 
   if (error) throw new Error(`Error obteniendo conversación: ${error.message}`);
@@ -68,7 +85,8 @@ export async function touchConversation(conversationId: string) {
   const { error } = await supabase
     .from('conversations')
     .update({ status: 'active', last_message_time: now, updated_at: now })
-    .eq('id', conversationId);
+    .eq('id', conversationId)
+    .filter('business_id', tenantOp(), tenantValue());
 
   if (error) throw new Error(`Error actualizando actividad: ${error.message}`);
 }
@@ -77,6 +95,7 @@ export async function getAllConversations() {
   const { data, error } = await supabase
     .from('conversations')
     .select('*')
+    .filter('business_id', tenantOp(), tenantValue())
     .order('last_message_time', { ascending: false });
 
   if (error) throw new Error(`Error obteniendo conversaciones: ${error.message}`);
@@ -217,7 +236,8 @@ export async function pauseBot(conversationId: string, minutes?: number) {
   const { error } = await supabase
     .from('conversations')
     .update({ bot_paused_until: pausedUntil })
-    .eq('id', conversationId);
+    .eq('id', conversationId)
+    .filter('business_id', tenantOp(), tenantValue());
 
   if (error) throw new Error(`Error pausando bot: ${error.message}`);
 }
@@ -226,7 +246,8 @@ export async function resumeBot(conversationId: string) {
   const { error } = await supabase
     .from('conversations')
     .update({ bot_paused_until: null })
-    .eq('id', conversationId);
+    .eq('id', conversationId)
+    .filter('business_id', tenantOp(), tenantValue());
 
   if (error) throw new Error(`Error reactivando bot: ${error.message}`);
 }
@@ -248,6 +269,7 @@ export async function createQuotation(conversationId: string, phoneNumber: strin
     .from('quotations')
     .insert([{
       id: randomUUID(),
+      ...tenantColumns(),
       conversation_id: conversationId,
       customer_phone: phoneNumber,
       products,
@@ -269,7 +291,8 @@ export async function getAllQuotations() {
     .from('quotations')
     .update({ status: 'expired' })
     .eq('status', 'pending')
-    .lt('expires_at', new Date().toISOString());
+    .lt('expires_at', new Date().toISOString())
+    .filter('business_id', tenantOp(), tenantValue());
 
   // Marcar vencidas es secundario: si falla, igual se muestra la lista y se reintenta en la próxima carga.
   if (expireError) console.error('No se pudieron marcar cotizaciones vencidas:', expireError.message);
@@ -277,6 +300,7 @@ export async function getAllQuotations() {
   const { data, error } = await supabase
     .from('quotations')
     .select('*, conversations(customer_name, phone_number)')
+    .filter('business_id', tenantOp(), tenantValue())
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(`Error obteniendo cotizaciones: ${error.message}`);
@@ -308,6 +332,7 @@ export async function updateQuotationItems(quotationId: string, products: any[],
     .from('quotations')
     .update({ products, total_amount: totalAmount, expires_at: expiresAt.toISOString() })
     .eq('id', quotationId)
+    .filter('business_id', tenantOp(), tenantValue())
     .select()
     .single();
 
@@ -320,6 +345,7 @@ export async function updateQuotationStatus(quotationId: string, status: 'pendin
     .from('quotations')
     .update({ status })
     .eq('id', quotationId)
+    .filter('business_id', tenantOp(), tenantValue())
     .select()
     .maybeSingle();
 
@@ -337,6 +363,7 @@ export async function createOrder(
     .from('orders')
     .insert([{
       id: randomUUID(),
+      ...tenantColumns(),
       conversation_id: conversationId,
       customer_name: customerName,
       customer_phone: phoneNumber,
@@ -362,6 +389,7 @@ export async function getAllOrders() {
   const { data, error } = await supabase
     .from('orders')
     .select('*, conversations(customer_name, phone_number)')
+    .filter('business_id', tenantOp(), tenantValue())
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(`Error obteniendo pedidos: ${error.message}`);
@@ -373,6 +401,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     .from('orders')
     .update({ status })
     .eq('id', orderId)
+    .filter('business_id', tenantOp(), tenantValue())
     .select()
     .maybeSingle();
 
@@ -418,6 +447,7 @@ export async function updateOrderItems(orderId: string, products: any[], totalAm
       ...(address ? { customer_address: address } : {})
     })
     .eq('id', orderId)
+    .filter('business_id', tenantOp(), tenantValue())
     .select()
     .single();
 
@@ -433,6 +463,7 @@ export async function getSalesMetrics(days: number = 30) {
     .from('orders')
     .select('total_amount, status')
     .neq('status', 'cancelled')
+    .filter('business_id', tenantOp(), tenantValue())
     .gte('created_at', startDate.toISOString());
 
   if (error) throw new Error(`Error obteniendo métricas: ${error.message}`);
@@ -452,6 +483,7 @@ export async function createProduct(name: string, price: number, category: strin
     .from('products')
     .insert([{
       id: randomUUID(),
+      ...tenantColumns(),
       name,
       description: packaging || '',
       price,
@@ -471,6 +503,7 @@ export async function getAllProducts() {
   const { data, error } = await supabase
     .from('products')
     .select('*')
+    .filter('business_id', tenantOp(), tenantValue())
     .order('category', { ascending: true })
     .order('name', { ascending: true });
 
@@ -483,6 +516,7 @@ export async function updateProduct(productId: string, updates: { name?: string;
     .from('products')
     .update(updates)
     .eq('id', productId)
+    .filter('business_id', tenantOp(), tenantValue())
     .select()
     .maybeSingle();
 
@@ -496,6 +530,7 @@ export async function deleteProduct(productId: string) {
     .from('products')
     .delete()
     .eq('id', productId)
+    .filter('business_id', tenantOp(), tenantValue())
     .select()
     .maybeSingle();
 
@@ -504,12 +539,18 @@ export async function deleteProduct(productId: string) {
 }
 
 // ---------- CONFIGURACIÓN ----------
+// Cada negocio guarda su prompt, datos bancarios y estado del bot con su propio prefijo de clave.
+
+function configKey(key: string): string {
+  const tenant = currentTenant();
+  return tenant ? `business:${tenant.businessId}:${key}` : key;
+}
 
 export async function getConfig(key: string): Promise<string | undefined> {
   const { data, error } = await supabase
     .from('business_config')
     .select('value')
-    .eq('key', key)
+    .eq('key', configKey(key))
     .maybeSingle();
 
   if (error) throw new Error(`Error leyendo configuración: ${error.message}`);
@@ -519,7 +560,7 @@ export async function getConfig(key: string): Promise<string | undefined> {
 export async function setConfig(key: string, value: string) {
   const { data, error } = await supabase
     .from('business_config')
-    .upsert({ key, value, updated_at: new Date().toISOString() })
+    .upsert({ key: configKey(key), value, updated_at: new Date().toISOString() })
     .select()
     .single();
 
@@ -628,4 +669,416 @@ export async function logNotification(conversationId: string, eventType: string,
     }]);
 
   if (error) throw new Error(`Error registrando aviso: ${error.message}`);
+}
+
+// ---------- NEGOCIOS (MULTI-NEGOCIO) ----------
+
+export interface BusinessRow {
+  id: string;
+  name: string;
+  meta_phone_number: string | null;
+  meta_phone_number_id: string | null;
+  meta_access_token: string | null;
+  meta_business_account_id: string | null;
+  openai_api_key: string | null;
+  business_profile: Record<string, any>;
+  active: boolean;
+  owner_phone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Lo que el CRM puede ver de un negocio: nunca las claves, solo si están cargadas y sus últimos 4 caracteres. */
+export function toPublicBusiness(row: BusinessRow) {
+  const hint = (stored: string | null) => {
+    if (!stored) return '';
+    try {
+      return maskSecret(decryptSecret(stored));
+    } catch {
+      return '••••';
+    }
+  };
+  const { meta_access_token, openai_api_key, ...rest } = row;
+  return {
+    ...rest,
+    meta_access_token_hint: hint(meta_access_token),
+    openai_api_key_hint: hint(openai_api_key),
+    whatsapp_configured: !!(meta_access_token && row.meta_phone_number_id),
+    openai_configured: !!openai_api_key
+  };
+}
+
+function tenantFromRow(row: BusinessRow): TenantContext {
+  const profile = normalizeProfile(row.business_profile, STORE_PROFILE);
+  // La clave de OpenAI de las plantillas no pertenece al negocio: la suya va en su columna cifrada.
+  profile.ai = { model: profile.ai?.model || 'gpt-5.4-mini' };
+  return {
+    businessId: row.id,
+    name: row.name,
+    profile,
+    whatsappPhoneId: row.meta_phone_number_id || '',
+    whatsappToken: decryptSecret(row.meta_access_token),
+    wabaId: row.meta_business_account_id || '',
+    openaiApiKey: decryptSecret(row.openai_api_key)
+  };
+}
+
+// Cada mensaje consulta su negocio; un minuto de caché evita ir a la base por cada uno.
+const TENANT_CACHE_MS = 60_000;
+const tenantCache = new Map<string, { at: number; tenant: TenantContext | null }>();
+
+export function invalidateTenantCache() {
+  tenantCache.clear();
+}
+
+async function cachedTenant(cacheKey: string, column: 'id' | 'meta_phone_number_id', value: string): Promise<TenantContext | null> {
+  const hit = tenantCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < TENANT_CACHE_MS) return hit.tenant;
+
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq(column, value)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error buscando negocio: ${error.message}`);
+  const tenant = data ? tenantFromRow(data) : null;
+  tenantCache.set(cacheKey, { at: Date.now(), tenant });
+  return tenant;
+}
+
+/** Negocio activo con ese id, listo para atender (null si no existe o está desactivado). */
+export function loadTenant(businessId: string): Promise<TenantContext | null> {
+  return cachedTenant(`id:${businessId}`, 'id', businessId);
+}
+
+/** Negocio dueño del número que recibió el mensaje (Phone Number ID que Meta envía en cada webhook). */
+export function getTenantByPhoneNumberId(phoneNumberId: string): Promise<TenantContext | null> {
+  return cachedTenant(`phone:${phoneNumberId}`, 'meta_phone_number_id', phoneNumberId);
+}
+
+export async function getBusinessRow(businessId: string): Promise<BusinessRow | null> {
+  const { data, error } = await supabase.from('businesses').select('*').eq('id', businessId).maybeSingle();
+  if (error) throw new Error(`Error obteniendo negocio: ${error.message}`);
+  return data;
+}
+
+/** Negocios activos con su número de WhatsApp configurado (para los seguimientos automáticos). */
+export async function getActiveTenants(): Promise<TenantContext[]> {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('active', true)
+    .not('meta_phone_number_id', 'is', null)
+    .not('meta_access_token', 'is', null);
+
+  if (error) throw new Error(`Error obteniendo negocios activos: ${error.message}`);
+  const tenants: TenantContext[] = [];
+  for (const row of data || []) {
+    try {
+      tenants.push(tenantFromRow(row));
+    } catch (err: any) {
+      console.error(`❌ No se pudieron leer las claves del negocio ${row.name}:`, err.message);
+    }
+  }
+  return tenants;
+}
+
+export interface BusinessCredentials {
+  displayPhoneNumber?: string;
+  phoneNumberId?: string;
+  wabaId?: string;
+  metaAccessToken?: string;
+  openaiApiKey?: string;
+}
+
+/** Solo se cambian los campos enviados con valor: dejar un campo vacío en el CRM conserva la clave guardada. */
+function credentialColumns(c: BusinessCredentials) {
+  const clean = (v?: string) => (typeof v === 'string' ? v.trim() : '');
+  const columns: Record<string, string> = {};
+  if (clean(c.displayPhoneNumber)) columns.meta_phone_number = clean(c.displayPhoneNumber).replace(/[^\d+]/g, '');
+  if (clean(c.phoneNumberId)) columns.meta_phone_number_id = clean(c.phoneNumberId).replace(/\D/g, '');
+  if (clean(c.wabaId)) columns.meta_business_account_id = clean(c.wabaId).replace(/\D/g, '');
+  if (clean(c.metaAccessToken)) columns.meta_access_token = encryptSecret(clean(c.metaAccessToken));
+  if (clean(c.openaiApiKey)) columns.openai_api_key = encryptSecret(clean(c.openaiApiKey));
+  return columns;
+}
+
+function friendlyBusinessError(error: { code?: string; message: string }, action: string) {
+  if (error.code === UNIQUE_VIOLATION) return new Error('Ese número de WhatsApp ya está asignado a otro negocio');
+  return new Error(`Error ${action} negocio: ${error.message}`);
+}
+
+/** Crea un negocio con su perfil inicial y, si ya se tienen, sus claves de WhatsApp y OpenAI (cifradas). */
+export async function createBusiness(name: string, businessProfile: BusinessProfile, credentials: BusinessCredentials = {}) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('businesses')
+    .insert([{
+      id: randomUUID(),
+      name,
+      business_profile: { ...businessProfile, ai: { model: businessProfile.ai?.model || 'gpt-5.4-mini' } },
+      ...credentialColumns(credentials),
+      active: true,
+      created_at: now,
+      updated_at: now
+    }])
+    .select()
+    .single();
+
+  if (error) throw friendlyBusinessError(error, 'creando');
+  invalidateTenantCache();
+  return toPublicBusiness(data);
+}
+
+export async function updateBusinessCredentials(businessId: string, credentials: BusinessCredentials) {
+  const columns = credentialColumns(credentials);
+  if (Object.keys(columns).length === 0) throw new Error('No se envió ningún dato para actualizar');
+  const { data, error } = await supabase
+    .from('businesses')
+    .update({ ...columns, updated_at: new Date().toISOString() })
+    .eq('id', businessId)
+    .select()
+    .maybeSingle();
+
+  if (error) throw friendlyBusinessError(error, 'actualizando');
+  invalidateTenantCache();
+  return data ? toPublicBusiness(data) : null;
+}
+
+export async function updateBusinessInfo(businessId: string, updates: { name?: string; active?: boolean }) {
+  const { data, error } = await supabase
+    .from('businesses')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', businessId)
+    .select()
+    .maybeSingle();
+
+  if (error) throw friendlyBusinessError(error, 'actualizando');
+  invalidateTenantCache();
+  accessCache.clear();
+  return data ? toPublicBusiness(data) : null;
+}
+
+export async function saveTenantProfile(businessId: string, businessProfile: BusinessProfile) {
+  const { error } = await supabase
+    .from('businesses')
+    .update({ business_profile: businessProfile, updated_at: new Date().toISOString() })
+    .eq('id', businessId);
+
+  if (error) throw new Error(`Error guardando perfil del negocio: ${error.message}`);
+  invalidateTenantCache();
+}
+
+/** Todos los negocios (activos e inactivos) sin sus claves. */
+export async function getAllBusinesses() {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo negocios: ${error.message}`);
+  return (data || []).map(toPublicBusiness);
+}
+
+// ---------- TOKENS DE ACCESO DE NEGOCIOS ----------
+// El token se muestra una sola vez; en la base queda solo su hash SHA-256.
+
+const TOKEN_DAYS = 90;
+const hashToken = (plaintoken: string) => createHash('sha256').update(plaintoken).digest('hex');
+
+export type BusinessRole = 'owner' | 'manager' | 'staff';
+
+export interface BusinessAccess {
+  tokenId: string;
+  businessId: string;
+  userId: string | null;
+  role: BusinessRole;
+}
+
+export async function createBusinessAccessToken(businessId: string, businessUserId?: string) {
+  const plaintoken = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from('business_access_tokens')
+    .insert([{
+      id: randomUUID(),
+      business_id: businessId,
+      business_user_id: businessUserId || null,
+      token_hash: hashToken(plaintoken),
+      active: true,
+      created_at: new Date().toISOString(),
+      expires_at: expiresAt
+    }])
+    .select('id')
+    .single();
+
+  if (error) throw new Error(`Error creando token de acceso: ${error.message}`);
+  return { plaintoken, tokenId: data.id as string, expiresAt };
+}
+
+/** Revisa que el token siga activo y vigente, y que su negocio y su usuario sigan activos. */
+async function checkAccess(column: 'token_hash' | 'id', value: string): Promise<BusinessAccess | null> {
+  const { data, error } = await supabase
+    .from('business_access_tokens')
+    .select('id, business_id, business_user_id, expires_at, active, businesses(active), business_users(active, role)')
+    .eq(column, value)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error validando token: ${error.message}`);
+  if (!data || !data.active) return null;
+  if (data.expires_at && parseDbTimestamp(data.expires_at) < new Date()) return null;
+
+  const business: any = Array.isArray(data.businesses) ? data.businesses[0] : data.businesses;
+  if (!business?.active) return null;
+
+  const user: any = Array.isArray(data.business_users) ? data.business_users[0] : data.business_users;
+  if (data.business_user_id && !user?.active) return null;
+
+  return {
+    tokenId: data.id,
+    businessId: data.business_id,
+    userId: data.business_user_id || null,
+    role: (['owner', 'manager', 'staff'].includes(user?.role) ? user.role : 'owner') as BusinessRole
+  };
+}
+
+/** Valida el token que escribe el dueño del negocio al entrar al CRM. */
+export async function validateBusinessAccessToken(plaintoken: string): Promise<BusinessAccess | null> {
+  if (!/^[0-9a-f]{64}$/i.test(plaintoken)) return null;
+  const access = await checkAccess('token_hash', hashToken(plaintoken.toLowerCase()));
+  if (access) {
+    const { error } = await supabase.from('business_access_tokens').update({ last_used: new Date().toISOString() }).eq('id', access.tokenId);
+    if (error) console.error('No se pudo registrar el uso del token:', error.message);
+  }
+  return access;
+}
+
+// La sesión del CRM se revisa en cada petición: un minuto de caché basta para que revocar surta efecto rápido.
+const accessCache = new Map<string, { at: number; access: BusinessAccess | null }>();
+
+export async function getActiveAccessById(tokenId: string): Promise<BusinessAccess | null> {
+  const hit = accessCache.get(tokenId);
+  if (hit && Date.now() - hit.at < TENANT_CACHE_MS) return hit.access;
+  const access = await checkAccess('id', tokenId);
+  if (accessCache.size > 1000) accessCache.clear();
+  accessCache.set(tokenId, { at: Date.now(), access });
+  return access;
+}
+
+export async function listBusinessAccessTokens(businessId: string) {
+  const { data, error } = await supabase
+    .from('business_access_tokens')
+    .select('id, business_user_id, created_at, last_used, expires_at, active, business_users(email, full_name)')
+    .eq('business_id', businessId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo tokens: ${error.message}`);
+  return data || [];
+}
+
+export async function revokeBusinessAccessToken(businessId: string, tokenId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('business_access_tokens')
+    .update({ active: false })
+    .eq('id', tokenId)
+    .eq('business_id', businessId)
+    .select('id');
+
+  if (error) throw new Error(`Error revocando token: ${error.message}`);
+  accessCache.delete(tokenId);
+  return (data || []).length > 0;
+}
+
+// ---------- BUSINESS USERS ----------
+
+export interface BusinessUser {
+  id: string;
+  business_id: string;
+  email: string;
+  full_name: string;
+  role: 'owner' | 'manager' | 'staff';
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Crea un nuevo usuario para un negocio. */
+export async function createBusinessUser(
+  businessId: string,
+  email: string,
+  fullName: string,
+  role: 'owner' | 'manager' | 'staff' = 'owner'
+): Promise<BusinessUser> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('business_users')
+    .insert([{
+      id: randomUUID(),
+      business_id: businessId,
+      email,
+      full_name: fullName,
+      role,
+      active: true,
+      created_at: now,
+      updated_at: now
+    }])
+    .select()
+    .single();
+
+  if (error?.code === UNIQUE_VIOLATION) {
+    throw new Error(`El email ${email} ya existe en este negocio`);
+  }
+  if (error) throw new Error(`Error creando usuario: ${error.message}`);
+  return data;
+}
+
+/** Obtiene todos los usuarios de un negocio. */
+export async function getBusinessUsers(businessId: string): Promise<BusinessUser[]> {
+  const { data, error } = await supabase
+    .from('business_users')
+    .select('*')
+    .eq('business_id', businessId)
+    .eq('active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo usuarios: ${error.message}`);
+  return data || [];
+}
+
+/** Obtiene un usuario específico. */
+export async function getBusinessUser(userId: string): Promise<BusinessUser | null> {
+  const { data, error } = await supabase
+    .from('business_users')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error obteniendo usuario: ${error.message}`);
+  return data || null;
+}
+
+/** Actualiza un usuario. */
+export async function updateBusinessUser(userId: string, updates: Partial<BusinessUser>) {
+  const { data, error } = await supabase
+    .from('business_users')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Error actualizando usuario: ${error.message}`);
+  return data;
+}
+
+/** Desactiva un usuario (soft delete). */
+export async function deactivateBusinessUser(userId: string) {
+  const user = await updateBusinessUser(userId, { active: false });
+  // Un usuario desactivado no debe poder seguir entrando con tokens que ya tenía.
+  const { error } = await supabase.from('business_access_tokens').update({ active: false }).eq('business_user_id', userId);
+  if (error) throw new Error(`Error revocando tokens del usuario: ${error.message}`);
+  accessCache.clear();
+  return user;
 }

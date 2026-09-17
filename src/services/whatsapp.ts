@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { currentTenant } from './tenant';
 
 // Meta retira cada versión de la Graph API a los ~2 años; al pedir una vencida la sustituye
 // sin avisar. Revisar la cabecera "facebook-api-version" de las respuestas al actualizar.
@@ -6,8 +7,23 @@ const GRAPH_API = 'https://graph.facebook.com/v25.0';
 
 const graph = axios.create({ timeout: 30_000 });
 
+/**
+ * Credenciales del número que atiende: las del negocio en curso o, fuera de un negocio, las de VELAMIA.
+ * Un negocio nunca usa el número ni el token de VELAMIA como respaldo.
+ */
+function credentials() {
+  const tenant = currentTenant();
+  if (!tenant) {
+    return { token: process.env.WHATSAPP_TOKEN || '', phoneId: process.env.WHATSAPP_PHONE_ID || '', wabaId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '' };
+  }
+  if (!tenant.whatsappToken || !tenant.whatsappPhoneId) {
+    throw new Error(`El negocio ${tenant.name} no tiene configurado su número de WhatsApp (token o Phone Number ID)`);
+  }
+  return { token: tenant.whatsappToken, phoneId: tenant.whatsappPhoneId, wabaId: tenant.wabaId };
+}
+
 function authHeaders() {
-  return { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` };
+  return { Authorization: `Bearer ${credentials().token}` };
 }
 
 /**
@@ -28,7 +44,7 @@ export function getSentMessageId(responseData: any): string | undefined {
 async function postMessage(payload: Record<string, any>, label: string) {
   try {
     const response = await graph.post(
-      `${GRAPH_API}/${process.env.WHATSAPP_PHONE_ID}/messages`,
+      `${GRAPH_API}/${credentials().phoneId}/messages`,
       { messaging_product: 'whatsapp', ...payload },
       { headers: authHeaders() }
     );
@@ -71,8 +87,8 @@ export function sendTemplateMessage(phoneNumber: string, templateName: string, l
 }
 
 export async function getMessageTemplates(): Promise<any[]> {
-  const waba = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-  if (!waba) throw new Error('Falta la variable WHATSAPP_BUSINESS_ACCOUNT_ID');
+  const waba = credentials().wabaId;
+  if (!waba) throw new Error(currentTenant() ? `El negocio ${currentTenant()!.name} no tiene WhatsApp Business Account ID` : 'Falta la variable WHATSAPP_BUSINESS_ACCOUNT_ID');
 
   const response = await graph.get(`${GRAPH_API}/${waba}/message_templates`, {
     headers: authHeaders(),

@@ -1059,13 +1059,34 @@
 
         // Todas las peticiones pasan por el backend autenticado: el navegador
         // nunca maneja claves de Supabase ni de WhatsApp.
+        const BUSINESS_KEY = 'currentBusinessId';
+
+        function getCurrentBusinessId() {
+            try {
+                return localStorage.getItem(BUSINESS_KEY) || '';
+            } catch {
+                return '';
+            }
+        }
+
+        function setCurrentBusinessId(value) {
+            try {
+                if (value) localStorage.setItem(BUSINESS_KEY, value);
+                else localStorage.removeItem(BUSINESS_KEY);
+            } catch {
+                // sin almacenamiento: se trabaja en VELAMIA
+            }
+        }
+
         async function api(path, options = {}) {
             const token = getToken();
+            const businessId = getCurrentBusinessId();
             const res = await fetch(`${API_URL}${path}`, {
                 ...options,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
+                    ...(businessId ? { 'X-Business-Id': businessId } : {}),
                     ...(options.headers || {})
                 }
             });
@@ -1126,6 +1147,304 @@
             return !!until && until > new Date();
         }
 
+        // ---------- Administración de negocios (solo con la contraseña maestra) ----------
+        const EMPTY_BUSINESS_FORM = { name: '', preset: 'tienda', displayPhoneNumber: '', phoneNumberId: '', wabaId: '', metaAccessToken: '', openaiApiKey: '' };
+        const fieldStyle = { width: '100%', padding: '8px', border: '1px solid var(--rosa-palo-suave)', borderRadius: '4px', boxSizing: 'border-box' };
+        const labelStyle = { display: 'block', fontSize: '13px', marginBottom: '5px', fontWeight: '600' };
+        const buttonStyle = { padding: '8px 14px', background: 'var(--terracota)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' };
+        const secondaryButtonStyle = { ...buttonStyle, background: 'var(--rosa-palo-suave)', color: 'var(--texto)' };
+
+        function CredentialFields({ form, setForm, business }) {
+            const field = (key, label, placeholder, secret, hint) => (
+                <div style={{ marginBottom: '12px' }}>
+                    <label style={labelStyle}>{label}</label>
+                    <input
+                        type={secret ? 'password' : 'text'}
+                        autoComplete="off"
+                        value={form[key]}
+                        onChange={e => setForm({ ...form, [key]: e.target.value })}
+                        placeholder={hint ? `Guardado ${hint} · déjalo vacío para conservarlo` : placeholder}
+                        style={fieldStyle}
+                    />
+                </div>
+            );
+            return (
+                <div>
+                    {field('displayPhoneNumber', 'Número de WhatsApp del negocio', business?.meta_phone_number || 'Ej: +593 99 123 4567')}
+                    {field('phoneNumberId', 'Phone Number ID (Meta)', business?.meta_phone_number_id || 'Ej: 123456789012345')}
+                    {field('wabaId', 'WhatsApp Business Account ID (Meta)', business?.meta_business_account_id || 'Ej: 109876543210987')}
+                    {field('metaAccessToken', 'Token de acceso de Meta', 'Token permanente del usuario del sistema', true, business?.meta_access_token_hint)}
+                    {field('openaiApiKey', 'Clave de OpenAI (API key)', 'sk-...', true, business?.openai_api_key_hint)}
+                </div>
+            );
+        }
+
+        function BusinessCard({ business, selected, onSelect, onChanged }) {
+            const [mode, setMode] = useState(null); // 'keys' | 'access'
+            const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
+            const [busy, setBusy] = useState(false);
+            const [testResult, setTestResult] = useState(null);
+            const [newToken, setNewToken] = useState(null);
+            const [tokens, setTokens] = useState([]);
+
+            async function saveKeys() {
+                setBusy(true);
+                try {
+                    await api(`/api/businesses/${business.id}/credentials`, { method: 'PUT', body: JSON.stringify(form) });
+                    setForm(EMPTY_BUSINESS_FORM);
+                    setMode(null);
+                    onChanged();
+                } catch (err) {
+                    alert('Error guardando claves: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            async function testKeys() {
+                setBusy(true);
+                setTestResult(null);
+                try {
+                    setTestResult(await api(`/api/businesses/${business.id}/test-credentials`, { method: 'POST' }));
+                } catch (err) {
+                    alert('Error probando claves: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            async function loadTokens() {
+                try {
+                    setTokens(await api(`/api/businesses/${business.id}/tokens`));
+                } catch (err) {
+                    alert('Error cargando accesos: ' + err.message);
+                }
+            }
+
+            async function generateToken() {
+                if (!confirm(`¿Generar un nuevo token de acceso para ${business.name}?`)) return;
+                setBusy(true);
+                try {
+                    const data = await api(`/api/businesses/${business.id}/generate-access-token`, { method: 'POST' });
+                    setNewToken(data);
+                    loadTokens();
+                } catch (err) {
+                    alert('Error generando token: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            async function revokeToken(tokenId) {
+                if (!confirm('¿Revocar este acceso? Quien lo use ya no podrá entrar.')) return;
+                try {
+                    await api(`/api/businesses/${business.id}/tokens/${tokenId}`, { method: 'DELETE' });
+                    loadTokens();
+                } catch (err) {
+                    alert('Error revocando: ' + err.message);
+                }
+            }
+
+            async function toggleActive() {
+                const action = business.active ? 'desactivar' : 'activar';
+                if (!confirm(`¿Seguro que quieres ${action} ${business.name}? ${business.active ? 'El bot dejará de responder en su número y su acceso al CRM se cerrará.' : ''}`)) return;
+                try {
+                    await api(`/api/businesses/${business.id}`, { method: 'PATCH', body: JSON.stringify({ active: !business.active }) });
+                    onChanged();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
+            const status = (ok, text) => <span style={{ fontSize: '12px', color: ok ? '#2e7d32' : '#c62828' }}>{ok ? '✅' : '⚠️'} {text}</span>;
+
+            return (
+                <div style={{ border: '1px solid var(--rosa-palo-suave)', borderRadius: '8px', padding: '15px', background: selected ? 'var(--rosa-palo-suave)' : 'white', opacity: business.active ? 1 : 0.6 }}>
+                    <h4 style={{ marginBottom: '6px' }}>🏢 {business.name}{business.active ? '' : ' (desactivado)'}</h4>
+                    <p style={{ fontSize: '12px', color: 'var(--texto-suave)' }}>📱 {business.meta_phone_number || 'Sin número'}</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '8px 0' }}>
+                        {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
+                        {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
+                        {business.active && <button style={buttonStyle} onClick={() => onSelect(selected ? null : business.id)}>{selected ? 'Volver a VELAMIA' : 'Trabajar en este negocio'}</button>}
+                        <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>
+                        <button style={secondaryButtonStyle} onClick={() => { setMode(mode === 'access' ? null : 'access'); if (mode !== 'access') loadTokens(); }}>👤 Accesos</button>
+                        <button style={secondaryButtonStyle} onClick={toggleActive}>{business.active ? 'Desactivar' : 'Activar'}</button>
+                    </div>
+
+                    {mode === 'keys' && (
+                        <div style={{ marginTop: '14px', background: 'var(--beige-claro)', padding: '12px', borderRadius: '6px' }}>
+                            <CredentialFields form={form} setForm={setForm} business={business} />
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                <button style={buttonStyle} disabled={busy} onClick={saveKeys}>{busy ? 'Guardando...' : 'Guardar claves'}</button>
+                                <button style={secondaryButtonStyle} disabled={busy} onClick={testKeys}>Probar conexión</button>
+                            </div>
+                            {testResult && (
+                                <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {status(testResult.whatsapp.ok, `WhatsApp: ${testResult.whatsapp.detail}`)}
+                                    {status(testResult.openai.ok, `OpenAI: ${testResult.openai.detail}`)}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {mode === 'access' && (
+                        <div style={{ marginTop: '14px', background: 'var(--beige-claro)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                            <p style={{ marginBottom: '8px' }}>El dueño entra al CRM escribiendo su token en la pantalla de ingreso y solo ve su negocio. Cada token vence a los 90 días.</p>
+                            <button style={buttonStyle} disabled={busy} onClick={generateToken}>+ Generar token de acceso</button>
+                            {newToken && (
+                                <div style={{ marginTop: '10px', padding: '10px', background: 'white', border: '1px dashed var(--terracota)', borderRadius: '6px' }}>
+                                    <strong>Cópialo ahora, no se vuelve a mostrar:</strong>
+                                    <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', margin: '6px 0' }}>{newToken.accessToken}</div>
+                                    <button style={secondaryButtonStyle} onClick={() => navigator.clipboard?.writeText(newToken.accessToken)}>Copiar</button>
+                                </div>
+                            )}
+                            <div style={{ marginTop: '10px' }}>
+                                {tokens.length === 0 ? <p style={{ color: 'var(--texto-suave)' }}>Sin tokens generados.</p> : tokens.map(t => (
+                                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--rosa-palo-suave)' }}>
+                                        <span>
+                                            {t.active ? '🟢' : '⚪'} {t.business_users?.email || 'Acceso del negocio'} · creado {String(t.created_at).slice(0, 10)}
+                                            {t.expires_at ? ` · vence ${String(t.expires_at).slice(0, 10)}` : ''}
+                                            {t.last_used ? ` · último uso ${String(t.last_used).slice(0, 10)}` : ' · sin uso'}
+                                        </span>
+                                        {t.active && <button style={secondaryButtonStyle} onClick={() => revokeToken(t.id)}>Revocar</button>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function BusinessesPanel({ businesses, currentBusinessId, onSelect, onChanged }) {
+            const [showForm, setShowForm] = useState(false);
+            const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
+            const [saving, setSaving] = useState(false);
+
+            async function create() {
+                if (!form.name.trim()) return alert('Escribe el nombre del negocio');
+                setSaving(true);
+                try {
+                    await api('/api/businesses', { method: 'POST', body: JSON.stringify(form) });
+                    setForm(EMPTY_BUSINESS_FORM);
+                    setShowForm(false);
+                    onChanged();
+                } catch (err) {
+                    alert('Error creando negocio: ' + err.message);
+                } finally {
+                    setSaving(false);
+                }
+            }
+
+            return (
+                <div style={{ padding: '20px' }}>
+                    <h2 style={{ marginBottom: '8px' }}>🏢 Negocios</h2>
+                    <p style={{ color: 'var(--texto-suave)', fontSize: '13px', marginBottom: '20px' }}>
+                        Cada negocio tiene su propio número de WhatsApp, su clave de OpenAI, su catálogo, sus chats y su configuración. Nada se comparte con VELAMIA.
+                        {currentBusinessId ? '' : ' Ahora estás trabajando en VELAMIA.'}
+                    </p>
+
+                    {businesses.length === 0 ? (
+                        <p style={{ color: 'var(--texto-suave)' }}>No hay negocios creados aún.</p>
+                    ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px', marginBottom: '30px' }}>
+                            {businesses.map(b => (
+                                <BusinessCard key={b.id} business={b} selected={currentBusinessId === b.id} onSelect={onSelect} onChanged={onChanged} />
+                            ))}
+                        </div>
+                    )}
+
+                    {!showForm ? (
+                        <button style={buttonStyle} onClick={() => setShowForm(true)}>+ Nuevo negocio</button>
+                    ) : (
+                        <div style={{ background: 'var(--beige-claro)', padding: '20px', borderRadius: '8px', maxWidth: '520px' }}>
+                            <h3 style={{ marginBottom: '12px' }}>Nuevo negocio</h3>
+                            <div style={{ marginBottom: '12px' }}>
+                                <label style={labelStyle}>Nombre del negocio</label>
+                                <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ej: IZA SHOES" style={fieldStyle} />
+                            </div>
+                            <div style={{ marginBottom: '12px' }}>
+                                <label style={labelStyle}>Tipo de negocio (plantilla inicial)</label>
+                                <select value={form.preset} onChange={e => setForm({ ...form, preset: e.target.value })} style={fieldStyle}>
+                                    <option value="tienda">Tienda de productos (por unidad, sin fecha de evento)</option>
+                                    <option value="eventos">Detalles para eventos (por docena, con fecha de evento)</option>
+                                </select>
+                            </div>
+                            <p style={{ fontSize: '12px', color: 'var(--texto-suave)', margin: '4px 0 12px' }}>Las claves se pueden cargar ahora o después desde el botón 🔑 Claves.</p>
+                            <CredentialFields form={form} setForm={setForm} />
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button style={{ ...buttonStyle, flex: 1 }} disabled={saving} onClick={create}>{saving ? 'Guardando...' : 'Crear negocio'}</button>
+                                <button style={{ ...secondaryButtonStyle, flex: 1 }} onClick={() => { setShowForm(false); setForm(EMPTY_BUSINESS_FORM); }}>Cancelar</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ---------- Claves del propio negocio (dueño) ----------
+        function OwnerKeysPanel({ business, onChanged }) {
+            const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
+            const [busy, setBusy] = useState(false);
+            const [testResult, setTestResult] = useState(null);
+
+            async function save() {
+                setBusy(true);
+                try {
+                    await api('/api/me/credentials', { method: 'PUT', body: JSON.stringify(form) });
+                    setForm(EMPTY_BUSINESS_FORM);
+                    onChanged();
+                    alert('Claves guardadas');
+                } catch (err) {
+                    alert('Error guardando claves: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            async function test() {
+                setBusy(true);
+                setTestResult(null);
+                try {
+                    setTestResult(await api('/api/me/test-credentials', { method: 'POST' }));
+                } catch (err) {
+                    alert('Error probando claves: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            const status = (ok, text) => <div style={{ fontSize: '13px', color: ok ? '#2e7d32' : '#c62828' }}>{ok ? '✅' : '⚠️'} {text}</div>;
+
+            return (
+                <div style={{ padding: '20px', maxWidth: '560px' }}>
+                    <h2 style={{ marginBottom: '8px' }}>🔑 {business?.name || 'Mi negocio'} · Claves</h2>
+                    <p style={{ color: 'var(--texto-suave)', fontSize: '13px', marginBottom: '16px' }}>
+                        El bot responde desde tu número de WhatsApp y usa tu propia cuenta de OpenAI. Las claves se guardan cifradas y nunca se muestran completas.
+                    </p>
+                    {business && (
+                        <div style={{ marginBottom: '14px' }}>
+                            {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
+                            {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
+                        </div>
+                    )}
+                    <CredentialFields form={form} setForm={setForm} business={business} />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button style={buttonStyle} disabled={busy} onClick={save}>{busy ? 'Guardando...' : 'Guardar claves'}</button>
+                        <button style={secondaryButtonStyle} disabled={busy} onClick={test}>Probar conexión</button>
+                    </div>
+                    {testResult && (
+                        <div style={{ marginTop: '12px' }}>
+                            {status(testResult.whatsapp.ok, `WhatsApp: ${testResult.whatsapp.detail}`)}
+                            {status(testResult.openai.ok, `OpenAI: ${testResult.openai.detail}`)}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
         function LoginScreen({ onLogin, branding }) {
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
@@ -1144,6 +1463,8 @@
                     const data = await res.json().catch(() => ({ error: 'El servidor no está disponible, intenta en unos segundos' }));
                     if (!res.ok) throw new Error(data.error || 'No se pudo entrar');
                     setToken(data.token);
+                    // Un negocio entra siempre al suyo; el administrador empieza en VELAMIA.
+                    setCurrentBusinessId('');
                     onLogin();
                 } catch (err) {
                     setError(err.message);
@@ -1158,7 +1479,7 @@
                         <img src={logoOf(branding)} alt={branding.name || 'Logo'} />
                         <input
                             type="password"
-                            placeholder="Contraseña"
+                            placeholder="Contraseña o token de tu negocio"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && submit()}
@@ -1483,6 +1804,10 @@
             const [deletingChat, setDeletingChat] = useState(false);
             const [sending, setSending] = useState(false);
             const [biz, setBiz] = useState(null);
+            const [businesses, setBusinesses] = useState([]);
+            const currentBusinessId = getCurrentBusinessId() || null;
+            const [session, setSession] = useState(null);
+            const isAdmin = session?.role === 'admin';
             const unit = biz?.sales.unitSingular || 'unidad';
             const unitPlural = biz?.sales.unitPlural || 'unidades';
             const productEmoji = biz?.business.productEmoji || '🛍️';
@@ -1492,6 +1817,7 @@
             const stickToBottom = useRef(true);
 
             useEffect(() => {
+                loadSession();
                 loadConversations();
                 loadStats();
                 loadBotStatus();
@@ -1664,6 +1990,36 @@
                     alert('Error cambiando estado del bot: ' + err.message);
                     setBotEnabled(!newValue);
                 }
+            }
+
+            async function loadSession() {
+                try {
+                    const data = await api('/api/session');
+                    setSession(data);
+                    if (data.role === 'admin') loadBusinesses();
+                } catch (err) {
+                    // El negocio elegido ya no existe o fue desactivado: se vuelve a VELAMIA.
+                    if (getCurrentBusinessId()) {
+                        setCurrentBusinessId('');
+                        window.location.reload();
+                    }
+                    console.error('Error cargando sesión:', err);
+                }
+            }
+
+            async function loadBusinesses() {
+                try {
+                    const data = await api('/api/businesses');
+                    setBusinesses(Array.isArray(data) ? data : []);
+                } catch (err) {
+                    console.error('Error cargando negocios:', err);
+                }
+            }
+
+            // Cambiar de negocio recarga todo el CRM: chats, catálogo, perfil y configuración son de ese negocio.
+            function selectBusiness(businessId) {
+                setCurrentBusinessId(businessId || '');
+                window.location.reload();
             }
 
             async function sendPhoto() {
@@ -1880,6 +2236,13 @@
                                 </div>
                             </div>
                             <div className="header-actions">
+                                {isAdmin && businesses.length > 0 && (
+                                    <select value={currentBusinessId || ''} onChange={(e) => selectBusiness(e.target.value || null)} style={{ padding: '7px 14px', borderRadius: '4px', border: '1px solid var(--rosa-palo-suave)', fontSize: '13px', marginRight: '10px' }}>
+                                        <option value="">🏢 VELAMIA (predeterminado)</option>
+                                        {businesses.filter(b => b.active).map(b => <option key={b.id} value={b.id}>🏢 {b.name}</option>)}
+                                    </select>
+                                )}
+                                {session && !isAdmin && <span style={{ fontSize: '13px', marginRight: '10px' }}>🏢 {session.business?.name}</span>}
                                 <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
                                     <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
                                 </div>
@@ -1888,6 +2251,8 @@
                         </div>
 
                         <div className="nav-tabs">
+                            {isAdmin && <div className={`nav-tab ${activeTab === 'negocios' ? 'active' : ''}`} onClick={() => setActiveTab('negocios')}>🏢 Negocios</div>}
+                            {session && session.role === 'owner' && <div className={`nav-tab ${activeTab === 'claves' ? 'active' : ''}`} onClick={() => setActiveTab('claves')}>🔑 Claves</div>}
                             <div className={`nav-tab ${activeTab === 'conversaciones' ? 'active' : ''}`} onClick={() => setActiveTab('conversaciones')}>💬 Conversaciones</div>
                             <div className={`nav-tab ${activeTab === 'cotizaciones' ? 'active' : ''}`} onClick={() => setActiveTab('cotizaciones')}>🧾 Cotizaciones</div>
                             <div className={`nav-tab ${activeTab === 'pedidos' ? 'active' : ''}`} onClick={() => setActiveTab('pedidos')}>🛍️ Pedidos</div>
@@ -1918,6 +2283,18 @@
                                 </div>
                             </div>
                             )}
+
+                        {activeTab === 'negocios' && isAdmin && (
+                        <div className="content">
+                            <BusinessesPanel businesses={businesses} currentBusinessId={currentBusinessId} onSelect={selectBusiness} onChanged={loadBusinesses} />
+                        </div>
+                        )}
+
+                        {activeTab === 'claves' && session?.business && (
+                        <div className="content">
+                            <OwnerKeysPanel business={session.business} onChanged={loadSession} />
+                        </div>
+                        )}
 
                         {activeTab === 'conversaciones' && (
                         <div className={`content ${selectedConv ? 'chat-open' : ''}`}>
@@ -2255,6 +2632,7 @@
 
             return <App branding={branding} onBrandingChange={changeBranding} onLogout={() => {
                 setToken(null);
+                setCurrentBusinessId('');
                 setAuthenticated(false);
             }} />;
         }
