@@ -42,6 +42,8 @@ import {
   deactivateBusinessUser,
   createBusinessAccessToken,
   validateBusinessAccessToken,
+  authenticateBusinessUser,
+  changeOwnPassword,
   listBusinessAccessTokens,
   revokeBusinessAccessToken
 } from './db';
@@ -176,25 +178,43 @@ app.post(['/api/login', '/api/auth/login/business'], async (req: Request, res: R
     return res.status(429).json({ error: 'Demasiados intentos. Espera 15 minutos e intenta de nuevo.' });
   }
 
-  const secret = String(req.body?.password || req.body?.accessToken || '').trim();
-  if (isPasswordValid(secret)) {
-    loginFailures.delete(ip);
-    return res.json({ token: issueSessionToken(), role: 'admin' });
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const password = String(req.body?.password || req.body?.accessToken || '');
+  const fail = () => {
+    loginFailures.set(ip, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + LOGIN_WINDOW_MS });
+    res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+  };
+
+  // Administradora: usuario "admin" con la contraseña maestra.
+  if (username === 'admin' || !username) {
+    if (isPasswordValid(password)) {
+      loginFailures.delete(ip);
+      return res.json({ token: issueSessionToken(), role: 'admin' });
+    }
+    if (username === 'admin') return fail();
   }
 
   try {
-    const access = await validateBusinessAccessToken(secret);
+    // Usuario de una empresa (correo y contraseña).
+    if (username) {
+      const user = await authenticateBusinessUser(username, password);
+      if (!user) return fail();
+      loginFailures.delete(ip);
+      return res.json({ token: issueSessionToken(user), role: user.role, businessId: user.businessId });
+    }
+
+    // Tokens antiguos: se siguen aceptando mientras estén vigentes.
+    const access = await validateBusinessAccessToken(password.trim());
     if (access) {
       loginFailures.delete(ip);
       return res.json({ token: issueSessionToken(access), role: access.role, businessId: access.businessId });
     }
   } catch (error: any) {
-    console.error('Error validando token de negocio:', error.message);
+    console.error('Error validando acceso:', error.message);
     return res.status(500).json({ error: 'No se pudo validar el acceso, intenta de nuevo' });
   }
 
-  loginFailures.set(ip, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + LOGIN_WINDOW_MS });
-  res.status(401).json({ error: 'Contraseña o token incorrecto' });
+  fail();
 });
 
 // La pantalla de ingreso muestra el nombre y el logo antes de iniciar sesión: solo datos públicos.
@@ -772,108 +792,121 @@ app.delete('/api/businesses/:businessId/tokens/:tokenId', requireAdminSession, r
   }
 });
 
-// ---------- USUARIOS DE NEGOCIO (solo admin) ----------
+// ---------- USUARIOS DE EMPRESAS (solo admin) ----------
+// La empresa de la ruta puede ser un id de negocio o "velamia".
 
-app.get('/api/businesses/:businessId/users', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+/** Verifica que la empresa exista (VELAMIA siempre existe). */
+async function companyExists(req: Request, res: Response) {
+  const businessId = companyIdOf(req);
+  if (businessId && !(await getBusinessRow(businessId))) {
+    res.status(404).json({ error: 'Empresa no encontrada' });
+    return false;
+  }
+  return true;
+}
+
+/** El usuario debe pertenecer a la empresa de la ruta: así no se toca un usuario de otra empresa. */
+async function userOfCompany(req: Request, res: Response) {
+  const user = await getBusinessUser(req.params.userId);
+  if (!user || (user.business_id ?? null) !== companyIdOf(req)) {
+    res.status(404).json({ error: 'Usuario no encontrado en esta empresa' });
+    return null;
+  }
+  return user;
+}
+
+function sendUserError(res: Response, error: any) {
+  const message = String(error.message || error);
+  const status = /ya existe/.test(message) ? 409 : /contraseña debe/.test(message) ? 400 : 500;
+  res.status(status).json({ error: message });
+}
+
+app.get('/api/businesses/:businessId/users', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
   try {
-    res.json(await getBusinessUsers(req.params.businessId));
+    res.json(await getBusinessUsers(companyIdOf(req)));
   } catch (error: any) {
     console.error('Error cargando usuarios:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/businesses/:businessId/users', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+app.post('/api/businesses/:businessId/users', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
   try {
-    const { businessId } = req.params;
     const email = String(req.body?.email || '').trim().toLowerCase();
     const fullName = String(req.body?.fullName || '').trim();
     const role = req.body?.role || 'owner';
+    const password = String(req.body?.password || '');
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !fullName) {
-      return res.status(400).json({ error: 'Email válido y nombre son requeridos' });
+      return res.status(400).json({ error: 'Nombre y un correo válido son requeridos' });
     }
-    if (!ROLES.includes(role)) {
-      return res.status(400).json({ error: 'Rol inválido: owner | manager | staff' });
-    }
-    if (!(await getBusinessRow(businessId))) return res.status(404).json({ error: 'Negocio no encontrado' });
+    if (!ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido' });
+    if (!(await companyExists(req, res))) return;
 
-    const user = await createBusinessUser(businessId, email, fullName, role);
+    const user = await createBusinessUser(companyIdOf(req), email, fullName, role, password);
     console.log(`👤 Usuario creado: ${email}`);
     res.status(201).json(user);
   } catch (error: any) {
     console.error('Error creando usuario:', error.message);
-    res.status(error.message.includes('ya existe') ? 409 : 500).json({ error: error.message });
+    sendUserError(res, error);
   }
 });
 
-/** El usuario debe pertenecer al negocio de la ruta: así no se toca un usuario de otro negocio. */
-async function userOfBusiness(req: Request, res: Response) {
-  const user = await getBusinessUser(req.params.userId);
-  if (!user || user.business_id !== req.params.businessId) {
-    res.status(404).json({ error: 'Usuario no encontrado en este negocio' });
-    return null;
-  }
-  return user;
-}
-
-app.post('/api/businesses/:businessId/users/:userId/generate-token', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+/** Cambia nombre, rol, contraseña o estado de un usuario. */
+app.patch('/api/businesses/:businessId/users/:userId', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
   try {
-    const user = await userOfBusiness(req, res);
-    if (!user) return;
-    if (!user.active) return res.status(400).json({ error: 'El usuario está desactivado' });
-
-    const { plaintoken, expiresAt } = await createBusinessAccessToken(user.business_id, user.id);
-    console.log(`🔐 Token generado para ${user.email}`);
-    res.status(201).json({
-      accessToken: plaintoken,
-      expiresAt,
-      user: { id: user.id, email: user.email, fullName: user.full_name, role: user.role },
-      message: `Token para ${user.email}. Solo se muestra una vez.`
-    });
-  } catch (error: any) {
-    console.error('Error generando token:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.patch('/api/businesses/:businessId/users/:userId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
-  try {
-    const user = await userOfBusiness(req, res);
+    const user = await userOfCompany(req, res);
     if (!user) return;
 
-    const { fullName, role, active } = req.body || {};
-    const updates: any = {};
-    if (fullName) updates.full_name = String(fullName).trim();
-    if (role !== undefined) {
-      if (!ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido: owner | manager | staff' });
-      updates.role = role;
-    }
+    const { fullName, role, active, password } = req.body || {};
     if (active === false) {
       await deactivateBusinessUser(user.id);
-      delete updates.active;
-    } else if (active === true) {
-      updates.active = true;
+      console.log(`👤 Usuario desactivado: ${user.email}`);
     }
 
+    const updates: { full_name?: string; role?: any; active?: boolean; password?: string } = {};
+    if (fullName) updates.full_name = String(fullName).trim();
+    if (role !== undefined) {
+      if (!ROLES.includes(role)) return res.status(400).json({ error: 'Rol inválido' });
+      updates.role = role;
+    }
+    if (active === true) updates.active = true;
+    if (password !== undefined) updates.password = String(password);
+
     const updated = Object.keys(updates).length ? await updateBusinessUser(user.id, updates) : await getBusinessUser(user.id);
+    if (password !== undefined) console.log(`🔑 Contraseña cambiada por la administradora: ${user.email}`);
     res.json(updated);
   } catch (error: any) {
     console.error('Error actualizando usuario:', error.message);
-    res.status(500).json({ error: error.message });
+    sendUserError(res, error);
   }
 });
 
-app.delete('/api/businesses/:businessId/users/:userId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+app.delete('/api/businesses/:businessId/users/:userId', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
   try {
-    const user = await userOfBusiness(req, res);
+    const user = await userOfCompany(req, res);
     if (!user) return;
     await deactivateBusinessUser(user.id);
-    console.log(`👤 Usuario desactivado y tokens revocados: ${user.email}`);
+    console.log(`👤 Usuario desactivado: ${user.email}`);
     res.json({ message: `Usuario ${user.email} desactivado` });
   } catch (error: any) {
     console.error('Error desactivando usuario:', error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/** Cada usuario cambia su propia contraseña confirmando la actual. */
+app.put('/api/me/password', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const session = getCrmSession(req);
+    if (!session.userId) {
+      return res.status(400).json({ error: 'La contraseña de la administradora se cambia en las variables del servidor (CRM_PASSWORD)' });
+    }
+    const changed = await changeOwnPassword(session.userId, String(req.body?.currentPassword || ''), String(req.body?.newPassword || ''));
+    if (!changed) return res.status(401).json({ error: 'La contraseña actual no es correcta' });
+    res.json({ success: true });
+  } catch (error: any) {
+    sendUserError(res, error);
   }
 });
 

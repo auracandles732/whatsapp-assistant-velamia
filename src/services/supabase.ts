@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { randomUUID, randomBytes, createHash } from 'crypto';
+import { randomUUID, randomBytes, createHash, scryptSync, timingSafeEqual } from 'crypto';
 import { currentTenant, TenantContext, encryptSecret, decryptSecret, maskSecret } from './tenant';
 import { normalizeProfile, BusinessProfile, STORE_PROFILE } from '../config/businessProfile';
 
@@ -994,93 +994,173 @@ export async function revokeBusinessAccessToken(businessId: string | null, token
   return (data || []).length > 0;
 }
 
-// ---------- BUSINESS USERS ----------
+// ---------- USUARIOS DE EMPRESAS (usuario y contraseña) ----------
+// El usuario es el correo, único en toda la plataforma. business_id vacío = usuario de VELAMIA.
 
 export interface BusinessUser {
   id: string;
-  business_id: string;
+  business_id: string | null;
   email: string;
   full_name: string;
-  role: 'owner' | 'manager' | 'staff';
+  role: BusinessRole;
   active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-/** Crea un nuevo usuario para un negocio. */
+const USER_COLUMNS = 'id, business_id, email, full_name, role, active, created_at, updated_at';
+export const MIN_PASSWORD_LENGTH = 8;
+
+/** scrypt con sal propia por usuario: la contraseña nunca se guarda ni se puede recuperar. */
+function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64);
+  return `scrypt:${salt.toString('base64url')}:${hash.toString('base64url')}`;
+}
+
+function verifyPassword(password: string, stored: string | null): boolean {
+  const [scheme, salt, hash] = String(stored || '').split(':');
+  if (scheme !== 'scrypt' || !salt || !hash) return false;
+  const expected = Buffer.from(hash, 'base64url');
+  const actual = scryptSync(password, Buffer.from(salt, 'base64url'), expected.length);
+  return timingSafeEqual(actual, expected);
+}
+
+function checkPasswordRules(password: string) {
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`);
+  }
+}
+
+const companyFilter = (businessId: string | null) => (businessId ? 'eq' : 'is');
+
 export async function createBusinessUser(
-  businessId: string,
+  businessId: string | null,
   email: string,
   fullName: string,
-  role: 'owner' | 'manager' | 'staff' = 'owner'
+  role: BusinessRole,
+  password: string
 ): Promise<BusinessUser> {
+  checkPasswordRules(password);
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('business_users')
     .insert([{
       id: randomUUID(),
       business_id: businessId,
-      email,
-      full_name: fullName,
+      email: email.trim().toLowerCase(),
+      full_name: fullName.trim(),
       role,
+      password_hash: hashPassword(password),
       active: true,
       created_at: now,
       updated_at: now
     }])
-    .select()
+    .select(USER_COLUMNS)
     .single();
 
-  if (error?.code === UNIQUE_VIOLATION) {
-    throw new Error(`El email ${email} ya existe en este negocio`);
-  }
+  if (error?.code === UNIQUE_VIOLATION) throw new Error(`El usuario ${email} ya existe`);
   if (error) throw new Error(`Error creando usuario: ${error.message}`);
-  return data;
+  return data as BusinessUser;
 }
 
-/** Obtiene todos los usuarios de un negocio. */
-export async function getBusinessUsers(businessId: string): Promise<BusinessUser[]> {
+export async function getBusinessUsers(businessId: string | null): Promise<BusinessUser[]> {
   const { data, error } = await supabase
     .from('business_users')
-    .select('*')
-    .eq('business_id', businessId)
-    .eq('active', true)
-    .order('created_at', { ascending: false });
+    .select(USER_COLUMNS)
+    .filter('business_id', companyFilter(businessId), businessId)
+    .order('created_at', { ascending: true });
 
   if (error) throw new Error(`Error obteniendo usuarios: ${error.message}`);
-  return data || [];
+  return (data || []) as BusinessUser[];
 }
 
-/** Obtiene un usuario específico. */
 export async function getBusinessUser(userId: string): Promise<BusinessUser | null> {
-  const { data, error } = await supabase
-    .from('business_users')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
-
+  const { data, error } = await supabase.from('business_users').select(USER_COLUMNS).eq('id', userId).maybeSingle();
   if (error) throw new Error(`Error obteniendo usuario: ${error.message}`);
-  return data || null;
+  return (data as BusinessUser) || null;
 }
 
-/** Actualiza un usuario. */
-export async function updateBusinessUser(userId: string, updates: Partial<BusinessUser>) {
+export async function updateBusinessUser(userId: string, updates: { full_name?: string; role?: BusinessRole; active?: boolean; password?: string }) {
+  const { password, ...rest } = updates;
+  const columns: Record<string, any> = { ...rest, updated_at: new Date().toISOString() };
+  if (password !== undefined) {
+    checkPasswordRules(password);
+    columns.password_hash = hashPassword(password);
+  }
   const { data, error } = await supabase
     .from('business_users')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(columns)
     .eq('id', userId)
-    .select()
+    .select(USER_COLUMNS)
     .single();
 
   if (error) throw new Error(`Error actualizando usuario: ${error.message}`);
-  return data;
+  userAccessCache.delete(userId);
+  return data as BusinessUser;
 }
 
-/** Desactiva un usuario (soft delete). */
 export async function deactivateBusinessUser(userId: string) {
   const user = await updateBusinessUser(userId, { active: false });
-  // Un usuario desactivado no debe poder seguir entrando con tokens que ya tenía.
+  // Tokens antiguos del usuario, si los tenía, tampoco sirven más.
   const { error } = await supabase.from('business_access_tokens').update({ active: false }).eq('business_user_id', userId);
-  if (error) throw new Error(`Error revocando tokens del usuario: ${error.message}`);
+  if (error) throw new Error(`Error revocando accesos del usuario: ${error.message}`);
   accessCache.clear();
   return user;
+}
+
+/** Ingreso con usuario y contraseña. Devuelve null si no coincide o si el usuario o su empresa están desactivados. */
+export async function authenticateBusinessUser(email: string, password: string): Promise<BusinessAccess | null> {
+  const { data, error } = await supabase
+    .from('business_users')
+    .select('id, business_id, role, active, password_hash, businesses(active)')
+    .eq('email', email.trim().toLowerCase())
+    .maybeSingle();
+
+  if (error) throw new Error(`Error validando usuario: ${error.message}`);
+  // Se calcula el hash aunque el usuario no exista: así no se puede saber qué correos están registrados.
+  const valid = verifyPassword(password, data?.password_hash || 'scrypt:AAAAAAAAAAAAAAAAAAAAAA:' + 'A'.repeat(86));
+  if (!data || !valid || !data.active) return null;
+
+  const business: any = Array.isArray(data.businesses) ? data.businesses[0] : data.businesses;
+  if (data.business_id && !business?.active) return null;
+
+  return { tokenId: '', businessId: data.business_id, userId: data.id, role: normalizeRole(data.role) };
+}
+
+function normalizeRole(role: unknown): BusinessRole {
+  return (['owner', 'manager', 'staff'].includes(String(role)) ? role : 'staff') as BusinessRole;
+}
+
+// Cada petición del CRM revisa que el usuario siga activo; un minuto de caché evita ir a la base cada vez.
+const userAccessCache = new Map<string, { at: number; access: BusinessAccess | null }>();
+
+export async function getActiveUserAccess(userId: string): Promise<BusinessAccess | null> {
+  const hit = userAccessCache.get(userId);
+  if (hit && Date.now() - hit.at < TENANT_CACHE_MS) return hit.access;
+
+  const { data, error } = await supabase
+    .from('business_users')
+    .select('id, business_id, role, active, businesses(active)')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Error validando usuario: ${error.message}`);
+  const business: any = data && (Array.isArray(data.businesses) ? data.businesses[0] : data.businesses);
+  const access = data && data.active && (!data.business_id || business?.active)
+    ? { tokenId: '', businessId: data.business_id, userId: data.id, role: normalizeRole(data.role) }
+    : null;
+
+  if (userAccessCache.size > 1000) userAccessCache.clear();
+  userAccessCache.set(userId, { at: Date.now(), access });
+  return access;
+}
+
+/** El propio usuario cambia su contraseña confirmando la actual. */
+export async function changeOwnPassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+  const { data, error } = await supabase.from('business_users').select('password_hash').eq('id', userId).maybeSingle();
+  if (error) throw new Error(`Error validando usuario: ${error.message}`);
+  if (!data || !verifyPassword(currentPassword, data.password_hash)) return false;
+  await updateBusinessUser(userId, { password: newPassword });
+  return true;
 }

@@ -1179,13 +1179,101 @@
             );
         }
 
+        const ROLE_LABELS = { owner: 'Dueño (todo)', manager: 'Encargado (atiende y edita, sin configuración)', staff: 'Solo consulta' };
+        const EMPTY_USER_FORM = { fullName: '', email: '', role: 'owner', password: '' };
+
+        /** Usuarios con que una empresa entra al CRM (correo y contraseña). */
+        function CompanyUsers({ company }) {
+            const [users, setUsers] = useState([]);
+            const [form, setForm] = useState(EMPTY_USER_FORM);
+            const [busy, setBusy] = useState(false);
+            const base = `/api/businesses/${company.id}/users`;
+
+            async function load() {
+                try {
+                    setUsers(await api(base));
+                } catch (err) {
+                    alert('Error cargando usuarios: ' + err.message);
+                }
+            }
+
+            useEffect(() => { load(); }, [company.id]);
+
+            async function create() {
+                if (!form.fullName.trim() || !form.email.trim()) return alert('Escribe el nombre y el correo');
+                if (form.password.length < 8) return alert('La contraseña debe tener al menos 8 caracteres');
+                setBusy(true);
+                try {
+                    await api(base, { method: 'POST', body: JSON.stringify(form) });
+                    alert(`Usuario creado.\n\nUsuario: ${form.email.trim().toLowerCase()}\nContraseña: la que escribiste`);
+                    setForm(EMPTY_USER_FORM);
+                    load();
+                } catch (err) {
+                    alert('Error creando usuario: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            async function update(user, changes, done) {
+                try {
+                    await api(`${base}/${user.id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+                    if (done) alert(done);
+                    load();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
+            function changePassword(user) {
+                const password = prompt(`Nueva contraseña para ${user.email} (mínimo 8 caracteres):`);
+                if (password === null) return;
+                if (password.length < 8) return alert('La contraseña debe tener al menos 8 caracteres');
+                update(user, { password }, 'Contraseña cambiada');
+            }
+
+            function toggle(user) {
+                if (user.active && !confirm(`¿Desactivar a ${user.email}? Ya no podrá entrar al CRM.`)) return;
+                update(user, { active: !user.active });
+            }
+
+            return (
+                <div style={{ marginTop: '14px', background: 'var(--beige-claro)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                    <p style={{ marginBottom: '10px' }}>Cada usuario entra al CRM con su correo y su contraseña, y solo ve {company.name}.</p>
+
+                    {users.length === 0 ? <p style={{ color: 'var(--texto-suave)', marginBottom: '10px' }}>Todavía no hay usuarios.</p> : users.map(u => (
+                        <div key={u.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--rosa-palo-suave)', opacity: u.active ? 1 : 0.6 }}>
+                            <div><strong>{u.full_name}</strong> {u.active ? '' : '(desactivado)'}</div>
+                            <div style={{ color: 'var(--texto-suave)' }}>{u.email}</div>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px', alignItems: 'center' }}>
+                                <select value={u.role} onChange={e => update(u, { role: e.target.value })} style={{ padding: '5px', fontSize: '12px' }}>
+                                    {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                </select>
+                                <button style={secondaryButtonStyle} onClick={() => changePassword(u)}>Cambiar contraseña</button>
+                                <button style={secondaryButtonStyle} onClick={() => toggle(u)}>{u.active ? 'Desactivar' : 'Activar'}</button>
+                            </div>
+                        </div>
+                    ))}
+
+                    <div style={{ marginTop: '14px' }}>
+                        <strong>Nuevo usuario</strong>
+                        <input style={{ ...fieldStyle, marginTop: '8px' }} placeholder="Nombre" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} />
+                        <input style={{ ...fieldStyle, marginTop: '8px' }} placeholder="Correo (será su usuario)" autoComplete="off" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                        <input style={{ ...fieldStyle, marginTop: '8px' }} type="password" autoComplete="new-password" placeholder="Contraseña (mínimo 8 caracteres)" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+                        <select style={{ ...fieldStyle, marginTop: '8px' }} value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+                            {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                        <button style={{ ...buttonStyle, marginTop: '10px' }} disabled={busy} onClick={create}>{busy ? 'Creando...' : '+ Crear usuario'}</button>
+                    </div>
+                </div>
+            );
+        }
+
         function BusinessCard({ business, selected, onSelect, onChanged }) {
             const [mode, setMode] = useState(null); // 'keys' | 'access'
             const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
             const [busy, setBusy] = useState(false);
             const [testResult, setTestResult] = useState(null);
-            const [newToken, setNewToken] = useState(null);
-            const [tokens, setTokens] = useState([]);
 
             async function saveKeys() {
                 setBusy(true);
@@ -1213,38 +1301,6 @@
                 }
             }
 
-            async function loadTokens() {
-                try {
-                    setTokens(await api(`/api/businesses/${business.id}/tokens`));
-                } catch (err) {
-                    alert('Error cargando accesos: ' + err.message);
-                }
-            }
-
-            async function generateToken() {
-                if (!confirm(`¿Generar un nuevo token de acceso para ${business.name}?`)) return;
-                setBusy(true);
-                try {
-                    const data = await api(`/api/businesses/${business.id}/generate-access-token`, { method: 'POST' });
-                    setNewToken(data);
-                    loadTokens();
-                } catch (err) {
-                    alert('Error generando token: ' + err.message);
-                } finally {
-                    setBusy(false);
-                }
-            }
-
-            async function revokeToken(tokenId) {
-                if (!confirm('¿Revocar este acceso? Quien lo use ya no podrá entrar.')) return;
-                try {
-                    await api(`/api/businesses/${business.id}/tokens/${tokenId}`, { method: 'DELETE' });
-                    loadTokens();
-                } catch (err) {
-                    alert('Error revocando: ' + err.message);
-                }
-            }
-
             async function toggleActive() {
                 const action = business.active ? 'desactivar' : 'activar';
                 if (!confirm(`¿Seguro que quieres ${action} ${business.name}? ${business.active ? 'El bot dejará de responder en su número y su acceso al CRM se cerrará.' : ''}`)) return;
@@ -1269,7 +1325,7 @@
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
                         {business.active && <button style={buttonStyle} onClick={() => onSelect(business.id)}>Entrar</button>}
                         {!business.legacy && <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>}
-                        <button style={secondaryButtonStyle} onClick={() => { setMode(mode === 'access' ? null : 'access'); if (mode !== 'access') loadTokens(); }}>👤 Accesos</button>
+                        <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'access' ? null : 'access')}>👤 Usuarios</button>
                         {!business.legacy && <button style={secondaryButtonStyle} onClick={toggleActive}>{business.active ? 'Desactivar' : 'Activar'}</button>}
                     </div>
 
@@ -1289,31 +1345,7 @@
                         </div>
                     )}
 
-                    {mode === 'access' && (
-                        <div style={{ marginTop: '14px', background: 'var(--beige-claro)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
-                            <p style={{ marginBottom: '8px' }}>El dueño entra al CRM escribiendo su token en la pantalla de ingreso y solo ve su negocio. Cada token vence a los 90 días.</p>
-                            <button style={buttonStyle} disabled={busy} onClick={generateToken}>+ Generar token de acceso</button>
-                            {newToken && (
-                                <div style={{ marginTop: '10px', padding: '10px', background: 'white', border: '1px dashed var(--terracota)', borderRadius: '6px' }}>
-                                    <strong>Cópialo ahora, no se vuelve a mostrar:</strong>
-                                    <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', margin: '6px 0' }}>{newToken.accessToken}</div>
-                                    <button style={secondaryButtonStyle} onClick={() => navigator.clipboard?.writeText(newToken.accessToken)}>Copiar</button>
-                                </div>
-                            )}
-                            <div style={{ marginTop: '10px' }}>
-                                {tokens.length === 0 ? <p style={{ color: 'var(--texto-suave)' }}>Sin tokens generados.</p> : tokens.map(t => (
-                                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--rosa-palo-suave)' }}>
-                                        <span>
-                                            {t.active ? '🟢' : '⚪'} {t.business_users?.email || 'Acceso del negocio'} · creado {String(t.created_at).slice(0, 10)}
-                                            {t.expires_at ? ` · vence ${String(t.expires_at).slice(0, 10)}` : ''}
-                                            {t.last_used ? ` · último uso ${String(t.last_used).slice(0, 10)}` : ' · sin uso'}
-                                        </span>
-                                        {t.active && <button style={secondaryButtonStyle} onClick={() => revokeToken(t.id)}>Revocar</button>}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {mode === 'access' && <CompanyUsers company={business} />}
                 </div>
             );
         }
@@ -1492,24 +1524,28 @@
         }
 
         function LoginScreen({ onLogin, branding }) {
+            const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
             const [checking, setChecking] = useState(false);
 
             async function submit() {
-                if (!password) return;
+                if (!username.trim() || !password) {
+                    setError('Escribe tu usuario y tu contraseña');
+                    return;
+                }
                 setChecking(true);
                 setError('');
                 try {
                     const res = await fetch(`${API_URL}/api/login`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password })
+                        body: JSON.stringify({ username: username.trim(), password })
                     });
                     const data = await res.json().catch(() => ({ error: 'El servidor no está disponible, intenta en unos segundos' }));
                     if (!res.ok) throw new Error(data.error || 'No se pudo entrar');
                     setToken(data.token);
-                    // Un negocio entra siempre al suyo; el administrador empieza en VELAMIA.
+                    // Un usuario entra siempre a su empresa; la administradora empieza en la pantalla de empresas.
                     setCurrentBusinessId('');
                     onLogin();
                 } catch (err) {
@@ -1525,12 +1561,23 @@
                         <h2 style={{ marginBottom: '6px' }}>CRM</h2>
                         <p style={{ fontSize: '13px', color: 'var(--texto-suave)', marginBottom: '16px' }}>Asistentes de WhatsApp</p>
                         <input
+                            type="text"
+                            placeholder="Usuario (correo)"
+                            autoComplete="username"
+                            autoCapitalize="none"
+                            value={username}
+                            onChange={e => setUsername(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && submit()}
+                            style={{ marginBottom: '10px' }}
+                            autoFocus
+                        />
+                        <input
                             type="password"
-                            placeholder="Contraseña o token de tu empresa"
+                            placeholder="Contraseña"
+                            autoComplete="current-password"
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && submit()}
-                            autoFocus
                         />
                         <button onClick={submit} disabled={checking}>
                             {checking ? 'Entrando...' : 'Entrar al CRM'}
@@ -2053,6 +2100,20 @@
                 }
             }
 
+            async function changeOwnPassword() {
+                const currentPassword = prompt('Escribe tu contraseña actual:');
+                if (currentPassword === null) return;
+                const newPassword = prompt('Escribe tu nueva contraseña (mínimo 8 caracteres):');
+                if (newPassword === null) return;
+                if (newPassword.length < 8) return alert('La contraseña debe tener al menos 8 caracteres');
+                try {
+                    await api('/api/me/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
+                    alert('Contraseña cambiada');
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
             // Volver a la pantalla general de empresas (solo administradora).
             function changeCompany() {
                 setCurrentBusinessId('');
@@ -2276,6 +2337,7 @@
                             <div className="header-actions">
                                 {session?.business && <span style={{ fontSize: '13px', marginRight: '10px' }}>🏢 {session.business.name}</span>}
                                 {isAdmin && <button className="btn-logout" style={{ marginRight: '8px' }} onClick={changeCompany}>Cambiar empresa</button>}
+                                {session && !isAdmin && <button className="btn-logout" style={{ marginRight: '8px' }} onClick={changeOwnPassword}>Mi contraseña</button>}
                                 <div className={`toggle-bot ${botEnabled ? 'active' : 'inactive'}`} onClick={toggleBotStatus}>
                                     <span>{botEnabled ? '🤖 Bot Activo' : '🚫 Bot Inactivo'}</span>
                                 </div>

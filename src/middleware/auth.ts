@@ -31,12 +31,15 @@ export function isPasswordValid(password: string): boolean {
 }
 
 /**
- * Sesión firmada. Sin "tid" es la del administrador (contraseña maestra); con "tid" es la de un negocio,
- * atada al token con que entró: si ese token se revoca o vence, la sesión deja de valer.
+ * Sesión firmada. Sin "uid" ni "tid" es la del administrador (contraseña maestra). Con "uid" es la de un usuario
+ * de una empresa; con "tid", la de un token antiguo. Si el usuario o el token se desactivan, la sesión deja de valer.
  */
-export function issueSessionToken(access?: { tokenId: string; businessId: string | null }): string {
+export function issueSessionToken(access?: { tokenId: string; userId: string | null; businessId: string | null }): string {
   const data: Record<string, any> = { exp: Date.now() + SESSION_DURATION_MS };
-  if (access) {
+  if (access?.userId && !access.tokenId) {
+    data.uid = access.userId;
+    data.bid = access.businessId;
+  } else if (access) {
     data.tid = access.tokenId;
     data.bid = access.businessId;
   }
@@ -45,7 +48,7 @@ export function issueSessionToken(access?: { tokenId: string; businessId: string
   return `${payload}.${signature}`;
 }
 
-function readSessionToken(token: string): { exp: number; tid?: string; bid?: string | null } | null {
+function readSessionToken(token: string): { exp: number; tid?: string; uid?: string; bid?: string | null } | null {
   if (!CRM_PASSWORD) return null;
 
   const [payload, signature] = token.split('.');
@@ -89,15 +92,15 @@ export async function requireCrmSession(req: Request, res: Response, next: NextF
   }
 
   try {
-    const { loadTenant, getActiveAccessById } = await import('../services/supabase');
+    const { loadTenant, getActiveAccessById, getActiveUserAccess } = await import('../services/supabase');
     let session: CrmSession;
     // undefined = sin empresa elegida; VELAMIA_ID = VELAMIA; otro = id del negocio.
     let businessId: string | undefined;
 
-    if (data.tid) {
-      const access = await getActiveAccessById(data.tid);
+    if (data.uid || data.tid) {
+      const access = data.uid ? await getActiveUserAccess(data.uid) : await getActiveAccessById(data.tid!);
       if (!access || (access.businessId ?? null) !== (data.bid ?? null)) {
-        return res.status(401).json({ error: 'Tu acceso fue revocado o venció. Pide un nuevo token.' });
+        return res.status(401).json({ error: 'Tu usuario fue desactivado o tu acceso venció. Vuelve a entrar.' });
       }
       businessId = access.businessId ?? VELAMIA_ID;
       session = { role: access.role, businessId, tokenId: access.tokenId, userId: access.userId };
@@ -149,7 +152,7 @@ export function requireAdminSession(req: Request, res: Response, next: NextFunct
 
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const data = token ? readSessionToken(token) : null;
-  if (!data || data.tid) {
+  if (!data || data.tid || data.uid) {
     return res.status(401).json({ error: 'Se requiere sesión de administrador' });
   }
 
