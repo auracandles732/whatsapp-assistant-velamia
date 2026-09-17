@@ -603,13 +603,14 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     // Siempre se confirma la fecha, pero una entrega muy justa la revisa la dueña (una vez al día por chat).
-    if (plan.delivery_date && daysUntil(plan.delivery_date) <= profile().dates.urgentDays
+    const batchProfile = getProfileForBatch(batch);
+    if (plan.delivery_date && daysUntil(plan.delivery_date) <= batchProfile.dates.urgentDays
       && !(await hasRecentNotification(conversationId, 'urgent_date'))) {
       const days = daysUntil(plan.delivery_date);
       const cuando = days < 0 ? 'ya pasó' : days === 0 ? 'es hoy' : days === 1 ? 'es mañana' : `faltan ${days} días`;
       await notifyOwner({
         conversationId, customerPhone: phoneNumber, customerName, event: 'urgent_date',
-        detail: `${profile().dates.eventLabel.replace(/^./, c => c.toUpperCase())} ${formatDate(plan.event_date)} · entrega ${formatDate(plan.delivery_date)} (${cuando})`
+        detail: `${batchProfile.dates.eventLabel.replace(/^./, c => c.toUpperCase())} ${formatDate(plan.event_date)} · entrega ${formatDate(plan.delivery_date)} (${cuando})`
       });
     }
 
@@ -697,9 +698,9 @@ async function respondToBatch(batch: PendingBatch) {
     // el bot se pausa y el pedido igual debe quedar anotado.
     if (saleIntent === 'quotation' || saleIntent === 'order') {
       const transcript = [
-        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : profile().business.name}: ${t.content}`),
+        ...conversationHistory.slice(-20).map(t => `${t.role === 'user' ? 'Cliente' : batchProfile.business.name}: ${t.content}`),
         `Cliente: ${aiContent}`,
-        `${profile().business.name}: ${plan.reply}`
+        `${batchProfile.business.name}: ${plan.reply}`
       ].join('\n');
 
       await registerSale(saleIntent, {
@@ -726,7 +727,7 @@ async function respondToBatch(batch: PendingBatch) {
         && plan.show_products.every(n => pendingProducts.includes(n));
       const photos = continuesPending ? pendingProducts : plan.show_products;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
-      await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'));
+      await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile);
     }
   } catch (error) {
     console.error('❌ Error respondiendo mensaje:', error);
@@ -734,7 +735,7 @@ async function respondToBatch(batch: PendingBatch) {
 }
 
 /** Envía hasta PHOTO_BATCH_SIZE fotos; si quedan más, las guarda y pregunta si desea verlas. */
-async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true) {
+async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true, batchProfile?: any) {
   const products = names
     .map(name => catalog.find(p => p.name === name))
     .filter(p => p && p.image_url);
@@ -742,12 +743,13 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
   const batch = products.slice(0, PHOTO_BATCH_SIZE);
   const rest = products.slice(PHOTO_BATCH_SIZE).map(p => p.name);
   console.log(`📸 Enviando ${batch.length} foto(s) de productos${rest.length ? ` (quedan ${rest.length})` : ''}`);
-  const { business, sales } = profile();
+  const profToUse = batchProfile || profile();
+  const { business, sales } = profToUse;
 
   // Una a una y en orden: si una falla, las demás igual se envían.
   for (const product of batch) {
     try {
-      const packaging = profile().packaging.enabled && product.description ? `\n🎁 Empaque: ${product.description}` : '';
+      const packaging = profToUse.packaging.enabled && product.description ? `\n🎁 Empaque: ${product.description}` : '';
       const caption = `${business.productEmoji} *${product.name}*\n💰 $${Number(product.price).toFixed(2)} ${sales.priceSuffix}${packaging}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
