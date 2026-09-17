@@ -1269,11 +1269,44 @@
             );
         }
 
+        /** ¿El bot de la empresa atiende? Obligatorios en rojo, recomendados en naranja. */
+        function ReadinessList({ readiness }) {
+            if (!readiness) return null;
+            return (
+                <div style={{ margin: '8px 0', fontSize: '12px' }}>
+                    <div style={{
+                        fontWeight: 600, padding: '6px 8px', borderRadius: '4px', marginBottom: '6px',
+                        background: readiness.botReady ? '#e8f5e9' : '#fdecea', color: readiness.botReady ? '#2e7d32' : '#c62828'
+                    }}>
+                        {readiness.botReady ? '🤖 ' : '⛔ '}{readiness.summary}
+                    </div>
+                    {readiness.items.map(item => (
+                        <div key={item.key} title={item.ok ? '' : item.hint} style={{ color: item.ok ? '#2e7d32' : item.required ? '#c62828' : '#b26a00', marginBottom: '2px' }}>
+                            {item.ok ? '✅' : item.required ? '🔴' : '⚠️'} {item.label}{item.key === 'catalog' && item.ok ? ` (${readiness.products})` : ''}
+                            {!item.ok && <div style={{ color: 'var(--texto-suave)', marginLeft: '20px' }}>{item.hint}</div>}
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        function ConnectResult({ result }) {
+            if (!result) return null;
+            return (
+                <div style={{ marginTop: '10px', fontSize: '12px' }}>
+                    {result.steps.map((step, i) => (
+                        <div key={i} style={{ color: step.ok ? '#2e7d32' : '#c62828' }}>{step.ok ? '✅' : '⚠️'} {step.detail}</div>
+                    ))}
+                </div>
+            );
+        }
+
         function BusinessCard({ business, selected, onSelect, onChanged }) {
             const [mode, setMode] = useState(null); // 'keys' | 'access'
             const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
             const [busy, setBusy] = useState(false);
             const [testResult, setTestResult] = useState(null);
+            const [connectResult, setConnectResult] = useState(null);
 
             async function saveKeys() {
                 setBusy(true);
@@ -1345,10 +1378,12 @@
                 <div style={{ border: '1px solid var(--rosa-palo-suave)', borderRadius: '8px', padding: '15px', background: selected ? 'var(--rosa-palo-suave)' : 'white', opacity: business.active ? 1 : 0.6 }}>
                     <h4 style={{ marginBottom: '6px' }}>🏢 {business.name}{business.active ? '' : ' (suspendida)'}</h4>
                     <p style={{ fontSize: '12px', color: 'var(--texto-suave)' }}>{business.legacy ? '🔒 Claves en el servidor (instalación original)' : `📱 ${business.meta_phone_number || 'Sin número'}`}</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '8px 0' }}>
-                        {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
-                        {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
-                    </div>
+                    {business.legacy ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '8px 0' }}>
+                            {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
+                            {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
+                        </div>
+                    ) : <ReadinessList readiness={business.readiness} />}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
                         {business.active && <button style={buttonStyle} onClick={() => onSelect(business.id)}>Entrar</button>}
                         {!business.legacy && <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>}
@@ -1363,6 +1398,17 @@
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                 <button style={buttonStyle} disabled={busy} onClick={saveKeys}>{busy ? 'Guardando...' : 'Guardar claves'}</button>
                                 <button style={secondaryButtonStyle} disabled={busy} onClick={testKeys}>Probar conexión</button>
+                                <button style={secondaryButtonStyle} disabled={busy} onClick={async () => {
+                                    setBusy(true);
+                                    try {
+                                        setConnectResult(await api(`/api/businesses/${business.id}/connect-whatsapp`, { method: 'POST' }));
+                                        onChanged();
+                                    } catch (err) {
+                                        alert('Error conectando: ' + err.message);
+                                    } finally {
+                                        setBusy(false);
+                                    }
+                                }}>📲 Conectar WhatsApp</button>
                             </div>
                             {testResult && (
                                 <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1370,6 +1416,7 @@
                                     {status(testResult.openai.ok, `OpenAI: ${testResult.openai.detail}`)}
                                 </div>
                             )}
+                            <ConnectResult result={connectResult} />
                         </div>
                     )}
 
@@ -1495,6 +1542,23 @@
             const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
             const [busy, setBusy] = useState(false);
             const [testResult, setTestResult] = useState(null);
+            const [connectResult, setConnectResult] = useState(null);
+            const [readiness, setReadiness] = useState(null);
+
+            const loadReadiness = () => api('/api/me/readiness').then(setReadiness).catch(err => console.error('Error cargando estado:', err));
+            useEffect(() => { loadReadiness(); }, []);
+
+            async function connect() {
+                setBusy(true);
+                try {
+                    setConnectResult(await api('/api/me/connect-whatsapp', { method: 'POST' }));
+                    loadReadiness();
+                } catch (err) {
+                    alert('Error conectando: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
 
             async function save() {
                 setBusy(true);
@@ -1502,6 +1566,7 @@
                     await api('/api/me/credentials', { method: 'PUT', body: JSON.stringify(form) });
                     setForm(EMPTY_BUSINESS_FORM);
                     onChanged();
+                    loadReadiness();
                     alert('Claves guardadas');
                 } catch (err) {
                     alert('Error guardando claves: ' + err.message);
@@ -1530,17 +1595,14 @@
                     <p style={{ color: 'var(--texto-suave)', fontSize: '13px', marginBottom: '16px' }}>
                         El bot responde desde tu número de WhatsApp y usa tu propia cuenta de OpenAI. Las claves se guardan cifradas y nunca se muestran completas.
                     </p>
-                    {business && (
-                        <div style={{ marginBottom: '14px' }}>
-                            {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
-                            {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
-                        </div>
-                    )}
+                    <ReadinessList readiness={readiness} />
                     <CredentialFields form={form} setForm={setForm} business={business} />
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button style={buttonStyle} disabled={busy} onClick={save}>{busy ? 'Guardando...' : 'Guardar claves'}</button>
                         <button style={secondaryButtonStyle} disabled={busy} onClick={test}>Probar conexión</button>
+                        <button style={secondaryButtonStyle} disabled={busy} onClick={connect}>📲 Conectar WhatsApp</button>
                     </div>
+                    <ConnectResult result={connectResult} />
                     {testResult && (
                         <div style={{ marginTop: '12px' }}>
                             {status(testResult.whatsapp.ok, `WhatsApp: ${testResult.whatsapp.detail}`)}

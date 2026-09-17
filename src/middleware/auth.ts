@@ -14,7 +14,6 @@ export interface CrmSession {
   role: CrmRole;
   /** Negocio en que se trabaja; sin él (solo admin) se trabaja en VELAMIA. */
   businessId?: string;
-  tokenId?: string;
   userId?: string | null;
 }
 
@@ -31,16 +30,13 @@ export function isPasswordValid(password: string): boolean {
 }
 
 /**
- * Sesión firmada. Sin "uid" ni "tid" es la del administrador (contraseña maestra). Con "uid" es la de un usuario
- * de una empresa; con "tid", la de un token antiguo. Si el usuario o el token se desactivan, la sesión deja de valer.
+ * Sesión firmada. Sin "uid" es la de la administradora (contraseña maestra); con "uid" es la de un usuario
+ * de una empresa. Si el usuario o su empresa se desactivan, la sesión deja de valer.
  */
-export function issueSessionToken(access?: { tokenId: string; userId: string | null; businessId: string | null }): string {
+export function issueSessionToken(access?: { userId: string; businessId: string | null }): string {
   const data: Record<string, any> = { exp: Date.now() + SESSION_DURATION_MS };
-  if (access?.userId && !access.tokenId) {
+  if (access) {
     data.uid = access.userId;
-    data.bid = access.businessId;
-  } else if (access) {
-    data.tid = access.tokenId;
     data.bid = access.businessId;
   }
   const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
@@ -48,7 +44,7 @@ export function issueSessionToken(access?: { tokenId: string; userId: string | n
   return `${payload}.${signature}`;
 }
 
-function readSessionToken(token: string): { exp: number; tid?: string; uid?: string; bid?: string | null } | null {
+function readSessionToken(token: string): { exp: number; uid?: string; bid?: string | null } | null {
   if (!CRM_PASSWORD) return null;
 
   const [payload, signature] = token.split('.');
@@ -77,7 +73,7 @@ export const VELAMIA_ID = 'velamia';
 
 /**
  * Acceso al CRM. El administrador primero elige empresa (cabecera X-Business-Id: un id de negocio o "velamia");
- * sin elegir solo puede ver la plataforma general. El acceso de una empresa (token) trabaja siempre y solo
+ * sin elegir solo puede ver la plataforma general. Un usuario de una empresa trabaja siempre y solo
  * en la suya. Todo lo que sigue (consultas, envíos por WhatsApp, IA) corre dentro de esa empresa.
  */
 export async function requireCrmSession(req: Request, res: Response, next: NextFunction) {
@@ -92,18 +88,18 @@ export async function requireCrmSession(req: Request, res: Response, next: NextF
   }
 
   try {
-    const { loadTenant, getActiveAccessById, getActiveUserAccess } = await import('../services/supabase');
+    const { loadTenant, getActiveUserAccess } = await import('../services/supabase');
     let session: CrmSession;
     // undefined = sin empresa elegida; VELAMIA_ID = VELAMIA; otro = id del negocio.
     let businessId: string | undefined;
 
-    if (data.uid || data.tid) {
-      const access = data.uid ? await getActiveUserAccess(data.uid) : await getActiveAccessById(data.tid!);
+    if (data.uid) {
+      const access = await getActiveUserAccess(data.uid);
       if (!access || (access.businessId ?? null) !== (data.bid ?? null)) {
-        return res.status(401).json({ error: 'Tu usuario fue desactivado o tu acceso venció. Vuelve a entrar.' });
+        return res.status(401).json({ error: 'Tu usuario fue desactivado. Vuelve a entrar o habla con la administradora.' });
       }
       businessId = access.businessId ?? VELAMIA_ID;
-      session = { role: access.role, businessId, tokenId: access.tokenId, userId: access.userId };
+      session = { role: access.role, businessId, userId: access.userId };
     } else {
       const requested = String(req.headers['x-business-id'] || '').trim().toLowerCase();
       if (requested && requested !== VELAMIA_ID && !UUID_PATTERN.test(requested)) {
@@ -152,7 +148,7 @@ export function requireAdminSession(req: Request, res: Response, next: NextFunct
 
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const data = token ? readSessionToken(token) : null;
-  if (!data || data.tid || data.uid) {
+  if (!data || data.uid) {
     return res.status(401).json({ error: 'Se requiere sesión de administrador' });
   }
 

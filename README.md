@@ -4,7 +4,7 @@ Asistente de ventas por WhatsApp con CRM web instalable como app, **configurable
 desde el CRM (Configuración → Perfil del negocio). La primera instalación es VELAMIA (velas para eventos, Guayaquil):
 lo que este README describe como comportamiento es el de su perfil.
 
-- **Instalar para otro negocio:** [docs/NUEVO_NEGOCIO.md](docs/NUEVO_NEGOCIO.md)
+- **Agregar y administrar empresas:** [docs/NUEVO_NEGOCIO.md](docs/NUEVO_NEGOCIO.md)
 - **Perfil del negocio:** `src/config/businessProfile.ts` (tipos, validación y plantillas `VELAMIA_PROFILE`, `EVENTS_PROFILE`, `STORE_PROFILE`).
   Se guarda en `business_config` (clave `business_profile`) y define unidad de venta, pagos, fechas, envíos,
   seguimientos, avisos, emojis, nombre, logo y color. Las reglas de la IA se arman con `buildCoreRules(perfil)`.

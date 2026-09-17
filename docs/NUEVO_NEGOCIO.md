@@ -1,90 +1,63 @@
-# Instalar el asistente para un negocio nuevo
+# Plataforma de empresas: cómo agregar y administrar una empresa
 
-Cada negocio tiene **su propia instalación**: su número de WhatsApp, su base de datos y su servidor.
-Así los chats, clientes y ventas de un negocio nunca se mezclan con los de otro.
+Todas las empresas comparten este mismo servidor, base de datos y CRM, pero cada una tiene lo suyo por separado:
+número de WhatsApp, clave de OpenAI, chats, catálogo, cotizaciones, pedidos, configuración, archivos y usuarios.
+VELAMIA es la instalación original: aparece como una empresa más, con sus datos y claves en el servidor.
 
-Tiempo estimado: 1 a 2 horas (más la aprobación de plantillas en Meta, que puede tardar hasta 24 h).
+Link del CRM: `https://whatsapp-assistant-velamia.onrender.com/crm/`
 
-## 1. Cuentas que necesita el negocio
+## 1. Qué necesita la empresa antes de empezar
 
-| Servicio | Para qué | Plan |
+| Qué | Dónde se consigue | Para qué |
 |---|---|---|
-| Meta (WhatsApp Business Platform) | Número que atiende a las clientas | Responder a clientas es gratis; las plantillas (seguimientos y avisos) se cobran por mensaje |
-| Supabase | Base de datos y fotos | Plan gratuito o de pago |
-| Render | Servidor del asistente y del CRM | Plan gratuito o de pago |
-| OpenAI | Inteligencia del asistente | Pago por uso |
+| Número de WhatsApp registrado en la API | Meta Business → WhatsApp Manager | Recibir y enviar mensajes |
+| Phone Number ID y WhatsApp Business Account ID | Meta for Developers → WhatsApp → Configuración de la API | Saber qué número atiende |
+| Token permanente de Meta | Meta Business → Usuarios del sistema → Generar token (permisos `whatsapp_business_messaging` y `whatsapp_business_management`) | Que el bot hable desde ese número |
+| Clave de OpenAI (API key) | platform.openai.com → API keys, con saldo cargado | El "cerebro" del bot. Sin ella no responde |
 
-> Revisa los precios y límites vigentes de cada servicio antes de cotizarle al negocio. Los planes gratuitos
-> limitan cuántos proyectos o horas de servidor tiene cada cuenta: con varios negocios conviene que cada uno
-> tenga sus propias cuentas (así también paga su propio consumo).
+La cuenta de WhatsApp de la empresa debe estar en la **misma App de Meta** que usa la plataforma
+(la del webhook y `META_APP_SECRET`), o haberle dado acceso a esa App.
 
-## 2. Base de datos (Supabase)
+## 2. Crear la empresa (usuario `admin`)
 
-1. Crear un proyecto nuevo.
-2. Abrir **SQL Editor**, pegar todo `setup/base_nueva.sql` y ejecutar. Crea tablas, protección y buckets de fotos.
-3. En **Project Settings → API** copiar `Project URL` y la clave `service_role`.
+1. Entrar al CRM con usuario `admin` y la contraseña maestra.
+2. **+ Nueva empresa**: nombre y tipo (tienda por unidad o detalles para eventos). Las claves se pueden cargar ahí o después.
+3. En la tarjeta de la empresa → **🔑 Claves**: cargar número, Phone Number ID, WABA ID, token de Meta y clave de OpenAI → **Guardar claves**.
+4. **Probar conexión**: confirma que Meta y OpenAI aceptan las claves.
+5. **📲 Conectar WhatsApp**: suscribe la cuenta de la empresa a la App. Sin este paso Meta no envía sus mensajes al bot.
+6. **Entrar** a la empresa y completar ⚙️ Configuración (número para avisos a la dueña, datos bancarios, instrucciones) y 🛍️ Catálogo.
+7. **👤 Usuarios**: crear el acceso del dueño (correo, contraseña y rol).
 
-## 3. WhatsApp (Meta)
+La tarjeta muestra si el bot está listo:
+- 🔴 obligatorio (WhatsApp, número conectado, OpenAI): sin esto **el bot no atiende**.
+- ⚠️ recomendado (catálogo, número para avisos, datos bancarios): atiende, pero incompleto.
 
-1. En developers.facebook.com crear una app de tipo **Business** y agregar **WhatsApp**.
-2. Registrar el número del negocio y copiar: `Phone number ID` y `WhatsApp Business Account ID`.
-3. Crear un **usuario del sistema** con token permanente (permisos `whatsapp_business_messaging` y `whatsapp_business_management`).
-4. Copiar la **clave secreta de la app** (Configuración → Básica).
-5. Crear las plantillas (categoría Marketing o Utilidad, idioma Español):
-   - **Aviso para la dueña** (ej. `aviso_equipo`) con 4 variables: `{{1}}` motivo, `{{2}}` cliente, `{{3}}` teléfono, `{{4}}` detalle.
-     Opcional: botón de URL "Abrir CRM" hacia `https://<servidor>.onrender.com/crm/`.
-   - **Seguimientos** (opcional), una por paso, sin variables. Ej: `seguimiento_01` "¡Hola! 😊 ¿Pudiste revisar las opciones que te compartí? Estoy aquí para ayudarte."
+## 3. Accesos
 
-## 4. Servidor (Render)
+- **Administradora:** usuario `admin` + contraseña maestra (`CRM_PASSWORD`). Ve todas las empresas y elige con cuál trabajar.
+- **Usuarios de una empresa:** correo + contraseña (mínimo 8 caracteres). Entran directo a su empresa y no ven las demás.
+- Roles: **Dueño** (todo, incluidas claves y configuración) · **Encargado** (atiende, catálogo y pedidos; no cambia configuración) · **Solo consulta**.
+- Cada usuario cambia su contraseña con **Mi contraseña**; la administradora puede cambiarla o desactivar al usuario.
 
-1. Crear un **Web Service** desde este repositorio (o una copia/fork para el negocio).
-   Build command `npm run build` · Start command `npm start`.
-2. En **Environment** cargar:
+## 4. Suspender y eliminar
 
-| Variable | Valor |
-|---|---|
-| `WHATSAPP_TOKEN` | Token permanente del usuario del sistema |
-| `WHATSAPP_PHONE_ID` | Phone number ID |
-| `WHATSAPP_BUSINESS_ACCOUNT_ID` | WhatsApp Business Account ID |
-| `META_APP_SECRET` | Clave secreta de la app |
-| `WEBHOOK_VERIFY_TOKEN` | Una palabra secreta inventada |
-| `OPENAI_API_KEY` | Clave de OpenAI |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | Del paso 2 |
-| `CRM_PASSWORD` | Contraseña del CRM para el negocio |
+- **⏸️ Suspender:** el bot deja de responder, se detienen los seguimientos y sus usuarios no entran. No se borra nada; **▶️ Reactivar** lo devuelve todo.
+- **🗑️ Eliminar:** borra para siempre chats, mensajes, seguimientos, avisos, cotizaciones, pedidos, catálogo, fotos y archivos,
+  usuarios, configuración y claves. Exige suspender antes y escribir el nombre exacto.
 
-3. En Meta → WhatsApp → Configuración: webhook `https://<servidor>.onrender.com/webhook`, token = `WEBHOOK_VERIFY_TOKEN`,
-   y suscribirse al campo **messages**.
+## 5. Seguimientos automáticos y avisos fuera de 24 h
 
-## 5. Perfil del negocio (desde el CRM)
+Necesitan **plantillas aprobadas por Meta en la cuenta de esa empresa**. Mientras no las tenga, dejar los seguimientos
+apagados en ⚙️ Configuración. Los avisos a la dueña se envían como texto libre si no hay plantilla (solo llegan si
+la dueña le escribió al número en las últimas 24 horas).
 
-Entrar a `https://<servidor>.onrender.com/crm/` → **Configuración → Perfil del negocio**:
+## 6. Cómo funciona por dentro (referencia técnica)
 
-1. **Empezar desde una plantilla**: "Detalles para eventos" (por docena, con fecha de evento) o "Tienda de productos" (por unidad).
-2. Completar: nombre, descripción, ciudad, logo y color; unidad de venta; pagos (anticipo o total, tarjeta);
-   fechas de entrega; tipo de envío; **tu WhatsApp para recibir avisos**; nombres de las plantillas del paso 3.
-3. **Guardar perfil**. Se aplica al instante.
-
-También en Configuración:
-- **Datos para transferencia**: el texto exacto que el asistente envía cuando la clienta elige transferencia.
-- **Instrucciones del asistente**: tono, horarios, políticas y preguntas frecuentes del negocio.
-
-Y en **Catálogo** cargar los productos con foto, precio y categoría.
-
-## 6. Probar antes de publicar
-
-Escribir desde otro número al WhatsApp del negocio y recorrer una venta completa:
-saludo → pedir fotos → elegir producto → cantidad (y fecha/ciudad si aplica) → total → forma de pago.
-Revisar en el CRM que aparezca la cotización y que llegue el aviso al WhatsApp de la dueña.
-
-## Qué es configurable y qué no
-
-| Configurable en el perfil | Fijo en el código |
-|---|---|
-| Nombre, descripción, logo, color, zona horaria | Idioma español |
-| Unidad de venta y cómo se llaman los productos | Moneda en dólares ($) |
-| Personalización sí/no | Fotos de 4 en 4, espera de 5 s y pausas entre mensajes |
-| Anticipo % por transferencia, tarjeta sí/no | Cálculo del total por el sistema (la IA no hace cuentas) |
-| Fecha de evento, días de anticipación, disponibilidad | Formato de mensajes (frases cortas, listas) |
-| Envío: tarifario Ecuador, tarifa fija o sin envío; retiro en local | Tarifario de Ecuador con origen Guayaquil |
-| Seguimientos (plantillas, días, horario) y plantilla de avisos | |
-| Emojis y si se presenta como persona o asistente virtual | |
+- Cada mensaje de WhatsApp trae el `phone_number_id` del número que lo recibió: con él se sabe de qué empresa es.
+  Si es `WHATSAPP_PHONE_ID` es VELAMIA; si no pertenece a ninguna empresa activa, se ignora.
+- Todo corre dentro del contexto de la empresa (`src/services/tenant.ts`): sus claves, su perfil y solo sus datos
+  (`business_id`). VELAMIA = sin `business_id` y variables de entorno.
+- Token de Meta y clave de OpenAI se guardan cifrados (AES-256-GCM) con `BUSINESS_SECRETS_KEY`.
+  **No cambiar ni perder esa variable**: las claves guardadas quedarían ilegibles.
+- Configuración por empresa en `business_config` con claves `business:<id>:<clave>`; archivos en la carpeta `<id>/` de cada bucket.
+- Migraciones de la plataforma: `007` a `017`.

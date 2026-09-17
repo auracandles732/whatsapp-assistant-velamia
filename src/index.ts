@@ -34,6 +34,8 @@ import {
   updateBusinessCredentials,
   updateBusinessInfo,
   deleteBusinessCompletely,
+  getBusinessReadiness,
+  markWebhookConnected,
   BusinessCredentials,
   BusinessRow,
   createBusinessUser,
@@ -41,12 +43,8 @@ import {
   getBusinessUser,
   updateBusinessUser,
   deactivateBusinessUser,
-  createBusinessAccessToken,
-  validateBusinessAccessToken,
   authenticateBusinessUser,
-  changeOwnPassword,
-  listBusinessAccessTokens,
-  revokeBusinessAccessToken
+  changeOwnPassword
 } from './db';
 import { removeFilesByPublicUrls, storagePath } from './services/storage';
 import { currentTenant, decryptSecret } from './services/tenant';
@@ -161,10 +159,10 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const loginFailures = new Map<string, { count: number; resetAt: number }>();
 
 /**
- * Una sola pantalla de ingreso: con la contraseña maestra entra el administrador; con el token de un negocio
- * (64 caracteres) entra su dueño o personal, que solo verá su negocio.
+ * Una sola pantalla de ingreso: usuario "admin" con la contraseña maestra para la administradora;
+ * correo y contraseña para los usuarios de cada empresa, que solo ven la suya.
  */
-app.post(['/api/login', '/api/auth/login/business'], async (req: Request, res: Response) => {
+app.post('/api/login', async (req: Request, res: Response) => {
   if (!process.env.CRM_PASSWORD) {
     return res.status(503).json({ error: 'Falta configurar la variable CRM_PASSWORD en el servidor' });
   }
@@ -180,42 +178,30 @@ app.post(['/api/login', '/api/auth/login/business'], async (req: Request, res: R
   }
 
   const username = String(req.body?.username || '').trim().toLowerCase();
-  const password = String(req.body?.password || req.body?.accessToken || '');
+  const password = String(req.body?.password || '');
   const fail = () => {
     loginFailures.set(ip, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + LOGIN_WINDOW_MS });
     res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   };
 
+  if (!username) return fail();
+
   // Administradora: usuario "admin" con la contraseña maestra.
-  if (username === 'admin' || !username) {
-    if (isPasswordValid(password)) {
-      loginFailures.delete(ip);
-      return res.json({ token: issueSessionToken(), role: 'admin' });
-    }
-    if (username === 'admin') return fail();
+  if (username === 'admin') {
+    if (!isPasswordValid(password)) return fail();
+    loginFailures.delete(ip);
+    return res.json({ token: issueSessionToken(), role: 'admin' });
   }
 
   try {
-    // Usuario de una empresa (correo y contraseña).
-    if (username) {
-      const user = await authenticateBusinessUser(username, password);
-      if (!user) return fail();
-      loginFailures.delete(ip);
-      return res.json({ token: issueSessionToken(user), role: user.role, businessId: user.businessId });
-    }
-
-    // Tokens antiguos: se siguen aceptando mientras estén vigentes.
-    const access = await validateBusinessAccessToken(password.trim());
-    if (access) {
-      loginFailures.delete(ip);
-      return res.json({ token: issueSessionToken(access), role: access.role, businessId: access.businessId });
-    }
+    const user = await authenticateBusinessUser(username, password);
+    if (!user) return fail();
+    loginFailures.delete(ip);
+    res.json({ token: issueSessionToken(user), role: user.role, businessId: user.businessId });
   } catch (error: any) {
     console.error('Error validando acceso:', error.message);
-    return res.status(500).json({ error: 'No se pudo validar el acceso, intenta de nuevo' });
+    res.status(500).json({ error: 'No se pudo validar el acceso, intenta de nuevo' });
   }
-
-  fail();
 });
 
 // La pantalla de ingreso muestra el nombre y el logo antes de iniciar sesión: solo datos públicos.
@@ -632,20 +618,20 @@ app.delete('/api/products/:id', requireCrmSession, requireUuidParam, async (req:
 
 // ---------- MULTI-NEGOCIO: ADMINISTRACIÓN (solo contraseña maestra) ----------
 
-/** Valida los ids de negocio, usuario y token que vienen en la ruta. */
+/** Valida los ids de empresa y usuario que vienen en la ruta. */
 function requireUuidParams(req: Request, res: Response, next: NextFunction) {
-  for (const name of ['businessId', 'userId', 'tokenId']) {
+  for (const name of ['businessId', 'userId']) {
     const value = req.params[name];
     if (value !== undefined && !UUID_PATTERN.test(value)) return res.status(400).json({ error: `Id inválido (${name})` });
   }
   next();
 }
 
-/** Como requireUuidParams, pero la empresa también puede ser VELAMIA (solo para sus accesos). */
+/** Como requireUuidParams, pero la empresa también puede ser VELAMIA (solo para sus usuarios). */
 function requireCompanyParams(req: Request, res: Response, next: NextFunction) {
   if (req.params.businessId !== VELAMIA_ID) return requireUuidParams(req, res, next);
-  if (req.params.tokenId !== undefined && !UUID_PATTERN.test(req.params.tokenId)) {
-    return res.status(400).json({ error: 'Id inválido (tokenId)' });
+  if (req.params.userId !== undefined && !UUID_PATTERN.test(req.params.userId)) {
+    return res.status(400).json({ error: 'Id inválido (userId)' });
   }
   next();
 }
@@ -777,42 +763,6 @@ app.post('/api/businesses/:businessId/test-credentials', requireAdminSession, re
     res.json(await testBusinessCredentials(row));
   } catch (error: any) {
     sendBusinessError(res, error);
-  }
-});
-
-app.post('/api/businesses/:businessId/generate-access-token', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
-  try {
-    const businessId = companyIdOf(req);
-    const row = businessId ? await getBusinessRow(businessId) : null;
-    if (businessId && !row) return res.status(404).json({ error: 'Negocio no encontrado' });
-
-    const { plaintoken, expiresAt } = await createBusinessAccessToken(businessId);
-    console.log(`🔐 Token de acceso generado para ${row ? row.name : 'VELAMIA'}`);
-    res.status(201).json({
-      accessToken: plaintoken,
-      expiresAt,
-      message: 'Guarda este token: solo se muestra una vez. El dueño lo escribe en la pantalla de ingreso del CRM.'
-    });
-  } catch (error: any) {
-    sendBusinessError(res, error);
-  }
-});
-
-app.get('/api/businesses/:businessId/tokens', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
-  try {
-    res.json(await listBusinessAccessTokens(companyIdOf(req)));
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/businesses/:businessId/tokens/:tokenId', requireAdminSession, requireCompanyParams, async (req: Request, res: Response) => {
-  try {
-    const revoked = await revokeBusinessAccessToken(companyIdOf(req), req.params.tokenId);
-    if (!revoked) return res.status(404).json({ error: 'Token no encontrado en este negocio' });
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
   }
 });
 
@@ -1027,6 +977,96 @@ async function testBusinessCredentials(row: BusinessRow) {
 
   return result;
 }
+
+/**
+ * Conecta el número de la empresa al bot: suscribe su cuenta de WhatsApp (WABA) a la App de Meta de esta
+ * plataforma, que es la que tiene configurado el webhook. Sin esto Meta nunca envía sus mensajes al servidor.
+ * Antes revisa que el número pertenezca a esa cuenta y esté habilitado para la API.
+ */
+async function connectBusinessWhatsApp(row: BusinessRow): Promise<{ ok: boolean; steps: { ok: boolean; detail: string }[] }> {
+  const steps: { ok: boolean; detail: string }[] = [];
+  const graphUrl = 'https://graph.facebook.com/v25.0';
+  const token = decryptSecret(row.meta_access_token);
+  if (!token || !row.meta_phone_number_id || !row.meta_business_account_id) {
+    return { ok: false, steps: [{ ok: false, detail: 'Faltan claves: token de Meta, Phone Number ID y WhatsApp Business Account ID' }] };
+  }
+  const headers = { Authorization: `Bearer ${token}` };
+  const metaError = (data: any, status: number) => data?.error?.message || `Meta respondió ${status}`;
+
+  // 1) El número pertenece a la cuenta y está disponible para la API.
+  try {
+    const response = await fetch(`${graphUrl}/${row.meta_business_account_id}/phone_numbers?fields=id,display_phone_number,verified_name,platform_type,code_verification_status`, { headers });
+    const data: any = await response.json();
+    if (!response.ok) return { ok: false, steps: [{ ok: false, detail: `No se pudo leer la cuenta de WhatsApp: ${metaError(data, response.status)}` }] };
+    const phone = (data.data || []).find((p: any) => String(p.id) === String(row.meta_phone_number_id));
+    if (!phone) {
+      return { ok: false, steps: [{ ok: false, detail: 'El Phone Number ID no pertenece a esa WhatsApp Business Account. Revisa ambos datos en Meta.' }] };
+    }
+    steps.push({ ok: true, detail: `Número encontrado: ${phone.verified_name || ''} ${phone.display_phone_number || ''}`.trim() });
+    if (phone.platform_type && phone.platform_type !== 'CLOUD_API') {
+      steps.push({ ok: false, detail: `El número no está registrado en la API de WhatsApp (estado: ${phone.platform_type}). Regístralo en Meta antes de conectarlo.` });
+      return { ok: false, steps };
+    }
+  } catch (error: any) {
+    return { ok: false, steps: [{ ok: false, detail: `No se pudo consultar a Meta: ${error.message}` }] };
+  }
+
+  // 2) Suscribir la cuenta a la App: desde aquí Meta envía los mensajes de ese número al webhook.
+  try {
+    const response = await fetch(`${graphUrl}/${row.meta_business_account_id}/subscribed_apps`, { method: 'POST', headers });
+    const data: any = await response.json();
+    if (!response.ok || data.success === false) {
+      steps.push({ ok: false, detail: `Meta no aceptó la conexión: ${metaError(data, response.status)}` });
+      return { ok: false, steps };
+    }
+    steps.push({ ok: true, detail: 'Cuenta suscrita: los mensajes de este número llegarán al bot' });
+  } catch (error: any) {
+    steps.push({ ok: false, detail: `No se pudo conectar: ${error.message}` });
+    return { ok: false, steps };
+  }
+
+  return { ok: true, steps };
+}
+
+async function runConnectWhatsApp(businessId: string, res: Response) {
+  const row = await getBusinessRow(businessId);
+  if (!row) return res.status(404).json({ error: 'Empresa no encontrada' });
+  const result = await connectBusinessWhatsApp(row);
+  await markWebhookConnected(row.id, result.ok);
+  console.log(`📲 Conectar WhatsApp de ${row.name}: ${result.ok ? 'conectado' : 'falló'}`);
+  res.json(result);
+}
+
+app.post('/api/businesses/:businessId/connect-whatsapp', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    await runConnectWhatsApp(req.params.businessId, res);
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+app.post('/api/me/connect-whatsapp', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    if (!tenant) return res.status(400).json({ error: 'El WhatsApp de VELAMIA ya está conectado desde el servidor' });
+    await runConnectWhatsApp(tenant.businessId, res);
+  } catch (error: any) {
+    sendBusinessError(res, error);
+  }
+});
+
+/** Estado del bot de la empresa en que se trabaja (para el dueño). */
+app.get('/api/me/readiness', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    if (!tenant) return res.json(null);
+    const row = await getBusinessRow(tenant.businessId);
+    if (!row) return res.status(404).json({ error: 'Empresa no encontrada' });
+    res.json(await getBusinessReadiness(row));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Ruta no encontrada' });

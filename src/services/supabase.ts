@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { randomUUID, randomBytes, createHash, scryptSync, timingSafeEqual } from 'crypto';
+import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { currentTenant, TenantContext, encryptSecret, decryptSecret, maskSecret } from './tenant';
 import { normalizeProfile, BusinessProfile, STORE_PROFILE } from '../config/businessProfile';
 
@@ -844,6 +844,10 @@ export async function updateBusinessCredentials(businessId: string, credentials:
 
   if (error) throw friendlyBusinessError(error, 'actualizando');
   invalidateTenantCache();
+  // Otro número u otra cuenta de WhatsApp: hay que volver a conectarla.
+  if (data && (columns.meta_phone_number_id || columns.meta_business_account_id)) {
+    await markWebhookConnected(businessId, false);
+  }
   return data ? toPublicBusiness(data) : null;
 }
 
@@ -858,7 +862,6 @@ export async function updateBusinessInfo(businessId: string, updates: { name?: s
   if (error) throw friendlyBusinessError(error, 'actualizando');
   // Suspender surte efecto al instante: sin caché, el bot deja de responder y sus usuarios quedan fuera.
   invalidateTenantCache();
-  accessCache.clear();
   userAccessCache.clear();
   return data ? toPublicBusiness(data) : null;
 }
@@ -932,7 +935,6 @@ export async function deleteBusinessCompletely(businessId: string) {
   if (error) throw new Error(`Error borrando la empresa: ${error.message}`);
 
   invalidateTenantCache();
-  accessCache.clear();
   userAccessCache.clear();
   return { name: row.name, summary };
 }
@@ -955,119 +957,109 @@ export async function getAllBusinesses() {
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(`Error obteniendo negocios: ${error.message}`);
-  return (data || []).map(toPublicBusiness);
+  const rows = data || [];
+  const readiness = await Promise.all(rows.map(row => getBusinessReadiness(row)));
+  return rows.map((row, i) => ({ ...toPublicBusiness(row), readiness: readiness[i] }));
 }
 
-// ---------- TOKENS DE ACCESO DE NEGOCIOS ----------
-// El token se muestra una sola vez; en la base queda solo su hash SHA-256.
+// ---------- ¿EL BOT DE LA EMPRESA ESTÁ LISTO? ----------
 
-const TOKEN_DAYS = 90;
-const hashToken = (plaintoken: string) => createHash('sha256').update(plaintoken).digest('hex');
+/** Clave donde se anota que el número de la empresa quedó conectado al webhook (fecha). */
+export const webhookConnectedKey = (businessId: string) => `business:${businessId}:whatsapp_webhook_connected`;
 
-export type BusinessRole = 'owner' | 'manager' | 'staff';
-
-export interface BusinessAccess {
-  tokenId: string;
-  /** null = VELAMIA (sus datos no llevan business_id). */
-  businessId: string | null;
-  userId: string | null;
-  role: BusinessRole;
+export async function markWebhookConnected(businessId: string, connected: boolean) {
+  if (connected) {
+    const { error } = await supabase
+      .from('business_config')
+      .upsert({ key: webhookConnectedKey(businessId), value: new Date().toISOString(), updated_at: new Date().toISOString() });
+    if (error) throw new Error(`Error guardando conexión: ${error.message}`);
+  } else {
+    const { error } = await supabase.from('business_config').delete().eq('key', webhookConnectedKey(businessId));
+    if (error) throw new Error(`Error guardando conexión: ${error.message}`);
+  }
 }
 
-export async function createBusinessAccessToken(businessId: string | null, businessUserId?: string) {
-  const plaintoken = randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + TOKEN_DAYS * 24 * 60 * 60 * 1000).toISOString();
-
-  const { data, error } = await supabase
-    .from('business_access_tokens')
-    .insert([{
-      id: randomUUID(),
-      business_id: businessId,
-      business_user_id: businessUserId || null,
-      token_hash: hashToken(plaintoken),
-      active: true,
-      created_at: new Date().toISOString(),
-      expires_at: expiresAt
-    }])
-    .select('id')
-    .single();
-
-  if (error) throw new Error(`Error creando token de acceso: ${error.message}`);
-  return { plaintoken, tokenId: data.id as string, expiresAt };
+export interface ReadinessItem {
+  key: string;
+  label: string;
+  ok: boolean;
+  /** true = sin esto el bot no atiende; false = atiende, pero incompleto. */
+  required: boolean;
+  hint: string;
 }
 
-/** Revisa que el token siga activo y vigente, y que su negocio y su usuario sigan activos. */
-async function checkAccess(column: 'token_hash' | 'id', value: string): Promise<BusinessAccess | null> {
-  const { data, error } = await supabase
-    .from('business_access_tokens')
-    .select('id, business_id, business_user_id, expires_at, active, businesses(active), business_users(active, role)')
-    .eq(column, value)
-    .maybeSingle();
+/**
+ * Lista de lo que necesita una empresa para que su bot atienda bien.
+ * botReady solo es true si están todas las obligatorias: WhatsApp, OpenAI y número conectado.
+ */
+export async function getBusinessReadiness(row: BusinessRow) {
+  const prefix = `business:${row.id}:`;
+  const [configResult, productsResult] = await Promise.all([
+    supabase.from('business_config').select('key, value').like('key', `${prefix}%`),
+    supabase.from('products').select('id', { count: 'exact', head: true }).eq('business_id', row.id)
+  ]);
+  if (configResult.error) throw new Error(`Error leyendo configuración: ${configResult.error.message}`);
+  if (productsResult.error) throw new Error(`Error contando productos: ${productsResult.error.message}`);
 
-  if (error) throw new Error(`Error validando token: ${error.message}`);
-  if (!data || !data.active) return null;
-  if (data.expires_at && parseDbTimestamp(data.expires_at) < new Date()) return null;
+  const config = new Map((configResult.data || []).map(c => [c.key.slice(prefix.length), String(c.value || '')]));
+  const profile = normalizeProfile(row.business_profile, STORE_PROFILE);
+  const products = productsResult.count || 0;
 
-  const business: any = Array.isArray(data.businesses) ? data.businesses[0] : data.businesses;
-  // Los accesos de VELAMIA no tienen negocio en la tabla: VELAMIA siempre está activa.
-  if (data.business_id && !business?.active) return null;
+  const items: ReadinessItem[] = [
+    {
+      key: 'whatsapp', label: 'Claves de WhatsApp', required: true,
+      ok: !!(row.meta_access_token && row.meta_phone_number_id && row.meta_business_account_id),
+      hint: 'Carga token de Meta, Phone Number ID y WhatsApp Business Account ID en 🔑 Claves'
+    },
+    {
+      key: 'webhook', label: 'Número conectado', required: true,
+      ok: !!config.get('whatsapp_webhook_connected'),
+      hint: 'Pulsa "Conectar WhatsApp" en 🔑 Claves para que los mensajes lleguen al bot'
+    },
+    {
+      key: 'openai', label: 'Clave de OpenAI', required: true,
+      ok: !!row.openai_api_key,
+      hint: 'Sin esta clave el bot no puede pensar ni responder'
+    },
+    {
+      key: 'catalog', label: 'Catálogo', required: false,
+      ok: products > 0,
+      hint: 'Sin productos el bot no puede mostrar fotos ni dar precios'
+    },
+    {
+      key: 'ownerPhone', label: 'Número para avisos a la dueña', required: false,
+      ok: !!(profile.alerts.ownerPhone || config.get('owner_phone')),
+      hint: 'Sin él nadie se entera de pedidos, pagos ni reclamos (⚙️ Configuración)'
+    },
+    {
+      key: 'bankDetails', label: 'Datos bancarios', required: false,
+      ok: !profile.payments.transferEnabled || !!config.get('payment_transfer_info')?.trim(),
+      hint: 'Si acepta transferencias, el bot necesita los datos para enviarlos (⚙️ Configuración)'
+    }
+  ];
 
-  const user: any = Array.isArray(data.business_users) ? data.business_users[0] : data.business_users;
-  if (data.business_user_id && !user?.active) return null;
-
+  const missingRequired = items.filter(i => i.required && !i.ok);
   return {
-    tokenId: data.id,
-    businessId: data.business_id,
-    userId: data.business_user_id || null,
-    role: (['owner', 'manager', 'staff'].includes(user?.role) ? user.role : 'owner') as BusinessRole
+    items,
+    products,
+    botReady: row.active && missingRequired.length === 0,
+    summary: !row.active
+      ? 'Empresa suspendida: el bot no atiende'
+      : missingRequired.length
+        ? `El bot NO atenderá: falta ${missingRequired.map(i => i.label.toLowerCase()).join(', ')}`
+        : items.some(i => !i.ok)
+          ? 'Bot listo, con configuración pendiente'
+          : 'Bot listo'
   };
 }
 
-/** Valida el token que escribe el dueño del negocio al entrar al CRM. */
-export async function validateBusinessAccessToken(plaintoken: string): Promise<BusinessAccess | null> {
-  if (!/^[0-9a-f]{64}$/i.test(plaintoken)) return null;
-  const access = await checkAccess('token_hash', hashToken(plaintoken.toLowerCase()));
-  if (access) {
-    const { error } = await supabase.from('business_access_tokens').update({ last_used: new Date().toISOString() }).eq('id', access.tokenId);
-    if (error) console.error('No se pudo registrar el uso del token:', error.message);
-  }
-  return access;
-}
+export type BusinessRole = 'owner' | 'manager' | 'staff';
 
-// La sesión del CRM se revisa en cada petición: un minuto de caché basta para que revocar surta efecto rápido.
-const accessCache = new Map<string, { at: number; access: BusinessAccess | null }>();
-
-export async function getActiveAccessById(tokenId: string): Promise<BusinessAccess | null> {
-  const hit = accessCache.get(tokenId);
-  if (hit && Date.now() - hit.at < TENANT_CACHE_MS) return hit.access;
-  const access = await checkAccess('id', tokenId);
-  if (accessCache.size > 1000) accessCache.clear();
-  accessCache.set(tokenId, { at: Date.now(), access });
-  return access;
-}
-
-export async function listBusinessAccessTokens(businessId: string | null) {
-  const { data, error } = await supabase
-    .from('business_access_tokens')
-    .select('id, business_user_id, created_at, last_used, expires_at, active, business_users(email, full_name)')
-    .filter('business_id', businessId ? 'eq' : 'is', businessId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw new Error(`Error obteniendo tokens: ${error.message}`);
-  return data || [];
-}
-
-export async function revokeBusinessAccessToken(businessId: string | null, tokenId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('business_access_tokens')
-    .update({ active: false })
-    .eq('id', tokenId)
-    .filter('business_id', businessId ? 'eq' : 'is', businessId)
-    .select('id');
-
-  if (error) throw new Error(`Error revocando token: ${error.message}`);
-  accessCache.delete(tokenId);
-  return (data || []).length > 0;
+/** Quién entró al CRM: su usuario, su empresa (null = VELAMIA) y su rol. */
+export interface BusinessAccess {
+  businessId: string | null;
+  userId: string;
+  role: BusinessRole;
 }
 
 // ---------- USUARIOS DE EMPRESAS (usuario y contraseña) ----------
@@ -1177,12 +1169,7 @@ export async function updateBusinessUser(userId: string, updates: { full_name?: 
 }
 
 export async function deactivateBusinessUser(userId: string) {
-  const user = await updateBusinessUser(userId, { active: false });
-  // Tokens antiguos del usuario, si los tenía, tampoco sirven más.
-  const { error } = await supabase.from('business_access_tokens').update({ active: false }).eq('business_user_id', userId);
-  if (error) throw new Error(`Error revocando accesos del usuario: ${error.message}`);
-  accessCache.clear();
-  return user;
+  return updateBusinessUser(userId, { active: false });
 }
 
 /** Ingreso con usuario y contraseña. Devuelve null si no coincide o si el usuario o su empresa están desactivados. */
@@ -1201,7 +1188,7 @@ export async function authenticateBusinessUser(email: string, password: string):
   const business: any = Array.isArray(data.businesses) ? data.businesses[0] : data.businesses;
   if (data.business_id && !business?.active) return null;
 
-  return { tokenId: '', businessId: data.business_id, userId: data.id, role: normalizeRole(data.role) };
+  return { businessId: data.business_id, userId: data.id, role: normalizeRole(data.role) };
 }
 
 function normalizeRole(role: unknown): BusinessRole {
@@ -1224,7 +1211,7 @@ export async function getActiveUserAccess(userId: string): Promise<BusinessAcces
   if (error) throw new Error(`Error validando usuario: ${error.message}`);
   const business: any = data && (Array.isArray(data.businesses) ? data.businesses[0] : data.businesses);
   const access = data && data.active && (!data.business_id || business?.active)
-    ? { tokenId: '', businessId: data.business_id, userId: data.id, role: normalizeRole(data.role) }
+    ? { businessId: data.business_id, userId: data.id, role: normalizeRole(data.role) }
     : null;
 
   if (userAccessCache.size > 1000) userAccessCache.clear();
