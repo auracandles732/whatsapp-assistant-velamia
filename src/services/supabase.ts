@@ -531,6 +531,119 @@ export async function getQuotationRefs(sinceIso: string): Promise<Array<{ conver
   return data || [];
 }
 
+// ---------- CRM FASE 2: no leídas, etiquetas, notas y próximas acciones ----------
+// Todo esto necesita la migración 020. Mientras no se haya corrido, las lecturas devuelven null
+// y el CRM simplemente no muestra estas partes (en vez de fallar).
+
+const tableMissing = (message: string) => /does not exist|could not find the (table|column)|schema cache/i.test(message);
+
+export interface ConversationNote { id: string; author: string | null; content: string; created_at: string }
+export interface ConversationTask { id: string; title: string; due_date: string | null; done: boolean; done_at: string | null; created_by: string | null; created_at: string }
+
+export async function getConversationNotes(conversationId: string): Promise<ConversationNote[] | null> {
+  const { data, error } = await supabase
+    .from('conversation_notes')
+    .select('id, author, content, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+    .limit(200);
+
+  if (error) {
+    if (tableMissing(error.message)) return null;
+    throw new Error(`Error obteniendo notas: ${error.message}`);
+  }
+  return data || [];
+}
+
+export async function addConversationNote(conversationId: string, author: string, content: string) {
+  const { data, error } = await supabase
+    .from('conversation_notes')
+    .insert([{ conversation_id: conversationId, author, content }])
+    .select('id, author, content, created_at')
+    .single();
+
+  if (error) throw new Error(`Error guardando la nota: ${error.message}`);
+  return data;
+}
+
+export async function deleteConversationNote(conversationId: string, noteId: string) {
+  const { error } = await supabase.from('conversation_notes').delete().eq('id', noteId).eq('conversation_id', conversationId);
+  if (error) throw new Error(`Error borrando la nota: ${error.message}`);
+}
+
+export async function getConversationTasks(conversationId: string): Promise<ConversationTask[] | null> {
+  const { data, error } = await supabase
+    .from('conversation_tasks')
+    .select('id, title, due_date, done, done_at, created_by, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    if (tableMissing(error.message)) return null;
+    throw new Error(`Error obteniendo acciones: ${error.message}`);
+  }
+  return data || [];
+}
+
+export async function addConversationTask(conversationId: string, title: string, dueDate: string | null, author: string) {
+  const { data, error } = await supabase
+    .from('conversation_tasks')
+    .insert([{ conversation_id: conversationId, title, due_date: dueDate, created_by: author }])
+    .select('id, title, due_date, done, done_at, created_by, created_at')
+    .single();
+
+  if (error) throw new Error(`Error guardando la acción: ${error.message}`);
+  return data;
+}
+
+export async function setConversationTaskDone(conversationId: string, taskId: string, done: boolean) {
+  const { error } = await supabase
+    .from('conversation_tasks')
+    .update({ done, done_at: done ? new Date().toISOString() : null })
+    .eq('id', taskId)
+    .eq('conversation_id', conversationId);
+
+  if (error) throw new Error(`Error actualizando la acción: ${error.message}`);
+}
+
+export async function deleteConversationTask(conversationId: string, taskId: string) {
+  const { error } = await supabase.from('conversation_tasks').delete().eq('id', taskId).eq('conversation_id', conversationId);
+  if (error) throw new Error(`Error borrando la acción: ${error.message}`);
+}
+
+/** Marca el chat como visto. Si la migración no se corrió todavía, no hace nada. */
+export async function markConversationRead(conversationId: string) {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('id', conversationId)
+    .filter('business_id', tenantOp(), tenantValue());
+
+  if (error && !tableMissing(error.message)) throw new Error(`Error marcando como leído: ${error.message}`);
+}
+
+export async function setConversationTags(conversationId: string, tags: string[]) {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ tags })
+    .eq('id', conversationId)
+    .filter('business_id', tenantOp(), tenantValue());
+
+  if (error) throw new Error(`Error guardando etiquetas: ${error.message}`);
+}
+
+/** 'closed' saca el chat de la lista principal; un mensaje nuevo del cliente lo vuelve a abrir solo. */
+export async function setConversationStatus(conversationId: string, status: 'active' | 'closed') {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ status })
+    .eq('id', conversationId)
+    .filter('business_id', tenantOp(), tenantValue());
+
+  if (error) throw new Error(`Error cambiando el estado del chat: ${error.message}`);
+}
+
 export async function getQuotationsByConversation(conversationId: string) {
   const { data, error } = await supabase
     .from('quotations')

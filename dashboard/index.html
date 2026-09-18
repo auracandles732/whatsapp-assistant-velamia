@@ -1453,7 +1453,63 @@
             .nx-page:has(.nx-content.chat-open) .nx-top { display: none; }
             .nx-bubble { max-width: 84%; }
             .nx-send { padding: 13px 16px; }
+            .nx-note-btn .lbl-hide { display: none; }
+            .nx-note-btn { padding: 12px; }
+            .nx-note { max-width: 92%; }
         }
+
+        /* ---------- CRM fase 2: etiquetas, no leídas, notas, acciones y alertas ---------- */
+        .nx-item.unread .name { color: #0E1533; }
+        .nx-item.unread .prev { color: #1E2A4A; font-weight: 600; }
+        .nx-unread { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: #4F5BD5; color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+        .nx-chip { padding: 8px 12px; }
+
+        .nx-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+        .nx-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-radius: 999px; background: #F1F4FC; color: #4A5582; font-size: 13px; font-weight: 600; }
+        .nx-tag button { padding: 0 4px; background: none; color: #9AA3C7; font-size: 15px; line-height: 1; cursor: pointer; }
+        .nx-tag button:hover { color: #C33636; }
+        .nx-tag-add { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 1px dashed #B6BEE0; background: #fff; color: #6C7CF0; display: inline-flex; align-items: center; justify-content: center; font-size: 17px; }
+        .nx-tag-input { padding: 5px 12px; border: 1px solid #C9D2F5; border-radius: 999px; font-size: 13px; width: 150px; font-family: inherit; color: #1E2A4A; }
+        .nx-tag-input:focus { outline: none; border-color: #6C7CF0; }
+
+        .nx-note { align-self: center; max-width: 78%; padding: 10px 14px; border-radius: 12px; background: #FFF8DC; border: 1px solid #F1E2A0; color: #5C4A05; font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; }
+        .nx-note .meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; font-size: 11px; font-weight: 700; color: #9A853A; }
+        .nx-note .meta button { padding: 0 4px; background: none; color: #B8A24A; font-size: 15px; line-height: 1; cursor: pointer; }
+        .nx-note .meta button:hover { color: #C33636; }
+
+        .nx-input.note { background: #FFFBEA; }
+        .nx-input.note textarea { background: #FFF8DC; border-color: #F1E2A0; }
+        .nx-note-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 12px; border: 1px solid #E1E6F4; background: #fff; color: #2A3766; font-size: 14px; font-weight: 600; flex-shrink: 0; }
+        .nx-note-btn:hover { background: #F6F8FE; }
+        .nx-note-btn.on { background: #FFF1C2; border-color: #F1E2A0; color: #7A5F00; }
+
+        .nx-task { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid #F0F2FA; }
+        .nx-task:first-of-type { border-top: none; }
+        .nx-check { width: 24px; height: 24px; padding: 0; margin-top: 1px; border-radius: 7px; border: 2px solid #C5CBE0; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; }
+        .nx-check:hover { border-color: #4F5BD5; background: #EEF2FF; }
+        .nx-task .info { flex: 1; min-width: 0; }
+        .nx-task .tt { font-size: 14px; font-weight: 600; color: #141C3A; word-wrap: break-word; }
+        .nx-task .dd { margin-top: 2px; font-size: 13px; color: #7A84AE; }
+        .nx-task .x { padding: 0 4px; background: none; color: #B6BEE0; font-size: 16px; line-height: 1; cursor: pointer; }
+        .nx-task .x:hover { color: #C33636; }
+        .nx-status { padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+        .nx-status.pend { background: #FDE8EF; color: #C2417A; }
+        .nx-status.today { background: #FFF1DA; color: #B36B00; }
+        .nx-status.late { background: #FDE8E8; color: #C33636; }
+        .nx-add-link { margin-top: 6px; padding: 8px 0 0; background: none; color: #2563EB; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .nx-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .nx-form input { padding: 10px 12px; border: 1px solid #E1E6F4; border-radius: 10px; font-size: 14px; font-family: inherit; color: #1E2A4A; background: #fff; }
+        .nx-form input:focus { outline: none; border-color: #6C7CF0; }
+        .nx-form .row { display: flex; gap: 8px; }
+        .nx-form button { padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+        .nx-form .save { background: #4F5BD5; color: #fff; }
+        .nx-form .cancel { background: #F1F4FC; color: #4A5582; }
+
+        .nx-alert { display: flex; gap: 10px; padding: 12px; margin-bottom: 8px; border-radius: 12px; background: #F1EEFF; border: 1px solid #E1DAFF; }
+        .nx-alert:last-child { margin-bottom: 0; }
+        .nx-alert.warn { background: #FFF6E5; border-color: #F6DFA8; }
+        .nx-alert .at { font-size: 14px; font-weight: 700; color: #141C3A; }
+        .nx-alert .ax { margin-top: 2px; font-size: 13px; color: #5C668F; line-height: 1.35; }
 
         .btn-logout {
             background: transparent;
@@ -1907,6 +1963,9 @@
                 case 'clock': return <svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
                 case 'calendar': return <svg {...p}><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>;
                 case 'chart': return <svg {...p}><path d="M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-8" /></svg>;
+                case 'note': return <svg {...p}><path d="M5 4h14v11l-5 5H5zM14 20v-5h5M8 9h8M8 13h4" /></svg>;
+                case 'bulb': return <svg {...p}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z" /></svg>;
+                case 'sparkle': return <svg {...p}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" /></svg>;
                 default: return null;
             }
         }
@@ -2878,6 +2937,116 @@
             );
         }
 
+        const TAG_SUGGESTIONS = ['VIP', 'Mayorista', 'Seguimiento', 'Urgente', 'Pago pendiente'];
+
+        function TagBar({ tags, onChange }) {
+            const [adding, setAdding] = useState(false);
+            const [value, setValue] = useState('');
+            function commit() {
+                const tag = value.trim();
+                setAdding(false);
+                setValue('');
+                if (tag && !tags.some(t => t.toLowerCase() === tag.toLowerCase())) onChange([...tags, tag]);
+            }
+            return (
+                <div className="nx-tags">
+                    {tags.map(tag => (
+                        <span className="nx-tag" key={tag}>{tag}<button type="button" title="Quitar etiqueta" onClick={() => onChange(tags.filter(t => t !== tag))}>×</button></span>
+                    ))}
+                    {adding ? (
+                        <>
+                            <input
+                                className="nx-tag-input"
+                                autoFocus
+                                list="nx-tag-suggestions"
+                                maxLength={24}
+                                placeholder="Nueva etiqueta"
+                                value={value}
+                                onChange={e => setValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setAdding(false); setValue(''); } }}
+                                onBlur={commit}
+                            />
+                            <datalist id="nx-tag-suggestions">{TAG_SUGGESTIONS.filter(t => !tags.includes(t)).map(t => <option key={t} value={t} />)}</datalist>
+                        </>
+                    ) : tags.length < 8 && <button type="button" className="nx-tag-add" title="Agregar etiqueta" onClick={() => setAdding(true)}>+</button>}
+                </div>
+            );
+        }
+
+        function taskDueInfo(task) {
+            if (!task.due_date) return { label: 'Sin fecha', cls: 'pend', text: 'Pendiente' };
+            const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: BUSINESS_TZ });
+            const date = new Date(task.due_date + 'T12:00:00');
+            const pretty = date.toLocaleDateString('es-EC', { day: 'numeric', month: 'long' });
+            if (task.due_date < todayKey) return { label: pretty, cls: 'late', text: 'Atrasada' };
+            if (task.due_date === todayKey) return { label: 'Hoy, ' + pretty, cls: 'today', text: 'Hoy' };
+            return { label: pretty, cls: 'pend', text: 'Pendiente' };
+        }
+
+        function TasksCard({ tasks, onAdd, onToggle, onRemove }) {
+            const [open, setOpen] = useState(false);
+            const [title, setTitle] = useState('');
+            const [date, setDate] = useState('');
+            const pending = tasks.filter(t => !t.done).sort((a, b) => (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1);
+            async function save() {
+                if (!title.trim()) return;
+                await onAdd(title.trim(), date);
+                setTitle('');
+                setDate('');
+                setOpen(false);
+            }
+            return (
+                <div className="nx-card">
+                    <div className="nx-card-h">
+                        <h3><PlatIcon name="check" size={20} /> Próxima acción</h3>
+                        {pending.length > 0 && <button type="button" className="link" onClick={() => onToggle(pending[0], true)}>Marcar como completada</button>}
+                    </div>
+                    {pending.length === 0 && !open && <div className="nx-soft">No hay acciones pendientes.</div>}
+                    {pending.map(task => {
+                        const info = taskDueInfo(task);
+                        return (
+                            <div className="nx-task" key={task.id}>
+                                <button type="button" className="nx-check" title="Marcar como hecha" onClick={() => onToggle(task, true)}></button>
+                                <div className="info">
+                                    <div className="tt">{task.title}</div>
+                                    <div className="dd">{info.label}</div>
+                                </div>
+                                <span className={'nx-status ' + info.cls}>{info.text}</span>
+                                <button type="button" className="x" title="Borrar" onClick={() => onRemove(task)}>×</button>
+                            </div>
+                        );
+                    })}
+                    {open ? (
+                        <div className="nx-form">
+                            <input type="text" autoFocus maxLength={160} placeholder="Ej: enviar confirmación de pedido" value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} />
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+                            <div className="row">
+                                <button type="button" className="save" onClick={save}>Guardar</button>
+                                <button type="button" className="cancel" onClick={() => { setOpen(false); setTitle(''); setDate(''); }}>Cancelar</button>
+                            </div>
+                        </div>
+                    ) : <button type="button" className="nx-add-link" onClick={() => setOpen(true)}>+ Agregar acción</button>}
+                </div>
+            );
+        }
+
+        function AlertsCard({ alerts, loading }) {
+            return (
+                <div className="nx-card">
+                    <div className="nx-card-h"><h3><PlatIcon name="sparkle" size={20} color="#7C5CF0" /> Alertas</h3></div>
+                    {loading ? <div className="nx-soft">Cargando...</div> : alerts.length === 0 ? <div className="nx-soft">Sin alertas por ahora.</div> : alerts.map(alert => (
+                        <div className={'nx-alert ' + alert.level} key={alert.title}>
+                            <PlatIcon name={alert.level === 'warn' ? 'clock' : 'bulb'} size={22} color={alert.level === 'warn' ? '#B36B00' : '#7C5CF0'} />
+                            <div>
+                                <div className="at">{alert.title}</div>
+                                <div className="ax">{alert.text}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
         function App({ onLogout, branding, onBrandingChange }) {
             const [conversations, setConversations] = useState([]);
             const [selectedConv, setSelectedConv] = useState(null);
@@ -2915,6 +3084,8 @@
             const [summary, setSummary] = useState(null);
             const [search, setSearch] = useState('');
             const [listFilter, setListFilter] = useState('all');
+            const [noteMode, setNoteMode] = useState(false);
+            const [noteText, setNoteText] = useState('');
             const isAdmin = session?.role === 'admin';
             const unit = biz?.sales.unitSingular || 'unidad';
             const unitPlural = biz?.sales.unitPlural || 'unidades';
@@ -2958,6 +3129,19 @@
                 const interval = setInterval(load, 15000);
                 return () => clearInterval(interval);
             }, [activeTab]);
+
+            useEffect(() => {
+                if (!selectedConv) return;
+                const id = selectedConv.id;
+                api('/api/conversations/' + id + '/read', { method: 'POST' })
+                    .then(() => setListOverview(prev => (prev.unread && prev.unread[id] ? { ...prev, unread: { ...prev.unread, [id]: 0 } } : prev)))
+                    .catch(() => {});
+            }, [selectedConv?.id, messages.length]);
+
+            useEffect(() => {
+                setNoteMode(false);
+                setNoteText('');
+            }, [selectedConv?.id]);
 
             useEffect(() => {
                 setSummary(null);
@@ -3201,15 +3385,27 @@
             const clientSet = new Set(listOverview.clientIds || []);
             const dayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
             const isRecent = c => { const t = parseTs(c.last_message_time); return !!t && t.getTime() > dayAgoMs; };
-            const needsCount = conversations.filter(isBotPausedIn).length;
+            const isClosedConv = c => c.status === 'closed';
+            const unreadMap = listOverview.unread || {};
+            const hasReadTracking = conversations.length > 0 && 'last_read_at' in conversations[0];
+            const openConversations = conversations.filter(c => !isClosedConv(c));
+            const unreadCount = openConversations.filter(c => unreadMap[c.id]).length;
+            const needsCount = openConversations.filter(isBotPausedIn).length;
             const searchText = search.trim().toLowerCase();
             const visibleConversations = conversations.filter(c => {
                 if (searchText && !((c.customer_name || '').toLowerCase().includes(searchText) || (c.phone_number || '').includes(searchText))) return false;
+                if (listFilter === 'closed') return isClosedConv(c);
+                if (isClosedConv(c)) return false;
+                if (listFilter === 'unread') return !!unreadMap[c.id];
                 if (listFilter === 'needs') return isBotPausedIn(c);
                 if (listFilter === 'clients') return clientSet.has(c.id);
                 if (listFilter === 'recent') return isRecent(c);
                 return true;
             });
+            const timeline = [
+                ...messages.map(m => ({ kind: 'msg', key: 'm' + m.id, ts: m.timestamp, data: m })),
+                ...((summary && summary.phase2 ? summary.notes : []).map(n => ({ kind: 'note', key: 'n' + n.id, ts: n.created_at, data: n })))
+            ].sort((a, b) => parseTs(a.ts) - parseTs(b.ts));
 
             async function loadQuotations() {
                 try {
@@ -3348,6 +3544,94 @@
                 }
             }
 
+            async function refreshSummary(id) {
+                try {
+                    const data = await api('/api/conversations/' + id + '/summary');
+                    if (openChatId.current === id) setSummary(data);
+                } catch (err) {
+                    console.error('Error cargando resumen del cliente:', err);
+                }
+            }
+
+            async function saveTags(tags) {
+                if (!selectedConv) return;
+                const id = selectedConv.id;
+                setSummary(prev => (prev ? { ...prev, tags } : prev));
+                try {
+                    await api('/api/conversations/' + id + '/tags', { method: 'PUT', body: JSON.stringify({ tags }) });
+                } catch (err) {
+                    alert('Error guardando etiquetas: ' + err.message);
+                    refreshSummary(id);
+                }
+            }
+
+            async function toggleClosed() {
+                if (!currentConv) return;
+                const closing = currentConv.status !== 'closed';
+                try {
+                    await api('/api/conversations/' + currentConv.id + '/status', { method: 'PUT', body: JSON.stringify({ status: closing ? 'closed' : 'active' }) });
+                    if (closing) setSelectedConv(null);
+                    loadConversations();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
+            async function saveNote() {
+                const content = noteText.trim();
+                if (!content || !selectedConv) return;
+                const id = selectedConv.id;
+                try {
+                    await api('/api/conversations/' + id + '/notes', { method: 'POST', body: JSON.stringify({ content }) });
+                    setNoteText('');
+                    stickToBottom.current = true;
+                    await refreshSummary(id);
+                    setTimeout(keepAtBottom, 100);
+                } catch (err) {
+                    alert('Error guardando la nota: ' + err.message);
+                }
+            }
+
+            async function removeNote(note) {
+                if (!selectedConv || !confirm('¿Borrar esta nota?')) return;
+                try {
+                    await api('/api/conversations/' + selectedConv.id + '/notes/' + note.id, { method: 'DELETE' });
+                    refreshSummary(selectedConv.id);
+                } catch (err) {
+                    alert('Error borrando la nota: ' + err.message);
+                }
+            }
+
+            async function addTask(title, dueDate) {
+                if (!selectedConv) return;
+                try {
+                    await api('/api/conversations/' + selectedConv.id + '/tasks', { method: 'POST', body: JSON.stringify({ title, dueDate }) });
+                    refreshSummary(selectedConv.id);
+                } catch (err) {
+                    alert('Error guardando la acción: ' + err.message);
+                }
+            }
+
+            async function setTaskDone(task, done) {
+                if (!selectedConv) return;
+                try {
+                    await api('/api/conversations/' + selectedConv.id + '/tasks/' + task.id, { method: 'PATCH', body: JSON.stringify({ done }) });
+                    refreshSummary(selectedConv.id);
+                } catch (err) {
+                    alert('Error actualizando la acción: ' + err.message);
+                }
+            }
+
+            async function removeTask(task) {
+                if (!selectedConv || !confirm('¿Borrar esta acción?')) return;
+                try {
+                    await api('/api/conversations/' + selectedConv.id + '/tasks/' + task.id, { method: 'DELETE' });
+                    refreshSummary(selectedConv.id);
+                } catch (err) {
+                    alert('Error borrando la acción: ' + err.message);
+                }
+            }
+
             async function sendMessage() {
                 if (!inputText.trim() || !selectedConv || sending) return;
 
@@ -3451,7 +3735,7 @@
                             <div className="nx-panel nx-list">
                                 <div className="nx-list-head">
                                     <h2>Conversaciones</h2>
-                                    <span className="nx-count">{conversations.length}</span>
+                                    <span className="nx-count">{openConversations.length}</span>
                                 </div>
                                 <div className="nx-search">
                                     <span className="ic"><PlatIcon name="search" size={18} color="#7A84AE" /></span>
@@ -3459,9 +3743,11 @@
                                 </div>
                                 <div className="nx-chips">
                                     <button type="button" className={'nx-chip' + (listFilter === 'all' ? ' on' : '')} onClick={() => setListFilter('all')}>Todas</button>
+                                    {hasReadTracking && <button type="button" className={'nx-chip' + (listFilter === 'unread' ? ' on' : '')} onClick={() => setListFilter('unread')}>No leídas{unreadCount > 0 && <span className="n">{unreadCount}</span>}</button>}
                                     <button type="button" className={'nx-chip' + (listFilter === 'needs' ? ' on' : '')} onClick={() => setListFilter('needs')}>Te necesitan{needsCount > 0 && <span className="n">{needsCount}</span>}</button>
                                     <button type="button" className={'nx-chip' + (listFilter === 'clients' ? ' on' : '')} onClick={() => setListFilter('clients')}>Clientes</button>
-                                    <button type="button" className={'nx-chip' + (listFilter === 'recent' ? ' on' : '')} onClick={() => setListFilter('recent')}>Últimas 24 h</button>
+                                    <button type="button" className={'nx-chip' + (listFilter === 'recent' ? ' on' : '')} onClick={() => setListFilter('recent')}>En curso</button>
+                                    <button type="button" className={'nx-chip' + (listFilter === 'closed' ? ' on' : '')} onClick={() => setListFilter('closed')}>Cerradas</button>
                                 </div>
                                 <div className="nx-items">
                                     {visibleConversations.length === 0 && <div className="nx-none">{conversations.length === 0 ? 'Todavía no hay conversaciones.' : 'No hay conversaciones con ese filtro.'}</div>}
@@ -3469,7 +3755,7 @@
                                         const preview = listOverview.previews[conv.id];
                                         const label = conv.customer_name || conv.phone_number;
                                         return (
-                                            <div key={conv.id} className={'nx-item' + (selectedConv?.id === conv.id ? ' active' : '')} onClick={() => setSelectedConv(conv)}>
+                                            <div key={conv.id} className={'nx-item' + (selectedConv?.id === conv.id ? ' active' : '') + (unreadMap[conv.id] ? ' unread' : '')} onClick={() => setSelectedConv(conv)}>
                                                 <Avatar name={label} size={44} />
                                                 <div className="body">
                                                     <div className="row">
@@ -3480,6 +3766,7 @@
                                                     <div className="foot">
                                                         <span className={'nx-dot' + (isRecent(conv) ? ' live' : '')}></span>
                                                         {isBotPausedIn(conv) && <span className="nx-need">Te necesita</span>}
+                                                        {unreadMap[conv.id] > 0 && <span className="nx-unread">{unreadMap[conv.id]}</span>}
                                                     </div>
                                                 </div>
                                             </div>
@@ -3498,10 +3785,15 @@
                                                 {currentConv.customer_name || currentConv.phone_number}
                                                 {summary && summary.badges.map(b => <span key={b} className={'nx-badge ' + (b === 'Cliente' ? 'green' : b === 'Interesado' ? 'violet' : 'gray')}>{b}</span>)}
                                                 <span className={'nx-badge ' + (botPausedInChat ? 'red' : 'gray')}>{botPausedInChat ? 'Bot pausado: atiendes tú' : 'El bot atiende'}</span>
+                                                {isClosedConv(currentConv) && <span className="nx-badge gray">Cerrada</span>}
                                             </div>
                                             <div className="ph">{'+' + currentConv.phone_number}</div>
+                                            {summary && summary.phase2 && <TagBar tags={summary.tags || []} onChange={saveTags} />}
                                         </div>
                                         <div className="nx-head-actions">
+                                            <button type="button" className="nx-icon-btn" onClick={toggleClosed}>
+                                                <PlatIcon name={isClosedConv(currentConv) ? 'refresh' : 'check'} size={18} color="#4F5BD5" /> <span className="lbl-hide">{isClosedConv(currentConv) ? 'Reabrir' : 'Cerrar'}</span>
+                                            </button>
                                             <button type="button" className="nx-icon-btn" onClick={pauseOrResumeBot} disabled={pausingBot}>
                                                 <PlatIcon name={botPausedInChat ? 'play' : 'pause'} size={18} color="#4F5BD5" /> <span className="lbl-hide">{botPausedInChat ? 'Reactivar bot' : 'Pausar bot'}</span>
                                             </button>
@@ -3512,17 +3804,31 @@
                                     </div>
 
                                     <div className="nx-msgs" ref={messagesRef} onScroll={handleMessagesScroll}>
-                                        {messages.map((msg, index) => {
+                                        {timeline.map((item, index) => {
+                                            const newDay = index === 0 || dayKey(timeline[index - 1].ts) !== dayKey(item.ts);
+                                            const dayPill = newDay ? <div className="nx-day">{dayLabel(item.ts)}</div> : null;
+                                            if (item.kind === 'note') {
+                                                const note = item.data;
+                                                return (
+                                                    <React.Fragment key={item.key}>
+                                                        {dayPill}
+                                                        <div className="nx-note">
+                                                            <div className="meta"><span>📝 Nota interna · {note.author || 'Equipo'} · {formatTime(note.created_at)}</span><button type="button" title="Borrar nota" onClick={() => removeNote(note)}>×</button></div>
+                                                            {note.content}
+                                                        </div>
+                                                    </React.Fragment>
+                                                );
+                                            }
+                                            const msg = item.data;
                                             const content = msg.content || '';
                                             // Solo en fotos, audios y documentos la primera línea es la URL del archivo;
                                             // un enlace que escribe la clienta se muestra tal cual.
                                             const urlMatch = MEDIA_TYPES.includes(msg.type) ? content.match(/^https?:\/\/\S+/) : null;
                                             const mediaUrl = urlMatch ? urlMatch[0] : null;
                                             const textPart = mediaUrl ? content.slice(mediaUrl.length).replace(/^\n/, '') : content;
-                                            const newDay = index === 0 || dayKey(messages[index - 1].timestamp) !== dayKey(msg.timestamp);
                                             return (
-                                                <React.Fragment key={msg.id}>
-                                                    {newDay && <div className="nx-day">{dayLabel(msg.timestamp)}</div>}
+                                                <React.Fragment key={item.key}>
+                                                    {dayPill}
                                                     <div className={'nx-msg ' + msg.sender}>
                                                         <div className="nx-bubble">
                                                             {msg.type === 'image' && mediaUrl ? <img src={mediaUrl} onLoad={keepAtBottom} onClick={() => window.open(mediaUrl, '_blank')} /> : null}
@@ -3537,22 +3843,27 @@
                                         })}
                                     </div>
 
-                                    <div className="nx-input">
+                                    <div className={'nx-input' + (noteMode ? ' note' : '')}>
                                         <button type="button" className="nx-round" onClick={sendPhoto} title="Enviar foto"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
                                         <textarea
-                                            placeholder="Escribe un mensaje..."
-                                            value={inputText}
-                                            onChange={e => setInputText(e.target.value)}
+                                            placeholder={noteMode ? 'Nota interna: el cliente no la ve...' : 'Escribe un mensaje...'}
+                                            value={noteMode ? noteText : inputText}
+                                            onChange={e => (noteMode ? setNoteText(e.target.value) : setInputText(e.target.value))}
                                             onKeyPress={e => {
                                                 if (e.key === 'Enter' && !e.shiftKey) {
                                                     e.preventDefault();
-                                                    sendMessage();
+                                                    if (noteMode) saveNote(); else sendMessage();
                                                 }
                                             }}
                                         ></textarea>
-                                        <button type="button" className="nx-send" onClick={sendMessage} disabled={sending}>
-                                            <PlatIcon name="send" size={19} color="#fff" /> {sending ? 'Enviando...' : 'Enviar'}
-                                        </button>
+                                        {summary && summary.phase2 && (
+                                            <button type="button" className={'nx-note-btn' + (noteMode ? ' on' : '')} onClick={() => setNoteMode(!noteMode)} title="Nota interna (el cliente no la ve)">
+                                                <PlatIcon name="note" size={18} color={noteMode ? '#7A5F00' : '#4F5BD5'} /> <span className="lbl-hide">Nota</span>
+                                            </button>
+                                        )}
+                                        {noteMode
+                                            ? <button type="button" className="nx-send" onClick={saveNote}><PlatIcon name="note" size={19} color="#fff" /> Guardar nota</button>
+                                            : <button type="button" className="nx-send" onClick={sendMessage} disabled={sending}><PlatIcon name="send" size={19} color="#fff" /> {sending ? 'Enviando...' : 'Enviar'}</button>}
                                     </div>
                                 </div>
                             ) : (
@@ -3568,6 +3879,8 @@
                                 <TodayCard data={today} />
                                 {selectedConv && <ClientCard summary={summary} conv={currentConv} />}
                                 {selectedConv && <ProductsCard summary={summary} onCatalog={() => setActiveTab('catalogo')} />}
+                                {selectedConv && summary && summary.phase2 && <TasksCard tasks={summary.tasks} onAdd={addTask} onToggle={setTaskDone} onRemove={removeTask} />}
+                                {selectedConv && <AlertsCard alerts={summary ? summary.alerts : []} loading={!summary} />}
                             </div>
                         </div>
                         )}

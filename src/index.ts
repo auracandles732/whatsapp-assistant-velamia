@@ -64,6 +64,16 @@ import {
 import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
+import {
+  markConversationRead,
+  setConversationTags,
+  setConversationStatus,
+  addConversationNote,
+  deleteConversationNote,
+  addConversationTask,
+  setConversationTaskDone,
+  deleteConversationTask
+} from './db';
 import { testBusinessCredentials, startHealthCheck, runHealthCheck } from './services/health';
 import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging } from './config/businessProfile';
 
@@ -357,6 +367,130 @@ app.get('/api/conversations/:id/summary', requireCrmSession, requireUuidParam, a
     const summary = await getConversationSummary(req.params.id);
     if (!summary) return res.status(404).json({ error: 'Conversación no encontrada' });
     res.json(summary);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Vistas del CRM, fase 2: leído, etiquetas, cerrar chat, notas y próximas acciones ----------
+
+/** Quién hace el cambio, para mostrarlo en notas y acciones. */
+async function crmAuthor(req: Request): Promise<string> {
+  const session = getCrmSession(req);
+  if (session.role === 'admin') return 'Administradora';
+  try {
+    const user = session.userId ? await getBusinessUser(session.userId) : null;
+    if (user?.full_name) return user.full_name;
+  } catch {
+    // sin nombre: se usa el genérico
+  }
+  return 'Equipo';
+}
+
+/** El chat debe ser del negocio en que se trabaja; si no, responde 404 y devuelve false. */
+async function ownsConversation(req: Request, res: Response): Promise<boolean> {
+  if (await getConversationById(req.params.id)) return true;
+  res.status(404).json({ error: 'Conversación no encontrada' });
+  return false;
+}
+
+function requireUuidTaskParam(req: Request, res: Response, next: NextFunction) {
+  const value = req.params.noteId ?? req.params.taskId;
+  if (!UUID_PATTERN.test(String(value))) return res.status(400).json({ error: 'Id inválido' });
+  next();
+}
+
+app.post('/api/conversations/:id/read', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    await markConversationRead(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/conversations/:id/tags', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    const raw: unknown[] = Array.isArray(req.body?.tags) ? req.body.tags : [];
+    const seen = new Set<string>();
+    const tags: string[] = [];
+    for (const item of raw) {
+      const tag = String(item ?? '').trim().slice(0, 24);
+      if (tag && !seen.has(tag.toLowerCase())) {
+        seen.add(tag.toLowerCase());
+        tags.push(tag);
+      }
+    }
+    await setConversationTags(req.params.id, tags.slice(0, 8));
+    res.json({ success: true, tags: tags.slice(0, 8) });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/conversations/:id/status', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    const status = req.body?.status === 'closed' ? 'closed' : 'active';
+    await setConversationStatus(req.params.id, status);
+    res.json({ success: true, status });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/conversations/:id/notes', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    const content = String(req.body?.content || '').trim();
+    if (!content) return res.status(400).json({ error: 'Escribe la nota' });
+    if (content.length > 1000) return res.status(400).json({ error: 'La nota no puede superar 1000 caracteres' });
+    res.json(await addConversationNote(req.params.id, await crmAuthor(req), content));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/conversations/:id/notes/:noteId', requireCrmSession, requireUuidParam, requireUuidTaskParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    await deleteConversationNote(req.params.id, req.params.noteId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/conversations/:id/tasks', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    const title = String(req.body?.title || '').trim();
+    if (!title) return res.status(400).json({ error: 'Escribe qué hay que hacer' });
+    if (title.length > 160) return res.status(400).json({ error: 'La acción no puede superar 160 caracteres' });
+    const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.dueDate || '')) ? String(req.body.dueDate) : null;
+    res.json(await addConversationTask(req.params.id, title, dueDate, await crmAuthor(req)));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/conversations/:id/tasks/:taskId', requireCrmSession, requireUuidParam, requireUuidTaskParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    await setConversationTaskDone(req.params.id, req.params.taskId, !!req.body?.done);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/conversations/:id/tasks/:taskId', requireCrmSession, requireUuidParam, requireUuidTaskParam, async (req: Request, res: Response) => {
+  try {
+    if (!(await ownsConversation(req, res))) return;
+    await deleteConversationTask(req.params.id, req.params.taskId);
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

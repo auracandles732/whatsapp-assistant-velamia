@@ -8,6 +8,9 @@ import {
   getConversationById,
   getAllProducts,
   getMessages,
+  getAllConversations,
+  getConversationNotes,
+  getConversationTasks,
   productNameFromCaption,
   parseDbTimestamp
 } from './supabase';
@@ -101,7 +104,7 @@ function previewText(m: { type: string; content: string | null }): string {
 /** Último mensaje de cada chat (para la lista) y los chats que ya compraron algo. */
 export async function getListOverview() {
   const since = new Date(Date.now() - 14 * DAY).toISOString();
-  const [messages, orders] = await Promise.all([getRecentMessages(since, 4000), getOrderRefs()]);
+  const [messages, orders, conversations] = await Promise.all([getRecentMessages(since, 4000), getOrderRefs(), getAllConversations()]);
 
   const previews: Record<string, { text: string; sender: string; timestamp: string }> = {};
   for (const m of messages) {
@@ -111,7 +114,16 @@ export async function getListOverview() {
     }
   }
 
-  return { previews, clientIds: [...new Set(orders.map(o => o.conversation_id))] };
+  // Sin la migración 020 no existe last_read_at: en ese caso no se muestran mensajes sin leer.
+  const unread: Record<string, number> = {};
+  for (const conv of conversations as any[]) {
+    if (!('last_read_at' in conv)) break;
+    const readAt = conv.last_read_at ? parseDbTimestamp(conv.last_read_at).getTime() : 0;
+    const count = messages.filter(m => m.conversation_id === conv.id && m.sender === 'customer' && parseDbTimestamp(m.timestamp).getTime() > readAt).length;
+    if (count > 0) unread[conv.id] = count;
+  }
+
+  return { previews, clientIds: [...new Set(orders.map(o => o.conversation_id))], unread };
 }
 
 function shippingPlace(products: unknown): string {
@@ -126,16 +138,69 @@ function shippingPlace(products: unknown): string {
 
 const capitalize = (text: string) => (text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : text);
 
+const agoText = (ms: number) => {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${Math.max(1, minutes)} min`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h`;
+  return `${Math.round(minutes / 1440)} días`;
+};
+
+export interface CrmAlert { level: 'info' | 'warn'; title: string; text: string }
+
+/** Avisos calculados con reglas simples sobre el chat (sin gastar IA): qué merece atención ahora. */
+export function buildAlerts(conversation: any, messages: any[], quotations: any[]): CrmAlert[] {
+  const alerts: CrmAlert[] = [];
+  const now = Date.now();
+  const at = (m: any) => parseDbTimestamp(m.timestamp).getTime();
+  const last = messages[messages.length - 1];
+  const paused = !!conversation.bot_paused_until && parseDbTimestamp(conversation.bot_paused_until).getTime() > now;
+
+  if (last && last.sender === 'customer' && paused && now - at(last) > 10 * 60 * 1000) {
+    alerts.push({ level: 'warn', title: 'Cliente esperando respuesta', text: `Escribió hace ${agoText(now - at(last))} y el bot está en pausa: te toca responder.` });
+  }
+
+  const pending = quotations.find((q: any) => q.status === 'pending'
+    && now - parseDbTimestamp(q.created_at).getTime() > DAY
+    && (!q.expires_at || parseDbTimestamp(q.expires_at).getTime() > now));
+  if (pending) {
+    alerts.push({ level: 'warn', title: 'Cotización sin respuesta', text: `La cotización de $${Number(pending.total_amount || 0).toFixed(2)} lleva ${agoText(now - parseDbTimestamp(pending.created_at).getTime())} sin confirmarse.` });
+  }
+
+  const bankIndex = messages.map((m: any) => String(m.content || '').startsWith('🏦 Datos para transferencia')).lastIndexOf(true);
+  if (bankIndex >= 0 && messages.slice(bankIndex + 1).some((m: any) => m.sender === 'customer' && m.type === 'image' && now - at(m) < 72 * 60 * 60 * 1000)) {
+    alerts.push({ level: 'info', title: 'Posible comprobante de pago', text: 'Envió una imagen después de recibir los datos bancarios. Revísala y confirma el pago.' });
+  }
+
+  const recent = messages
+    .filter((m: any) => m.sender === 'customer' && m.type === 'text' && now - at(m) < 3 * DAY)
+    .slice(-15)
+    .map((m: any) => String(m.content || '').toLowerCase())
+    .join(' ');
+  const topics: string[] = [];
+  if (/precio|cu[aá]nto (cuesta|vale|es|sale)|cost[oa]/.test(recent)) topics.push('precios');
+  if (/env[ií]o|entreg|domicilio/.test(recent)) topics.push('envíos');
+  if (/disponib|stock/.test(recent)) topics.push('disponibilidad');
+  if (/cotiza|presupuesto/.test(recent)) topics.push('cotización');
+  if (/instala/.test(recent)) topics.push('instalación');
+  if (topics.length >= 2) {
+    alerts.push({ level: 'info', title: 'Alta intención de compra', text: `Ha consultado ${topics.join(', ')}.` });
+  }
+
+  return alerts.slice(0, 3);
+}
+
 /** Todo lo que se sabe de un cliente: compras, ciudad, productos que consultó y en qué anda interesado. */
 export async function getConversationSummary(conversationId: string) {
   const conversation = await getConversationById(conversationId);
   if (!conversation) return null;
 
-  const [orders, quotations, messages, catalog] = await Promise.all([
+  const [orders, quotations, messages, catalog, notes, tasks] = await Promise.all([
     getOrdersByConversation(conversationId),
     getQuotationsByConversation(conversationId),
     getMessages(conversationId, 500),
-    getAllProducts()
+    getAllProducts(),
+    getConversationNotes(conversationId),
+    getConversationTasks(conversationId)
   ]);
 
   const valid = orders.filter((o: any) => o.status !== 'cancelled');
@@ -190,6 +255,13 @@ export async function getConversationSummary(conversationId: string) {
     },
     badges,
     interest: topCategory ? `Interesado en ${capitalize(topCategory)}` : null,
-    products
+    products,
+    tags: Array.isArray(conversation.tags) ? conversation.tags : [],
+    closed: conversation.status === 'closed',
+    // Sin la migración 020 no hay notas ni acciones: el CRM oculta esas partes.
+    phase2: notes !== null && tasks !== null,
+    notes: notes || [],
+    tasks: tasks || [],
+    alerts: buildAlerts(conversation, messages, quotations)
   };
 }
