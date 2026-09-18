@@ -1712,6 +1712,144 @@
 
         .product-card .photo.nophoto { display: flex; align-items: center; justify-content: center; font-size: 34px; background: #EEF1F9; color: #9AA3C7; }
 
+        /* ---------- Catálogo ---------- */
+        .cat-page { flex: 1; overflow-y: auto; padding: 20px 24px 32px; color: #1E2A4A; }
+        .cat-wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+        .cat-head { display: grid; grid-template-columns: minmax(0, 1.1fr) repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+        .cat-title { display: flex; align-items: center; gap: 14px; }
+        .cat-title .tile { width: 52px; height: 52px; border-radius: 16px; background: #E8EEFF; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .cat-title h1 { font-size: 26px; font-weight: 800; color: #141C3A; line-height: 1.15; }
+        .cat-title p { margin-top: 3px; font-size: 14px; color: #5C668F; line-height: 1.35; }
+
+        .cat-stat { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: #fff; border: 1px solid #E8ECF6; border-radius: 18px; box-shadow: 0 4px 20px rgba(50, 70, 160, 0.06); min-width: 0; }
+        .cat-stat .tile { width: 48px; height: 48px; border-radius: 50%; background: #EEF2FF; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .cat-stat .lab { font-size: 14px; color: #5C668F; }
+        .cat-stat .val { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 30px; font-weight: 800; color: #141C3A; line-height: 1.15; }
+        .cat-stat .sub { font-size: 13px; font-weight: 500; color: #7A84AE; }
+        .cat-stat .up { padding: 2px 8px; border-radius: 999px; background: #E6F6EC; color: #1E8A4A; font-size: 12px; font-weight: 700; }
+        .cat-stat .down { padding: 2px 8px; border-radius: 999px; background: #FDE8E8; color: #C33636; font-size: 12px; font-weight: 700; }
+
+        .cat-card { background: #fff; border: 1px solid #E8ECF6; border-radius: 20px; padding: 22px; box-shadow: 0 4px 20px rgba(50, 70, 160, 0.06); }
+        .cat-add-h { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+        .cat-add-h .plus { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #4F6BF5, #7C5CF0); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 6px 16px rgba(80, 100, 240, 0.35); }
+        .cat-add-h h2 { font-size: 20px; font-weight: 800; color: #141C3A; }
+        .cat-add-h p { margin-top: 2px; font-size: 14px; color: #5C668F; }
+
+        .cat-add { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 22px; align-items: start; }
+        .cat-drop {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;
+            min-height: 190px; padding: 16px; border: 2px dashed #B9C4F0; border-radius: 16px; background: #F8FAFF; color: #5C668F;
+            font-size: 13px; cursor: pointer; overflow: hidden; line-height: 1.4;
+        }
+        .cat-f label.cat-drop { display: flex; margin: 0; font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #5C668F; }
+        .cat-drop.over { background: #EEF2FF; border-color: #6C7CF0; }
+        .cat-drop img { width: 100%; height: 100%; max-height: 190px; object-fit: contain; border-radius: 10px; }
+        .cat-drop small { color: #8A93B5; font-size: 12px; }
+        .cat-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 16px; align-items: end; }
+        .cat-fields .wide { grid-column: 1 / -1; }
+        .cat-f label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: #3A4570; text-transform: uppercase; letter-spacing: 0.3px; }
+        .cat-f label i { font-style: normal; font-weight: 500; color: #7A84AE; text-transform: none; letter-spacing: 0; }
+        .cat-in { display: flex; align-items: center; border: 1px solid #DCE2F5; border-radius: 12px; background: #fff; overflow: hidden; }
+        .cat-in:focus-within { border-color: #6C7CF0; box-shadow: 0 0 0 3px rgba(108, 124, 240, 0.16); }
+        .cat-in .ic { display: flex; align-items: center; justify-content: center; width: 44px; align-self: stretch; background: #F4F6FD; border-right: 1px solid #E6EAF7; flex-shrink: 0; }
+        .cat-in input, .cat-in select { flex: 1; min-width: 0; padding: 13px 14px; border: none; background: transparent; font-size: 14px; font-family: inherit; color: #1E2A4A; }
+        .cat-in input:focus, .cat-in select:focus { outline: none; }
+        .cat-submit {
+            display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 14px 22px; border-radius: 12px;
+            background: linear-gradient(90deg, #4F6BF5, #8B5CF6); color: #fff; font-size: 15px; font-weight: 600; box-shadow: 0 6px 16px rgba(110, 100, 240, 0.32);
+        }
+        .cat-submit:hover { filter: brightness(1.08); }
+        .cat-submit:disabled { opacity: 0.7; cursor: default; }
+
+        .cat-list-h { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 18px; margin-bottom: 16px; }
+        .cat-list-h .ttl { display: flex; align-items: center; gap: 12px; flex: 1 1 240px; min-width: 0; }
+        .cat-list-h .ttl .tile { width: 40px; height: 40px; border-radius: 12px; background: #E8EEFF; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .cat-list-h h2 { font-size: 20px; font-weight: 800; color: #141C3A; }
+        .cat-list-h p { margin-top: 1px; font-size: 13px; color: #6B7599; }
+        .cat-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+        .cat-tools .cat-in { min-width: 200px; }
+        .cat-tools select { padding: 12px 14px; border: 1px solid #DCE2F5; border-radius: 12px; background: #fff; color: #1E2A4A; font-size: 14px; font-family: inherit; }
+        .cat-tools select:focus { outline: none; border-color: #6C7CF0; }
+        .cat-toggle { display: inline-flex; border: 1px solid #DCE2F5; border-radius: 12px; overflow: hidden; background: #fff; }
+        .cat-toggle button { padding: 11px 13px; background: #fff; display: flex; }
+        .cat-toggle button.on { background: #4F5BD5; }
+
+        .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+        .cat-item { display: flex; flex-direction: column; background: #fff; border: 1px solid #E8ECF6; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(50, 70, 160, 0.07); }
+        .cat-item .ph { width: 100%; height: 170px; object-fit: cover; background: #EEF1F9; display: flex; align-items: center; justify-content: center; }
+        .cat-item .body { flex: 1; display: flex; flex-direction: column; padding: 14px; }
+        .cat-tag { align-self: flex-start; padding: 4px 12px; border-radius: 999px; background: #FDE8EF; color: #C2417A; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+        .cat-item h3 { margin: 8px 0 4px; font-size: 16px; font-weight: 800; color: #141C3A; line-height: 1.25; word-wrap: break-word; }
+        .cat-price { font-size: 22px; font-weight: 800; color: #141C3A; }
+        .cat-price small { font-size: 13px; font-weight: 500; color: #6B7599; }
+        .cat-lines { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 12px; }
+        .cat-lines div { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #5C668F; line-height: 1.3; }
+        .cat-actions { display: flex; gap: 8px; margin-top: auto; }
+        .cat-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid #DCE2F5; background: #fff; color: #2563EB; font-size: 13px; font-weight: 600; }
+        .cat-btn:hover { background: #F4F7FF; }
+        .cat-btn:disabled { opacity: 0.6; cursor: default; }
+        .cat-btn.del { flex: 0 0 auto; padding: 10px 12px; color: #D03535; border-color: #F5C9C9; background: #FEF1F1; }
+        .cat-btn.del:hover { background: #FCE0E0; }
+        .cat-btn.copy { color: #2A3766; }
+
+        .cat-rows { display: flex; flex-direction: column; gap: 10px; }
+        .cat-row { display: flex; align-items: center; gap: 14px; padding: 10px; background: #fff; border: 1px solid #E8ECF6; border-radius: 14px; }
+        .cat-row .th { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; background: #EEF1F9; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .cat-row .mid { flex: 1; min-width: 0; }
+        .cat-row .mid h3 { margin: 4px 0 2px; font-size: 15px; font-weight: 800; color: #141C3A; }
+        .cat-row .mid .meta { font-size: 12px; color: #6B7599; line-height: 1.35; }
+        .cat-row .cat-price { font-size: 18px; white-space: nowrap; }
+        .cat-row .cat-actions { margin-top: 0; }
+        .cat-empty { padding: 36px 20px; text-align: center; color: #6B7599; font-size: 15px; line-height: 1.5; }
+
+        .cat-modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(20, 28, 58, 0.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .cat-modal { width: 100%; max-width: 620px; max-height: 92vh; overflow-y: auto; background: #fff; border-radius: 20px; padding: 22px; box-shadow: 0 20px 60px rgba(20, 28, 58, 0.4); }
+        .cat-modal h2 { font-size: 20px; font-weight: 800; color: #141C3A; margin-bottom: 16px; }
+        .cat-modal .foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .cat-modal .cancel { padding: 13px 20px; border-radius: 12px; background: #F1F4FC; color: #4A5582; font-size: 14px; font-weight: 600; }
+        .cat-modal .edit-photo { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+        .cat-modal .edit-photo img, .cat-modal .edit-photo .noimg { width: 84px; height: 84px; border-radius: 12px; object-fit: cover; background: #EEF1F9; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .cat-modal .edit-photo label.pick { padding: 10px 14px; border-radius: 10px; border: 1px solid #DCE2F5; color: #2563EB; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+        @media (max-width: 1250px) {
+            .cat-head { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .cat-title { grid-column: 1 / -1; }
+        }
+
+        @media (max-width: 900px) {
+            .cat-page { padding: 14px 12px 28px; }
+            .cat-add { grid-template-columns: 1fr; }
+            .cat-drop { min-height: 150px; }
+            .cat-card { padding: 16px; border-radius: 16px; }
+            .cat-tools { width: 100%; }
+            .cat-tools .cat-in { flex: 1 1 100%; }
+            .cat-tools select { flex: 1 1 140px; min-width: 0; }
+        }
+
+        @media (max-width: 700px) {
+            .cat-head { grid-template-columns: 1fr; gap: 10px; }
+            .cat-title h1 { font-size: 22px; }
+            .cat-stat { padding: 12px 14px; }
+            .cat-stat .val { font-size: 26px; }
+            .cat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+            .cat-item .ph { height: 120px; }
+            .cat-item .body { padding: 10px; }
+            .cat-price { font-size: 18px; }
+            .cat-actions { flex-wrap: wrap; }
+            .cat-btn { padding: 9px 8px; font-size: 12px; }
+            .cat-btn .lb { display: none; }
+            .cat-row { flex-wrap: wrap; }
+            .cat-row .mid { flex: 1 1 60%; }
+            .cat-row .cat-actions { width: 100%; }
+            .cat-modal { padding: 16px; border-radius: 16px; }
+        }
+
+        @media (max-width: 420px) {
+            .cat-grid { grid-template-columns: 1fr; }
+            .cat-btn .lb { display: inline; }
+        }
+
         .btn-logout {
             background: transparent;
             border: 1px solid var(--rosa-palo);
@@ -2172,6 +2310,15 @@
                 case 'truck': return <svg {...p}><path d="M2 6h11v10H2zM13 9h4l4 4v3h-8" /><circle cx="7" cy="17.5" r="1.8" /><circle cx="17" cy="17.5" r="1.8" /></svg>;
                 case 'bell': return <svg {...p}><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21h4" /></svg>;
                 case 'save': return <svg {...p}><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6" /></svg>;
+                case 'image': return <svg {...p}><rect x="3" y="4" width="18" height="16" rx="2.5" /><circle cx="9" cy="10" r="1.8" /><path d="M21 16l-5-5-8 8" /></svg>;
+                case 'edit': return <svg {...p}><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg>;
+                case 'copy': return <svg {...p}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>;
+                case 'grid': return <svg {...p}><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>;
+                case 'list': return <svg {...p}><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg>;
+                case 'ruler': return <svg {...p}><path d="M3 15L15 3l6 6L9 21zM7 11l2 2M10 8l2 2M13 5l2 2" /></svg>;
+                case 'layers': return <svg {...p}><path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5" /></svg>;
+                case 'gift': return <svg {...p}><rect x="3" y="8" width="18" height="5" rx="1" /><path d="M5 13v7h14v-7M12 8v12M12 8c-2 0-4-1-4-3s3-2 4 3c1-5 4-5 4-3s-2 3-4 3z" /></svg>;
+                case 'dollar': return <svg {...p}><path d="M12 3v18M16 7.5C15 6.5 13.7 6 12 6c-2.2 0-4 1-4 2.8 0 4 8 2 8 6.2 0 1.8-1.8 2.8-4 2.8-1.7 0-3.2-.6-4.2-1.7" /></svg>;
                 default: return null;
             }
         }
@@ -3473,6 +3620,364 @@
             );
         }
 
+        function readPhoto(file, done) {
+            if (!file) return;
+            // WhatsApp solo envía fotos JPG o PNG de hasta 5 MB.
+            if (!['image/jpeg', 'image/png'].includes(file.type)) {
+                alert('La foto debe ser JPG o PNG. WhatsApp no puede enviar otros formatos.');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                alert('La foto pesa más de 5 MB. Usa una foto más liviana para que WhatsApp la pueda enviar.');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => done(reader.result);
+            reader.readAsDataURL(file);
+        }
+
+        function CatField({ icon, label, wide, children }) {
+            return (
+                <div className={'cat-f' + (wide ? ' wide' : '')}>
+                    <label>{label}</label>
+                    <div className="cat-in"><span className="ic"><PlatIcon name={icon} size={18} color="#6B7599" /></span>{children}</div>
+                </div>
+            );
+        }
+
+        /** Campos de un producto (los usa el formulario de agregar y la ventana de editar). Unidad y medida solo si el negocio las usa. */
+        function ProductFields({ value, onChange, biz, categories, listId }) {
+            const perProductUnits = !!biz?.sales?.perProductUnits;
+            const unit = biz?.sales?.unitSingular || 'unidad';
+            const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
+            const categoryLabel = biz?.dates?.enabled ? 'Categoría / ' + biz.dates.eventLabel : 'Categoría';
+            const set = (key, v) => onChange({ ...value, [key]: v });
+            return (
+                <>
+                    <CatField icon="tag" label="Nombre del producto">
+                        <input type="text" placeholder="Ej: nombre de tu producto" value={value.name} onChange={e => set('name', e.target.value)} />
+                    </CatField>
+                    <CatField icon="dollar" label={'Precio por ' + unit + ' ($)'}>
+                        <input type="number" min="0" step="0.01" placeholder="Ej: 25.00" value={value.price} onChange={e => set('price', e.target.value)} />
+                    </CatField>
+                    <CatField icon="bag" label={categoryLabel}>
+                        <input type="text" list={listId} placeholder="Ej: la categoría del producto" value={value.category} onChange={e => set('category', e.target.value)} />
+                        <datalist id={listId}>{categories.map(c => <option key={c} value={c} />)}</datalist>
+                    </CatField>
+                    {perProductUnits && (
+                        <>
+                            <CatField icon="box" label={<>Unidad de venta <i>(opcional)</i></>}>
+                                <input type="text" placeholder="Ej: caja de 10, tubo, metro" value={value.sale_unit} onChange={e => set('sale_unit', e.target.value)} />
+                            </CatField>
+                            <CatField icon="ruler" label={<>Medida <i>(opcional)</i></>}>
+                                <input type="text" placeholder="Ej: 2,95 m x 0,17 m" value={value.measure} onChange={e => set('measure', e.target.value)} />
+                            </CatField>
+                            <CatField icon="layers" label={<>Unidades que trae <i>(opcional)</i></>}>
+                                <input type="number" min="2" step="1" placeholder="Ej: 10 si la caja trae 10" value={value.pieces_per_unit} onChange={e => set('pieces_per_unit', e.target.value)} />
+                            </CatField>
+                        </>
+                    )}
+                    {packagingTypes.length > 0 && (
+                        <CatField icon="gift" label="Empaque incluido">
+                            <select value={value.packaging} onChange={e => set('packaging', e.target.value)}>
+                                <option value="">Sin definir</option>
+                                {packagingTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                            </select>
+                        </CatField>
+                    )}
+                </>
+            );
+        }
+
+        const EMPTY_PRODUCT = { name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', photoBase64: '', photoPreview: '' };
+        const SORTS = { recent: 'Más recientes', name: 'Nombre (A-Z)', low: 'Precio: menor a mayor', high: 'Precio: mayor a menor' };
+
+        function CatalogView({ products, biz, legacy, reload }) {
+            const perProductUnits = !!biz?.sales?.perProductUnits;
+            const unit = biz?.sales?.unitSingular || 'unidad';
+            const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
+            const [form, setForm] = useState(EMPTY_PRODUCT);
+            const [saving, setSaving] = useState(false);
+            const [drag, setDrag] = useState(false);
+            const [search, setSearch] = useState('');
+            const [categoryFilter, setCategoryFilter] = useState('');
+            const [sort, setSort] = useState('recent');
+            const [view, setView] = useState('grid');
+            const [editing, setEditing] = useState(null);
+            const [busyId, setBusyId] = useState('');
+
+            const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+            const total = products.length;
+            const average = total ? products.reduce((sum, p) => sum + Number(p.price || 0), 0) / total : 0;
+            const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+            const before = products.filter(p => { const t = parseTs(p.created_at); return t && t.getTime() <= monthAgo; }).length;
+            const growth = before > 0 ? Math.round((total - before) / before * 100) : null;
+            const pretty = text => (text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : text);
+            const categoryNames = categories.slice(0, 2).map(pretty).join(', ') + (categories.length > 2 ? '…' : '');
+
+            const needle = search.trim().toLowerCase();
+            const visible = products
+                .filter(p => (!categoryFilter || p.category === categoryFilter) && (!needle || (p.name + ' ' + p.category).toLowerCase().includes(needle)))
+                .sort((a, b) => {
+                    if (sort === 'name') return String(a.name).localeCompare(String(b.name), 'es');
+                    if (sort === 'low') return Number(a.price) - Number(b.price);
+                    if (sort === 'high') return Number(b.price) - Number(a.price);
+                    return (parseTs(b.created_at)?.getTime() || 0) - (parseTs(a.created_at)?.getTime() || 0);
+                });
+
+            const uploadPhoto = async base64 => (await api('/api/upload-image', { method: 'POST', body: JSON.stringify({ imageBase64: base64 }) })).url;
+
+            async function addProduct() {
+                if (!form.name.trim() || !form.price || !form.category.trim()) {
+                    alert('Completa nombre, precio y categoría');
+                    return;
+                }
+                setSaving(true);
+                try {
+                    const imageUrl = form.photoBase64 ? await uploadPhoto(form.photoBase64) : '';
+                    await api('/api/products', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name: form.name, price: parseFloat(form.price), category: form.category, packaging: form.packaging,
+                            sale_unit: form.sale_unit, measure: form.measure, pieces_per_unit: form.pieces_per_unit, image_url: imageUrl
+                        })
+                    });
+                    setForm(EMPTY_PRODUCT);
+                    reload();
+                } catch (err) {
+                    alert('Error agregando producto: ' + err.message);
+                } finally {
+                    setSaving(false);
+                }
+            }
+
+            function startEdit(p) {
+                setEditing({
+                    id: p.id, name: p.name || '', price: String(p.price ?? ''), category: p.category || '',
+                    packaging: p.description || '', sale_unit: p.sale_unit || '', measure: p.measure || '',
+                    pieces_per_unit: p.pieces_per_unit ? String(p.pieces_per_unit) : '', image_url: p.image_url || '', photoBase64: '', photoPreview: ''
+                });
+            }
+
+            async function saveEdit() {
+                const e = editing;
+                if (!e.name.trim() || !e.price || !e.category.trim()) {
+                    alert('Completa nombre, precio y categoría');
+                    return;
+                }
+                setBusyId(e.id);
+                try {
+                    const body = { name: e.name, price: parseFloat(e.price), category: e.category };
+                    if (perProductUnits) Object.assign(body, { sale_unit: e.sale_unit, measure: e.measure, pieces_per_unit: e.pieces_per_unit });
+                    if (packagingTypes.length > 0) body.packaging = e.packaging;
+                    if (e.photoBase64) body.image_url = await uploadPhoto(e.photoBase64);
+                    await api('/api/products/' + e.id, { method: 'PUT', body: JSON.stringify(body) });
+                    setEditing(null);
+                    reload();
+                } catch (err) {
+                    alert('Error guardando el producto: ' + err.message);
+                } finally {
+                    setBusyId('');
+                }
+            }
+
+            async function duplicate(p) {
+                setBusyId(p.id);
+                try {
+                    await api('/api/products', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name: p.name + ' (copia)', price: Number(p.price), category: p.category,
+                            packaging: packagingTypes.some(t => t.name === p.description) ? p.description : '',
+                            sale_unit: p.sale_unit || '', measure: p.measure || '', pieces_per_unit: p.pieces_per_unit || '', image_url: p.image_url || ''
+                        })
+                    });
+                    reload();
+                } catch (err) {
+                    alert('Error duplicando el producto: ' + err.message);
+                } finally {
+                    setBusyId('');
+                }
+            }
+
+            async function remove(p) {
+                if (!confirm('¿Eliminar "' + p.name + '" del catálogo?')) return;
+                setBusyId(p.id);
+                try {
+                    await api('/api/products/' + p.id, { method: 'DELETE' });
+                    reload();
+                } catch (err) {
+                    alert('Error eliminando producto: ' + err.message);
+                } finally {
+                    setBusyId('');
+                }
+            }
+
+            const photo = (p, cls) => (p.image_url || legacy
+                ? <img className={cls} src={p.image_url || 'logo.png'} alt="" loading="lazy" />
+                : <div className={cls}><PlatIcon name="image" size={34} color="#9AA3C7" /></div>);
+            const priceText = p => <>${Number(p.price).toFixed(2).replace(/\.00$/, '')} <small>por {(perProductUnits && p.sale_unit) || unit}</small></>;
+            const detailLines = p => {
+                const lines = [];
+                if (perProductUnits) {
+                    if (p.sale_unit) lines.push(['box', 'Unidad de venta: ' + p.sale_unit]);
+                    if (p.measure) lines.push(['ruler', 'Medida: ' + p.measure]);
+                    if (p.pieces_per_unit) lines.push(['layers', 'Unidades que trae: ' + p.pieces_per_unit]);
+                }
+                if (biz?.packaging?.enabled) lines.push(['gift', 'Empaque: ' + (p.description || 'Sin definir')]);
+                return lines;
+            };
+            const actions = p => (
+                <div className="cat-actions">
+                    <button type="button" className="cat-btn" disabled={busyId === p.id} onClick={() => startEdit(p)}><PlatIcon name="edit" size={16} color="#2563EB" /><span className="lb">Editar</span></button>
+                    <button type="button" className="cat-btn copy" disabled={busyId === p.id} onClick={() => duplicate(p)}><PlatIcon name="copy" size={16} color="#2A3766" /><span className="lb">Duplicar</span></button>
+                    <button type="button" className="cat-btn del" disabled={busyId === p.id} title="Eliminar" onClick={() => remove(p)}><PlatIcon name="trash" size={16} color="#D03535" /></button>
+                </div>
+            );
+
+            return (
+                <div className="cat-page">
+                    <div className="cat-wrap">
+                        <div className="cat-head">
+                            <div className="cat-title">
+                                <div className="tile"><PlatIcon name="bag" size={28} color="#4F5BD5" /></div>
+                                <div><h1>Catálogo de productos</h1><p>Gestiona los productos que compartes por WhatsApp</p></div>
+                            </div>
+                            <div className="cat-stat">
+                                <div className="tile"><PlatIcon name="box" size={24} color="#4F5BD5" /></div>
+                                <div>
+                                    <div className="lab">Productos activos</div>
+                                    <div className="val">{total}{growth !== null && <span className={growth >= 0 ? 'up' : 'down'}>{growth >= 0 ? '↑ +' : '↓ '}{growth}%</span>}</div>
+                                    {growth !== null && <div className="sub">vs. mes anterior</div>}
+                                </div>
+                            </div>
+                            <div className="cat-stat">
+                                <div className="tile"><PlatIcon name="tag" size={24} color="#4F5BD5" /></div>
+                                <div>
+                                    <div className="lab">Categorías</div>
+                                    <div className="val">{categories.length}</div>
+                                    {categories.length > 0 && <div className="sub">{categoryNames}</div>}
+                                </div>
+                            </div>
+                            <div className="cat-stat">
+                                <div className="tile"><PlatIcon name="chart" size={24} color="#4F5BD5" /></div>
+                                <div>
+                                    <div className="lab">Precio promedio</div>
+                                    <div className="val">${average.toFixed(2).replace(/\.00$/, '')}</div>
+                                    <div className="sub">{perProductUnits ? 'por unidad de venta' : 'por ' + unit}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="cat-card">
+                            <div className="cat-add-h">
+                                <div className="plus"><PlatIcon name="plus" size={24} color="#fff" /></div>
+                                <div><h2>Agregar producto al catálogo</h2><p>Completa la información del producto. Luego podrás editarlo o compartirlo por WhatsApp.</p></div>
+                            </div>
+                            <div className="cat-add">
+                                <div className="cat-f">
+                                    <label>Foto del producto</label>
+                                    <label
+                                        className={'cat-drop' + (drag ? ' over' : '')}
+                                        onDragOver={e => { e.preventDefault(); setDrag(true); }}
+                                        onDragLeave={() => setDrag(false)}
+                                        onDrop={e => { e.preventDefault(); setDrag(false); readPhoto(e.dataTransfer.files[0], data => setForm(prev => ({ ...prev, photoBase64: data, photoPreview: data }))); }}
+                                    >
+                                        {form.photoPreview
+                                            ? <img src={form.photoPreview} alt="" />
+                                            : <><PlatIcon name="image" size={38} color="#6C7CF0" /><span>Haz clic para subir una imagen o arrástrala aquí</span><small>JPG, PNG (máx. 5 MB)</small></>}
+                                        <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={e => { readPhoto(e.target.files[0], data => setForm(prev => ({ ...prev, photoBase64: data, photoPreview: data }))); e.target.value = ''; }} />
+                                    </label>
+                                </div>
+                                <div className="cat-fields">
+                                    <ProductFields value={form} onChange={setForm} biz={biz} categories={categories} listId="cat-list-new" />
+                                    <button type="button" className="cat-submit" onClick={addProduct} disabled={saving}><PlatIcon name="plus" size={18} color="#fff" /> {saving ? 'Guardando...' : 'Agregar producto'}</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="cat-card">
+                            <div className="cat-list-h">
+                                <div className="ttl">
+                                    <div className="tile"><PlatIcon name="grid" size={22} color="#4F5BD5" /></div>
+                                    <div><h2>Tus productos</h2><p>Administra, edita o elimina los productos de tu catálogo</p></div>
+                                </div>
+                                <div className="cat-tools">
+                                    <div className="cat-in"><span className="ic"><PlatIcon name="search" size={18} color="#6B7599" /></span><input type="text" placeholder="Buscar productos..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+                                    <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+                                        <option value="">Todas las categorías</option>
+                                        {categories.map(c => <option key={c} value={c}>{pretty(c)}</option>)}
+                                    </select>
+                                    <select value={sort} onChange={e => setSort(e.target.value)}>
+                                        {Object.entries(SORTS).map(([key, label]) => <option key={key} value={key}>Ordenar por: {label}</option>)}
+                                    </select>
+                                    <div className="cat-toggle">
+                                        <button type="button" className={view === 'grid' ? 'on' : ''} title="Tarjetas" onClick={() => setView('grid')}><PlatIcon name="grid" size={19} color={view === 'grid' ? '#fff' : '#6B7599'} /></button>
+                                        <button type="button" className={view === 'list' ? 'on' : ''} title="Lista" onClick={() => setView('list')}><PlatIcon name="list" size={19} color={view === 'list' ? '#fff' : '#6B7599'} /></button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {total === 0 ? (
+                                <div className="cat-empty">Aún no has agregado productos. Usa el formulario de arriba para empezar tu catálogo {biz?.business?.productEmoji || ''}</div>
+                            ) : visible.length === 0 ? (
+                                <div className="cat-empty">Ningún producto coincide con la búsqueda.</div>
+                            ) : view === 'grid' ? (
+                                <div className="cat-grid">
+                                    {visible.map(p => (
+                                        <div className="cat-item" key={p.id}>
+                                            {photo(p, 'ph')}
+                                            <div className="body">
+                                                <span className="cat-tag">{p.category}</span>
+                                                <h3>{p.name}</h3>
+                                                <div className="cat-price">{priceText(p)}</div>
+                                                <div className="cat-lines">{detailLines(p).map(([icon, text]) => <div key={icon}><PlatIcon name={icon} size={16} color="#8A93B5" /><span>{text}</span></div>)}</div>
+                                                {actions(p)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="cat-rows">
+                                    {visible.map(p => (
+                                        <div className="cat-row" key={p.id}>
+                                            {photo(p, 'th')}
+                                            <div className="mid">
+                                                <span className="cat-tag">{p.category}</span>
+                                                <h3>{p.name}</h3>
+                                                <div className="meta">{detailLines(p).map(([, text]) => text).join(' · ')}</div>
+                                            </div>
+                                            <div className="cat-price">{priceText(p)}</div>
+                                            {actions(p)}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {editing && (
+                        <div className="cat-modal-bg" onMouseDown={e => { if (e.target === e.currentTarget) setEditing(null); }}>
+                            <div className="cat-modal">
+                                <h2>Editar producto</h2>
+                                <div className="edit-photo">
+                                    {editing.photoPreview || editing.image_url ? <img src={editing.photoPreview || editing.image_url} alt="" /> : <div className="noimg"><PlatIcon name="image" size={30} color="#9AA3C7" /></div>}
+                                    <label className="pick">Cambiar foto<input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={e => { readPhoto(e.target.files[0], data => setEditing(prev => ({ ...prev, photoBase64: data, photoPreview: data }))); e.target.value = ''; }} /></label>
+                                </div>
+                                <div className="cat-fields">
+                                    <ProductFields value={editing} onChange={setEditing} biz={biz} categories={categories} listId="cat-list-edit" />
+                                </div>
+                                <div className="foot">
+                                    <button type="button" className="cancel" onClick={() => setEditing(null)}>Cancelar</button>
+                                    <button type="button" className="cat-submit" onClick={saveEdit} disabled={busyId === editing.id}>{busyId === editing.id ? 'Guardando...' : 'Guardar cambios'}</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
         function App({ onLogout, branding, onBrandingChange }) {
             const [conversations, setConversations] = useState([]);
             const [selectedConv, setSelectedConv] = useState(null);
@@ -3483,8 +3988,6 @@
             const [loading, setLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('conversaciones');
             const [products, setProducts] = useState([]);
-            const [newProduct, setNewProduct] = useState({ name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', photoBase64: '', photoPreview: '' });
-            const [savingProduct, setSavingProduct] = useState(false);
             const [systemPrompt, setSystemPrompt] = useState('');
             const [savingPrompt, setSavingPrompt] = useState(false);
             const [promptSaved, setPromptSaved] = useState(false);
@@ -3514,10 +4017,8 @@
             const [noteText, setNoteText] = useState('');
             const isAdmin = session?.role === 'admin';
             const unit = biz?.sales.unitSingular || 'unidad';
-            const perProductUnits = !!biz?.sales?.perProductUnits;
             const unitPlural = biz?.sales.unitPlural || 'unidades';
             const productEmoji = biz?.business.productEmoji || '🛍️';
-            const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
             const messagesRef = useRef(null);
             // Se sigue al último mensaje salvo que la dueña haya subido a leer mensajes anteriores.
             const stickToBottom = useRef(true);
@@ -3638,95 +4139,6 @@
                     setProducts(Array.isArray(data) ? data : []);
                 } catch (err) {
                     console.error('Error cargando catálogo:', err);
-                }
-            }
-
-            function handlePhotoSelect(e) {
-                const file = e.target.files[0];
-                if (!file) return;
-                // WhatsApp solo envía fotos JPG o PNG de hasta 5 MB.
-                if (!['image/jpeg', 'image/png'].includes(file.type)) {
-                    alert('La foto debe ser JPG o PNG. WhatsApp no puede enviar otros formatos.');
-                    e.target.value = '';
-                    return;
-                }
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('La foto pesa más de 5 MB. Usa una foto más liviana para que WhatsApp la pueda enviar.');
-                    e.target.value = '';
-                    return;
-                }
-                const reader = new FileReader();
-                reader.onload = () => {
-                    setNewProduct(prev => ({ ...prev, photoBase64: reader.result, photoPreview: reader.result }));
-                };
-                reader.readAsDataURL(file);
-            }
-
-            async function addProduct() {
-                if (!newProduct.name.trim() || !newProduct.price || !newProduct.category.trim()) {
-                    alert('Completa nombre, precio y categoría');
-                    return;
-                }
-                setSavingProduct(true);
-                try {
-                    let imageUrl = '';
-                    if (newProduct.photoBase64) {
-                        const uploadData = await api('/api/upload-image', {
-                            method: 'POST',
-                            body: JSON.stringify({ imageBase64: newProduct.photoBase64 })
-                        });
-                        imageUrl = uploadData.url;
-                    }
-
-                    await api('/api/products', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            name: newProduct.name,
-                            price: parseFloat(newProduct.price),
-                            category: newProduct.category,
-                            packaging: newProduct.packaging,
-                            sale_unit: newProduct.sale_unit,
-                            measure: newProduct.measure,
-                            pieces_per_unit: newProduct.pieces_per_unit,
-                            image_url: imageUrl
-                        })
-                    });
-
-                    setNewProduct({ name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', photoBase64: '', photoPreview: '' });
-                    loadProducts();
-                } catch (err) {
-                    alert('Error agregando producto: ' + err.message);
-                } finally {
-                    setSavingProduct(false);
-                }
-            }
-
-            async function changeProductPackaging(id, packaging) {
-                try {
-                    await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify({ packaging }) });
-                    setProducts(prev => prev.map(p => p.id === id ? { ...p, description: packaging } : p));
-                } catch (err) {
-                    alert('Error cambiando el empaque: ' + err.message);
-                }
-            }
-
-            /** Guarda la unidad, la medida o las piezas de un producto ya creado. */
-            async function changeProductField(id, field, value) {
-                try {
-                    const saved = await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
-                    setProducts(prev => prev.map(x => x.id === id ? saved : x));
-                } catch (err) {
-                    alert('Error guardando el producto: ' + err.message);
-                }
-            }
-
-            async function removeProduct(id) {
-                if (!confirm('¿Eliminar este producto del catálogo?')) return;
-                try {
-                    await api(`/api/products/${id}`, { method: 'DELETE' });
-                    loadProducts();
-                } catch (err) {
-                    alert('Error eliminando producto: ' + err.message);
                 }
             }
 
@@ -4311,101 +4723,7 @@
                             </div>
                         </div>
                         )}
-                        {activeTab === 'catalogo' && (
-                        <div className="catalog-container">
-                            <div className="catalog-form">
-                                <div className="form-field">
-                                    <label>Foto</label>
-                                    <label className="photo-upload">
-                                        {newProduct.photoPreview ? <img src={newProduct.photoPreview} /> : '📷'}
-                                        <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={handlePhotoSelect} />
-                                    </label>
-                                </div>
-                                <div className="form-field">
-                                    <label>Nombre del producto</label>
-                                    <input type="text" placeholder="Ej: nombre del producto" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
-                                </div>
-                                <div className="form-field">
-                                    <label>Precio por {unit} ($)</label>
-                                    <input type="number" step="0.01" placeholder="Ej: 25.00" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
-                                </div>
-                                <div className="form-field">
-                                    <label>{biz?.dates.enabled ? `Categoría / ${biz.dates.eventLabel}` : 'Categoría'}</label>
-                                    <input type="text" placeholder="Ej: la categoría del producto" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
-                                </div>
-                                {perProductUnits && (
-                                    <>
-                                        <div className="form-field">
-                                            <label>Unidad de venta (opcional)</label>
-                                            <input type="text" placeholder="Ej: caja de 10, tubo, metro" value={newProduct.sale_unit} onChange={e => setNewProduct({...newProduct, sale_unit: e.target.value})} />
-                                        </div>
-                                        <div className="form-field">
-                                            <label>Medida (opcional)</label>
-                                            <input type="text" placeholder="Ej: 2,95 m x 0,17 m" value={newProduct.measure} onChange={e => setNewProduct({...newProduct, measure: e.target.value})} />
-                                        </div>
-                                        <div className="form-field">
-                                            <label>Unidades que trae (opcional)</label>
-                                            <input type="number" min="2" step="1" placeholder="Ej: 10 si la caja trae 10" value={newProduct.pieces_per_unit} onChange={e => setNewProduct({...newProduct, pieces_per_unit: e.target.value})} />
-                                        </div>
-                                    </>
-                                )}
-                                {packagingTypes.length > 0 && (
-                                    <div className="form-field">
-                                        <label>Empaque incluido</label>
-                                        <select value={newProduct.packaging} onChange={e => setNewProduct({...newProduct, packaging: e.target.value})}>
-                                            <option value="">Sin definir</option>
-                                            {packagingTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-                                        </select>
-                                    </div>
-                                )}
-                                <button className="btn-add-product" onClick={addProduct} disabled={savingProduct}>
-                                    {savingProduct ? 'Guardando...' : '+ Agregar'}
-                                </button>
-                            </div>
-
-                            {products.length === 0 ? (
-                                <div className="empty-catalog">
-                                    <p>Aún no has agregado productos. Usa el formulario de arriba para empezar tu catálogo {productEmoji}</p>
-                                </div>
-                            ) : (
-                                <div className="catalog-grid">
-                                    {products.map(product => (
-                                        <div key={product.id} className="product-card">
-                                            {product.image_url || session?.business?.legacy ? <img className="photo" src={product.image_url || 'logo.png'} /> : <div className="photo nophoto">📷</div>}
-                                            <div className="info">
-                                                <span className="category-tag">{product.category}</span>
-                                                <h4>{product.name}</h4>
-                                                <div className="price">${product.price} <small>por {(perProductUnits && product.sale_unit) || unit}</small></div>
-                                                {perProductUnits && (
-                                                    <div className="unit-fields">
-                                                        <label>Unidad de venta
-                                                            <input type="text" defaultValue={product.sale_unit || ''} placeholder="caja de 10, tubo..."
-                                                                onBlur={e => e.target.value !== (product.sale_unit || '') && changeProductField(product.id, 'sale_unit', e.target.value)} />
-                                                        </label>
-                                                        <label>Medida
-                                                            <input type="text" defaultValue={product.measure || ''} placeholder="2,95 m x 0,17 m"
-                                                                onBlur={e => e.target.value !== (product.measure || '') && changeProductField(product.id, 'measure', e.target.value)} />
-                                                        </label>
-                                                        <label>Unidades que trae
-                                                            <input type="number" min="2" step="1" defaultValue={product.pieces_per_unit || ''} placeholder="10"
-                                                                onBlur={e => e.target.value !== String(product.pieces_per_unit || '') && changeProductField(product.id, 'pieces_per_unit', e.target.value)} />
-                                                        </label>
-                                                    </div>
-                                                )}
-                                                {packagingTypes.length > 0 && (
-                                                    <select className="packaging-select" value={product.description || ''} onChange={e => changeProductPackaging(product.id, e.target.value)}>
-                                                        <option value="">🎁 Empaque sin definir</option>
-                                                        {packagingTypes.map(t => <option key={t.name} value={t.name}>🎁 {t.name}</option>)}
-                                                    </select>
-                                                )}
-                                                <button className="btn-delete-product" onClick={() => removeProduct(product.id)}>🗑️ Eliminar</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        )}
+                        {activeTab === 'catalogo' && <CatalogView products={products} biz={biz} legacy={!!session?.business?.legacy} reload={loadProducts} />}
                         {activeTab === 'cotizaciones' && (() => {
                             const statusLabels = { pending: 'Pendiente', accepted: 'Aceptada', expired: 'Vencida' };
                             const visible = quoteFilter === 'all' ? quotations : quotations.filter(q => q.status === quoteFilter);
