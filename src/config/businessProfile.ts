@@ -75,6 +75,8 @@ export interface BusinessProfile {
     customRates: Array<{ zone: string; costPerKg: number }>;
     /** Pesos de productos para cálculo con customRates: {productId: peso_kg}. */
     productWeights: Record<string, number>;
+    /** Cómo se empacan los envíos ("en caja de cartón protegida"). El asistente lo dice cuando preguntan si llegan bien cuidados. Vacío = no se menciona. */
+    packingNote: string;
   };
   followUps: {
     enabled: boolean;
@@ -155,7 +157,8 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     pickupAddress: '',
     useCustomRates: false,
     customRates: [],
-    productWeights: {}
+    productWeights: {},
+    packingNote: ''
   },
   followUps: {
     enabled: true,
@@ -229,7 +232,8 @@ export const STORE_PROFILE: BusinessProfile = {
     pickupAddress: '',
     useCustomRates: false,
     customRates: [],
-    productWeights: {}
+    productWeights: {},
+    packingNote: ''
   },
   followUps: {
     enabled: false,
@@ -359,7 +363,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       pickupAddress: text(sh.pickupAddress, base.shipping.pickupAddress),
       useCustomRates: bool(sh.useCustomRates, base.shipping.useCustomRates),
       customRates: Array.isArray(sh.customRates) ? sh.customRates.filter((r: any) => typeof r.zone === 'string' && typeof r.costPerKg === 'number') : base.shipping.customRates,
-      productWeights: typeof sh.productWeights === 'object' && sh.productWeights !== null ? sh.productWeights : base.shipping.productWeights
+      productWeights: typeof sh.productWeights === 'object' && sh.productWeights !== null ? sh.productWeights : base.shipping.productWeights,
+      packingNote: text(sh.packingNote, base.shipping.packingNote ?? '', 300)
     },
     followUps: {
       enabled: bool(f.enabled, base.followUps.enabled),

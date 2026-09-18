@@ -68,3 +68,23 @@ test('con empaques, el asistente recibe la lista completa y qué hacer si un pro
   assert.ok(prompt.includes('no inventes uno'));
   assert.ok(prompt.includes('Acetato, Tul, Kraft, Caja lazo personalizable'));
 });
+
+// ---------- Cómo viajan los pedidos ----------
+
+const conNota = normalizeProfile({
+  ...PROFILE_PRESETS.eventos.profile,
+  shipping: { ...PROFILE_PRESETS.eventos.profile.shipping, packingNote: 'Todos los pedidos salen en una caja de cartón bien protegida.' }
+});
+
+test('la nota de embalaje solo llega a las instrucciones del negocio que la escribió', () => {
+  const catalogo = [{ name: 'Vela', price: 30, category: 'EVENTOS' }];
+  assert.ok(buildSystemPrompt(catalogo, undefined, conNota).includes('caja de cartón bien protegida'));
+  assert.ok(!buildSystemPrompt(catalogo, undefined, conEmpaques).includes('Cómo viajan los pedidos'));
+  assert.ok(!buildSystemPrompt(catalogo, undefined, sinEmpaques).includes('Cómo viajan los pedidos'));
+});
+
+test('un perfil guardado antes de esta nota queda con la nota vacía', () => {
+  const antes = { ...PROFILE_PRESETS.eventos.profile, shipping: { ...PROFILE_PRESETS.eventos.profile.shipping } };
+  delete (antes.shipping as any).packingNote;
+  assert.equal(normalizeProfile(antes).shipping.packingNote, '');
+});

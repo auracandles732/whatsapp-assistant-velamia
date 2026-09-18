@@ -226,6 +226,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     add(sh.pickupAvailable
       ? `- ${origin} También puede retirar sin costo de envío${sh.pickupAddress ? ` en ${sh.pickupAddress}` : ''}; en ese caso usa "retiro" como shipping_place.`
       : `- ${origin} No hay retiro en local: si el cliente pide retirar, explícale con amabilidad que todos los pedidos se entregan por envío.`);
+    add(sh.packingNote && `- Cómo viajan los pedidos: ${sh.packingNote} Si el cliente pregunta si llegan bien cuidados, si se pueden dañar o cómo los envían, respóndelo con esto, sin inventar más detalles y sin mencionar costos.`);
   } else {
     add(`- No hacemos envíos${sh.pickupAddress ? `: el cliente retira su pedido en ${sh.pickupAddress}` : ''}.`);
   }

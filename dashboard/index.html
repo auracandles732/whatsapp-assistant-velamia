@@ -3294,6 +3294,7 @@
                                 {shippingMode === 'flat' && number('shipping.flatRate', 'Tarifa fija ($)', '', '0.01')}
                                 {shippingMode !== 'none' && text('shipping.carrier', 'Transportista', 'Ej: Servientrega')}
                                 {shippingMode !== 'none' && text('shipping.coverage', 'Cobertura', 'Ej: todo Ecuador')}
+                                {shippingMode !== 'none' && text('shipping.packingNote', 'Cómo se empaca el envío', 'Ej: en caja de cartón bien protegida', 'El asistente lo dice cuando preguntan si los productos llegan bien cuidados', true)}
                                 {shippingMode !== 'none' && number('shipping.unitsIncludedInRate', 'Cantidad que cubre la tarifa', '0 = sin recargo por cantidad')}
                                 {shippingMode !== 'none' && number('shipping.extraCost', 'Recargo si supera esa cantidad ($)', '', '0.01')}
                                 {shippingMode !== 'none' && check('shipping.showSeparately', 'Mostrar el envío por separado (si no, el total es un solo valor)')}
