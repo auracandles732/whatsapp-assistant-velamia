@@ -299,10 +299,11 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       'EMPAQUE (campo packaging de order_items):',
       `- Cada ${model} viene con su empaque, indicado en el catálogo como "empaque: …", y ese empaque ya está incluido en el precio.`,
       '- Tipos de empaque:',
-      ...p.packaging.types.map(t => `  - ${t.name}: ${t.description}.`),
+      ...p.packaging.types.map(t => `  - ${t.name}: ${t.description}${t.onlyIncluded ? ' (solo viene en los modelos que ya lo incluyen; NO se puede elegir como cambio)' : ''}.`),
       `- Si preguntan por los empaques en general, describe TODOS los tipos, uno por línea con su descripción, y pregunta qué ${model} le interesa para decirle cuál lleva.`,
       `- Si preguntan por la presentación o el empaque de un ${model}, dile el empaque de ESE ${model} según el catálogo y descríbelo en una frase. Si ese ${model} no tiene empaque en el catálogo, no inventes uno: dile que confirmas cuál lleva, menciona brevemente los tipos disponibles (${p.packaging.types.map(t => t.name).join(', ')}), pregúntale si tiene preferencia y escribe la consulta en owner_question.`,
-      `- El cliente puede cambiar a otro empaque. Costo del cambio por ${unit}: ${p.packaging.types.map(t => `${t.name} (${cost(t.changeCost)})`).join(', ')}. No menciones estos costos si no pregunta por cambiar el empaque.`,
+      `- El cliente puede cambiar a otro empaque. Costo del cambio por ${unit}: ${p.packaging.types.filter(t => !t.onlyIncluded).map(t => `${t.name} (${cost(t.changeCost)})`).join(', ')}. No menciones estos costos si no pregunta por cambiar el empaque.`,
+      ...(p.packaging.types.some(t => t.onlyIncluded) ? [`- Estos empaques NO se pueden elegir como cambio: ${p.packaging.types.filter(t => t.onlyIncluded).map(t => t.name).join(', ')}. Solo los llevan los ${models} que ya lo traen en el catálogo. Si el cliente pide cambiar a uno de ellos en un ${model} que no lo trae, explícale con amabilidad que ese empaque no se puede aplicar a ese ${model} por sus características (peso, tamaño), ofrécele los que sí puede elegir (${p.packaging.types.filter(t => !t.onlyIncluded).map(t => t.name).join(', ')}) y NO lo pongas en packaging: deja el del catálogo. No es una duda para la dueña: no escribas owner_question.`] : []),
       `- Personalizar la vela (colores, nombres, frases) no es lo mismo que personalizar el empaque. Un empaque solo se personaliza si su descripción lo dice; si preguntan por personalizar otro empaque, aclara que ese empaque no se personaliza (la vela sí) y menciona el que sí se puede.`,
       '- Si el cliente elige o pregunta por un empaque personalizable, pregúntale qué color le gustaría para cada parte que se personaliza. No ofrezcas una lista de colores: hay mucha variedad, así que deja que el cliente lo diga. Guarda los colores del empaque en personalization (ejemplo: "tul rosado con lazo blanco").',
       '- Si pide un cambio con "costo por confirmar", dile que lo verificas y le confirmas el valor (escríbelo en owner_question) y no des un total con ese cambio.',
@@ -645,6 +646,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
   const packagingOn = p.packaging.enabled && p.packaging.types.length > 0;
   // Empaque pedido cuyo costo de cambio aún no está definido: sin ese valor no hay total.
   let packagingUndefined = '';
+  let packagingBlocked = '';
   const items = (Array.isArray(rawItems) ? rawItems : [])
     .map((i: any) => ({
       product: byName.get(productKey(i?.name)),
@@ -657,7 +659,11 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
       // El empaque del catálogo va incluido en el precio; cambiarlo suma el costo del empaque elegido por unidad de venta.
       const included = packagingOn ? String(i.product.description || '').trim() : '';
       const wanted = packagingOn ? findPackaging(i.packaging, p) : undefined;
-      const changed = !!wanted && productKey(wanted.name) !== productKey(included);
+      const differs = !!wanted && productKey(wanted.name) !== productKey(included);
+      // Un empaque que solo viene en ciertos modelos no se puede aplicar a otro: se deja el del catálogo.
+      const blocked = differs && wanted!.onlyIncluded === true;
+      if (blocked) packagingBlocked = wanted!.name;
+      const changed = differs && !blocked;
       if (changed && wanted!.changeCost === null) packagingUndefined = wanted!.name;
       const extra = changed ? wanted!.changeCost || 0 : 0;
       return {
@@ -684,7 +690,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
   const subtotal = round2(items.reduce((sum: number, i: any) => sum + i.price * i.quantity, 0));
   const total = missing ? 0 : round2(subtotal + (shipping?.cost || 0));
   const depositPercent = p.payments.transferEnabled ? p.payments.depositPercent : 100;
-  return { items, place, shipping, missing, packagingUndefined, subtotal, total, deposit: round2(total * depositPercent / 100) };
+  return { items, place, shipping, missing, packagingUndefined, packagingBlocked, subtotal, total, deposit: round2(total * depositPercent / 100) };
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -931,6 +937,15 @@ export async function planTurn(params: {
   const amountsInReply = (reply().match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || [])
     .map(a => Number(a.replace(/[$\s]/g, '').replace(',', '.')));
   // Sin montos todavía, pero la reserva de la fecha sí se puede mencionar para crear urgencia.
+  // Si el cliente pidió un empaque que ese modelo no puede llevar y la respuesta no lo aclara, se rehace una vez.
+  if (firstOrder.packagingBlocked) {
+    const said = normalizeWords(reply());
+    const explains = said.includes(normalizeWords(firstOrder.packagingBlocked)) && /no (se )?(puede|podemos|es posible|esta disponible|aplica|lleva|maneja)|solo (viene|va|lleva)/.test(said);
+    if (!explains) {
+      const allowed = p.packaging.types.filter(t => !t.onlyIncluded).map(t => t.name).join(', ');
+      corrections.push(`El cliente pidió el empaque ${firstOrder.packagingBlocked}, que solo lo llevan los ${p.sales.productLabelPlural.toLowerCase()} que ya lo incluyen: dile con amabilidad que no se puede aplicar a ese ${p.sales.productLabel.toLowerCase()} por sus características (peso, tamaño), ofrécele ${allowed} y no lo pongas como empaque del pedido. No escribas owner_question.`);
+    }
+  }
   const noAmountsYet = `No escribas ningún monto (ni valor total${usesDeposit ? ' ni valor del anticipo' : ''}) todavía${p.dates.enabled ? `; sí puedes decir que la fecha se reserva con el ${usesDeposit ? 'anticipo' : 'pago'}` : ''}.`;
 
   // Un monto que el negocio ya le dio en este chat (por ejemplo el precio de un diseño personalizado que escribió

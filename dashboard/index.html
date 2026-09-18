@@ -3341,9 +3341,12 @@
                                             <input type="text" placeholder="Cómo es" value={type.description} onChange={e => set('packaging.types.' + i + '.description', e.target.value)} />
                                             <input type="number" min="0" step="0.01" placeholder="Costo" title={'Costo del cambio por ' + form.sales.unitSingular + ' ($)'} value={type.changeCost ?? ''} onChange={e => set('packaging.types.' + i + '.changeCost', e.target.value === '' ? null : Number(e.target.value))} />
                                             <button type="button" className="btn-link" onClick={() => set('packaging.types', form.packaging.types.filter((_, j) => j !== i))}>Quitar</button>
+                                            <label className="check-row" style={{ gridColumn: '1 / -1', flex: '1 1 100%', padding: '2px 0 8px' }}>
+                                                <input type="checkbox" checked={!!type.onlyIncluded} onChange={e => set('packaging.types.' + i + '.onlyIncluded', e.target.checked)} /> Solo viene en los modelos que ya lo incluyen (no se ofrece como cambio)
+                                            </label>
                                         </div>
                                     ))}
-                                    <button type="button" className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null }])}>+ Agregar empaque</button>
+                                    <button type="button" className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null, onlyIncluded: false }])}>+ Agregar empaque</button>
                                 </>
                             )}
                         </CfgCard>

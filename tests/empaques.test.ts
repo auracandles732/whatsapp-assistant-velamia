@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { findPackaging, normalizeProfile, PROFILE_PRESETS } from '../src/config/businessProfile';
-import { buildSystemPrompt } from '../src/services/openai';
+import { buildSystemPrompt, computeOrderTotal } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -87,4 +87,68 @@ test('un perfil guardado antes de esta nota queda con la nota vacía', () => {
   const antes = { ...PROFILE_PRESETS.eventos.profile, shipping: { ...PROFILE_PRESETS.eventos.profile.shipping } };
   delete (antes.shipping as any).packingNote;
   assert.equal(normalizeProfile(antes).shipping.packingNote, '');
+});
+
+// ---------- Empaques que solo vienen en ciertos modelos ----------
+
+const conRestriccion = normalizeProfile({
+  ...PROFILE_PRESETS.eventos.profile,
+  shipping: { ...PROFILE_PRESETS.eventos.profile.shipping, mode: 'flat', flatRate: 10, unitsIncludedInRate: 0, extraCost: 0 },
+  packaging: {
+    enabled: true,
+    types: [
+      { name: 'Tul', description: 'delicado, con lazo', changeCost: 0 },
+      { name: 'Kraft', description: 'natural', changeCost: null },
+      { name: 'Caja lazo personalizable', description: 'caja con lazo', changeCost: 0, onlyIncluded: true }
+    ]
+  }
+});
+
+const catalogoEmpaques = [
+  { name: 'Vela con tul', price: 30, category: 'EVENTOS', description: 'Tul' },
+  { name: 'Vela con caja', price: 30, category: 'EVENTOS', description: 'Caja lazo personalizable' }
+];
+
+test('la restricción de empaque se guarda y por defecto no existe', () => {
+  const caja = conRestriccion.packaging.types.find(t => t.name === 'Caja lazo personalizable');
+  const tul = conRestriccion.packaging.types.find(t => t.name === 'Tul');
+  assert.equal(caja?.onlyIncluded, true);
+  assert.equal(tul?.onlyIncluded, false);
+  assert.equal(normalizeProfile({ packaging: { enabled: true, types: [{ name: 'X', description: 'y' }] } }).packaging.types[0].onlyIncluded, false);
+});
+
+test('de tul a caja NO se puede: se queda el tul y se avisa', () => {
+  const pedido = computeOrderTotal([{ name: 'Vela con tul', quantity: 2, packaging: 'Caja lazo personalizable' }], 'Quito', catalogoEmpaques, conRestriccion);
+  assert.equal(pedido.items[0].packaging, 'Tul');
+  assert.equal(pedido.items[0].packagingChanged, false);
+  assert.equal(pedido.packagingBlocked, 'Caja lazo personalizable');
+  assert.equal(pedido.missing, '');
+  assert.equal(pedido.total, 70);
+});
+
+test('de caja a tul sí se puede y no cuesta extra', () => {
+  const pedido = computeOrderTotal([{ name: 'Vela con caja', quantity: 2, packaging: 'Tul' }], 'Quito', catalogoEmpaques, conRestriccion);
+  assert.equal(pedido.items[0].packaging, 'Tul');
+  assert.equal(pedido.items[0].packagingChanged, true);
+  assert.equal(pedido.packagingBlocked, '');
+  assert.equal(pedido.total, 70);
+});
+
+test('quedarse con la caja que ya trae no es un cambio ni se bloquea', () => {
+  const pedido = computeOrderTotal([{ name: 'Vela con caja', quantity: 1, packaging: 'Caja lazo personalizable' }], 'Quito', catalogoEmpaques, conRestriccion);
+  assert.equal(pedido.items[0].packagingChanged, false);
+  assert.equal(pedido.packagingBlocked, '');
+});
+
+test('un empaque que sí se puede elegir sigue funcionando con su costo por confirmar', () => {
+  const pedido = computeOrderTotal([{ name: 'Vela con tul', quantity: 1, packaging: 'Kraft' }], 'Quito', catalogoEmpaques, conRestriccion);
+  assert.equal(pedido.packagingBlocked, '');
+  assert.equal(pedido.missing, 'packaging_cost');
+});
+
+test('las instrucciones avisan qué empaques no se pueden elegir y no cobran por ellos', () => {
+  const prompt = buildSystemPrompt(catalogoEmpaques, undefined, conRestriccion);
+  assert.ok(prompt.includes('NO se pueden elegir como cambio: Caja lazo personalizable'));
+  assert.ok(prompt.includes('Costo del cambio por docena: Tul (sin costo), Kraft (costo por confirmar).'));
+  assert.ok(!buildSystemPrompt(catalogoEmpaques, undefined, conEmpaques).includes('NO se pueden elegir como cambio'));
 });

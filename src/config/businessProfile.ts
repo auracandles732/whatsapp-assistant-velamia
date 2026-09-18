@@ -118,6 +118,8 @@ export interface PackagingType {
   description: string;
   /** Costo adicional por unidad de venta al cambiar a este empaque; null = aún no definido. */
   changeCost: number | null;
+  /** true = solo viene en los modelos que ya lo incluyen (por peso, altura...): no se ofrece como cambio. */
+  onlyIncluded?: boolean;
 }
 
 export const VELAMIA_PROFILE: BusinessProfile = {
@@ -396,7 +398,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
             name: text(t?.name, '', 40),
             description: text(t?.description, '', 160),
             // Vacío = costo del cambio sin definir: el bot no da un total con ese cambio.
-            changeCost: t?.changeCost === null || t?.changeCost === undefined || t?.changeCost === '' ? null : num(t.changeCost, 0, 0, 10000)
+            changeCost: t?.changeCost === null || t?.changeCost === undefined || t?.changeCost === '' ? null : num(t.changeCost, 0, 0, 10000),
+            onlyIncluded: t?.onlyIncluded === true
           }))
           .filter((t: PackagingType) => t.name)
           .slice(0, 10)
