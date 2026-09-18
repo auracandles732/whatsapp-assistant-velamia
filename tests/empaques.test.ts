@@ -7,7 +7,7 @@ import './entorno';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { findPackaging, normalizeProfile, PROFILE_PRESETS } from '../src/config/businessProfile';
+import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS } from '../src/config/businessProfile';
 import { buildSystemPrompt, computeOrderTotal } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
@@ -89,66 +89,106 @@ test('un perfil guardado antes de esta nota queda con la nota vacía', () => {
   assert.equal(normalizeProfile(antes).shipping.packingNote, '');
 });
 
-// ---------- Empaques que solo vienen en ciertos modelos ----------
+// ---------- Cambios de un empaque a otro ----------
 
-const conRestriccion = normalizeProfile({
+const conCambios = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
   shipping: { ...PROFILE_PRESETS.eventos.profile.shipping, mode: 'flat', flatRate: 10, unitsIncludedInRate: 0, extraCost: 0 },
   packaging: {
     enabled: true,
     types: [
-      { name: 'Tul', description: 'delicado, con lazo', changeCost: 0 },
-      { name: 'Kraft', description: 'natural', changeCost: null },
-      { name: 'Caja lazo personalizable', description: 'caja con lazo', changeCost: 0, onlyIncluded: true }
+      { name: 'Tul', description: 'delicado, con lazo', changeCost: null },
+      { name: 'Acetato', description: 'transparente', changeCost: null },
+      { name: 'Caja lazo personalizable', description: 'caja con lazo', changeCost: null },
+      { name: 'Kraft', description: 'natural', changeCost: null }
+    ],
+    changes: [
+      { from: 'Caja lazo personalizable', to: 'Tul', cost: 0, allowed: true, note: '' },
+      { from: 'Caja lazo personalizable', to: 'Acetato', cost: 4, allowed: true, note: '' },
+      { from: 'Tul', to: 'Caja lazo personalizable', cost: null, allowed: false, note: 'por el peso y la altura de la vela' },
+      { from: 'Tul', to: 'Acetato', cost: 5, allowed: true, note: '' },
+      { from: 'Acetato', to: 'Tul', cost: 0, allowed: true, note: 'En el tul sí se aprecia bien la vela.' },
+      { from: 'Acetato', to: 'Caja lazo personalizable', cost: 0, allowed: true, note: 'No se recomienda: en la caja no se aprecia bien la vela.' },
+      { from: 'Tul', to: 'Tul', cost: 1, allowed: true, note: 'inválida: mismo empaque' },
+      { from: '', to: 'Kraft', cost: 1, allowed: true, note: 'inválida: sin origen' }
     ]
   }
 });
 
-const catalogoEmpaques = [
+const catalogoCambios = [
   { name: 'Vela con tul', price: 30, category: 'EVENTOS', description: 'Tul' },
-  { name: 'Vela con caja', price: 30, category: 'EVENTOS', description: 'Caja lazo personalizable' }
+  { name: 'Vela con caja', price: 30, category: 'EVENTOS', description: 'Caja lazo personalizable' },
+  { name: 'Vela con acetato', price: 30, category: 'EVENTOS', description: 'Acetato' }
 ];
 
-test('la restricción de empaque se guarda y por defecto no existe', () => {
-  const caja = conRestriccion.packaging.types.find(t => t.name === 'Caja lazo personalizable');
-  const tul = conRestriccion.packaging.types.find(t => t.name === 'Tul');
-  assert.equal(caja?.onlyIncluded, true);
-  assert.equal(tul?.onlyIncluded, false);
-  assert.equal(normalizeProfile({ packaging: { enabled: true, types: [{ name: 'X', description: 'y' }] } }).packaging.types[0].onlyIncluded, false);
+const pedir = (modelo: string, empaque: string) =>
+  computeOrderTotal([{ name: modelo, quantity: 2, packaging: empaque }], 'Quito', catalogoCambios, conCambios);
+
+test('las reglas de cambio se guardan y se descartan las que no tienen sentido', () => {
+  assert.equal(conCambios.packaging.changes.length, 6);
+  assert.equal(normalizeProfile({ packaging: { enabled: true, types: [] } }).packaging.changes.length, 0);
 });
 
-test('de tul a caja NO se puede: se queda el tul y se avisa', () => {
-  const pedido = computeOrderTotal([{ name: 'Vela con tul', quantity: 2, packaging: 'Caja lazo personalizable' }], 'Quito', catalogoEmpaques, conRestriccion);
+test('una regla escrita manda; si no hay regla vale el costo general del empaque nuevo', () => {
+  assert.deepEqual(packagingChange('Tul', 'Acetato', conCambios), { allowed: true, cost: 5, note: '', specific: true });
+  assert.equal(packagingChange('Tul', 'Caja lazo personalizable', conCambios)?.allowed, false);
+  assert.equal(packagingChange('Acetato', 'Kraft', conCambios)?.specific, false);
+  assert.equal(packagingChange('Acetato', 'Kraft', conCambios)?.cost, null);
+  assert.equal(packagingChange('Tul', 'no existe', conCambios), undefined);
+});
+
+test('de tul a caja NO se puede: se queda el tul, se explica el motivo y se ofrecen las otras opciones', () => {
+  const pedido = pedir('Vela con tul', 'Caja lazo personalizable');
   assert.equal(pedido.items[0].packaging, 'Tul');
   assert.equal(pedido.items[0].packagingChanged, false);
   assert.equal(pedido.packagingBlocked, 'Caja lazo personalizable');
+  assert.equal(pedido.packagingBlockedNote, 'por el peso y la altura de la vela');
+  assert.deepEqual(pedido.packagingAlternatives, ['Acetato', 'Kraft']);
   assert.equal(pedido.missing, '');
   assert.equal(pedido.total, 70);
 });
 
 test('de caja a tul sí se puede y no cuesta extra', () => {
-  const pedido = computeOrderTotal([{ name: 'Vela con caja', quantity: 2, packaging: 'Tul' }], 'Quito', catalogoEmpaques, conRestriccion);
+  const pedido = pedir('Vela con caja', 'Tul');
   assert.equal(pedido.items[0].packaging, 'Tul');
   assert.equal(pedido.items[0].packagingChanged, true);
   assert.equal(pedido.packagingBlocked, '');
   assert.equal(pedido.total, 70);
 });
 
-test('quedarse con la caja que ya trae no es un cambio ni se bloquea', () => {
-  const pedido = computeOrderTotal([{ name: 'Vela con caja', quantity: 1, packaging: 'Caja lazo personalizable' }], 'Quito', catalogoEmpaques, conRestriccion);
+test('de caja a acetato suma $4 por docena', () => {
+  assert.equal(pedir('Vela con caja', 'Acetato').total, 2 * 34 + 10);
+});
+
+test('de tul a acetato suma $5 por docena', () => {
+  assert.equal(pedir('Vela con tul', 'Acetato').total, 2 * 35 + 10);
+});
+
+test('de acetato a tul o a caja no cuesta extra, y a la caja se le avisa que no se recomienda', () => {
+  assert.equal(pedir('Vela con acetato', 'Tul').total, 70);
+  const aCaja = pedir('Vela con acetato', 'Caja lazo personalizable');
+  assert.equal(aCaja.total, 70);
+  assert.equal(aCaja.items[0].packaging, 'Caja lazo personalizable');
+  assert.equal(aCaja.packagingBlocked, '');
+  assert.match(packagingChange('Acetato', 'Caja lazo personalizable', conCambios)!.note, /No se recomienda/);
+});
+
+test('quedarse con el empaque que ya trae no es un cambio', () => {
+  const pedido = pedir('Vela con caja', 'Caja lazo personalizable');
   assert.equal(pedido.items[0].packagingChanged, false);
   assert.equal(pedido.packagingBlocked, '');
 });
 
-test('un empaque que sí se puede elegir sigue funcionando con su costo por confirmar', () => {
-  const pedido = computeOrderTotal([{ name: 'Vela con tul', quantity: 1, packaging: 'Kraft' }], 'Quito', catalogoEmpaques, conRestriccion);
-  assert.equal(pedido.packagingBlocked, '');
-  assert.equal(pedido.missing, 'packaging_cost');
+test('un cambio sin regla ni costo definido queda por confirmar', () => {
+  assert.equal(pedir('Vela con tul', 'Kraft').missing, 'packaging_cost');
 });
 
-test('las instrucciones avisan qué empaques no se pueden elegir y no cobran por ellos', () => {
-  const prompt = buildSystemPrompt(catalogoEmpaques, undefined, conRestriccion);
-  assert.ok(prompt.includes('NO se pueden elegir como cambio: Caja lazo personalizable'));
-  assert.ok(prompt.includes('Costo del cambio por docena: Tul (sin costo), Kraft (costo por confirmar).'));
-  assert.ok(!buildSystemPrompt(catalogoEmpaques, undefined, conEmpaques).includes('NO se pueden elegir como cambio'));
+test('las instrucciones del asistente traen la tabla de cambios con costos, prohibiciones y notas', () => {
+  const prompt = buildSystemPrompt(catalogoCambios, undefined, conCambios);
+  assert.ok(prompt.includes('Caja lazo personalizable → Tul: sin costo'));
+  assert.ok(prompt.includes('Caja lazo personalizable → Acetato: +$4.00 por docena'));
+  assert.ok(prompt.includes('Tul → Acetato: +$5.00 por docena'));
+  assert.ok(prompt.includes('Tul → Caja lazo personalizable: NO se puede. por el peso y la altura de la vela'));
+  assert.ok(prompt.includes('Acetato → Caja lazo personalizable: sin costo. No se recomienda'));
+  assert.ok(!buildSystemPrompt(catalogoCambios, undefined, conEmpaques).includes('Cambios de empaque, del empaque que trae'));
 });

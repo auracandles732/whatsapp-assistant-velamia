@@ -1850,6 +1850,18 @@
             .cat-btn .lb { display: inline; }
         }
 
+        .nx-cfg .nx-sub { margin: 20px 0 6px; font-size: 15px; font-weight: 800; color: #141C3A; }
+        .nx-rule { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 130px 100px auto; gap: 8px; align-items: center; margin-bottom: 10px; padding: 10px; border: 1px solid #E8ECF6; border-radius: 12px; background: #FAFBFF; }
+        .nx-rule select, .nx-rule input { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; color: #1E2A4A; font-size: 14px; font-family: inherit; }
+        .nx-rule input:disabled { background: #F1F3F9; color: #9AA3C7; }
+        .nx-rule .arrow { color: #6B7599; font-weight: 700; }
+        .nx-rule .note { grid-column: 1 / -2; }
+        @media (max-width: 900px) {
+            .nx-rule { grid-template-columns: 1fr 1fr; }
+            .nx-rule .arrow { display: none; }
+            .nx-rule .note { grid-column: 1 / -1; }
+        }
+
         .btn-logout {
             background: transparent;
             border: 1px solid var(--rosa-palo);
@@ -3341,12 +3353,33 @@
                                             <input type="text" placeholder="Cómo es" value={type.description} onChange={e => set('packaging.types.' + i + '.description', e.target.value)} />
                                             <input type="number" min="0" step="0.01" placeholder="Costo" title={'Costo del cambio por ' + form.sales.unitSingular + ' ($)'} value={type.changeCost ?? ''} onChange={e => set('packaging.types.' + i + '.changeCost', e.target.value === '' ? null : Number(e.target.value))} />
                                             <button type="button" className="btn-link" onClick={() => set('packaging.types', form.packaging.types.filter((_, j) => j !== i))}>Quitar</button>
-                                            <label className="check-row" style={{ gridColumn: '1 / -1', flex: '1 1 100%', padding: '2px 0 8px' }}>
-                                                <input type="checkbox" checked={!!type.onlyIncluded} onChange={e => set('packaging.types.' + i + '.onlyIncluded', e.target.checked)} /> Solo viene en los modelos que ya lo incluyen (no se ofrece como cambio)
-                                            </label>
                                         </div>
                                     ))}
-                                    <button type="button" className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null, onlyIncluded: false }])}>+ Agregar empaque</button>
+                                    <button type="button" className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null }])}>+ Agregar empaque</button>
+
+                                    <h4 className="nx-sub">Cambios de un empaque a otro</h4>
+                                    <p className="hint">Cuando la clienta quiere cambiar el empaque que trae el modelo. Aquí defines si se puede, cuánto cuesta por {form.sales.unitSingular} y qué debe explicarle el asistente. Lo que no esté aquí usa el "Costo" general del empaque nuevo.</p>
+                                    {(form.packaging.changes || []).map((c, i) => (
+                                        <div key={i} className="nx-rule">
+                                            <select value={c.from} onChange={e => set('packaging.changes.' + i + '.from', e.target.value)}>
+                                                <option value="">Trae…</option>
+                                                {(form.packaging.types || []).filter(t => t.name).map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                                            </select>
+                                            <span className="arrow">→</span>
+                                            <select value={c.to} onChange={e => set('packaging.changes.' + i + '.to', e.target.value)}>
+                                                <option value="">Pide…</option>
+                                                {(form.packaging.types || []).filter(t => t.name).map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                                            </select>
+                                            <select value={c.allowed === false ? 'no' : 'yes'} onChange={e => set('packaging.changes.' + i + '.allowed', e.target.value === 'yes')}>
+                                                <option value="yes">Sí se puede</option>
+                                                <option value="no">No se puede</option>
+                                            </select>
+                                            <input type="number" min="0" step="0.01" placeholder="Extra $" disabled={c.allowed === false} title={'Extra por ' + form.sales.unitSingular + ' ($). Vacío = por confirmar'} value={c.cost ?? ''} onChange={e => set('packaging.changes.' + i + '.cost', e.target.value === '' ? null : Number(e.target.value))} />
+                                            <input type="text" className="note" placeholder="Nota para la clienta (por qué no se puede o no conviene)" value={c.note || ''} onChange={e => set('packaging.changes.' + i + '.note', e.target.value)} />
+                                            <button type="button" className="btn-link" onClick={() => set('packaging.changes', (form.packaging.changes || []).filter((_, j) => j !== i))}>Quitar</button>
+                                        </div>
+                                    ))}
+                                    <button type="button" className="btn-link" onClick={() => set('packaging.changes', [...(form.packaging.changes || []), { from: '', to: '', cost: null, allowed: true, note: '' }])}>+ Agregar cambio</button>
                                 </>
                             )}
                         </CfgCard>

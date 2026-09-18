@@ -104,6 +104,8 @@ export interface BusinessProfile {
     /** Cada producto del catálogo tiene su empaque incluido en el precio; la clienta puede cambiarlo. */
     enabled: boolean;
     types: PackagingType[];
+    /** Reglas de cambio entre empaques; lo que no esté aquí usa el costo general del empaque nuevo. */
+    changes: PackagingChange[];
   };
   ai: {
     /** OpenAI API key específica del negocio. Si está vacía, usa la global (process.env.OPENAI_API_KEY). */
@@ -118,8 +120,17 @@ export interface PackagingType {
   description: string;
   /** Costo adicional por unidad de venta al cambiar a este empaque; null = aún no definido. */
   changeCost: number | null;
-  /** true = solo viene en los modelos que ya lo incluyen (por peso, altura...): no se ofrece como cambio. */
-  onlyIncluded?: boolean;
+}
+
+/** Cambio de un empaque a otro (del que trae el modelo al que pide la clienta): si se puede, cuánto cuesta y qué explicarle. */
+export interface PackagingChange {
+  from: string;
+  to: string;
+  /** Extra por unidad de venta; null = costo por confirmar. */
+  cost: number | null;
+  allowed: boolean;
+  /** Motivo o recomendación que el asistente le explica a la clienta (por qué no se puede o por qué no conviene). */
+  note: string;
 }
 
 export const VELAMIA_PROFILE: BusinessProfile = {
@@ -188,7 +199,8 @@ export const VELAMIA_PROFILE: BusinessProfile = {
       { name: 'Tul', description: 'delicado, ligero y decorativo, va con lazo; se personaliza el color del tul y del lazo', changeCost: null },
       { name: 'Kraft', description: 'natural, minimalista y brinda mayor protección', changeCost: null },
       { name: 'Caja lazo personalizable', description: 'caja con lazo; se personaliza el color del lazo y la portada frontal y trasera', changeCost: null }
-    ]
+    ],
+    changes: []
   },
   ai: {
     openai_api_key: process.env.OPENAI_API_KEY || '',
@@ -250,7 +262,7 @@ export const STORE_PROFILE: BusinessProfile = {
     decorativeEmojis: ['😊', '✨', '🙌', '👌', '💫', '🎉', '👍', '🛍️', '📦', '🤩']
   },
   branding: { primaryColor: '#B96B4F', logoUrl: '' },
-  packaging: { enabled: false, types: [] },
+  packaging: { enabled: false, types: [], changes: [] },
   ai: {
     openai_api_key: process.env.OPENAI_API_KEY || '',
     model: 'gpt-5.4-mini'
@@ -398,12 +410,23 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
             name: text(t?.name, '', 40),
             description: text(t?.description, '', 160),
             // Vacío = costo del cambio sin definir: el bot no da un total con ese cambio.
-            changeCost: t?.changeCost === null || t?.changeCost === undefined || t?.changeCost === '' ? null : num(t.changeCost, 0, 0, 10000),
-            onlyIncluded: t?.onlyIncluded === true
+            changeCost: t?.changeCost === null || t?.changeCost === undefined || t?.changeCost === '' ? null : num(t.changeCost, 0, 0, 10000)
           }))
           .filter((t: PackagingType) => t.name)
           .slice(0, 10)
-        : base.packaging.types
+        : base.packaging.types,
+      changes: Array.isArray(pk.changes)
+        ? pk.changes
+          .map((c: any) => ({
+            from: text(c?.from, '', 40),
+            to: text(c?.to, '', 40),
+            cost: c?.cost === null || c?.cost === undefined || c?.cost === '' ? null : num(c.cost, 0, 0, 10000),
+            allowed: c?.allowed !== false,
+            note: text(c?.note, '', 240)
+          }))
+          .filter((c: PackagingChange) => c.from && c.to && c.from !== c.to)
+          .slice(0, 60)
+        : (base.packaging.changes || [])
     },
     ai: {
       openai_api_key: typeof ai.openai_api_key === 'string' && ai.openai_api_key.length > 0 ? ai.openai_api_key : (base.ai?.openai_api_key || ''),
@@ -412,13 +435,40 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
   };
 }
 
+const packagingKey = (v: unknown) => String(v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+export interface PackagingChangeRule {
+  allowed: boolean;
+  /** null = costo por confirmar. */
+  cost: number | null;
+  note: string;
+  /** true = existe una regla escrita para este cambio; false = se usa el costo general del empaque nuevo. */
+  specific: boolean;
+}
+
+/**
+ * Qué pasa al pasar del empaque que trae un modelo al que pide la clienta. Si hay una regla para ese cambio manda;
+ * si no, vale el costo general del empaque nuevo. Devuelve undefined si el empaque pedido no existe.
+ */
+export function packagingChange(fromName: unknown, toName: unknown, p: BusinessProfile = profile()): PackagingChangeRule | undefined {
+  const to = findPackaging(toName, p);
+  if (!to) return undefined;
+  const from = findPackaging(fromName, p);
+  const rule = from
+    ? (p.packaging.changes || []).find(c => packagingKey(c.from) === packagingKey(from.name) && packagingKey(c.to) === packagingKey(to.name))
+    : undefined;
+  return rule
+    ? { allowed: rule.allowed, cost: rule.cost, note: rule.note, specific: true }
+    : { allowed: true, cost: to.changeCost, note: '', specific: false };
+}
+
 /**
  * Tipo de empaque por nombre, sin importar mayúsculas ni tildes. Si no hay coincidencia exacta acepta
  * variantes claras ("bolsa de tul" → Tul, "caja con lazo" → Caja lazo personalizable), pero solo cuando
  * una única opción encaja: ante la duda no adivina.
  */
 export function findPackaging(name: unknown, p: BusinessProfile = profile()): PackagingType | undefined {
-  const key = (v: unknown) => String(v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const key = packagingKey;
   const wanted = key(name);
   if (!wanted) return undefined;
 
