@@ -1,7 +1,7 @@
 import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
 import { recordAiUsage } from './supabase';
-import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel } from '../config/businessProfile';
+import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, usesProductUnits } from '../config/businessProfile';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
 const openaiClients = new Map<string, OpenAI>();
@@ -256,7 +256,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     if (sh.mode === 'ecuador_table') add('- Si la ciudad no aparece en el tarifario o existe en varias provincias, pregunta la ciudad y la provincia.');
   }
   add(
-    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad del pedido actual según toda la conversación, ${ownUnits ? 'en la unidad de venta de ESE producto (cajas, tubos, metros)' : `cantidad de ${units}`}; lista vacía si no están claros. quantity_in_pieces: true SOLO si esa cantidad son piezas sueltas y no unidades de venta (ejemplo: 18 paneles de un producto que va en caja de 10 → quantity 18 con quantity_in_pieces true); false en cualquier otro caso.${!ownUnits && s.unitDetail && /\d/.test(s.unitDetail) ? ` Si el cliente da la cantidad en piezas (1 ${unit} = ${s.unitDetail}), conviértela a ${units} (ejemplo: ${Number(s.unitDetail.match(/\d+/)![0]) * 4} ${s.unitDetail.replace(/\d+/g, '').trim()} = 4 ${units}) y en reply habla siempre en ${units}.` : ''}${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); anota lo que ya pidió aunque aún falten detalles (ejemplo: "bicolor" aunque no haya dicho los colores); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
+    `- order_items: ${models} del catálogo (nombre exacto) y quantity = cantidad del pedido actual según toda la conversación, ${ownUnits ? 'en la unidad de venta de ESE producto (cajas, tubos, metros)' : `cantidad de ${units}`}; lista vacía si no están claros. ${ownUnits ? 'quantity_in_pieces: true SOLO si esa cantidad son piezas sueltas y no unidades de venta (ejemplo: 18 paneles de un producto que va en caja de 10 → quantity 18 con quantity_in_pieces true); false en cualquier otro caso.' : 'quantity_in_pieces: siempre false.'}${!ownUnits && s.unitDetail && /\d/.test(s.unitDetail) ? ` Si el cliente da la cantidad en piezas (1 ${unit} = ${s.unitDetail}), conviértela a ${units} (ejemplo: ${Number(s.unitDetail.match(/\d+/)![0]) * 4} ${s.unitDetail.replace(/\d+/g, '').trim()} = 4 ${units}) y en reply habla siempre en ${units}.` : ''}${s.personalization ? ` En personalization escribe SOLO los detalles que el cliente pidió para ese ${model} (ejemplo: "bicolor rosado y blanco, nombre Emma"); anota lo que ya pidió aunque aún falten detalles (ejemplo: "bicolor" aunque no haya dicho los colores); nunca frases tuyas como "se puede personalizar"; cadena vacía si no pidió nada.` : ' personalization: cadena vacía.'}`,
     sh.mode === 'ecuador_table'
       ? '- shipping_place: ciudad o cantón de envío que indicó el cliente, en formato "Ciudad, Provincia" (ejemplo: "Quito, Pichincha"); si no conoces la provincia escribe solo la ciudad; cadena vacía si no la ha dicho.'
       : sh.mode === 'flat'
@@ -412,6 +412,15 @@ interface CatalogProduct {
   measure?: string | null;
   /** Piezas que trae esa unidad (10 = caja de 10); vacío = la del negocio. */
   pieces_per_unit?: number | null;
+}
+
+/**
+ * La unidad, medida y piezas propias de cada producto solo cuentan en los negocios que las usan (MegaMundo);
+ * en los demás (VELAMIA vende todo por docena) se ignoran aunque el producto tenga esos datos guardados.
+ */
+export function scopeCatalog<T extends CatalogProduct>(catalog: T[], p: BusinessProfile): T[] {
+  if (usesProductUnits(p)) return catalog;
+  return catalog.map(c => ({ ...c, sale_unit: null, measure: null, pieces_per_unit: null }));
 }
 
 /** Unidad en la que se vende y se cotiza un producto: la suya si la tiene, si no la del negocio. */
@@ -586,6 +595,7 @@ function piecesPerUnit(p: BusinessProfile): number {
  */
 export function normalizeQuantities(rawItems: any, customerText: string, p: BusinessProfile = profile(), catalog: CatalogProduct[] = []): any {
   if (!Array.isArray(rawItems)) return rawItems;
+  catalog = scopeCatalog(catalog, p);
   const globalPer = piecesPerUnit(p);
   // Un producto puede traer sus propias piezas por unidad (una caja de 10, un tubo suelto).
   const piecesOf = (name: unknown) => {
@@ -700,6 +710,7 @@ export function buildSystemPrompt(
   customPrompt: string | undefined,
   p: BusinessProfile = profile()
 ) {
+  catalog = scopeCatalog(catalog, p);
   const persona = customPrompt && customPrompt.trim() ? customPrompt.trim() : defaultPersona(p);
   const { unitSingular: unit } = p.sales;
   const models = p.sales.productLabelPlural.toLowerCase();

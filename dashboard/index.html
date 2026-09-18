@@ -1705,6 +1705,13 @@
         .nx-stale { margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: #FFF3DC; color: #7A5300; font-size: 13px; }
         .nx-err { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #FDE8E8; color: #A63A3A; font-size: 13px; line-height: 1.35; }
 
+        .unit-fields { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+        .unit-fields label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 700; color: #6B7599; text-transform: uppercase; letter-spacing: 0.4px; }
+        .unit-fields input { padding: 8px 10px; border: 1px solid #DCE2F5; border-radius: 8px; background: #fff; color: #1E2A4A; font-size: 13px; font-family: inherit; text-transform: none; letter-spacing: 0; font-weight: 500; }
+        .unit-fields input:focus { outline: none; border-color: #6C7CF0; box-shadow: 0 0 0 3px rgba(108, 124, 240, 0.16); }
+
+        .product-card .photo.nophoto { display: flex; align-items: center; justify-content: center; font-size: 34px; background: #EEF1F9; color: #9AA3C7; }
+
         .btn-logout {
             background: transparent;
             border: 1px solid var(--rosa-palo);
@@ -2846,7 +2853,7 @@
                         <div className="nx-sum">
                             {row('pin', [b.city, b.country].filter(Boolean).join(', ') || 'Sin ciudad')}
                             {row('clock', b.timezone)}
-                            {row('box', 'Vende: ' + (sa.goodsWord || 'productos') + ' (por ' + sa.unitSingular + ')')}
+                            {row('box', 'Vende: ' + (sa.goodsWord || 'productos') + (sa.perProductUnits ? ' (unidad y medida propias por producto)' : ' (por ' + sa.unitSingular + ')'))}
                             {row('tag', 'Personalización: ' + (sa.personalization ? 'Sí' : 'No'))}
                             {row('card', 'Pagos: ' + (methods.length ? methods.join(' y ') : 'sin definir'), !methods.length)}
                             {row('truck', hasShipping ? 'Envíos: ' + (sh.carrier || 'sin transportista') + (sh.coverage ? ' (' + sh.coverage + ')' : '') : 'Sin envíos' + (sh.pickupAvailable ? ' (retiro en local)' : ''))}
@@ -3100,8 +3107,12 @@
                                 {text('sales.goodsWord', 'Qué vendes (para hablar del total)', 'velas, zapatos, productos')}
                                 {text('sales.minimumOrder', 'Pedido mínimo', 'Ej: 2 docenas', 'Vacío = sin mínimo')}
                                 {check('sales.personalization', 'Los productos se pueden personalizar')}
+                                {check('sales.perProductUnits', 'Cada producto tiene su propia unidad y medida (cajas, tubos, metros…)')}
                                 {form.sales.personalization && text('sales.personalizationExamples', 'Qué se puede personalizar', 'Ej: colores, nombres y frases', '', true)}
                             </div>
+                            <p className="hint" style={{ marginTop: '10px' }}>{form.sales.perProductUnits
+                                ? 'Activado: en el Catálogo cada producto tiene su unidad de venta, su medida y las piezas que trae, y el asistente cotiza cada uno en su unidad.'
+                                : 'Apagado: todos tus productos se venden en la misma unidad (' + form.sales.unitSingular + '), sin medidas por producto. Enciéndelo solo si vendes en cajas, tubos, metros u otras unidades distintas.'}</p>
                         </CfgCard>
 
                         <CfgCard id="pagos" icon="card" title="Pagos" subtitle="Configura las formas de pago que aceptas">
@@ -3503,6 +3514,7 @@
             const [noteText, setNoteText] = useState('');
             const isAdmin = session?.role === 'admin';
             const unit = biz?.sales.unitSingular || 'unidad';
+            const perProductUnits = !!biz?.sales?.perProductUnits;
             const unitPlural = biz?.sales.unitPlural || 'unidades';
             const productEmoji = biz?.business.productEmoji || '🛍️';
             const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
@@ -4321,18 +4333,22 @@
                                     <label>{biz?.dates.enabled ? `Categoría / ${biz.dates.eventLabel}` : 'Categoría'}</label>
                                     <input type="text" placeholder="Ej: la categoría del producto" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
                                 </div>
-                                <div className="form-field">
-                                    <label>Unidad de venta (opcional)</label>
-                                    <input type="text" placeholder="Ej: caja de 10, tubo, metro" value={newProduct.sale_unit} onChange={e => setNewProduct({...newProduct, sale_unit: e.target.value})} />
-                                </div>
-                                <div className="form-field">
-                                    <label>Medida (opcional)</label>
-                                    <input type="text" placeholder="Ej: 2,95 m x 0,17 m" value={newProduct.measure} onChange={e => setNewProduct({...newProduct, measure: e.target.value})} />
-                                </div>
-                                <div className="form-field">
-                                    <label>Unidades que trae (opcional)</label>
-                                    <input type="number" min="2" step="1" placeholder="Ej: 10 si la caja trae 10" value={newProduct.pieces_per_unit} onChange={e => setNewProduct({...newProduct, pieces_per_unit: e.target.value})} />
-                                </div>
+                                {perProductUnits && (
+                                    <>
+                                        <div className="form-field">
+                                            <label>Unidad de venta (opcional)</label>
+                                            <input type="text" placeholder="Ej: caja de 10, tubo, metro" value={newProduct.sale_unit} onChange={e => setNewProduct({...newProduct, sale_unit: e.target.value})} />
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Medida (opcional)</label>
+                                            <input type="text" placeholder="Ej: 2,95 m x 0,17 m" value={newProduct.measure} onChange={e => setNewProduct({...newProduct, measure: e.target.value})} />
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Unidades que trae (opcional)</label>
+                                            <input type="number" min="2" step="1" placeholder="Ej: 10 si la caja trae 10" value={newProduct.pieces_per_unit} onChange={e => setNewProduct({...newProduct, pieces_per_unit: e.target.value})} />
+                                        </div>
+                                    </>
+                                )}
                                 {packagingTypes.length > 0 && (
                                     <div className="form-field">
                                         <label>Empaque incluido</label>
@@ -4355,19 +4371,27 @@
                                 <div className="catalog-grid">
                                     {products.map(product => (
                                         <div key={product.id} className="product-card">
-                                            <img className="photo" src={product.image_url || 'logo.png'} />
+                                            {product.image_url || session?.business?.legacy ? <img className="photo" src={product.image_url || 'logo.png'} /> : <div className="photo nophoto">📷</div>}
                                             <div className="info">
                                                 <span className="category-tag">{product.category}</span>
                                                 <h4>{product.name}</h4>
-                                                <div className="price">${product.price} <small>por {product.sale_unit || unit}</small></div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', margin: '6px 0' }}>
-                                                    <input type="text" defaultValue={product.sale_unit || ''} placeholder="Unidad de venta (caja de 10, tubo...)"
-                                                        onBlur={e => e.target.value !== (product.sale_unit || '') && changeProductField(product.id, 'sale_unit', e.target.value)} />
-                                                    <input type="text" defaultValue={product.measure || ''} placeholder="Medida (2,95 m x 0,17 m)"
-                                                        onBlur={e => e.target.value !== (product.measure || '') && changeProductField(product.id, 'measure', e.target.value)} />
-                                                    <input type="number" min="2" step="1" defaultValue={product.pieces_per_unit || ''} placeholder="Unidades que trae"
-                                                        onBlur={e => e.target.value !== String(product.pieces_per_unit || '') && changeProductField(product.id, 'pieces_per_unit', e.target.value)} />
-                                                </div>
+                                                <div className="price">${product.price} <small>por {(perProductUnits && product.sale_unit) || unit}</small></div>
+                                                {perProductUnits && (
+                                                    <div className="unit-fields">
+                                                        <label>Unidad de venta
+                                                            <input type="text" defaultValue={product.sale_unit || ''} placeholder="caja de 10, tubo..."
+                                                                onBlur={e => e.target.value !== (product.sale_unit || '') && changeProductField(product.id, 'sale_unit', e.target.value)} />
+                                                        </label>
+                                                        <label>Medida
+                                                            <input type="text" defaultValue={product.measure || ''} placeholder="2,95 m x 0,17 m"
+                                                                onBlur={e => e.target.value !== (product.measure || '') && changeProductField(product.id, 'measure', e.target.value)} />
+                                                        </label>
+                                                        <label>Unidades que trae
+                                                            <input type="number" min="2" step="1" defaultValue={product.pieces_per_unit || ''} placeholder="10"
+                                                                onBlur={e => e.target.value !== String(product.pieces_per_unit || '') && changeProductField(product.id, 'pieces_per_unit', e.target.value)} />
+                                                        </label>
+                                                    </div>
+                                                )}
                                                 {packagingTypes.length > 0 && (
                                                     <select className="packaging-select" value={product.description || ''} onChange={e => changeProductPackaging(product.id, e.target.value)}>
                                                         <option value="">🎁 Empaque sin definir</option>

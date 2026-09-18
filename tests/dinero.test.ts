@@ -19,6 +19,7 @@ import { normalizeProfile, PROFILE_PRESETS } from '../src/config/businessProfile
 const tienda = normalizeProfile({
   ...PROFILE_PRESETS.tienda.profile,
   business: { ...PROFILE_PRESETS.tienda.profile.business, name: 'Tienda de prueba', city: 'Guayaquil' },
+  sales: { ...PROFILE_PRESETS.tienda.profile.sales, perProductUnits: true },
   payments: { transferEnabled: true, cardEnabled: false, depositPercent: 70, cardBrands: '' },
   shipping: {
     ...PROFILE_PRESETS.tienda.profile.shipping,

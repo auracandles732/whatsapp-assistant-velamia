@@ -42,7 +42,7 @@ import {
   OrderItem,
   TurnPlan
 } from '../services/openai';
-import { profile, todayLocal, formatDate, quantityText } from '../config/businessProfile';
+import { profile, todayLocal, formatDate, quantityText, usesProductUnits } from '../config/businessProfile';
 import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
@@ -760,8 +760,9 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
     try {
       const packaging = profToUse.packaging.enabled && product.description ? `\n🎁 Empaque: ${product.description}` : '';
       // Si el producto tiene su propia unidad (caja, tubo, metro), el precio se muestra con esa y no con la del negocio.
-      const priceUnit = product.sale_unit ? `por ${product.sale_unit}` : sales.priceSuffix;
-      const measure = product.measure ? `\n📏 ${product.measure}` : '';
+      const ownUnits = usesProductUnits(profToUse);
+      const priceUnit = ownUnits && product.sale_unit ? `por ${product.sale_unit}` : sales.priceSuffix;
+      const measure = ownUnits && product.measure ? `\n📏 ${product.measure}` : '';
       const caption = `${business.productEmoji} *${product.name}*${measure}\n💰 $${Number(product.price).toFixed(2)} ${priceUnit}${packaging}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);

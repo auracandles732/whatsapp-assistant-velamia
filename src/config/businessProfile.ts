@@ -38,6 +38,8 @@ export interface BusinessProfile {
     personalizationExamples: string;
     /** Vacío = sin pedido mínimo. */
     minimumOrder: string;
+    /** true = cada producto puede tener su propia unidad, medida y piezas (cajas, tubos, metros). false = todo se vende en la unidad del negocio. */
+    perProductUnits: boolean;
   };
   payments: {
     transferEnabled: boolean;
@@ -136,7 +138,8 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     piecesPerUnit: 12,
     personalization: true,
     personalizationExamples: 'cambios de colores, nombres, frases y detalles',
-    minimumOrder: ''
+    minimumOrder: '',
+    perProductUnits: false
   },
   payments: { transferEnabled: true, depositPercent: 50, cardEnabled: true, cardBrands: 'Visa y Mastercard' },
   dates: { enabled: true, eventLabel: 'evento', deliveryDaysBeforeEvent: 3, urgentDays: 3, alwaysAvailable: true },
@@ -209,7 +212,8 @@ export const STORE_PROFILE: BusinessProfile = {
     piecesPerUnit: 1,
     personalization: false,
     personalizationExamples: '',
-    minimumOrder: ''
+    minimumOrder: '',
+    perProductUnits: false
   },
   payments: { transferEnabled: true, depositPercent: 100, cardEnabled: false, cardBrands: '' },
   dates: { enabled: false, eventLabel: 'evento', deliveryDaysBeforeEvent: 0, urgentDays: 2, alwaysAvailable: false },
@@ -327,7 +331,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
         : Math.max(1, Number(String(s.unitDetail ?? base.sales.unitDetail).match(/\d+/)?.[0]) || 1),
       personalization: bool(s.personalization, base.sales.personalization),
       personalizationExamples: text(s.personalizationExamples, base.sales.personalizationExamples),
-      minimumOrder: text(s.minimumOrder, base.sales.minimumOrder, 120)
+      minimumOrder: text(s.minimumOrder, base.sales.minimumOrder, 120),
+      perProductUnits: bool(s.perProductUnits, base.sales.perProductUnits === true)
     },
     payments: {
       transferEnabled: bool(p.transferEnabled, base.payments.transferEnabled),
@@ -469,6 +474,9 @@ export function useProfile(p: BusinessProfile) {
 }
 
 // ---------- Textos derivados ----------
+
+/** ¿Este negocio maneja unidad, medida y piezas propias en cada producto? Si no, esos datos no se usan aunque existan. */
+export const usesProductUnits = (p: BusinessProfile = profile()) => p.sales.perProductUnits === true;
 
 export const unitWord = (quantity: number, p: BusinessProfile = profile()) =>
   quantity === 1 ? p.sales.unitSingular : p.sales.unitPlural;

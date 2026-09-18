@@ -76,7 +76,7 @@ import {
   deleteConversationTask
 } from './db';
 import { testBusinessCredentials, startHealthCheck, runHealthCheck } from './services/health';
-import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging } from './config/businessProfile';
+import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging, usesProductUnits } from './config/businessProfile';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -704,6 +704,8 @@ function cleanProductName(value: unknown): string {
  */
 function productUnit(body: any, isUpdate = false) {
   const unit: { sale_unit?: string | null; measure?: string | null; pieces_per_unit?: number | null } = {};
+  // Solo los negocios que venden con unidad propia por producto guardan estos datos.
+  if (!usesProductUnits(profile())) return unit;
   const text = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
   if (!isUpdate || body?.sale_unit !== undefined) unit.sale_unit = text(body?.sale_unit);
   if (!isUpdate || body?.measure !== undefined) unit.measure = text(body?.measure);
