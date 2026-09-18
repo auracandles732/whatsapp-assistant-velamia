@@ -404,11 +404,34 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
   };
 }
 
-/** Tipo de empaque por nombre, sin importar mayúsculas ni tildes. */
+/**
+ * Tipo de empaque por nombre, sin importar mayúsculas ni tildes. Si no hay coincidencia exacta acepta
+ * variantes claras ("bolsa de tul" → Tul, "caja con lazo" → Caja lazo personalizable), pero solo cuando
+ * una única opción encaja: ante la duda no adivina.
+ */
 export function findPackaging(name: unknown, p: BusinessProfile = profile()): PackagingType | undefined {
-  const key = (v: unknown) => String(v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+  const key = (v: unknown) => String(v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim().toLowerCase();
   const wanted = key(name);
-  return wanted ? p.packaging.types.find(t => key(t.name) === wanted) : undefined;
+  if (!wanted) return undefined;
+
+  const exact = p.packaging.types.find(t => key(t.name) === wanted);
+  if (exact) return exact;
+
+  const contained = p.packaging.types.filter(t => {
+    const own = key(t.name);
+    return own.length >= 3 && (` ${wanted} `.includes(` ${own} `) || ` ${own} `.includes(` ${wanted} `));
+  });
+  if (contained.length === 1) return contained[0];
+  if (contained.length > 1) return undefined;
+
+  // Comparten al menos dos palabras con el nombre del empaque ("caja con lazo" y "caja lazo personalizable").
+  const words = (text: string) => new Set(text.split(' ').filter(w => w.length >= 3));
+  const wantedWords = words(wanted);
+  const scored = p.packaging.types
+    .map(t => ({ type: t, shared: [...words(key(t.name))].filter(w => wantedWords.has(w)).length }))
+    .filter(x => x.shared >= 2)
+    .sort((a, b) => b.shared - a.shared);
+  return scored.length === 1 || (scored.length > 1 && scored[0].shared > scored[1].shared) ? scored[0].type : undefined;
 }
 
 // ---------- Perfil en uso ----------
