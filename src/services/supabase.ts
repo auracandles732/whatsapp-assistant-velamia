@@ -476,6 +476,72 @@ export async function getSalesMetrics(days: number = 30) {
   };
 }
 
+// ---------- DATOS PARA LAS VISTAS DEL CRM (resumen de hoy, vistas previas, resumen del cliente) ----------
+
+export interface RecentMessage {
+  conversation_id: string;
+  sender: string;
+  type: string;
+  content: string | null;
+  timestamp: string;
+}
+
+/** Mensajes desde una fecha, de todos los chats del negocio. Se piden por tandas para no pasarse del largo de la URL. */
+export async function getRecentMessages(sinceIso: string, maxRows = 3000): Promise<RecentMessage[]> {
+  const ids = (await getAllConversations()).map((c: any) => c.id as string);
+  const rows: RecentMessage[] = [];
+  for (let i = 0; i < ids.length; i += 60) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('conversation_id, sender, type, content, timestamp')
+      .in('conversation_id', ids.slice(i, i + 60))
+      .gte('timestamp', sinceIso)
+      .order('timestamp', { ascending: false })
+      .limit(maxRows);
+
+    if (error) throw new Error(`Error obteniendo mensajes recientes: ${error.message}`);
+    rows.push(...((data || []) as RecentMessage[]));
+  }
+  return rows;
+}
+
+/** Pedidos vigentes (sin cancelados) del negocio, con su chat y fecha. */
+export async function getOrderRefs(sinceIso?: string): Promise<Array<{ conversation_id: string; created_at: string; total_amount: number }>> {
+  let query = supabase
+    .from('orders')
+    .select('conversation_id, created_at, total_amount')
+    .neq('status', 'cancelled')
+    .filter('business_id', tenantOp(), tenantValue());
+  if (sinceIso) query = query.gte('created_at', sinceIso);
+
+  const { data, error } = await query.limit(5000);
+  if (error) throw new Error(`Error obteniendo pedidos: ${error.message}`);
+  return data || [];
+}
+
+export async function getQuotationRefs(sinceIso: string): Promise<Array<{ conversation_id: string; created_at: string }>> {
+  const { data, error } = await supabase
+    .from('quotations')
+    .select('conversation_id, created_at')
+    .filter('business_id', tenantOp(), tenantValue())
+    .gte('created_at', sinceIso)
+    .limit(5000);
+
+  if (error) throw new Error(`Error obteniendo cotizaciones: ${error.message}`);
+  return data || [];
+}
+
+export async function getQuotationsByConversation(conversationId: string) {
+  const { data, error } = await supabase
+    .from('quotations')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Error obteniendo cotizaciones del chat: ${error.message}`);
+  return data || [];
+}
+
 // ---------- CONSUMO DE IA ----------
 
 /**

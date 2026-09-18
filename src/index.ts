@@ -63,6 +63,7 @@ import {
 } from './middleware/auth';
 import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
+import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { testBusinessCredentials, startHealthCheck, runHealthCheck } from './services/health';
 import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging } from './config/businessProfile';
 
@@ -328,6 +329,34 @@ app.get('/api/stats', requireCrmSession, async (_req: Request, res: Response) =>
       orders: metrics.totalOrders,
       revenue: metrics.totalRevenue
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Vistas del CRM: resumen de hoy, lista de chats y resumen del cliente ----------
+
+app.get('/api/crm/today', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await getTodaySummary());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/crm/list-overview', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await getListOverview());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/conversations/:id/summary', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+  try {
+    const summary = await getConversationSummary(req.params.id);
+    if (!summary) return res.status(404).json({ error: 'Conversación no encontrada' });
+    res.json(summary);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
