@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRM WhatsApp</title>
+    <title>Vendia</title>
 
     <!-- Instalable como app (PWA) -->
     <link rel="manifest" href="manifest.json">
@@ -845,28 +845,55 @@
         }
 
         .login-screen {
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--beige);
             padding: 20px;
+            background:
+                linear-gradient(rgba(255, 246, 238, 0.35), rgba(255, 246, 238, 0.35)),
+                url('fondo.png') center / cover no-repeat,
+                linear-gradient(135deg, #FFE9D9 0%, #FFD2B3 55%, #F7B58C 100%);
         }
 
         .login-card {
-            background: var(--crema);
-            border: 1px solid var(--rosa-palo-suave);
-            border-radius: 18px;
-            padding: 40px 34px;
+            background: rgba(255, 252, 249, 0.82);
+            -webkit-backdrop-filter: blur(14px);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            border-radius: 22px;
+            padding: 38px 34px 32px;
             width: 100%;
-            max-width: 380px;
+            max-width: 400px;
             text-align: center;
-            box-shadow: 0 6px 30px rgba(185, 107, 79, 0.1);
+            box-shadow: 0 18px 50px rgba(200, 100, 40, 0.18);
         }
 
-        .login-card img {
-            height: 54px;
-            margin-bottom: 26px;
+        .login-brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 11px;
+            margin-bottom: 6px;
+        }
+
+        .login-brand span {
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #4A2A1A;
+        }
+
+        .login-tagline {
+            font-size: 14px;
+            color: #8A6650;
+            margin-bottom: 24px;
+        }
+
+        .login-foot {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #A58572;
         }
 
         .login-card input {
@@ -890,13 +917,13 @@
             width: 100%;
             margin-top: 12px;
             padding: 13px;
-            background: var(--terracota);
+            background: #E7480D;
             color: white;
             font-size: 14px;
         }
 
         .login-card button:hover {
-            background: var(--terracota-dark);
+            background: #C93D08;
         }
 
         .login-error {
@@ -1728,8 +1755,15 @@
             return (
                 <div className="login-screen">
                     <div className="login-card">
-                        <h2 style={{ marginBottom: '6px' }}>CRM</h2>
-                        <p style={{ fontSize: '13px', color: 'var(--texto-suave)', marginBottom: '16px' }}>Asistentes de WhatsApp</p>
+                        <div className="login-brand">
+                            <svg width="42" height="42" viewBox="0 0 48 48" aria-hidden="true">
+                                <rect width="48" height="48" rx="13" fill="#E7480D" />
+                                <path d="M24 10c-7.7 0-14 5.6-14 12.6 0 3.3 1.4 6.3 3.7 8.5L12.5 38l7-2.6c1.4.4 2.9.6 4.5.6 7.7 0 14-5.6 14-12.7S31.7 10 24 10z" fill="#fff" />
+                                <path d="M17.5 20.5l4.200 9 2.800-6.500 2.800 6.500 4.200-9" fill="none" stroke="#E7480D" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <span>Vendia</span>
+                        </div>
+                        <p className="login-tagline">Tu asistente de ventas en WhatsApp</p>
                         <input
                             type="text"
                             placeholder="Usuario (correo)"
@@ -1750,9 +1784,10 @@
                             onKeyDown={e => e.key === 'Enter' && submit()}
                         />
                         <button onClick={submit} disabled={checking}>
-                            {checking ? 'Entrando...' : 'Entrar al CRM'}
+                            {checking ? 'Entrando...' : 'Entrar'}
                         </button>
                         {error && <div className="login-error">{error}</div>}
+                        <div className="login-foot">Atiende y vende por WhatsApp las 24 horas</div>
                     </div>
                 </div>
             );
@@ -2910,7 +2945,7 @@
 
             useEffect(() => {
                 onSessionExpired = () => { setRole(null); setAuthenticated(false); };
-                document.title = 'CRM · Asistentes de WhatsApp';
+                document.title = 'Vendia';
             }, []);
 
             // Quién entró: la administradora sin empresa elegida ve la pantalla general de empresas.
