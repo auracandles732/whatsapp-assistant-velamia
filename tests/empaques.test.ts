@@ -192,3 +192,11 @@ test('las instrucciones del asistente traen la tabla de cambios con costos, proh
   assert.ok(prompt.includes('Acetato → Caja lazo personalizable: sin costo. No se recomienda'));
   assert.ok(!buildSystemPrompt(catalogoCambios, undefined, conEmpaques).includes('Cambios de empaque, del empaque que trae'));
 });
+
+test('un cambio con nota devuelve el aviso que hay que darle a la clienta; uno sin nota no', () => {
+  const aCaja = pedir('Vela con acetato', 'Caja lazo personalizable');
+  assert.equal(aCaja.packagingAdvice?.packaging, 'Caja lazo personalizable');
+  assert.match(aCaja.packagingAdvice!.note, /No se recomienda/);
+  assert.equal(pedir('Vela con caja', 'Tul').packagingAdvice, null);
+  assert.equal(pedir('Vela con tul', 'Acetato').packagingAdvice, null);
+});

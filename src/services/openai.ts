@@ -660,6 +660,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
   let packagingUndefined = '';
   let packagingBlocked = '';
   let packagingBlockedNote = '';
+  let packagingAdvice = null as { packaging: string; note: string } | null;
   let packagingAlternatives: string[] = [];
   const items = (Array.isArray(rawItems) ? rawItems : [])
     .map((i: any) => ({
@@ -685,6 +686,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
           .map(t => t.name);
       }
       const changed = differs && !blocked;
+      if (changed && rule!.note && !packagingAdvice) packagingAdvice = { packaging: wanted!.name, note: rule!.note };
       if (changed && rule!.cost === null) packagingUndefined = wanted!.name;
       const extra = changed ? rule!.cost || 0 : 0;
       return {
@@ -711,7 +713,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
   const subtotal = round2(items.reduce((sum: number, i: any) => sum + i.price * i.quantity, 0));
   const total = missing ? 0 : round2(subtotal + (shipping?.cost || 0));
   const depositPercent = p.payments.transferEnabled ? p.payments.depositPercent : 100;
-  return { items, place, shipping, missing, packagingUndefined, packagingBlocked, packagingBlockedNote, packagingAlternatives, subtotal, total, deposit: round2(total * depositPercent / 100) };
+  return { items, place, shipping, missing, packagingUndefined, packagingBlocked, packagingBlockedNote, packagingAlternatives, packagingAdvice, subtotal, total, deposit: round2(total * depositPercent / 100) };
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -967,6 +969,19 @@ export async function planTurn(params: {
       corrections.push(`El cliente pidió cambiar al empaque ${firstOrder.packagingBlocked}, pero ese cambio no se puede hacer${firstOrder.packagingBlockedNote ? ` (${firstOrder.packagingBlockedNote})` : ''}: explícaselo con amabilidad${others ? `, ofrécele ${others}` : ''} y no lo pongas como empaque del pedido. No escribas owner_question.`);
     }
   }
+  // Un cambio con nota (por ejemplo "no se recomienda") se le explica a la clienta una vez, antes de confirmarlo.
+  const advice = firstOrder.packagingAdvice;
+  const adviceTold = (text: string) => {
+    if (!advice) return true;
+    const said = normalizeWords(text);
+    const nameWords = new Set(normalizeWords(advice.packaging).split(/[^a-zñ]+/));
+    const noteWords = normalizeWords(advice.note).split(/[^a-zñ]+/).filter(w => w.length >= 6 && !nameWords.has(w));
+    const cue = /recomend|convien|luc(e|ir|ira)\b|aprecia|se ve\b|se ven\b|resalta|se nota|visible/.test(said);
+    return cue || new Set(noteWords.filter(w => said.includes(w))).size >= 2;
+  };
+  if (advice && !adviceTold(reply()) && !adviceTold(history.filter(m => m.role === 'assistant').map(m => m.content).join(' '))) {
+    corrections.push(`El cliente pidió cambiar al empaque ${advice.packaging}. Antes de seguir, díselo con amabilidad y tus palabras, dirigiéndote a él: "${advice.note}". Si aun así lo quiere, sigue con el pedido normalmente con ese empaque.`);
+  }
   const noAmountsYet = `No escribas ningún monto (ni valor total${usesDeposit ? ' ni valor del anticipo' : ''}) todavía${p.dates.enabled ? `; sí puedes decir que la fecha se reserva con el ${usesDeposit ? 'anticipo' : 'pago'}` : ''}.`;
 
   // Un monto que el negocio ya le dio en este chat (por ejemplo el precio de un diseño personalizado que escribió
@@ -1030,6 +1045,11 @@ export async function planTurn(params: {
         .filter(line => !line.includes(formatDate(expectedDelivery)) && !/reservad|se reserva|orden de pago/i.test(line))
         .join('\n').replace(/\n{3,}/g, '\n\n').trim();
     }
+  }
+
+  if (advice && !adviceTold(reply()) && !adviceTold(history.filter(m => m.role === 'assistant').map(m => m.content).join(' '))) {
+    console.warn('ℹ️ La IA no explicó la nota del cambio de empaque: se agrega tal como la escribió el negocio');
+    parsed.reply = `${reply().trim()}\n\n${advice.note}`.trim();
   }
 
   const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);

@@ -3358,7 +3358,7 @@
                                     <button type="button" className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null }])}>+ Agregar empaque</button>
 
                                     <h4 className="nx-sub">Cambios de un empaque a otro</h4>
-                                    <p className="hint">Cuando la clienta quiere cambiar el empaque que trae el modelo. Aquí defines si se puede, cuánto cuesta por {form.sales.unitSingular} y qué debe explicarle el asistente. Lo que no esté aquí usa el "Costo" general del empaque nuevo.</p>
+                                    <p className="hint">Cuando la clienta quiere cambiar el empaque que trae el modelo. Aquí defines si se puede, cuánto cuesta por {form.sales.unitSingular} y qué debe explicarle el asistente: escribe la nota como se la dirías al cliente ("En la caja no se aprecia bien la vela; en el tul sí. Si igual la prefieres, se puede"). Lo que no esté aquí usa el "Costo" general del empaque nuevo.</p>
                                     {(form.packaging.changes || []).map((c, i) => (
                                         <div key={i} className="nx-rule">
                                             <select value={c.from} onChange={e => set('packaging.changes.' + i + '.from', e.target.value)}>
@@ -3375,7 +3375,7 @@
                                                 <option value="no">No se puede</option>
                                             </select>
                                             <input type="number" min="0" step="0.01" placeholder="Extra $" disabled={c.allowed === false} title={'Extra por ' + form.sales.unitSingular + ' ($). Vacío = por confirmar'} value={c.cost ?? ''} onChange={e => set('packaging.changes.' + i + '.cost', e.target.value === '' ? null : Number(e.target.value))} />
-                                            <input type="text" className="note" placeholder="Nota para la clienta (por qué no se puede o no conviene)" value={c.note || ''} onChange={e => set('packaging.changes.' + i + '.note', e.target.value)} />
+                                            <input type="text" className="note" placeholder="Lo que se le dice al cliente (por qué no se puede o no conviene)" value={c.note || ''} onChange={e => set('packaging.changes.' + i + '.note', e.target.value)} />
                                             <button type="button" className="btn-link" onClick={() => set('packaging.changes', (form.packaging.changes || []).filter((_, j) => j !== i))}>Quitar</button>
                                         </div>
                                     ))}
