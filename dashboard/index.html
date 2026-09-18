@@ -1686,6 +1686,25 @@
             .nx-cfg-h .right { min-width: 0; width: 100%; }
         }
 
+        .nx-real { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: #E6F6EC; color: #1E8A4A; font-size: 11px; font-weight: 700; vertical-align: middle; }
+        .nx-try { display: flex; gap: 8px; margin-bottom: 10px; }
+        .nx-try input { flex: 1; min-width: 0; padding: 11px 14px; border: 1px solid #DCE2F5; border-radius: 10px; font-size: 14px; font-family: inherit; color: #1E2A4A; background: #fff; }
+        .nx-try input:focus { outline: none; border-color: #6C7CF0; box-shadow: 0 0 0 3px rgba(108, 124, 240, 0.16); }
+        .nx-try button { padding: 11px 16px; border-radius: 10px; background: linear-gradient(90deg, #4F6BF5, #8B5CF6); color: #fff; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+        .nx-try button:disabled { opacity: 0.7; cursor: default; }
+        .nx-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .nx-quick button { padding: 6px 12px; border-radius: 999px; background: #F1F4FC; color: #4A5582; font-size: 12px; font-weight: 600; }
+        .nx-quick button:hover { background: #E4EAFB; }
+        .nx-wa .bubble.me { margin-bottom: 8px; }
+        .nx-wa .bubble.bot { white-space: pre-wrap; margin-left: auto; border-radius: 14px 4px 14px 14px; background: #DFF5DF; }
+        .nx-wa .empty { padding: 18px 8px; text-align: center; font-size: 14px; color: #6B7599; line-height: 1.45; }
+        .nx-wa .thinking { display: flex; align-items: center; gap: 10px; padding: 8px; font-size: 14px; color: #6B7599; }
+        .nx-extra { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+        .nx-extra div { padding: 8px 12px; border-radius: 10px; background: #F1EEFF; color: #4A3FA8; font-size: 13px; line-height: 1.35; }
+        .nx-extra div.warn { background: #FFF3DC; color: #7A5300; }
+        .nx-stale { margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: #FFF3DC; color: #7A5300; font-size: 13px; }
+        .nx-err { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #FDE8E8; color: #A63A3A; font-size: 13px; line-height: 1.35; }
+
         .btn-logout {
             background: transparent;
             border: 1px solid var(--rosa-palo);
@@ -2729,16 +2748,77 @@
             );
         }
 
+        const HANDOFF_TEXT = {
+            card_payment: 'el cliente eligió pagar con tarjeta',
+            payment_proof: 'el cliente envió un comprobante de pago',
+            complaint: 'el cliente tiene un reclamo'
+        };
+
+        function AssistantPreview({ form }) {
+            const [message, setMessage] = useState('Hola');
+            const [busy, setBusy] = useState(false);
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState('');
+            const formKey = JSON.stringify(form);
+
+            async function run(text) {
+                const sent = (text ?? message).trim() || 'Hola';
+                setMessage(sent);
+                setBusy(true);
+                setError('');
+                try {
+                    const data = await api('/api/business-profile/preview', { method: 'POST', body: JSON.stringify({ message: sent, profile: form }) });
+                    setResult({ ...data, message: sent, at: new Date(), formKey });
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            const time = result ? result.at.toLocaleTimeString('es-EC', { timeZone: BUSINESS_TZ, hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+            const extras = [];
+            if (result) {
+                if (result.photos && result.photos.length) extras.push({ text: 'Enviaría fotos de: ' + result.photos.join(', ') });
+                if (result.sendBankDetails) extras.push({ text: 'Enviaría tus datos de transferencia.' });
+                if (result.handoff && result.handoff !== 'none') extras.push({ text: 'Se pausaría y te avisaría: ' + (HANDOFF_TEXT[result.handoff] || result.handoff) + '.', warn: true });
+                if (result.ownerQuestion) extras.push({ text: 'Te avisaría esta duda: ' + result.ownerQuestion, warn: true });
+            }
+
+            return (
+                <div className="nx-pcard">
+                    <h4>Vista previa del asistente<span className="nx-real">Respuesta real de la IA</span></h4>
+                    <div className="nx-try">
+                        <input type="text" maxLength={300} value={message} placeholder="Mensaje de un cliente" onChange={e => setMessage(e.target.value)} onKeyDown={e => e.key === 'Enter' && !busy && run()} />
+                        <button type="button" onClick={() => run()} disabled={busy}><PlatIcon name="send" size={17} color="#fff" /> {busy ? 'Probando...' : 'Probar'}</button>
+                    </div>
+                    <div className="nx-quick">
+                        {['Hola', '¿Cuánto cuesta?', '¿Hacen envíos?'].map(q => <button key={q} type="button" disabled={busy} onClick={() => run(q)}>{q}</button>)}
+                    </div>
+                    <div className="nx-wa">
+                        {busy && <div className="thinking"><div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }}></div> El asistente está escribiendo...</div>}
+                        {!busy && !result && <div className="empty">Escribe un mensaje de cliente y pulsa <b>Probar</b> para ver cómo respondería el asistente ahora mismo, con tu perfil, tus instrucciones y tu catálogo.</div>}
+                        {!busy && result && (
+                            <>
+                                <div className="bubble me"><p>{result.message}</p><div className="tm">{time}</div></div>
+                                <div className="bubble bot">{result.reply ? <p>{result.reply}</p> : <p><i>No enviaría texto.</i></p>}<div className="tm">{time}</div></div>
+                            </>
+                        )}
+                    </div>
+                    {result && !busy && extras.length > 0 && <div className="nx-extra">{extras.map((x, i) => <div key={i} className={x.warn ? 'warn' : ''}>{x.text}</div>)}</div>}
+                    {result && !busy && result.formKey !== formKey && <div className="nx-stale">Cambiaste el perfil después de esta prueba: pulsa Probar otra vez para ver la respuesta actualizada.</div>}
+                    {error && <div className="nx-err">{error}</div>}
+                    <div className="nx-note-line"><PlatIcon name="bulb" size={18} color="#4F5BD5" /><span>Es una respuesta real: usa el perfil que tienes en pantalla (aunque no lo hayas guardado) y la IA de este negocio, así que cada prueba gasta unos centavos.</span></div>
+                </div>
+            );
+        }
+
         function ProfilePreview({ form, readiness, legacy }) {
             const b = form.business, sa = form.sales, pay = form.payments, sh = form.shipping, dt = form.dates;
             const logo = form.branding.logoUrl || (legacy ? 'logo.png' : '');
             const hasShipping = sh.mode !== 'none';
             const methods = [pay.transferEnabled && 'Transferencia', pay.cardEnabled && 'Tarjeta'].filter(Boolean);
             const stepsCount = (form.followUps.steps || []).length;
-            const plural = String(sa.productLabelPlural || 'productos').toLowerCase();
-            const goods = String(sa.goodsWord || '').toLowerCase();
-            const what = goods && goods !== plural && goods !== 'productos' ? plural + ' de ' + goods : plural;
-            const time = new Date().toLocaleTimeString('es-EC', { timeZone: BUSINESS_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
             const missing = readiness ? readiness.items.filter(i => !i.ok).map(i => i.label.toLowerCase()) : [];
             const ownerPhone = (form.alerts.ownerPhone || '').trim();
             const row = (icon, text, warn) => <div className={'row' + (warn ? ' warn' : '')}><span className="ic"><PlatIcon name={icon} size={19} color={warn ? '#B36B00' : '#6B7599'} /></span><span>{text}</span></div>;
@@ -2759,18 +2839,7 @@
                         </div>
                     </div>
 
-                    <div className="nx-pcard">
-                        <h4>Vista previa del asistente</h4>
-                        <div className="nx-wa">
-                            <div className="bubble">
-                                <p>¡Hola! 👋 {form.style.humanPersona ? 'Soy parte del equipo de' : 'Soy el asistente de'} <b>{b.name || 'tu negocio'}</b> {b.productEmoji}</p>
-                                <p>Te ayudo con información sobre nuestros {what}, precios{sa.personalization ? ', personalizaciones' : ''}{hasShipping ? ', envíos' : ''} y más.</p>
-                                <p>¿En qué puedo ayudarte?</p>
-                                <div className="tm">{time}</div>
-                            </div>
-                        </div>
-                        <div className="nx-note-line"><PlatIcon name="bulb" size={18} color="#4F5BD5" /><span>Ejemplo del saludo con tus datos. Cada respuesta real la escribe la IA según tu perfil y tus instrucciones.</span></div>
-                    </div>
+                    <AssistantPreview form={form} />
 
                     <div className="nx-pcard">
                         <h4>Resumen del negocio</h4>

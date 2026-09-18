@@ -64,6 +64,7 @@ import {
 import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
+import { planTurn } from './services/openai';
 import {
   markConversationRead,
   setConversationTags,
@@ -237,6 +238,39 @@ app.get('/api/business-profile', requireCrmSession, (_req: Request, res: Respons
 
 app.get('/api/business-profile/presets', requireCrmSession, (_req: Request, res: Response) => {
   res.json(Object.entries(PROFILE_PRESETS).map(([id, preset]) => ({ id, label: preset.label, profile: publicProfile(preset.profile) })));
+});
+
+// Prueba real del asistente: pasa un mensaje de cliente por el mismo camino que un chat de verdad (planTurn) y devuelve
+// lo que respondería. No envía nada por WhatsApp ni guarda mensajes; sí gasta tokens de la clave de OpenAI del negocio.
+const previewLastAt = new Map<string, number>();
+
+app.post('/api/business-profile/preview', requireCrmSession, async (req: Request, res: Response) => {
+  try {
+    const businessKey = currentTenant()?.businessId ?? 'velamia';
+    if (Date.now() - (previewLastAt.get(businessKey) || 0) < 4000) {
+      return res.status(429).json({ error: 'Espera unos segundos entre pruebas' });
+    }
+    previewLastAt.set(businessKey, Date.now());
+
+    const message = String(req.body?.message || 'Hola').trim().slice(0, 300) || 'Hola';
+    // Con el perfil que la persona tiene en pantalla (aunque no lo haya guardado), para probar antes de aplicar cambios.
+    const testProfile = req.body?.profile && typeof req.body.profile === 'object' ? normalizeProfile(req.body.profile, profile()) : profile();
+    const [catalog, customPrompt] = await Promise.all([getAllProducts(), getConfig('system_prompt')]);
+
+    const plan = await planTurn({ history: [], userMessage: message, catalog, customPrompt, sentProducts: [], profile: testProfile });
+    res.json({
+      reply: plan.reply,
+      photos: plan.show_products,
+      intent: plan.intent,
+      handoff: plan.handoff,
+      ownerQuestion: plan.owner_question,
+      sendBankDetails: plan.send_bank_details,
+      orderTotal: plan.order_total
+    });
+  } catch (error: any) {
+    console.error('❌ Prueba del asistente:', error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.put('/api/business-profile', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
