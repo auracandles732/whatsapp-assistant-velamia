@@ -1511,6 +1511,181 @@
         .nx-alert .at { font-size: 14px; font-weight: 700; color: #141C3A; }
         .nx-alert .ax { margin-top: 2px; font-size: 13px; color: #5C668F; line-height: 1.35; }
 
+        /* ---------- Configuración: perfil del negocio ---------- */
+        .settings-container.nx-cfg-page { padding: 20px 24px 28px; }
+
+        .nx-set {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr) 340px;
+            gap: 22px;
+            align-items: start;
+            max-width: 1500px;
+            margin: 0 auto;
+            color: #1E2A4A;
+        }
+
+        .nx-set-nav { position: sticky; top: 0; align-self: start; }
+        .nx-set-nav .ttl { padding: 4px 12px 12px; font-size: 20px; font-weight: 800; color: #141C3A; }
+        .nx-set-nav nav { display: flex; flex-direction: column; gap: 4px; }
+        .nx-set-nav button {
+            display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px;
+            border-radius: 12px; background: none; color: #4A5582; font-size: 15px; font-weight: 500;
+            text-align: left; white-space: nowrap; cursor: pointer;
+        }
+        .nx-set-nav button:hover { background: #E8EEFF; }
+        .nx-set-nav button.on { background: #E6EBFF; color: #2F4BD8; font-weight: 700; }
+
+        .nx-set-main { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+
+        .nx-set-head {
+            position: sticky; top: 0; z-index: 4;
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+            padding: 4px 0 12px; background: linear-gradient(180deg, #F3F6FD 82%, rgba(243, 246, 253, 0));
+        }
+        .nx-set-head h1 { font-size: 30px; font-weight: 800; color: #141C3A; line-height: 1.15; }
+        .nx-set-head p { margin-top: 4px; font-size: 14px; color: #5C668F; line-height: 1.4; max-width: 620px; }
+        .nx-savebox { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+        .nx-savebox .save-status { color: #1E8A4A; font-size: 13px; font-weight: 600; }
+        .nx-save {
+            display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+            padding: 13px 22px; border-radius: 12px; background: linear-gradient(90deg, #4F6BF5, #8B5CF6); color: #fff;
+            font-size: 15px; font-weight: 600; box-shadow: 0 6px 16px rgba(110, 100, 240, 0.32);
+        }
+        .nx-save:hover { filter: brightness(1.08); }
+        .nx-save:disabled { opacity: 0.7; cursor: default; }
+        .nx-savebar { display: none; }
+
+        .nx-cfg {
+            background: #fff; border: 1px solid #E8ECF6; border-radius: 20px; padding: 22px;
+            box-shadow: 0 4px 20px rgba(50, 70, 160, 0.06); scroll-margin-top: 78px;
+        }
+        .nx-cfg-h { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 14px; margin-bottom: 18px; }
+        .nx-cfg-h .tile { width: 48px; height: 48px; border-radius: 14px; background: #E8EEFF; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .nx-cfg-h .tt { flex: 1; min-width: 160px; }
+        .nx-cfg-h h3 { font-size: 18px; font-weight: 800; color: #141C3A; margin: 0; }
+        .nx-cfg-h p { margin-top: 2px; font-size: 13px; color: #6B7599; line-height: 1.35; }
+        .nx-cfg-h .right { min-width: 220px; }
+
+        .nx-cfg p.hint { margin: 0 0 12px; font-size: 13px; color: #6B7599; line-height: 1.5; }
+        .nx-cfg .profile-section { border-top: none; padding-top: 0; margin-top: 0; }
+        .nx-cfg .profile-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 16px; }
+        .nx-cfg .profile-grid .wide { grid-column: 1 / -1; }
+
+        .nx-cfg .form-field label { font-size: 13px; font-weight: 600; color: #3A4570; text-transform: none; letter-spacing: 0; }
+        .nx-cfg .form-field input:not([type=checkbox]):not([type=color]), .nx-cfg .form-field select, .nx-cfg .step-row input {
+            width: 100%; padding: 12px 14px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff;
+            color: #1E2A4A; font-size: 14px; font-family: inherit; min-width: 0;
+        }
+        .nx-cfg .form-field input:focus, .nx-cfg .form-field select:focus, .nx-cfg .step-row input:focus, .nx-cfg .prompt-textarea:focus {
+            outline: none; border-color: #6C7CF0; box-shadow: 0 0 0 3px rgba(108, 124, 240, 0.16);
+        }
+        .nx-cfg .form-field input[type=color] { width: 100%; height: 46px; padding: 4px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; cursor: pointer; }
+        .nx-cfg .field-hint { font-size: 12px; color: #7A84AE; line-height: 1.35; }
+
+        .nx-cfg .check-row {
+            display: flex; align-items: center; gap: 12px; padding: 10px 0; font-size: 14px; color: #2A3766; cursor: pointer; line-height: 1.35;
+        }
+        .nx-cfg .check-row input[type=checkbox] {
+            appearance: none; -webkit-appearance: none; flex-shrink: 0; position: relative;
+            width: 42px; height: 24px; margin: 0; border-radius: 999px; background: #C9CFE6; cursor: pointer; transition: background 0.2s;
+        }
+        .nx-cfg .check-row input[type=checkbox]::after {
+            content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+            background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.2s;
+        }
+        .nx-cfg .check-row input[type=checkbox]:checked { background: linear-gradient(90deg, #4F6BF5, #8B5CF6); }
+        .nx-cfg .check-row input[type=checkbox]:checked::after { transform: translateX(18px); }
+
+        .nx-cfg .step-row { gap: 10px; margin-bottom: 10px; }
+        .nx-cfg .btn-link { color: #2563EB; font-size: 14px; font-weight: 600; padding: 6px 0; background: none; cursor: pointer; }
+        .nx-cfg .btn-link:hover { text-decoration: underline; }
+
+        .nx-logo { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+        .nx-logo .box { width: 96px; height: 96px; border-radius: 16px; background: #F1F4FC; border: 1px solid #E1E6F4; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .nx-logo .box img { width: 100%; height: 100%; object-fit: contain; }
+        .nx-logo .pick {
+            display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px;
+            border: 1px solid #DCE2F5; background: #fff; color: #2563EB; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .nx-general { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 20px; align-items: start; }
+
+        .nx-cfg .prompt-textarea { width: 100%; padding: 14px; border: 1px solid #DCE2F5; border-radius: 12px; background: #fff; color: #1E2A4A; font-size: 14px; line-height: 1.55; }
+        .nx-cfg .settings-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+        .nx-cfg .save-status { font-size: 13px; color: #1E8A4A; font-weight: 600; }
+        .nx-cfg .btn-save-prompt {
+            padding: 12px 20px; border-radius: 12px; background: linear-gradient(90deg, #4F6BF5, #8B5CF6); color: #fff;
+            font-size: 14px; font-weight: 600; box-shadow: 0 6px 16px rgba(110, 100, 240, 0.28);
+        }
+        .nx-cfg .btn-save-prompt:hover { filter: brightness(1.08); }
+
+        .nx-set-side { align-self: start; display: flex; flex-direction: column; gap: 18px; }
+        .nx-pcard { background: #fff; border: 1px solid #E8ECF6; border-radius: 20px; padding: 20px; box-shadow: 0 4px 20px rgba(50, 70, 160, 0.06); }
+        .nx-pcard h4 { font-size: 17px; font-weight: 800; color: #141C3A; margin: 0 0 12px; }
+        .nx-biz { text-align: center; }
+        .nx-biz .banner { height: 120px; border-radius: 14px; background: #F7EEF0; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 12px; }
+        .nx-biz .banner img { max-width: 70%; max-height: 90px; object-fit: contain; }
+        .nx-biz .nm { font-size: 17px; font-weight: 800; color: #141C3A; }
+        .nx-biz .lc { margin-top: 2px; font-size: 15px; color: #5C668F; }
+        .nx-biz .ds { margin-top: 4px; font-size: 14px; color: #5C668F; line-height: 1.4; }
+        .nx-chipset { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
+        .nx-tagchip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+        .nx-tagchip.violet { background: #EEE9FF; color: #5B45D6; }
+        .nx-tagchip.green { background: #E6F6EC; color: #1E8A4A; }
+        .nx-tagchip.blue { background: #E3EEFF; color: #2A62D8; }
+        .nx-tagchip.orange { background: #FFEFD9; color: #B36B00; }
+
+        .nx-wa { border-radius: 16px; padding: 16px; background: #EFE7E4; }
+        .nx-wa .bubble { max-width: 92%; padding: 12px 14px; border-radius: 4px 14px 14px 14px; background: #fff; box-shadow: 0 1px 4px rgba(40, 60, 140, 0.12); font-size: 14px; line-height: 1.45; color: #1E2A4A; }
+        .nx-wa .bubble p { margin: 0 0 8px; }
+        .nx-wa .bubble p:last-of-type { margin-bottom: 0; }
+        .nx-wa .bubble .tm { margin-top: 4px; text-align: right; font-size: 11px; color: #7A84AE; }
+        .nx-note-line { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; font-size: 13px; color: #5C668F; line-height: 1.4; }
+
+        .nx-sum { display: flex; flex-direction: column; gap: 4px; }
+        .nx-sum .row { display: flex; align-items: flex-start; gap: 12px; padding: 7px 0; font-size: 14px; color: #2A3766; line-height: 1.35; }
+        .nx-sum .row .ic { display: flex; flex-shrink: 0; margin-top: 1px; }
+        .nx-sum .row.warn { color: #B36B00; }
+        .nx-ready { display: flex; gap: 12px; align-items: flex-start; margin-top: 12px; padding: 14px; border-radius: 14px; background: #ECE8FF; }
+        .nx-ready.warn { background: #FFF3DC; }
+        .nx-ready .t { font-size: 15px; font-weight: 800; color: #2F2A6B; }
+        .nx-ready.warn .t { color: #7A5300; }
+        .nx-ready .d { margin-top: 2px; font-size: 13px; color: #5C668F; line-height: 1.4; }
+
+        @media (max-width: 1299px) {
+            .nx-set { grid-template-columns: minmax(0, 1fr) 320px; }
+            .nx-set-nav { grid-column: 1 / -1; grid-row: 1; z-index: 5; background: #F3F6FD; margin: 0 -24px; padding: 20px 24px 8px; top: -20px; }
+            .nx-set-nav .ttl { display: none; }
+            .nx-set-nav nav { flex-direction: row; overflow-x: auto; scrollbar-width: none; padding: 4px 0; }
+            .nx-set-nav nav::-webkit-scrollbar { display: none; }
+            .nx-set-nav button { width: auto; flex-shrink: 0; padding: 9px 14px; font-size: 14px; border-radius: 999px; background: #fff; border: 1px solid #E1E6F4; }
+            .nx-set-nav button.on { background: #4F5BD5; border-color: #4F5BD5; color: #fff; }
+            .nx-set-nav button.on svg { stroke: #fff; }
+            .nx-set-head { top: 58px; }
+            .nx-cfg { scroll-margin-top: 130px; }
+        }
+
+        @media (max-width: 900px) {
+            .settings-container.nx-cfg-page { padding: 12px 12px 90px; }
+            .nx-set { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+            .nx-set-nav { margin: 0 -12px; padding: 12px 12px 6px; top: -12px; }
+            .nx-set-head { position: static; padding: 0; background: none; }
+            .nx-set-head h1 { font-size: 24px; }
+            .nx-set-head .nx-savebox { display: none; }
+            .nx-savebar {
+                display: flex; align-items: center; gap: 12px; position: sticky; bottom: 10px; z-index: 6;
+                padding: 10px 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.96); border: 1px solid #E1E6F4;
+                box-shadow: 0 8px 26px rgba(40, 60, 140, 0.22);
+            }
+            .nx-savebar .save-status { flex: 1; font-size: 13px; color: #1E8A4A; font-weight: 600; }
+            .nx-savebar .nx-save { flex-shrink: 0; }
+            .nx-cfg { padding: 16px; border-radius: 16px; scroll-margin-top: 70px; }
+            .nx-general { grid-template-columns: 1fr; }
+            .nx-cfg .profile-grid { grid-template-columns: 1fr; }
+            .nx-cfg .step-row { display: flex !important; flex-wrap: wrap; }
+            .nx-cfg .step-row input { flex: 1 1 140px; width: auto; }
+            .nx-cfg-h .right { min-width: 0; width: 100%; }
+        }
+
         .btn-logout {
             background: transparent;
             border: 1px solid var(--rosa-palo);
@@ -1966,6 +2141,11 @@
                 case 'note': return <svg {...p}><path d="M5 4h14v11l-5 5H5zM14 20v-5h5M8 9h8M8 13h4" /></svg>;
                 case 'bulb': return <svg {...p}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z" /></svg>;
                 case 'sparkle': return <svg {...p}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" /></svg>;
+                case 'home': return <svg {...p}><path d="M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6" /></svg>;
+                case 'card': return <svg {...p}><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="M3 10h18M7 15h4" /></svg>;
+                case 'truck': return <svg {...p}><path d="M2 6h11v10H2zM13 9h4l4 4v3h-8" /><circle cx="7" cy="17.5" r="1.8" /><circle cx="17" cy="17.5" r="1.8" /></svg>;
+                case 'bell': return <svg {...p}><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15zM10 21h4" /></svg>;
+                case 'save': return <svg {...p}><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6" /></svg>;
                 default: return null;
             }
         }
@@ -2536,12 +2716,126 @@
 
         const getIn = (obj, path) => path.split('.').reduce((o, key) => (o == null ? undefined : o[key]), obj);
 
-        function BusinessProfileForm({ onSaved }) {
+        function CfgCard({ id, icon, title, subtitle, right, children }) {
+            return (
+                <section className="nx-cfg" id={'cfg-' + id}>
+                    <div className="nx-cfg-h">
+                        <div className="tile"><PlatIcon name={icon} size={24} color="#4F5BD5" /></div>
+                        <div className="tt"><h3>{title}</h3><p>{subtitle}</p></div>
+                        {right && <div className="right">{right}</div>}
+                    </div>
+                    {children}
+                </section>
+            );
+        }
+
+        function ProfilePreview({ form, readiness, legacy }) {
+            const b = form.business, sa = form.sales, pay = form.payments, sh = form.shipping, dt = form.dates;
+            const logo = form.branding.logoUrl || (legacy ? 'logo.png' : '');
+            const hasShipping = sh.mode !== 'none';
+            const methods = [pay.transferEnabled && 'Transferencia', pay.cardEnabled && 'Tarjeta'].filter(Boolean);
+            const stepsCount = (form.followUps.steps || []).length;
+            const plural = String(sa.productLabelPlural || 'productos').toLowerCase();
+            const goods = String(sa.goodsWord || '').toLowerCase();
+            const what = goods && goods !== plural && goods !== 'productos' ? plural + ' de ' + goods : plural;
+            const time = new Date().toLocaleTimeString('es-EC', { timeZone: BUSINESS_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+            const missing = readiness ? readiness.items.filter(i => !i.ok).map(i => i.label.toLowerCase()) : [];
+            const ownerPhone = (form.alerts.ownerPhone || '').trim();
+            const row = (icon, text, warn) => <div className={'row' + (warn ? ' warn' : '')}><span className="ic"><PlatIcon name={icon} size={19} color={warn ? '#B36B00' : '#6B7599'} /></span><span>{text}</span></div>;
+            return (
+                <>
+                    <div className="nx-pcard nx-biz">
+                        <div className="banner">{logo ? <img src={logo} alt="" /> : <Avatar name={b.name} size={72} />}</div>
+                        <div className="nm">{b.name || 'Tu negocio'}</div>
+                        <div className="lc">{[b.city, b.country].filter(Boolean).join(', ')}</div>
+                        {b.description && <div className="ds">{b.description}</div>}
+                        <div className="nx-chipset">
+                            {sa.personalization && <span className="nx-tagchip violet">Personalizable</span>}
+                            {pay.transferEnabled && <span className="nx-tagchip green">Transferencia</span>}
+                            {pay.cardEnabled && <span className="nx-tagchip blue">Tarjeta</span>}
+                            {hasShipping && <span className="nx-tagchip orange">{sh.carrier || 'Envíos'}</span>}
+                            {sh.pickupAvailable && <span className="nx-tagchip violet">Retiro en local</span>}
+                            {dt.enabled && dt.alwaysAvailable && <span className="nx-tagchip violet">Disponible siempre</span>}
+                        </div>
+                    </div>
+
+                    <div className="nx-pcard">
+                        <h4>Vista previa del asistente</h4>
+                        <div className="nx-wa">
+                            <div className="bubble">
+                                <p>¡Hola! 👋 {form.style.humanPersona ? 'Soy parte del equipo de' : 'Soy el asistente de'} <b>{b.name || 'tu negocio'}</b> {b.productEmoji}</p>
+                                <p>Te ayudo con información sobre nuestros {what}, precios{sa.personalization ? ', personalizaciones' : ''}{hasShipping ? ', envíos' : ''} y más.</p>
+                                <p>¿En qué puedo ayudarte?</p>
+                                <div className="tm">{time}</div>
+                            </div>
+                        </div>
+                        <div className="nx-note-line"><PlatIcon name="bulb" size={18} color="#4F5BD5" /><span>Ejemplo del saludo con tus datos. Cada respuesta real la escribe la IA según tu perfil y tus instrucciones.</span></div>
+                    </div>
+
+                    <div className="nx-pcard">
+                        <h4>Resumen del negocio</h4>
+                        <div className="nx-sum">
+                            {row('pin', [b.city, b.country].filter(Boolean).join(', ') || 'Sin ciudad')}
+                            {row('clock', b.timezone)}
+                            {row('box', 'Vende: ' + (sa.goodsWord || 'productos') + ' (por ' + sa.unitSingular + ')')}
+                            {row('tag', 'Personalización: ' + (sa.personalization ? 'Sí' : 'No'))}
+                            {row('card', 'Pagos: ' + (methods.length ? methods.join(' y ') : 'sin definir'), !methods.length)}
+                            {row('truck', hasShipping ? 'Envíos: ' + (sh.carrier || 'sin transportista') + (sh.coverage ? ' (' + sh.coverage + ')' : '') : 'Sin envíos' + (sh.pickupAvailable ? ' (retiro en local)' : ''))}
+                            {row('calendar', 'Trabaja con fecha de evento: ' + (dt.enabled ? 'Sí' : 'No'))}
+                            {row('bell', 'Seguimientos automáticos: ' + (form.followUps.enabled ? stepsCount : 'No'))}
+                            {row('box', 'Empaques: ' + (form.packaging.enabled ? (form.packaging.types || []).length + ' opciones' : 'No'))}
+                            {row('whatsapp', ownerPhone ? 'Recibe avisos en: ' + ownerPhone : 'Sin número para recibir avisos', !ownerPhone)}
+                        </div>
+                        {readiness && (
+                            <div className={'nx-ready' + (missing.length ? ' warn' : '')}>
+                                <PlatIcon name={missing.length ? 'warn' : 'sparkle'} size={22} color="#6C5CE7" />
+                                <div>
+                                    <div className="t">{missing.length ? 'Falta completar' : 'Todo listo para vender'}</div>
+                                    <div className="d">{missing.length ? 'Pendiente: ' + missing.join(', ') + '.' : 'Tu configuración se aplica de inmediato en todos los chats del asistente.'}</div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </>
+            );
+        }
+
+        function BusinessProfileForm({ onSaved, extras = [], legacy = false }) {
             const [form, setForm] = useState(null);
             const [presets, setPresets] = useState([]);
             const [saving, setSaving] = useState(false);
             const [saved, setSaved] = useState(false);
             const [uploadingLogo, setUploadingLogo] = useState(false);
+            const [readiness, setReadiness] = useState(null);
+            const [activeSection, setActiveSection] = useState('top');
+            const rootRef = useRef(null);
+            const sectionIds = ['general', 'ventas', 'pagos', 'fechas', 'envios', 'seguimientos', 'empaques', 'avisos', ...extras.map(x => x.id)];
+            const sectionKey = sectionIds.join(',');
+
+            const loadReadiness = () => api('/api/me/readiness').then(setReadiness).catch(() => {});
+
+            useEffect(() => {
+                loadReadiness();
+            }, []);
+
+            useEffect(() => {
+                const root = rootRef.current;
+                if (!form || !root) return;
+                const scroller = root.closest('.settings-container');
+                if (!scroller) return;
+                const onScroll = () => {
+                    const base = scroller.getBoundingClientRect().top;
+                    let current = 'top';
+                    for (const id of sectionKey.split(',')) {
+                        const el = document.getElementById('cfg-' + id);
+                        if (el && el.getBoundingClientRect().top - base <= 170) current = id;
+                    }
+                    setActiveSection(current);
+                };
+                scroller.addEventListener('scroll', onScroll, { passive: true });
+                onScroll();
+                return () => scroller.removeEventListener('scroll', onScroll);
+            }, [!!form, sectionKey]);
 
             useEffect(() => {
                 api('/api/business-profile').then(setForm).catch(err => alert('Error cargando el perfil: ' + err.message));
@@ -2617,6 +2911,7 @@
                     setForm(result);
                     setSaved(true);
                     onSaved(result);
+                    loadReadiness();
                 } catch (err) {
                     alert('Error guardando el perfil: ' + err.message);
                 } finally {
@@ -2627,179 +2922,230 @@
             const steps = form.followUps.steps || [];
             const shippingMode = form.shipping.mode;
 
+            function goTo(id) {
+                const scroller = rootRef.current && rootRef.current.closest('.settings-container');
+                if (id === 'top') {
+                    if (scroller) scroller.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
+                const el = document.getElementById('cfg-' + id);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            const navItems = [
+                { id: 'top', icon: 'user', label: 'Perfil del negocio' },
+                { id: 'general', icon: 'home', label: 'General' },
+                { id: 'ventas', icon: 'tag', label: 'Ventas' },
+                { id: 'pagos', icon: 'card', label: 'Pagos' },
+                { id: 'fechas', icon: 'calendar', label: 'Fechas de entrega' },
+                { id: 'envios', icon: 'truck', label: 'Envíos' },
+                { id: 'seguimientos', icon: 'bell', label: 'Seguimientos' },
+                { id: 'empaques', icon: 'box', label: 'Empaques' },
+                { id: 'avisos', icon: 'sparkle', label: 'Avisos y estilo' },
+                ...extras.map(x => ({ id: x.id, icon: x.icon, label: x.label }))
+            ];
+
+            const saveButton = (
+                <button type="button" className="nx-save" onClick={save} disabled={saving}>
+                    <PlatIcon name="save" size={19} color="#fff" /> {saving ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+            );
+
             return (
-                <div className="settings-card">
-                    <h3>🏪 Perfil del negocio</h3>
-                    <p className="hint">Todo lo que hace único a tu negocio: cómo vende, cobra, envía y habla el asistente. Se aplica de inmediato en todos los chats y manda sobre las instrucciones de abajo.</p>
+                <div className="nx-set" ref={rootRef}>
+                    <aside className="nx-set-nav">
+                        <div className="ttl">Configuración</div>
+                        <nav>
+                            {navItems.map(item => (
+                                <button key={item.id} type="button" className={activeSection === item.id ? 'on' : ''} onClick={() => goTo(item.id)}>
+                                    <PlatIcon name={item.icon} size={19} color={activeSection === item.id ? '#2F4BD8' : '#6B7599'} /> {item.label}
+                                </button>
+                            ))}
+                        </nav>
+                    </aside>
 
-                    {presets.length > 0 && (
-                        <div className="form-field">
-                            <label>Empezar desde una plantilla</label>
-                            <select value="" onChange={e => loadPreset(e.target.value)}>
-                                <option value="">Elegir plantilla…</option>
-                                {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-                            </select>
+                    <div className="nx-set-main">
+                        <div className="nx-set-head">
+                            <div>
+                                <h1>Perfil del negocio</h1>
+                                <p>Todo lo que hace único a tu negocio: cómo vende, cobra, envía y habla el asistente. Se aplica de inmediato en todos los chats y manda sobre las instrucciones.</p>
+                            </div>
+                            <div className="nx-savebox">
+                                <span className="save-status">{saved ? '✅ Guardado' : ''}</span>
+                                {saveButton}
+                            </div>
                         </div>
-                    )}
 
-                    <div className="profile-section">
-                        <h4>Negocio</h4>
-                        <div className="profile-grid">
-                            {text('business.name', 'Nombre', 'Ej: Dulce Hogar')}
-                            {text('business.productEmoji', 'Emoji de productos', '🛍️', 'Va en el pie de cada foto')}
-                            {text('business.description', 'Qué es tu negocio', 'Ej: una tienda de zapatos para dama', 'Completa la frase "Nombre es …"', true)}
-                            {text('business.city', 'Ciudad')}
-                            {text('business.country', 'País')}
-                            <div className="form-field">
-                                <label>Zona horaria</label>
-                                <select value={form.business.timezone} onChange={e => set('business.timezone', e.target.value)}>
-                                    {[...new Set([form.business.timezone, ...TIMEZONES])].map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                                </select>
-                            </div>
-                            <div className="form-field">
-                                <label>Color principal</label>
-                                <input type="color" value={form.branding.primaryColor} onChange={e => set('branding.primaryColor', e.target.value)} />
-                            </div>
-                            <div className="form-field wide">
-                                <label>Logo</label>
-                                <div className="logo-preview">
-                                    <img src={form.branding.logoUrl || 'logo.png'} />
-                                    <label className="btn-link">
+                        <CfgCard
+                            id="general" icon="home" title="General" subtitle="Información básica de tu negocio"
+                            right={presets.length > 0 && (
+                                <div className="form-field">
+                                    <label>Empezar desde una plantilla</label>
+                                    <select value="" onChange={e => loadPreset(e.target.value)}>
+                                        <option value="">Elegir plantilla…</option>
+                                        {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                        >
+                            <div className="nx-general">
+                                <div className="nx-logo">
+                                    <div className="box">
+                                        {form.branding.logoUrl || legacy ? <img src={form.branding.logoUrl || 'logo.png'} alt="Logo" /> : <Avatar name={form.business.name} size={64} />}
+                                    </div>
+                                    <label className="pick">
                                         {uploadingLogo ? 'Subiendo…' : 'Cambiar logo'}
                                         <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={uploadLogo} />
                                     </label>
-                                    {form.branding.logoUrl && <button className="btn-link" onClick={() => set('branding.logoUrl', '')}>Quitar</button>}
+                                    {form.branding.logoUrl && <button type="button" className="btn-link" onClick={() => set('branding.logoUrl', '')}>Quitar</button>}
+                                    <small className="field-hint">PNG o JPG, máx. 5 MB</small>
+                                </div>
+                                <div className="profile-grid">
+                                    {text('business.name', 'Nombre del negocio', 'Ej: Dulce Hogar')}
+                                    {text('business.productEmoji', 'Emoji de productos', '🛍️', 'Va en el pie de cada foto')}
+                                    {text('business.description', 'Qué es tu negocio', 'Ej: una tienda de zapatos para dama', 'Completa la frase "Nombre es …"', true)}
+                                    {text('business.city', 'Ciudad')}
+                                    {text('business.country', 'País')}
+                                    <div className="form-field">
+                                        <label>Zona horaria</label>
+                                        <select value={form.business.timezone} onChange={e => set('business.timezone', e.target.value)}>
+                                            {[...new Set([form.business.timezone, ...TIMEZONES])].map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Color principal</label>
+                                        <input type="color" value={form.branding.primaryColor} onChange={e => set('branding.primaryColor', e.target.value)} />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
+                        </CfgCard>
 
-                    <div className="profile-section">
-                        <h4>Cómo vendes</h4>
-                        <div className="profile-grid">
-                            {text('sales.unitSingular', 'Unidad de venta', 'docena, par, unidad')}
-                            {text('sales.unitPlural', 'Unidad en plural', 'docenas, pares, unidades')}
-                            {text('sales.unitDetail', 'Qué incluye la unidad', 'Ej: 12 unidades', 'Déjalo vacío si no aplica')}
-                            {text('sales.priceSuffix', 'Texto del precio en fotos', 'la docena, el par, c/u')}
-                            {text('sales.productLabel', 'Cómo llamas a cada producto', 'Modelo, Producto, Diseño')}
-                            {text('sales.productLabelPlural', 'En plural', 'Modelos, Productos')}
-                            {text('sales.goodsWord', 'Qué vendes (para hablar del total)', 'velas, zapatos, productos')}
-                            {text('sales.minimumOrder', 'Pedido mínimo', 'Ej: 2 docenas', 'Vacío = sin mínimo')}
-                            {check('sales.personalization', 'Los productos se pueden personalizar')}
-                            {form.sales.personalization && text('sales.personalizationExamples', 'Qué se puede personalizar', 'Ej: colores, nombres y frases', '', true)}
-                        </div>
-                    </div>
-
-                    <div className="profile-section">
-                        <h4>Pagos</h4>
-                        <div className="profile-grid">
-                            {check('payments.transferEnabled', 'Acepto transferencia bancaria (el bot envía tus datos de pago)')}
-                            {form.payments.transferEnabled && number('payments.depositPercent', 'Anticipo por transferencia (%)', '100 = se paga todo al inicio')}
-                            {check('payments.cardEnabled', 'Acepto tarjeta (el bot se pausa y te avisa para que envíes el link)')}
-                            {form.payments.cardEnabled && text('payments.cardBrands', 'Tarjetas aceptadas', 'Ej: Visa y Mastercard')}
-                        </div>
-                    </div>
-
-                    <div className="profile-section">
-                        <h4>Fechas de entrega</h4>
-                        <div className="profile-grid">
-                            {check('dates.enabled', 'Trabajo con fecha de evento (el bot calcula la fecha de entrega)')}
-                            {form.dates.enabled && text('dates.eventLabel', 'Cómo se llama la fecha', 'evento, boda, fiesta')}
-                            {form.dates.enabled && number('dates.deliveryDaysBeforeEvent', 'Entrego días antes', '0 = el mismo día')}
-                            {form.dates.enabled && number('dates.urgentDays', 'Avisarme si la entrega es en (días)')}
-                            {form.dates.enabled && check('dates.alwaysAvailable', 'Siempre tengo disponibilidad (el bot no consulta fechas)')}
-                        </div>
-                    </div>
-
-                    <div className="profile-section">
-                        <h4>Envíos</h4>
-                        <div className="profile-grid">
-                            <div className="form-field wide">
-                                <label>Tipo de envío</label>
-                                <select value={shippingMode} onChange={e => set('shipping.mode', e.target.value)}>
-                                    <option value="ecuador_table">Tarifario Servientrega Ecuador (origen Guayaquil)</option>
-                                    <option value="flat">Tarifa fija a cualquier ciudad</option>
-                                    <option value="none">Sin envíos</option>
-                                </select>
+                        <CfgCard id="ventas" icon="tag" title="Cómo vendes" subtitle="Define cómo ofreces y describes tus productos">
+                            <div className="profile-grid">
+                                {text('sales.unitSingular', 'Unidad de venta', 'docena, par, unidad')}
+                                {text('sales.unitPlural', 'Unidad en plural', 'docenas, pares, unidades')}
+                                {text('sales.unitDetail', 'Qué incluye la unidad', 'Ej: 12 unidades', 'Déjalo vacío si no aplica')}
+                                {text('sales.priceSuffix', 'Texto del precio en fotos', 'la docena, el par, c/u')}
+                                {text('sales.productLabel', 'Cómo llamas a cada producto', 'Modelo, Producto, Diseño')}
+                                {text('sales.productLabelPlural', 'En plural', 'Modelos, Productos')}
+                                {text('sales.goodsWord', 'Qué vendes (para hablar del total)', 'velas, zapatos, productos')}
+                                {text('sales.minimumOrder', 'Pedido mínimo', 'Ej: 2 docenas', 'Vacío = sin mínimo')}
+                                {check('sales.personalization', 'Los productos se pueden personalizar')}
+                                {form.sales.personalization && text('sales.personalizationExamples', 'Qué se puede personalizar', 'Ej: colores, nombres y frases', '', true)}
                             </div>
-                            {shippingMode === 'flat' && number('shipping.flatRate', 'Tarifa fija ($)', '', '0.01')}
-                            {shippingMode !== 'none' && text('shipping.carrier', 'Transportista', 'Ej: Servientrega')}
-                            {shippingMode !== 'none' && text('shipping.coverage', 'Cobertura', 'Ej: todo Ecuador')}
-                            {shippingMode !== 'none' && number('shipping.unitsIncludedInRate', 'Cantidad que cubre la tarifa', '0 = sin recargo por cantidad')}
-                            {shippingMode !== 'none' && number('shipping.extraCost', 'Recargo si supera esa cantidad ($)', '', '0.01')}
-                            {shippingMode !== 'none' && check('shipping.showSeparately', 'Mostrar el envío por separado (si no, el total es un solo valor)')}
-                            {check('shipping.pickupAvailable', 'Se puede retirar en el local')}
-                            {(form.shipping.pickupAvailable || shippingMode === 'none') && text('shipping.pickupAddress', 'Dirección para retirar', 'Ej: Av. 9 de Octubre 123', '', true)}
-                        </div>
-                    </div>
+                        </CfgCard>
 
-                    <div className="profile-section">
-                        <h4>Seguimientos automáticos</h4>
-                        <div className="profile-grid">
-                            {check('followUps.enabled', 'Enviar seguimientos a clientas que no responden')}
-                        </div>
-                        {form.followUps.enabled && (
-                            <>
-                                <p className="hint">Cada seguimiento es una plantilla aprobada en Meta y se envía tras esos días sin respuesta.</p>
-                                {steps.map((step, i) => (
-                                    <div key={i} className="step-row">
-                                        <input type="text" placeholder="nombre_de_la_plantilla" value={step.template} onChange={e => set(`followUps.steps.${i}.template`, e.target.value.trim())} />
-                                        <input type="number" min="1" value={step.days} onChange={e => set(`followUps.steps.${i}.days`, Number(e.target.value))} />
-                                        <span>días</span>
-                                        <button className="btn-link" onClick={() => set('followUps.steps', steps.filter((_, j) => j !== i))}>Quitar</button>
-                                    </div>
-                                ))}
-                                <button className="btn-link" onClick={() => set('followUps.steps', [...steps, { template: '', days: (steps[steps.length - 1]?.days || 0) + 1 }])}>+ Agregar seguimiento</button>
-                                <div className="profile-grid" style={{ marginTop: '10px' }}>
-                                    {number('followUps.fromHour', 'Desde la hora (0-23)')}
-                                    {number('followUps.untilHour', 'Hasta la hora (1-24)')}
-                                    {text('followUps.optOutMessage', 'Respuesta si la clienta pide no recibir más', '', '', true)}
+                        <CfgCard id="pagos" icon="card" title="Pagos" subtitle="Configura las formas de pago que aceptas">
+                            <div className="profile-grid">
+                                {check('payments.transferEnabled', 'Acepto transferencia bancaria (el bot envía tus datos de pago)')}
+                                {check('payments.cardEnabled', 'Acepto tarjeta (el bot se pausa y te avisa para que envíes el link)')}
+                                {form.payments.transferEnabled && number('payments.depositPercent', 'Anticipo por transferencia (%)', '100 = se paga todo al inicio')}
+                                {form.payments.cardEnabled && text('payments.cardBrands', 'Tarjetas aceptadas', 'Ej: Visa y Mastercard')}
+                            </div>
+                        </CfgCard>
+
+                        <CfgCard id="fechas" icon="calendar" title="Fechas de entrega" subtitle="Activa si trabajas con fecha de evento">
+                            <div className="profile-grid">
+                                {check('dates.enabled', 'Trabajo con fecha de evento (el bot calcula la fecha de entrega)')}
+                                {form.dates.enabled && text('dates.eventLabel', 'Cómo se llama la fecha', 'evento, boda, fiesta')}
+                                {form.dates.enabled && number('dates.deliveryDaysBeforeEvent', 'Entrego días antes', '0 = el mismo día')}
+                                {form.dates.enabled && number('dates.urgentDays', 'Avisarme si la entrega es en (días)')}
+                                {form.dates.enabled && check('dates.alwaysAvailable', 'Siempre tengo disponibilidad (el bot no consulta fechas)')}
+                            </div>
+                        </CfgCard>
+
+                        <CfgCard id="envios" icon="truck" title="Envíos" subtitle="Configura tus métodos y tarifas de envío">
+                            <div className="profile-grid">
+                                <div className="form-field wide">
+                                    <label>Tipo de envío</label>
+                                    <select value={shippingMode} onChange={e => set('shipping.mode', e.target.value)}>
+                                        <option value="ecuador_table">Tarifario Servientrega Ecuador (origen Guayaquil)</option>
+                                        <option value="flat">Tarifa fija a cualquier ciudad</option>
+                                        <option value="none">Sin envíos</option>
+                                    </select>
                                 </div>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="profile-section">
-                        <h4>Empaques</h4>
-                        <div className="profile-grid">
-                            {check('packaging.enabled', 'Cada producto tiene un empaque incluido y la clienta puede cambiarlo')}
-                        </div>
-                        {form.packaging.enabled && (
-                            <>
-                                <p className="hint">El empaque de cada producto se elige en el Catálogo y va incluido en su precio. "Costo del cambio" es lo que se suma por {form.sales.unitSingular} si la clienta pide cambiar a ese empaque; si lo dejas vacío, el asistente no da el total y te avisa para que lo confirmes.</p>
-                                {(form.packaging.types || []).map((type, i) => (
-                                    <div key={i} className="step-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr) 90px auto' }}>
-                                        <input type="text" placeholder="Nombre (Kraft)" value={type.name} onChange={e => set(`packaging.types.${i}.name`, e.target.value)} />
-                                        <input type="text" placeholder="Cómo es" value={type.description} onChange={e => set(`packaging.types.${i}.description`, e.target.value)} />
-                                        <input type="number" min="0" step="0.01" placeholder="Costo" title={`Costo del cambio por ${form.sales.unitSingular} ($)`} value={type.changeCost ?? ''} onChange={e => set(`packaging.types.${i}.changeCost`, e.target.value === '' ? null : Number(e.target.value))} />
-                                        <button className="btn-link" onClick={() => set('packaging.types', form.packaging.types.filter((_, j) => j !== i))}>Quitar</button>
-                                    </div>
-                                ))}
-                                <button className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null }])}>+ Agregar empaque</button>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="profile-section">
-                        <h4>Avisos y estilo</h4>
-                        <div className="profile-grid">
-                            {text('alerts.ownerPhone', 'Tu WhatsApp para recibir avisos', 'Ej: 593991234567', 'Con código de país, sin + ni espacios', true)}
-                            {text('alerts.template', 'Plantilla de aviso para ti (Meta)', 'Ej: aviso_equipo', 'Vacío = aviso en texto libre (solo llega si escribiste al número en las últimas 24 h)', true)}
-                            <div className="form-field wide">
-                                <label>Emojis que usa el asistente</label>
-                                <input type="text" value={(form.style.decorativeEmojis || []).join(' ')} onChange={e => set('style.decorativeEmojis', e.target.value.split(' '))} />
-                                <small className="field-hint">Separados por espacio. El asistente los va rotando para no repetir.</small>
+                                {shippingMode === 'flat' && number('shipping.flatRate', 'Tarifa fija ($)', '', '0.01')}
+                                {shippingMode !== 'none' && text('shipping.carrier', 'Transportista', 'Ej: Servientrega')}
+                                {shippingMode !== 'none' && text('shipping.coverage', 'Cobertura', 'Ej: todo Ecuador')}
+                                {shippingMode !== 'none' && number('shipping.unitsIncludedInRate', 'Cantidad que cubre la tarifa', '0 = sin recargo por cantidad')}
+                                {shippingMode !== 'none' && number('shipping.extraCost', 'Recargo si supera esa cantidad ($)', '', '0.01')}
+                                {shippingMode !== 'none' && check('shipping.showSeparately', 'Mostrar el envío por separado (si no, el total es un solo valor)')}
+                                {check('shipping.pickupAvailable', 'Se puede retirar en el local')}
+                                {(form.shipping.pickupAvailable || shippingMode === 'none') && text('shipping.pickupAddress', 'Dirección para retirar', 'Ej: Av. 9 de Octubre 123', '', true)}
                             </div>
-                            {check('style.humanPersona', 'Presentarse como una persona del equipo (nunca decir que es un asistente virtual)')}
+                        </CfgCard>
+
+                        <CfgCard id="seguimientos" icon="bell" title="Seguimientos automáticos" subtitle="Mensajes a clientes que dejaron de responder">
+                            <div className="profile-grid">
+                                {check('followUps.enabled', 'Enviar seguimientos a clientas que no responden')}
+                            </div>
+                            {form.followUps.enabled && (
+                                <>
+                                    <p className="hint">Cada seguimiento es una plantilla aprobada en Meta y se envía tras esos días sin respuesta.</p>
+                                    {steps.map((step, i) => (
+                                        <div key={i} className="step-row">
+                                            <input type="text" placeholder="nombre_de_la_plantilla" value={step.template} onChange={e => set('followUps.steps.' + i + '.template', e.target.value.trim())} />
+                                            <input type="number" min="1" value={step.days} onChange={e => set('followUps.steps.' + i + '.days', Number(e.target.value))} />
+                                            <span>días</span>
+                                            <button type="button" className="btn-link" onClick={() => set('followUps.steps', steps.filter((_, j) => j !== i))}>Quitar</button>
+                                        </div>
+                                    ))}
+                                    <button type="button" className="btn-link" onClick={() => set('followUps.steps', [...steps, { template: '', days: (steps[steps.length - 1]?.days || 0) + 1 }])}>+ Agregar seguimiento</button>
+                                    <div className="profile-grid" style={{ marginTop: '10px' }}>
+                                        {number('followUps.fromHour', 'Desde la hora (0-23)')}
+                                        {number('followUps.untilHour', 'Hasta la hora (1-24)')}
+                                        {text('followUps.optOutMessage', 'Respuesta si la clienta pide no recibir más', '', '', true)}
+                                    </div>
+                                </>
+                            )}
+                        </CfgCard>
+
+                        <CfgCard id="empaques" icon="box" title="Empaques" subtitle="Opciones de presentación de tus productos">
+                            <div className="profile-grid">
+                                {check('packaging.enabled', 'Cada producto tiene un empaque incluido y la clienta puede cambiarlo')}
+                            </div>
+                            {form.packaging.enabled && (
+                                <>
+                                    <p className="hint">El empaque de cada producto se elige en el Catálogo y va incluido en su precio. "Costo del cambio" es lo que se suma por {form.sales.unitSingular} si la clienta pide cambiar a ese empaque; si lo dejas vacío, el asistente no da el total y te avisa para que lo confirmes.</p>
+                                    {(form.packaging.types || []).map((type, i) => (
+                                        <div key={i} className="step-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr) 90px auto' }}>
+                                            <input type="text" placeholder="Nombre (Kraft)" value={type.name} onChange={e => set('packaging.types.' + i + '.name', e.target.value)} />
+                                            <input type="text" placeholder="Cómo es" value={type.description} onChange={e => set('packaging.types.' + i + '.description', e.target.value)} />
+                                            <input type="number" min="0" step="0.01" placeholder="Costo" title={'Costo del cambio por ' + form.sales.unitSingular + ' ($)'} value={type.changeCost ?? ''} onChange={e => set('packaging.types.' + i + '.changeCost', e.target.value === '' ? null : Number(e.target.value))} />
+                                            <button type="button" className="btn-link" onClick={() => set('packaging.types', form.packaging.types.filter((_, j) => j !== i))}>Quitar</button>
+                                        </div>
+                                    ))}
+                                    <button type="button" className="btn-link" onClick={() => set('packaging.types', [...(form.packaging.types || []), { name: '', description: '', changeCost: null }])}>+ Agregar empaque</button>
+                                </>
+                            )}
+                        </CfgCard>
+
+                        <CfgCard id="avisos" icon="sparkle" title="Avisos y estilo" subtitle="Cómo te avisa el asistente y cómo habla">
+                            <div className="profile-grid">
+                                {text('alerts.ownerPhone', 'Tu WhatsApp para recibir avisos', 'Ej: 593991234567', 'Con código de país, sin + ni espacios', true)}
+                                {text('alerts.template', 'Plantilla de aviso para ti (Meta)', 'Ej: aviso_equipo', 'Vacío = aviso en texto libre (solo llega si escribiste al número en las últimas 24 h)', true)}
+                                <div className="form-field wide">
+                                    <label>Emojis que usa el asistente</label>
+                                    <input type="text" value={(form.style.decorativeEmojis || []).join(' ')} onChange={e => set('style.decorativeEmojis', e.target.value.split(' '))} />
+                                    <small className="field-hint">Separados por espacio. El asistente los va rotando para no repetir.</small>
+                                </div>
+                                {check('style.humanPersona', 'Presentarse como una persona del equipo (nunca decir que es un asistente virtual)')}
+                            </div>
+                        </CfgCard>
+
+                        {extras.map(x => (
+                            <CfgCard key={x.id} id={x.id} icon={x.icon} title={x.title} subtitle={x.subtitle}>{x.node}</CfgCard>
+                        ))}
+
+                        <div className="nx-savebar">
+                            <span className="save-status">{saved ? '✅ Guardado' : 'Los cambios del perfil se guardan aquí'}</span>
+                            {saveButton}
                         </div>
                     </div>
 
-                    <div className="settings-actions">
-                        <span className="save-status">{saved ? '✅ Perfil guardado' : ''}</span>
-                        <button className="btn-save-prompt" onClick={save} disabled={saving}>
-                            {saving ? 'Guardando...' : '💾 Guardar perfil'}
-                        </button>
-                    </div>
+                    <aside className="nx-set-side">
+                        <ProfilePreview form={form} readiness={readiness} legacy={legacy} />
+                    </aside>
                 </div>
             );
         }
@@ -4084,44 +4430,60 @@
                             );
                         })()}
                         {activeTab === 'configuracion' && (
-                        <div className="settings-container">
-                            <BusinessProfileForm onSaved={saved => {
-                                setBiz(saved);
-                                onBrandingChange({ name: saved.business.name, primaryColor: saved.branding.primaryColor, logoUrl: saved.branding.logoUrl, timezone: saved.business.timezone });
-                            }} />
-                            <div className="settings-card">
-                                <h3>🏦 Datos para transferencia</h3>
-                                <p className="hint">Cuando una clienta elige pagar por transferencia, el bot le indica {biz && biz.payments.depositPercent < 100 ? `el anticipo del ${biz.payments.depositPercent}%` : 'el total a pagar'} y le envía este texto exactamente como lo escribas.{biz?.payments.cardEnabled ? ' Con tarjeta, el bot indica el pago del total, se pausa y te avisa para que envíes el link de pago.' : ''}</p>
-                                <textarea
-                                    className="prompt-textarea"
-                                    style={{ minHeight: '140px' }}
-                                    placeholder={'Banco:\nTipo de cuenta:\nNúmero de cuenta:\nTitular:\nCédula / RUC:\n\nEnvíanos el comprobante por este chat 🤍'}
-                                    value={transferInfo}
-                                    onChange={e => setTransferInfo(e.target.value)}
-                                ></textarea>
-                                <div className="settings-actions">
-                                    <span className="save-status">{transferSaved ? '✅ Guardado' : (transferInfo.trim() ? '' : '⚠️ Sin datos: el bot te avisará cuando una clienta elija transferencia')}</span>
-                                    <button className="btn-save-prompt" onClick={savePaymentInfo} disabled={savingTransfer}>
-                                        {savingTransfer ? 'Guardando...' : '💾 Guardar datos de pago'}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="settings-card">
-                                <h3>🧠 Instrucciones del asistente (System Prompt)</h3>
-                                <p className="hint">Aquí defines el tono del asistente y detalles de tu negocio que no están en el perfil (horarios, políticas, preguntas frecuentes). Se aplica de inmediato en todos los chats. Precios, pagos, envíos y fechas vienen del Perfil del negocio y mandan sobre lo que escribas aquí.</p>
-                                <textarea
-                                    className="prompt-textarea"
-                                    placeholder={`Ej: Eres parte del equipo de ${branding.name || 'mi negocio'}. Responde siempre en español, de forma cálida y cercana, con mensajes cortos y algún emoji.`}
-                                    value={systemPrompt}
-                                    onChange={e => setSystemPrompt(e.target.value)}
-                                ></textarea>
-                                <div className="settings-actions">
-                                    <span className="save-status">{promptSaved ? '✅ Guardado' : ''}</span>
-                                    <button className="btn-save-prompt" onClick={saveSystemPrompt} disabled={savingPrompt}>
-                                        {savingPrompt ? 'Guardando...' : '💾 Guardar instrucciones'}
-                                    </button>
-                                </div>
-                            </div>
+                        <div className="settings-container nx-cfg-page">
+                            <BusinessProfileForm
+                                legacy={!!session?.business?.legacy}
+                                onSaved={saved => {
+                                    setBiz(saved);
+                                    onBrandingChange({ name: saved.business.name, primaryColor: saved.branding.primaryColor, logoUrl: saved.branding.logoUrl, timezone: saved.business.timezone });
+                                }}
+                                extras={[
+                                    {
+                                        id: 'transferencia', icon: 'building', label: 'Datos de transferencia', title: 'Datos para transferencia',
+                                        subtitle: 'Lo que el bot envía cuando la clienta paga por transferencia',
+                                        node: (
+                                            <>
+                                                <p className="hint">Cuando una clienta elige pagar por transferencia, el bot le indica {biz && biz.payments.depositPercent < 100 ? 'el anticipo del ' + biz.payments.depositPercent + '%' : 'el total a pagar'} y le envía este texto exactamente como lo escribas.{biz?.payments.cardEnabled ? ' Con tarjeta, el bot indica el pago del total, se pausa y te avisa para que envíes el link de pago.' : ''}</p>
+                                                <textarea
+                                                    className="prompt-textarea"
+                                                    style={{ minHeight: '140px' }}
+                                                    placeholder={'Banco:\nTipo de cuenta:\nNúmero de cuenta:\nTitular:\nCédula / RUC:\n\nEnvíanos el comprobante por este chat 🤍'}
+                                                    value={transferInfo}
+                                                    onChange={e => setTransferInfo(e.target.value)}
+                                                ></textarea>
+                                                <div className="settings-actions">
+                                                    <span className="save-status">{transferSaved ? '✅ Guardado' : (transferInfo.trim() ? '' : '⚠️ Sin datos: el bot te avisará cuando una clienta elija transferencia')}</span>
+                                                    <button type="button" className="btn-save-prompt" onClick={savePaymentInfo} disabled={savingTransfer}>
+                                                        {savingTransfer ? 'Guardando...' : '💾 Guardar datos de pago'}
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )
+                                    },
+                                    {
+                                        id: 'instrucciones', icon: 'sparkle', label: 'Instrucciones', title: 'Instrucciones del asistente',
+                                        subtitle: 'El tono y los detalles de tu negocio que no están en el perfil',
+                                        node: (
+                                            <>
+                                                <p className="hint">Aquí defines el tono del asistente y detalles de tu negocio que no están en el perfil (horarios, políticas, preguntas frecuentes). Se aplica de inmediato en todos los chats. Precios, pagos, envíos y fechas vienen del Perfil del negocio y mandan sobre lo que escribas aquí.</p>
+                                                <textarea
+                                                    className="prompt-textarea"
+                                                    style={{ minHeight: '260px' }}
+                                                    placeholder={'Ej: Eres parte del equipo de ' + (branding.name || 'mi negocio') + '. Responde siempre en español, de forma cálida y cercana, con mensajes cortos y algún emoji.'}
+                                                    value={systemPrompt}
+                                                    onChange={e => setSystemPrompt(e.target.value)}
+                                                ></textarea>
+                                                <div className="settings-actions">
+                                                    <span className="save-status">{promptSaved ? '✅ Guardado' : ''}</span>
+                                                    <button type="button" className="btn-save-prompt" onClick={saveSystemPrompt} disabled={savingPrompt}>
+                                                        {savingPrompt ? 'Guardando...' : '💾 Guardar instrucciones'}
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )
+                                    }
+                                ]}
+                            />
                         </div>
                         )}
                     </div>
