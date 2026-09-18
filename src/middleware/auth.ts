@@ -3,7 +3,11 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { runWithTenant, VELAMIA_ID } from '../services/tenant';
 
 const CRM_PASSWORD = process.env.CRM_PASSWORD || '';
-const APP_SECRET = process.env.META_APP_SECRET || '';
+// Cada app de Meta firma sus webhooks con su propio secreto. Si alguna empresa usa otra app,
+// su secreto se agrega en META_APP_SECRETS (separados por coma) junto al principal.
+const APP_SECRETS = [process.env.META_APP_SECRET || '', ...(process.env.META_APP_SECRETS || '').split(',')]
+  .map(secret => secret.trim())
+  .filter(Boolean);
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -134,7 +138,14 @@ export async function requireCrmSession(req: Request, res: Response, next: NextF
 export function requireOwnerRole(req: Request, res: Response, next: NextFunction) {
   const role = getCrmSession(req)?.role;
   if (role === 'admin' || role === 'owner') return next();
-  res.status(403).json({ error: 'Solo el dueño del negocio puede cambiar esta configuración' });
+  res.status(403).json({ error: 'Solo el dueño del negocio puede hacer este cambio' });
+}
+
+/** Atender y editar (enviar mensajes, catálogo, pedidos): dueño y encargado. "Solo consulta" solo mira. */
+export function requireEditorRole(req: Request, res: Response, next: NextFunction) {
+  const role = getCrmSession(req)?.role;
+  if (role === 'admin' || role === 'owner' || role === 'manager') return next();
+  res.status(403).json({ error: 'Tu usuario es solo de consulta: no puede hacer cambios' });
 }
 
 /** Administración global del sistema (crear negocios, usuarios, tokens): solo la contraseña maestra. */
@@ -159,7 +170,7 @@ export function requireAdminSession(req: Request, res: Response, next: NextFunct
  * podría inyectar mensajes falsos y disparar respuestas (y costos) de OpenAI.
  */
 export function verifyWebhookSignature(req: Request, res: Response, next: NextFunction) {
-  if (!APP_SECRET) {
+  if (APP_SECRETS.length === 0) {
     console.warn('⚠️  META_APP_SECRET no configurado: el webhook acepta peticiones sin verificar firma');
     return next();
   }
@@ -171,8 +182,8 @@ export function verifyWebhookSignature(req: Request, res: Response, next: NextFu
     return res.status(401).send('Firma ausente');
   }
 
-  const expected = 'sha256=' + createHmac('sha256', APP_SECRET).update(rawBody).digest('hex');
-  if (!safeCompare(signature, expected)) {
+  const valid = APP_SECRETS.some(secret => safeCompare(signature, 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex')));
+  if (!valid) {
     console.warn('🚫 Webhook rechazado: firma inválida');
     return res.status(401).send('Firma inválida');
   }

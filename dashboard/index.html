@@ -7,14 +7,15 @@
 
     <!-- Instalable como app (PWA) -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#B96B4F">
+    <meta name="theme-color" content="#4F5BD5">
 
     <!-- iPhone -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="CRM">
-    <link rel="apple-touch-icon" href="logo.png">
-    <link rel="icon" href="logo.png">
+    <meta name="apple-mobile-web-app-title" content="Nexly">
+    <link rel="apple-touch-icon" href="nexly-192.png">
+    <link rel="icon" href="nexly.svg" type="image/svg+xml">
+    <link rel="alternate icon" href="nexly-192.png" type="image/png">
 
     <!-- Versiones fijas: una actualización externa de estas librerías no puede romper el CRM. -->
     <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
@@ -1432,7 +1433,7 @@
         @media (max-width: 900px) {
             .nx-tab .lbl { display: none; }
             .nx-tab { padding: 0 14px; }
-            .nx-brand .s { display: none; }
+            .nx-brand .s .lbl { display: none; }
         }
 
         @media (max-width: 700px) {
@@ -1862,6 +1863,55 @@
             .nx-rule .note { grid-column: 1 / -1; }
         }
 
+        /* ---------- Marca Nexly dentro de cada empresa ---------- */
+        .nx-brand .nx-by { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 1.6px; color: #8A93B5; vertical-align: middle; }
+        .nx-brand .nx-avatar { flex-shrink: 0; }
+        .pl-logo { background: #fff; border: 1px solid #E1E6F4; }
+        .pl-brand .pl-name { font-weight: 800; letter-spacing: 3px; color: #1E2A6B; }
+        .nx-loading { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(180deg, #F8F9FF 0%, #EEF2FC 100%); color: #1E2A6B; }
+        .nx-loading .name { font-size: 22px; font-weight: 800; letter-spacing: 6px; padding-left: 6px; }
+        .nx-loading .row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #6B7599; }
+        .nx-pill:disabled { cursor: default; opacity: 0.85; }
+
+        /* ---------- Permisos: vistas de solo consulta ---------- */
+        .nx-readonly { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-top: 1px solid #EEF1F9; background: #F8F9FD; color: #5C668F; font-size: 14px; flex-shrink: 0; }
+        .nx-check.off { cursor: default; background: #F4F6FD; }
+        .nx-lock { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: #F1F4FC; color: #5C668F; font-size: 13px; font-weight: 600; }
+
+        /* ---------- Estadísticas, cotizaciones, pedidos y claves con el diseño nuevo ---------- */
+        .nx-page .stats { padding: 14px 16px 0; background: transparent; gap: 14px; }
+        .nx-page .stat-card { background: #fff !important; color: #141C3A; border: 1px solid #E8ECF6; border-radius: 16px; padding: 14px 18px; box-shadow: 0 2px 14px rgba(40, 60, 140, 0.07); }
+        .nx-page .stat-card h4 { color: #5C668F; opacity: 1; font-weight: 600; font-size: 12px; margin-bottom: 6px; }
+        .nx-page .stat-card .number { color: #141C3A; font-size: 26px; font-weight: 800; }
+        .nx-page .stat-card:nth-child(1) { border-left: 4px solid #4F5BD5; }
+        .nx-page .stat-card:nth-child(2) { border-left: 4px solid #38BDF8; }
+        .nx-page .stat-card:nth-child(3) { border-left: 4px solid #8B5CF6; }
+        .nx-page .stat-card:nth-child(4) { border-left: 4px solid #22A559; }
+
+        .nx-page .quotes-container { padding: 20px 24px 28px; width: 100%; max-width: 1100px; margin: 0 auto; color: #1E2A4A; }
+        .nx-page .quotes-toolbar { color: #5C668F; font-size: 14px; margin-bottom: 14px; }
+        .nx-page .quotes-toolbar select, .nx-page .quote-actions select { padding: 10px 12px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; color: #1E2A4A; font-size: 14px; font-family: inherit; }
+        .nx-page .quote-actions select:disabled { background: #F1F3F9; color: #7A84AE; }
+        .nx-page .quote-card { background: #fff; border: 1px solid #E8ECF6; border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; box-shadow: 0 2px 12px rgba(40, 60, 140, 0.06); }
+        .nx-page .quote-customer { font-size: 15px; color: #141C3A; }
+        .nx-page .quote-meta { color: #6B7599; font-size: 12.5px; }
+        .nx-page .quote-total { color: #3B4FD8; font-size: 20px; font-weight: 800; }
+        .nx-page .quote-items { color: #2A3766; font-size: 14px; }
+        .nx-page .quote-items small { color: #6B7599; }
+        .nx-page .quote-actions .btn-photo { padding: 10px 14px; border-radius: 10px; border: 1px solid #DCE2F5; background: #fff; color: #2563EB; font-size: 13px; font-weight: 600; }
+        .nx-page .quote-actions .btn-photo:hover { background: #F4F7FF; }
+        .nx-page .empty-catalog { padding: 36px 20px; text-align: center; color: #6B7599; background: #fff; border: 1px dashed #D5DCF2; border-radius: 16px; font-size: 14px; line-height: 1.5; }
+
+        .settings-container.nx-keys-page { padding: 20px 24px 28px; }
+        .nx-keys { max-width: 620px; margin: 0 auto; padding: 22px; background: #fff; border: 1px solid #E8ECF6; border-radius: 20px; box-shadow: 0 4px 20px rgba(50, 70, 160, 0.06); color: #1E2A4A; }
+
+        @media (max-width: 700px) {
+            .nx-page .stats { grid-template-columns: repeat(2, 1fr); padding: 10px 10px 0; gap: 10px; }
+            .nx-page .quotes-container { padding: 12px 10px 24px; }
+            .settings-container.nx-keys-page { padding: 12px 10px 24px; }
+            .nx-keys { padding: 16px; border-radius: 16px; }
+        }
+
         .btn-logout {
             background: transparent;
             border: 1px solid var(--rosa-palo);
@@ -2075,7 +2125,7 @@
         // Nombre, color, logo y zona horaria del negocio (perfil del negocio).
         function applyBranding(branding) {
             if (!branding) return;
-            if (branding.name) document.title = `${branding.name} · CRM`;
+            if (branding.name) document.title = `${branding.name} · Nexly`;
             if (/^#[0-9a-f]{6}$/i.test(branding.primaryColor || '')) {
                 document.documentElement.style.setProperty('--terracota', branding.primaryColor);
             }
@@ -2664,8 +2714,8 @@
                     <div className="main">
                         <div className="pl-topbar">
                             <div className="pl-brand">
-                                <span className="pl-logo"><PlatIcon name="robot" size={24} color="#fff" /></span>
-                                <b>Plataforma</b><span className="dot soft">·</span><span className="soft">Asistentes de WhatsApp</span>
+                                <span className="pl-logo"><NexlyMark size={28} id="nx-plat" /></span>
+                                <b className="pl-name">NEXLY</b><span className="dot soft">·</span><span className="soft">Plataforma de empresas</span>
                             </div>
                             <button className="pl-logout" onClick={onLogout}><PlatIcon name="logout" size={19} color="#D64545" /> Salir</button>
                         </div>
@@ -2734,7 +2784,7 @@
             const status = (ok, text) => <div style={{ fontSize: '13px', color: ok ? '#2e7d32' : '#c62828' }}>{ok ? '✅' : '⚠️'} {text}</div>;
 
             return (
-                <div style={{ padding: '20px', maxWidth: '560px' }}>
+                <div className="nx-keys">
                     <h2 style={{ marginBottom: '8px' }}>🔑 {business?.name || 'Mi negocio'} · Claves</h2>
                     <p style={{ color: 'var(--texto-suave)', fontSize: '13px', marginBottom: '16px' }}>
                         El bot responde desde tu número de WhatsApp y usa tu propia cuenta de OpenAI. Las claves se guardan cifradas y nunca se muestran completas.
@@ -2753,6 +2803,32 @@
                             {status(testResult.openai.ok, `OpenAI: ${testResult.openai.detail}`)}
                         </div>
                     )}
+                </div>
+            );
+        }
+
+        /** Logo de la plataforma. Cada uso lleva su propio id para que los degradados no choquen. */
+        function NexlyMark({ size = 24, id = 'nx-mark' }) {
+            return (
+                <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+                    <defs>
+                        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stopColor="#38BDF8" />
+                            <stop offset="1" stopColor="#8B5CF6" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M11 38V13l25 24V19" fill="none" stroke={'url(#' + id + ')'} strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="39" cy="8" r="5" fill="#A78BFA" />
+                </svg>
+            );
+        }
+
+        function NexlyLoading({ text = 'Cargando…' }) {
+            return (
+                <div className="nx-loading">
+                    <NexlyMark size={56} id="nx-loading" />
+                    <div className="name">NEXLY</div>
+                    <div className="row"><div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }}></div> {text}</div>
                 </div>
             );
         }
@@ -2824,16 +2900,7 @@
 
                         <div className="login-card">
                             <div className="login-logo">
-                                <svg width="60" height="60" viewBox="0 0 48 48" aria-hidden="true">
-                                    <defs>
-                                        <linearGradient id="nx" x1="0" y1="0" x2="1" y2="1">
-                                            <stop offset="0" stopColor="#38BDF8" />
-                                            <stop offset="1" stopColor="#8B5CF6" />
-                                        </linearGradient>
-                                    </defs>
-                                    <path d="M11 38V13l25 24V19" fill="none" stroke="url(#nx)" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
-                                    <circle cx="39" cy="8" r="5" fill="#A78BFA" />
-                                </svg>
+                                <NexlyMark size={60} id="nx-login" />
                                 <div className="name">NEXLY</div>
                                 <div className="sub">AI BUSINESS PLATFORM</div>
                             </div>
@@ -2979,7 +3046,7 @@
             );
         }
 
-        function ProfilePreview({ form, readiness, legacy }) {
+        function ProfilePreview({ form, readiness, legacy, canTest = true }) {
             const b = form.business, sa = form.sales, pay = form.payments, sh = form.shipping, dt = form.dates;
             const logo = form.branding.logoUrl || (legacy ? 'logo.png' : '');
             const hasShipping = sh.mode !== 'none';
@@ -3005,7 +3072,7 @@
                         </div>
                     </div>
 
-                    <AssistantPreview form={form} />
+                    {canTest && <AssistantPreview form={form} />}
 
                     <div className="nx-pcard">
                         <h4>Resumen del negocio</h4>
@@ -3035,7 +3102,7 @@
             );
         }
 
-        function BusinessProfileForm({ onSaved, extras = [], legacy = false }) {
+        function BusinessProfileForm({ onSaved, extras = [], legacy = false, readOnly = false, canTest = true }) {
             const [form, setForm] = useState(null);
             const [presets, setPresets] = useState([]);
             const [saving, setSaving] = useState(false);
@@ -3205,10 +3272,12 @@
                                 <h1>Perfil del negocio</h1>
                                 <p>Todo lo que hace único a tu negocio: cómo vende, cobra, envía y habla el asistente. Se aplica de inmediato en todos los chats y manda sobre las instrucciones.</p>
                             </div>
-                            <div className="nx-savebox">
-                                <span className="save-status">{saved ? '✅ Guardado' : ''}</span>
-                                {saveButton}
-                            </div>
+                            {readOnly
+                                ? <div className="nx-savebox"><span className="nx-lock"><PlatIcon name="key" size={16} color="#6B7599" /> Solo el dueño puede cambiar la configuración</span></div>
+                                : <div className="nx-savebox">
+                                    <span className="save-status">{saved ? '✅ Guardado' : ''}</span>
+                                    {saveButton}
+                                </div>}
                         </div>
 
                         <CfgCard
@@ -3401,14 +3470,14 @@
                             <CfgCard key={x.id} id={x.id} icon={x.icon} title={x.title} subtitle={x.subtitle}>{x.node}</CfgCard>
                         ))}
 
-                        <div className="nx-savebar">
+                        {!readOnly && <div className="nx-savebar">
                             <span className="save-status">{saved ? '✅ Guardado' : 'Los cambios del perfil se guardan aquí'}</span>
                             {saveButton}
-                        </div>
+                        </div>}
                     </div>
 
                     <aside className="nx-set-side">
-                        <ProfilePreview form={form} readiness={readiness} legacy={legacy} />
+                        <ProfilePreview form={form} readiness={readiness} legacy={legacy} canTest={canTest} />
                     </aside>
                 </div>
             );
@@ -3549,7 +3618,7 @@
 
         const TAG_SUGGESTIONS = ['VIP', 'Mayorista', 'Seguimiento', 'Urgente', 'Pago pendiente'];
 
-        function TagBar({ tags, onChange }) {
+        function TagBar({ tags, onChange, readOnly = false }) {
             const [adding, setAdding] = useState(false);
             const [value, setValue] = useState('');
             function commit() {
@@ -3561,7 +3630,7 @@
             return (
                 <div className="nx-tags">
                     {tags.map(tag => (
-                        <span className="nx-tag" key={tag}>{tag}<button type="button" title="Quitar etiqueta" onClick={() => onChange(tags.filter(t => t !== tag))}>×</button></span>
+                        <span className="nx-tag" key={tag}>{tag}{!readOnly && <button type="button" title="Quitar etiqueta" onClick={() => onChange(tags.filter(t => t !== tag))}>×</button>}</span>
                     ))}
                     {adding ? (
                         <>
@@ -3578,7 +3647,7 @@
                             />
                             <datalist id="nx-tag-suggestions">{TAG_SUGGESTIONS.filter(t => !tags.includes(t)).map(t => <option key={t} value={t} />)}</datalist>
                         </>
-                    ) : tags.length < 8 && <button type="button" className="nx-tag-add" title="Agregar etiqueta" onClick={() => setAdding(true)}>+</button>}
+                    ) : !readOnly && tags.length < 8 && <button type="button" className="nx-tag-add" title="Agregar etiqueta" onClick={() => setAdding(true)}>+</button>}
                 </div>
             );
         }
@@ -3593,7 +3662,7 @@
             return { label: pretty, cls: 'pend', text: 'Pendiente' };
         }
 
-        function TasksCard({ tasks, onAdd, onToggle, onRemove }) {
+        function TasksCard({ tasks, onAdd, onToggle, onRemove, readOnly = false }) {
             const [open, setOpen] = useState(false);
             const [title, setTitle] = useState('');
             const [date, setDate] = useState('');
@@ -3609,20 +3678,20 @@
                 <div className="nx-card">
                     <div className="nx-card-h">
                         <h3><PlatIcon name="check" size={20} /> Próxima acción</h3>
-                        {pending.length > 0 && <button type="button" className="link" onClick={() => onToggle(pending[0], true)}>Marcar como completada</button>}
+                        {!readOnly && pending.length > 0 && <button type="button" className="link" onClick={() => onToggle(pending[0], true)}>Marcar como completada</button>}
                     </div>
                     {pending.length === 0 && !open && <div className="nx-soft">No hay acciones pendientes.</div>}
                     {pending.map(task => {
                         const info = taskDueInfo(task);
                         return (
                             <div className="nx-task" key={task.id}>
-                                <button type="button" className="nx-check" title="Marcar como hecha" onClick={() => onToggle(task, true)}></button>
+                                {readOnly ? <span className="nx-check off"></span> : <button type="button" className="nx-check" title="Marcar como hecha" onClick={() => onToggle(task, true)}></button>}
                                 <div className="info">
                                     <div className="tt">{task.title}</div>
                                     <div className="dd">{info.label}</div>
                                 </div>
                                 <span className={'nx-status ' + info.cls}>{info.text}</span>
-                                <button type="button" className="x" title="Borrar" onClick={() => onRemove(task)}>×</button>
+                                {!readOnly && <button type="button" className="x" title="Borrar" onClick={() => onRemove(task)}>×</button>}
                             </div>
                         );
                     })}
@@ -3635,7 +3704,7 @@
                                 <button type="button" className="cancel" onClick={() => { setOpen(false); setTitle(''); setDate(''); }}>Cancelar</button>
                             </div>
                         </div>
-                    ) : <button type="button" className="nx-add-link" onClick={() => setOpen(true)}>+ Agregar acción</button>}
+                    ) : !readOnly && <button type="button" className="nx-add-link" onClick={() => setOpen(true)}>+ Agregar acción</button>}
                 </div>
             );
         }
@@ -3729,7 +3798,7 @@
         const EMPTY_PRODUCT = { name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', photoBase64: '', photoPreview: '' };
         const SORTS = { recent: 'Más recientes', name: 'Nombre (A-Z)', low: 'Precio: menor a mayor', high: 'Precio: mayor a menor' };
 
-        function CatalogView({ products, biz, legacy, reload }) {
+        function CatalogView({ products, biz, legacy, reload, readOnly = false }) {
             const perProductUnits = !!biz?.sales?.perProductUnits;
             const unit = biz?.sales?.unitSingular || 'unidad';
             const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
@@ -3864,7 +3933,7 @@
                 if (biz?.packaging?.enabled) lines.push(['gift', 'Empaque: ' + (p.description || 'Sin definir')]);
                 return lines;
             };
-            const actions = p => (
+            const actions = p => readOnly ? null : (
                 <div className="cat-actions">
                     <button type="button" className="cat-btn" disabled={busyId === p.id} onClick={() => startEdit(p)}><PlatIcon name="edit" size={16} color="#2563EB" /><span className="lb">Editar</span></button>
                     <button type="button" className="cat-btn copy" disabled={busyId === p.id} onClick={() => duplicate(p)}><PlatIcon name="copy" size={16} color="#2A3766" /><span className="lb">Duplicar</span></button>
@@ -3906,7 +3975,7 @@
                             </div>
                         </div>
 
-                        <div className="cat-card">
+                        {!readOnly && <div className="cat-card">
                             <div className="cat-add-h">
                                 <div className="plus"><PlatIcon name="plus" size={24} color="#fff" /></div>
                                 <div><h2>Agregar producto al catálogo</h2><p>Completa la información del producto. Luego podrás editarlo o compartirlo por WhatsApp.</p></div>
@@ -3931,7 +4000,7 @@
                                     <button type="button" className="cat-submit" onClick={addProduct} disabled={saving}><PlatIcon name="plus" size={18} color="#fff" /> {saving ? 'Guardando...' : 'Agregar producto'}</button>
                                 </div>
                             </div>
-                        </div>
+                        </div>}
 
                         <div className="cat-card">
                             <div className="cat-list-h">
@@ -4053,6 +4122,9 @@
             const [noteMode, setNoteMode] = useState(false);
             const [noteText, setNoteText] = useState('');
             const isAdmin = session?.role === 'admin';
+            // Mientras carga la sesión se muestra todo; el servidor igual rechaza lo que el rol no permite.
+            const canEdit = !session || session.role !== 'staff';
+            const canConfigure = !session || session.role === 'owner' || session.role === 'admin';
             const unit = biz?.sales.unitSingular || 'unidad';
             const unitPlural = biz?.sales.unitPlural || 'unidades';
             const productEmoji = biz?.business.productEmoji || '🛍️';
@@ -4535,16 +4607,7 @@
                 }
             }
 
-            if (loading) {
-                return (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--beige)' }}>
-                        <div className="loading">
-                            <div className="spinner"></div>
-                            <p>Cargando CRM...</p>
-                        </div>
-                    </div>
-                );
-            }
+            if (loading) return <NexlyLoading text="Cargando tu empresa…" />;
 
             return (
                 <div className="container nx-page">
@@ -4552,10 +4615,12 @@
                         <div className="nx-top">
                             <div className="nx-brand">
                                 {/* El logo por defecto (logo.png) es de VELAMIA: otra empresa sin logo propio no lo muestra. */}
-                                {(branding.logoUrl || session?.business?.legacy) && <img src={logoOf(branding)} alt={branding.name || 'Logo'} />}
+                                {branding.logoUrl || session?.business?.legacy
+                                    ? <img src={logoOf(branding)} alt={branding.name || 'Logo'} />
+                                    : <Avatar name={branding.name || session?.business?.name || 'N'} size={40} />}
                                 <div>
-                                    <div className="t">{branding.name || session?.business?.name || 'CRM'}</div>
-                                    <div className="s">CRM · Asistente WhatsApp</div>
+                                    <div className="t">{branding.name || session?.business?.name || 'Mi empresa'}</div>
+                                    <div className="s"><span className="lbl">Asistente WhatsApp · </span><span className="nx-by" title="Plataforma Nexly"><NexlyMark size={12} id="nx-by" /> NEXLY</span></div>
                                 </div>
                             </div>
 
@@ -4573,7 +4638,7 @@
                                     ? <button type="button" className="nx-pill" title="Cambiar empresa" onClick={changeCompany}><PlatIcon name="building" size={18} color="#4F5BD5" /><span className="lbl-hide">{session.business.name}</span></button>
                                     : <span className="nx-pill"><PlatIcon name="building" size={18} color="#4F5BD5" /><span className="lbl-hide">{session.business.name}</span></span>)}
                                 {session && !isAdmin && <button type="button" className="nx-pill" onClick={changeOwnPassword}><PlatIcon name="key" size={18} color="#4F5BD5" /><span className="lbl-hide">Mi contraseña</span></button>}
-                                <button type="button" className={'nx-pill ' + (botEnabled ? 'bot-on' : 'bot-off')} onClick={toggleBotStatus}><span className="dot"></span>{botEnabled ? 'Bot Activo' : 'Bot Inactivo'}</button>
+                                <button type="button" className={'nx-pill ' + (botEnabled ? 'bot-on' : 'bot-off')} onClick={toggleBotStatus} disabled={!canConfigure} title={canConfigure ? '' : 'Solo el dueño puede encender o apagar el bot'}><span className="dot"></span>{botEnabled ? 'Bot Activo' : 'Bot Inactivo'}</button>
                                 <button type="button" className="nx-pill" onClick={() => setStatsExpanded(!statsExpanded)}><PlatIcon name="chart" size={18} color="#4F5BD5" /><span className="lbl-hide">{statsExpanded ? 'Ocultar' : 'Estadísticas'}</span></button>
                                 <button type="button" className="nx-pill logout" onClick={onLogout}><PlatIcon name="logout" size={18} color="#D64545" /><span className="lbl-hide">Salir</span></button>
                             </div>
@@ -4601,7 +4666,7 @@
                             )}
 
                         {activeTab === 'claves' && session?.business && !session.business.legacy && (
-                        <div className="content">
+                        <div className="settings-container nx-keys-page">
                             <OwnerKeysPanel business={session.business} onChanged={loadSession} />
                         </div>
                         )}
@@ -4664,18 +4729,24 @@
                                                 {isClosedConv(currentConv) && <span className="nx-badge gray">Cerrada</span>}
                                             </div>
                                             <div className="ph">{'+' + currentConv.phone_number}</div>
-                                            {summary && summary.phase2 && <TagBar tags={summary.tags || []} onChange={saveTags} />}
+                                            {summary && summary.phase2 && <TagBar tags={summary.tags || []} onChange={saveTags} readOnly={!canEdit} />}
                                         </div>
                                         <div className="nx-head-actions">
-                                            <button type="button" className="nx-icon-btn" onClick={toggleClosed}>
-                                                <PlatIcon name={isClosedConv(currentConv) ? 'refresh' : 'check'} size={18} color="#4F5BD5" /> <span className="lbl-hide">{isClosedConv(currentConv) ? 'Reabrir' : 'Cerrar'}</span>
-                                            </button>
-                                            <button type="button" className="nx-icon-btn" onClick={pauseOrResumeBot} disabled={pausingBot}>
-                                                <PlatIcon name={botPausedInChat ? 'play' : 'pause'} size={18} color="#4F5BD5" /> <span className="lbl-hide">{botPausedInChat ? 'Reactivar bot' : 'Pausar bot'}</span>
-                                            </button>
-                                            <button type="button" className="nx-icon-btn danger" onClick={deleteChat} disabled={deletingChat}>
-                                                <PlatIcon name="trash" size={18} color="#C33636" /> <span className="lbl-hide">{deletingChat ? 'Eliminando...' : 'Eliminar'}</span>
-                                            </button>
+                                            {canEdit && (
+                                                <>
+                                                    <button type="button" className="nx-icon-btn" onClick={toggleClosed}>
+                                                        <PlatIcon name={isClosedConv(currentConv) ? 'refresh' : 'check'} size={18} color="#4F5BD5" /> <span className="lbl-hide">{isClosedConv(currentConv) ? 'Reabrir' : 'Cerrar'}</span>
+                                                    </button>
+                                                    <button type="button" className="nx-icon-btn" onClick={pauseOrResumeBot} disabled={pausingBot}>
+                                                        <PlatIcon name={botPausedInChat ? 'play' : 'pause'} size={18} color="#4F5BD5" /> <span className="lbl-hide">{botPausedInChat ? 'Reactivar bot' : 'Pausar bot'}</span>
+                                                    </button>
+                                                </>
+                                            )}
+                                            {canConfigure && (
+                                                <button type="button" className="nx-icon-btn danger" onClick={deleteChat} disabled={deletingChat}>
+                                                    <PlatIcon name="trash" size={18} color="#C33636" /> <span className="lbl-hide">{deletingChat ? 'Eliminando...' : 'Eliminar'}</span>
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -4689,7 +4760,7 @@
                                                     <React.Fragment key={item.key}>
                                                         {dayPill}
                                                         <div className="nx-note">
-                                                            <div className="meta"><span>📝 Nota interna · {note.author || 'Equipo'} · {formatTime(note.created_at)}</span><button type="button" title="Borrar nota" onClick={() => removeNote(note)}>×</button></div>
+                                                            <div className="meta"><span>📝 Nota interna · {note.author || 'Equipo'} · {formatTime(note.created_at)}</span>{canEdit && <button type="button" title="Borrar nota" onClick={() => removeNote(note)}>×</button>}</div>
                                                             {note.content}
                                                         </div>
                                                     </React.Fragment>
@@ -4719,7 +4790,8 @@
                                         })}
                                     </div>
 
-                                    <div className={'nx-input' + (noteMode ? ' note' : '')}>
+                                    {!canEdit && <div className="nx-readonly"><PlatIcon name="user" size={18} color="#6B7599" /> Tu usuario es solo de consulta: puedes ver los chats, pero no responder.</div>}
+                                    {canEdit && <div className={'nx-input' + (noteMode ? ' note' : '')}>
                                         <button type="button" className="nx-round" onClick={sendPhoto} title="Enviar foto"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
                                         <textarea
                                             placeholder={noteMode ? 'Nota interna: el cliente no la ve...' : 'Escribe un mensaje...'}
@@ -4740,7 +4812,7 @@
                                         {noteMode
                                             ? <button type="button" className="nx-send" onClick={saveNote}><PlatIcon name="note" size={19} color="#fff" /> Guardar nota</button>
                                             : <button type="button" className="nx-send" onClick={sendMessage} disabled={sending}><PlatIcon name="send" size={19} color="#fff" /> {sending ? 'Enviando...' : 'Enviar'}</button>}
-                                    </div>
+                                    </div>}
                                 </div>
                             ) : (
                                 <div className="nx-panel nx-chat">
@@ -4755,12 +4827,12 @@
                                 <TodayCard data={today} />
                                 {selectedConv && <ClientCard summary={summary} conv={currentConv} />}
                                 {selectedConv && <ProductsCard summary={summary} onCatalog={() => setActiveTab('catalogo')} />}
-                                {selectedConv && summary && summary.phase2 && <TasksCard tasks={summary.tasks} onAdd={addTask} onToggle={setTaskDone} onRemove={removeTask} />}
+                                {selectedConv && summary && summary.phase2 && <TasksCard tasks={summary.tasks} onAdd={addTask} onToggle={setTaskDone} onRemove={removeTask} readOnly={!canEdit} />}
                                 {selectedConv && <AlertsCard alerts={summary ? summary.alerts : []} loading={!summary} />}
                             </div>
                         </div>
                         )}
-                        {activeTab === 'catalogo' && <CatalogView products={products} biz={biz} legacy={!!session?.business?.legacy} reload={loadProducts} />}
+                        {activeTab === 'catalogo' && <CatalogView products={products} biz={biz} legacy={!!session?.business?.legacy} reload={loadProducts} readOnly={!canEdit} />}
                         {activeTab === 'cotizaciones' && (() => {
                             const statusLabels = { pending: 'Pendiente', accepted: 'Aceptada', expired: 'Vencida' };
                             const visible = quoteFilter === 'all' ? quotations : quotations.filter(q => q.status === quoteFilter);
@@ -4808,7 +4880,7 @@
                                             </ul>
                                             <div className="quote-actions">
                                                 <span className={`quote-status ${q.status}`}>{statusLabels[q.status] || q.status}</span>
-                                                <select value={q.status} onChange={e => changeQuotationStatus(q.id, e.target.value)}>
+                                                <select value={q.status} disabled={!canEdit} onChange={e => changeQuotationStatus(q.id, e.target.value)}>
                                                     <option value="pending">Pendiente</option>
                                                     <option value="accepted">Aceptada</option>
                                                     <option value="expired">Vencida</option>
@@ -4866,7 +4938,7 @@
                                             </ul>
                                             <div className="quote-actions">
                                                 <span className={`quote-status ${o.status}`}>{orderLabels[o.status] || o.status}</span>
-                                                <select value={o.status} onChange={e => changeOrderStatus(o.id, e.target.value)}>
+                                                <select value={o.status} disabled={!canEdit} onChange={e => changeOrderStatus(o.id, e.target.value)}>
                                                     {Object.entries(orderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                                 </select>
                                                 <button className="btn-photo" onClick={() => openChatFromQuotation(o.conversation_id)}>💬 Ver chat</button>
@@ -4881,6 +4953,8 @@
                         <div className="settings-container nx-cfg-page">
                             <BusinessProfileForm
                                 legacy={!!session?.business?.legacy}
+                                readOnly={!canConfigure}
+                                canTest={canEdit}
                                 onSaved={saved => {
                                     setBiz(saved);
                                     onBrandingChange({ name: saved.business.name, primaryColor: saved.branding.primaryColor, logoUrl: saved.branding.logoUrl, timezone: saved.business.timezone });
@@ -4901,7 +4975,7 @@
                                                 ></textarea>
                                                 <div className="settings-actions">
                                                     <span className="save-status">{transferSaved ? '✅ Guardado' : (transferInfo.trim() ? '' : '⚠️ Sin datos: el bot te avisará cuando una clienta elija transferencia')}</span>
-                                                    <button type="button" className="btn-save-prompt" onClick={savePaymentInfo} disabled={savingTransfer}>
+                                                    <button type="button" className="btn-save-prompt" onClick={savePaymentInfo} disabled={savingTransfer || !canConfigure}>
                                                         {savingTransfer ? 'Guardando...' : '💾 Guardar datos de pago'}
                                                     </button>
                                                 </div>
@@ -4923,7 +4997,7 @@
                                                 ></textarea>
                                                 <div className="settings-actions">
                                                     <span className="save-status">{promptSaved ? '✅ Guardado' : ''}</span>
-                                                    <button type="button" className="btn-save-prompt" onClick={saveSystemPrompt} disabled={savingPrompt}>
+                                                    <button type="button" className="btn-save-prompt" onClick={saveSystemPrompt} disabled={savingPrompt || !canConfigure}>
                                                         {savingPrompt ? 'Guardando...' : '💾 Guardar instrucciones'}
                                                     </button>
                                                 </div>
@@ -4981,7 +5055,7 @@
             if (!authenticated) {
                 return <LoginScreen branding={PLATFORM_BRANDING} onLogin={() => setAuthenticated(true)} />;
             }
-            if (!role) return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando...</div>;
+            if (!role) return <NexlyLoading />;
             if (role === 'admin' && !getCurrentBusinessId()) {
                 return <CompanyHome onLogout={logout} />;
             }

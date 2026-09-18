@@ -55,6 +55,7 @@ import {
   requireCrmSession,
   requireAdminSession,
   requireOwnerRole,
+  requireEditorRole,
   getCrmSession,
   VELAMIA_ID,
   isPasswordValid,
@@ -90,20 +91,24 @@ app.use(express.json({
   verify: (req, _res, buf) => { (req as any).rawBody = buf; }
 }));
 
-// El nombre y el color de la app instalable salen del perfil del negocio.
+// La app instalable es de la plataforma (Nexly), igual para todas las empresas: la marca de cada empresa
+// se ve recién dentro de su cuenta.
 app.get('/crm/manifest.json', (_req: Request, res: Response) => {
-  const { business, branding } = profile();
   res.json({
-    name: `${business.name} CRM`,
-    short_name: business.name.slice(0, 12),
-    description: `Panel de control del asistente WhatsApp de ${business.name}`,
+    name: 'Nexly',
+    short_name: 'Nexly',
+    description: 'Nexly · CRM y asistentes de WhatsApp para empresas',
     start_url: '/crm/index.html',
     scope: '/crm/',
     display: 'standalone',
-    background_color: '#F7EFEA',
-    theme_color: branding.primaryColor,
+    background_color: '#F3F6FD',
+    theme_color: '#4F5BD5',
     orientation: 'portrait',
-    icons: [{ src: branding.logoUrl || 'logo.png', sizes: branding.logoUrl ? 'any' : '1920x1920', type: 'image/png', purpose: 'any' }]
+    icons: [
+      { src: 'nexly-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: 'nexly-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: 'nexly-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
   });
 });
 
@@ -224,12 +229,6 @@ app.post('/api/login', async (req: Request, res: Response) => {
   }
 });
 
-// La pantalla de ingreso muestra el nombre y el logo antes de iniciar sesión: solo datos públicos.
-app.get('/api/public/branding', (_req: Request, res: Response) => {
-  const { business, branding } = profile();
-  res.json({ name: business.name, primaryColor: branding.primaryColor, logoUrl: branding.logoUrl, timezone: business.timezone });
-});
-
 // ---------- Perfil del negocio ----------
 
 app.get('/api/business-profile', requireCrmSession, (_req: Request, res: Response) => {
@@ -244,7 +243,7 @@ app.get('/api/business-profile/presets', requireCrmSession, (_req: Request, res:
 // lo que respondería. No envía nada por WhatsApp ni guarda mensajes; sí gasta tokens de la clave de OpenAI del negocio.
 const previewLastAt = new Map<string, number>();
 
-app.post('/api/business-profile/preview', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/business-profile/preview', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const businessKey = currentTenant()?.businessId ?? 'velamia';
     if (Date.now() - (previewLastAt.get(businessKey) || 0) < 4000) {
@@ -309,7 +308,7 @@ app.get('/api/conversations/:id/messages', requireCrmSession, requireUuidParam, 
  * Elimina el chat por completo: mensajes, cotizaciones, pedidos, seguimientos, avisos
  * y los archivos que envió el cliente.
  */
-app.delete('/api/conversations/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.delete('/api/conversations/:id', requireCrmSession, requireUuidParam, requireOwnerRole, async (req: Request, res: Response) => {
   try {
     const conv = await getConversationById(req.params.id);
     if (!conv) return res.status(404).json({ error: 'Conversación no encontrada' });
@@ -334,7 +333,7 @@ app.delete('/api/conversations/:id', requireCrmSession, requireUuidParam, async 
 });
 
 /** Pausa el bot en una conversación. Sin "minutes" queda pausado hasta reactivarlo. */
-app.post('/api/conversations/:id/pause', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.post('/api/conversations/:id/pause', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await getConversationById(req.params.id))) {
       return res.status(404).json({ error: 'Conversación no encontrada' });
@@ -349,7 +348,7 @@ app.post('/api/conversations/:id/pause', requireCrmSession, requireUuidParam, as
   }
 });
 
-app.post('/api/conversations/:id/resume', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.post('/api/conversations/:id/resume', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await getConversationById(req.params.id))) {
       return res.status(404).json({ error: 'Conversación no encontrada' });
@@ -444,7 +443,7 @@ app.post('/api/conversations/:id/read', requireCrmSession, requireUuidParam, asy
   }
 });
 
-app.put('/api/conversations/:id/tags', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.put('/api/conversations/:id/tags', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await ownsConversation(req, res))) return;
     const raw: unknown[] = Array.isArray(req.body?.tags) ? req.body.tags : [];
@@ -464,7 +463,7 @@ app.put('/api/conversations/:id/tags', requireCrmSession, requireUuidParam, asyn
   }
 });
 
-app.put('/api/conversations/:id/status', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.put('/api/conversations/:id/status', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await ownsConversation(req, res))) return;
     const status = req.body?.status === 'closed' ? 'closed' : 'active';
@@ -475,7 +474,7 @@ app.put('/api/conversations/:id/status', requireCrmSession, requireUuidParam, as
   }
 });
 
-app.post('/api/conversations/:id/notes', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.post('/api/conversations/:id/notes', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await ownsConversation(req, res))) return;
     const content = String(req.body?.content || '').trim();
@@ -487,7 +486,7 @@ app.post('/api/conversations/:id/notes', requireCrmSession, requireUuidParam, as
   }
 });
 
-app.delete('/api/conversations/:id/notes/:noteId', requireCrmSession, requireUuidParam, requireUuidTaskParam, async (req: Request, res: Response) => {
+app.delete('/api/conversations/:id/notes/:noteId', requireCrmSession, requireUuidParam, requireUuidTaskParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await ownsConversation(req, res))) return;
     await deleteConversationNote(req.params.id, req.params.noteId);
@@ -497,7 +496,7 @@ app.delete('/api/conversations/:id/notes/:noteId', requireCrmSession, requireUui
   }
 });
 
-app.post('/api/conversations/:id/tasks', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.post('/api/conversations/:id/tasks', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await ownsConversation(req, res))) return;
     const title = String(req.body?.title || '').trim();
@@ -510,7 +509,7 @@ app.post('/api/conversations/:id/tasks', requireCrmSession, requireUuidParam, as
   }
 });
 
-app.patch('/api/conversations/:id/tasks/:taskId', requireCrmSession, requireUuidParam, requireUuidTaskParam, async (req: Request, res: Response) => {
+app.patch('/api/conversations/:id/tasks/:taskId', requireCrmSession, requireUuidParam, requireUuidTaskParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await ownsConversation(req, res))) return;
     await setConversationTaskDone(req.params.id, req.params.taskId, !!req.body?.done);
@@ -520,7 +519,7 @@ app.patch('/api/conversations/:id/tasks/:taskId', requireCrmSession, requireUuid
   }
 });
 
-app.delete('/api/conversations/:id/tasks/:taskId', requireCrmSession, requireUuidParam, requireUuidTaskParam, async (req: Request, res: Response) => {
+app.delete('/api/conversations/:id/tasks/:taskId', requireCrmSession, requireUuidParam, requireUuidTaskParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     if (!(await ownsConversation(req, res))) return;
     await deleteConversationTask(req.params.id, req.params.taskId);
@@ -540,7 +539,7 @@ app.get('/api/quotations', requireCrmSession, async (_req: Request, res: Respons
   }
 });
 
-app.patch('/api/quotations/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.patch('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const { status } = req.body || {};
     if (!['pending', 'accepted', 'expired'].includes(status)) {
@@ -565,7 +564,7 @@ app.get('/api/orders', requireCrmSession, async (_req: Request, res: Response) =
 });
 
 // La dueña marca el avance del pedido; el bot lo usa para responder "¿cómo va mi pedido?".
-app.patch('/api/orders/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.patch('/api/orders/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const { status } = req.body || {};
     if (!ORDER_STATUSES.includes(status)) {
@@ -593,7 +592,7 @@ async function conversationForSending(req: Request, res: Response) {
   return conv;
 }
 
-app.post('/api/send-message', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/send-message', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const text = String(req.body?.text || '').trim();
     if (!text) return res.status(400).json({ error: 'Escribe un mensaje' });
@@ -611,7 +610,7 @@ app.post('/api/send-message', requireCrmSession, async (req: Request, res: Respo
   }
 });
 
-app.post('/api/send-image', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/send-image', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const { imageUrl, caption } = req.body || {};
     if (!/^https:\/\/\S+$/.test(String(imageUrl || ''))) {
@@ -722,7 +721,7 @@ function packagingName(value: unknown): string | null {
   return findPackaging(value)?.name ?? null;
 }
 
-app.post('/api/upload-image', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/upload-image', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
   try {
     // WhatsApp solo envía fotos JPG o PNG de hasta 5 MB: otra foto nunca le llegaría a la clienta.
     const matches = String(req.body?.imageBase64 || '').match(/^data:(image\/(?:jpeg|jpg|png));base64,(.+)$/);
@@ -757,7 +756,7 @@ app.get('/api/products', requireCrmSession, async (_req: Request, res: Response)
   }
 });
 
-app.post('/api/products', requireCrmSession, async (req: Request, res: Response) => {
+app.post('/api/products', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const { name, price, category, image_url, packaging } = req.body || {};
     const parsedPrice = Number(price);
@@ -781,7 +780,7 @@ app.post('/api/products', requireCrmSession, async (req: Request, res: Response)
   }
 });
 
-app.put('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.put('/api/products/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const { name, price, category, image_url, packaging } = req.body || {};
     const updates: Parameters<typeof updateProduct>[1] = { ...productUnit(req.body, true) };
@@ -820,7 +819,7 @@ app.put('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Re
   }
 });
 
-app.delete('/api/products/:id', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
+app.delete('/api/products/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const deleted = await deleteProduct(req.params.id);
     if (!deleted) return res.status(404).json({ error: 'Producto no encontrado' });
