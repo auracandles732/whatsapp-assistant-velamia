@@ -200,3 +200,39 @@ test('un cambio con nota devuelve el aviso que hay que darle a la clienta; uno s
   assert.equal(pedir('Vela con caja', 'Tul').packagingAdvice, null);
   assert.equal(pedir('Vela con tul', 'Acetato').packagingAdvice, null);
 });
+
+// ---------- Modelos que van tal cual (frascos): ningún empaque ----------
+
+const conFrascos = normalizeProfile({
+  ...PROFILE_PRESETS.eventos.profile,
+  shipping: { ...PROFILE_PRESETS.eventos.profile.shipping, mode: 'flat', flatRate: 10, unitsIncludedInRate: 0, extraCost: 0 },
+  packaging: {
+    enabled: true,
+    types: [
+      { name: 'Tul', description: 'delicado', changeCost: null },
+      { name: 'Kraft', description: 'natural', changeCost: null },
+      { name: 'Sin empaque', description: 'va tal cual en su frasco', changeCost: null }
+    ],
+    changes: [
+      { from: 'Sin empaque', to: 'Tul', cost: null, allowed: false, note: 'Los frascos son anchos y pesados: van tal cual.' },
+      { from: 'Sin empaque', to: 'Kraft', cost: null, allowed: false, note: 'Los frascos son anchos y pesados: van tal cual.' }
+    ]
+  }
+});
+
+test('un modelo en frasco no admite ningún empaque y no se ofrecen alternativas', () => {
+  const catalogo = [{ name: 'Vela en frasco', price: 45, category: 'EVENTOS', description: 'Sin empaque' }];
+  const pedido = computeOrderTotal([{ name: 'Vela en frasco', quantity: 1, packaging: 'Tul' }], 'Quito', catalogo, conFrascos);
+  assert.equal(pedido.items[0].packaging, 'Sin empaque');
+  assert.equal(pedido.items[0].packagingChanged, false);
+  assert.equal(pedido.packagingBlocked, 'Tul');
+  assert.deepEqual(pedido.packagingAlternatives, []);
+  assert.equal(pedido.total, 55);
+});
+
+test('el mismo negocio sigue dejando cambiar entre los empaques de los demás modelos', () => {
+  const catalogo = [{ name: 'Vela normal', price: 30, category: 'EVENTOS', description: 'Tul' }];
+  const pedido = computeOrderTotal([{ name: 'Vela normal', quantity: 1, packaging: 'Kraft' }], 'Quito', catalogo, conFrascos);
+  assert.equal(pedido.packagingBlocked, '');
+  assert.equal(pedido.missing, 'packaging_cost');
+});

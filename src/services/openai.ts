@@ -302,7 +302,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
         `- Cambios de empaque, del empaque que trae el ${model} al que pide el cliente:`,
         ...rules.map(c => `  - ${c.from} → ${c.to}: ${!c.allowed ? 'NO se puede' : cost(c.cost)}${c.note ? `. ${c.note}` : ''}`),
         `- Un cambio que NO esté en esa lista cuesta según el empaque nuevo, por ${unit}: ${defaults}. Si el cambio pedido está en la lista, manda la lista.`,
-        `- Si el cambio dice "NO se puede": explícale con amabilidad el motivo indicado, ofrécele los empaques a los que sí puede pasar desde el que trae ese ${model} y NO lo pongas en packaging (deja el del catálogo). No es una duda para la dueña: no escribas owner_question.`,
+        `- Si el cambio dice "NO se puede": explícale con amabilidad el motivo indicado, ofrécele los empaques a los que sí puede pasar desde el que trae ese ${model} (si no puede pasar a ninguno, dile que ese ${model} va tal cual, sin otro empaque, y no ofrezcas alternativas) y NO lo pongas en packaging (deja el del catálogo). No es una duda para la dueña: no escribas owner_question.`,
         `- Si el cambio trae una recomendación (por ejemplo que no conviene), díselo con esas palabras antes de confirmar; si aun así lo quiere, se puede y va en packaging.`,
         '- No menciones costos ni reglas de cambio si el cliente no pregunta por cambiar el empaque.'
       ]
@@ -966,7 +966,7 @@ export async function planTurn(params: {
     const explains = said.includes(normalizeWords(firstOrder.packagingBlocked)) && /no (se )?(puede|podemos|es posible|esta disponible|aplica|lleva|maneja)|solo (viene|va|lleva)/.test(said);
     if (!explains) {
       const others = firstOrder.packagingAlternatives.join(', ');
-      corrections.push(`El cliente pidió cambiar al empaque ${firstOrder.packagingBlocked}, pero ese cambio no se puede hacer${firstOrder.packagingBlockedNote ? ` (${firstOrder.packagingBlockedNote})` : ''}: explícaselo con amabilidad${others ? `, ofrécele ${others}` : ''} y no lo pongas como empaque del pedido. No escribas owner_question.`);
+      corrections.push(`El cliente pidió cambiar al empaque ${firstOrder.packagingBlocked}, pero ese cambio no se puede hacer${firstOrder.packagingBlockedNote ? ` (${firstOrder.packagingBlockedNote})` : ''}: explícaselo con amabilidad${others ? `, ofrécele ${others}` : ', dile que ese modelo va tal cual, sin otro empaque, y no ofrezcas alternativas'} y no lo pongas como empaque del pedido. No escribas owner_question.`);
     }
   }
   // Un cambio con nota (por ejemplo "no se recomienda") se le explica a la clienta una vez, antes de confirmarlo.
