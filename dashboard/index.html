@@ -1134,6 +1134,139 @@
             .login-card { padding: 30px 22px 20px; }
         }
 
+        /* ---------- Pantalla de empresas (plataforma) ---------- */
+        .pl-page { background: linear-gradient(180deg, #F8F9FF 0%, #F1F4FC 100%); color: #1E2A4A; }
+        .pl-page .main { background: transparent; }
+
+        .pl-topbar {
+            height: 68px;
+            flex-shrink: 0;
+            background: #fff;
+            border-bottom: 1px solid #E8ECF6;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+        }
+
+        .pl-brand { display: flex; align-items: center; gap: 10px; font-size: 17px; color: #1E2A4A; min-width: 0; }
+        .pl-brand .soft { color: #6B7599; }
+        .pl-logo {
+            width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+            background: linear-gradient(135deg, #4F6BF5, #7C5CF0);
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .pl-logout {
+            display: flex; align-items: center; gap: 8px;
+            padding: 11px 18px; background: #fff; border: 1px solid #E1E6F4; border-radius: 12px;
+            color: #D64545; font-size: 15px; font-weight: 600;
+            box-shadow: 0 1px 3px rgba(30, 42, 90, 0.06);
+        }
+        .pl-logout:hover { background: #FFF5F5; }
+
+        .pl-wrap { padding: 32px; max-width: 1400px; }
+
+        .pl-title { display: flex; align-items: center; gap: 18px; margin-bottom: 26px; }
+        .pl-title .tile {
+            width: 54px; height: 54px; border-radius: 16px; background: #E8EEFF; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .pl-title h1 { font-size: 34px; font-weight: 800; color: #141C3A; line-height: 1.1; }
+        .pl-title p { color: #5C668F; font-size: 15px; margin-top: 4px; line-height: 1.4; }
+
+        .pl-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+            gap: 26px;
+            align-items: start;
+            margin-bottom: 28px;
+        }
+
+        .pl-card {
+            background: #fff; border: 1px solid #E8ECF6; border-radius: 20px; padding: 26px;
+            box-shadow: 0 6px 24px rgba(50, 70, 160, 0.07);
+        }
+        .pl-card.selected { border-color: #6C7CF0; }
+        .pl-card.off { opacity: 0.7; }
+
+        .pl-head {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 14px 16px;
+            padding-bottom: 16px; border-bottom: 1px solid #EEF1F9; margin-bottom: 10px;
+        }
+        .pl-tile {
+            width: 60px; height: 60px; border-radius: 16px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .pl-tile.a { background: #E6EDFF; }
+        .pl-tile.b { background: #EEE9FF; }
+        .pl-head .info { flex: 1; min-width: 150px; }
+        .pl-head .name { font-size: 24px; font-weight: 800; color: #141C3A; }
+        .pl-head .wa { display: flex; align-items: center; gap: 8px; color: #5C668F; font-size: 15px; margin-top: 4px; }
+
+        .pl-pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; white-space: nowrap;
+        }
+        .pl-pill::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+        .pl-pill.ok { background: #E6F6EC; color: #1E8A4A; }
+        .pl-pill.warn { background: #FFF1DA; color: #B36B00; }
+        .pl-pill.bad { background: #FDE8E8; color: #C33636; }
+        .pl-pill.off { background: #EEF0F6; color: #6B7599; }
+
+        .pl-rows { display: flex; flex-direction: column; gap: 2px; }
+
+        .pl-row {
+            display: flex; align-items: center; gap: 14px;
+            width: 100%; padding: 11px 12px; border-radius: 10px;
+            background: none; border: none; text-align: left;
+            font-size: 16px; font-weight: 400; color: #1E2A4A; white-space: normal;
+            font-family: inherit;
+        }
+        button.pl-row { cursor: pointer; }
+        button.pl-row:hover { background: #F4F6FD; }
+        .pl-row.muted { color: #6B7599; }
+        .pl-row.summary { background: #EEF3FF; font-weight: 500; }
+        .pl-row .txt { flex: 1; min-width: 0; }
+        .pl-row .hint { display: block; font-size: 13px; color: #6B7599; margin-top: 1px; }
+        .pl-row .cfg { display: inline-flex; align-items: center; gap: 6px; color: #2563EB; font-size: 14px; font-weight: 600; flex-shrink: 0; }
+        .pl-row .chev { color: #9AA3C7; display: flex; flex-shrink: 0; }
+        .pl-row .sub { display: block; font-size: 12px; color: #8A93B5; margin-top: 1px; }
+
+        .pl-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+
+        .pl-btn {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 13px 22px; border-radius: 12px; font-size: 16px; font-weight: 600;
+            border: 1px solid #E1E6F4; background: #F6F8FE; color: #2A3766; white-space: nowrap;
+        }
+        .pl-btn:hover { background: #EDF1FC; }
+        .pl-btn:disabled { opacity: 0.6; cursor: default; }
+        .pl-btn.primary {
+            background: linear-gradient(90deg, #2F6BF0, #3B5BE8); border-color: transparent; color: #fff;
+            box-shadow: 0 6px 16px rgba(47, 107, 240, 0.3);
+        }
+        .pl-btn.primary:hover { filter: brightness(1.08); }
+        .pl-btn.grad {
+            background: linear-gradient(90deg, #4F6BF5, #8B5CF6); border-color: transparent; color: #fff;
+            box-shadow: 0 6px 16px rgba(110, 100, 240, 0.3);
+        }
+        .pl-btn.grad:hover { filter: brightness(1.08); }
+        .pl-btn.danger { background: #FEECEC; border-color: #F8D0D0; color: #D03535; }
+        .pl-btn.danger:hover { background: #FCE0E0; }
+
+        .pl-bottom { display: flex; flex-wrap: wrap; gap: 12px; }
+
+        @media (max-width: 600px) {
+            .pl-topbar { padding: 0 16px; }
+            .pl-brand .soft, .pl-brand .dot { display: none; }
+            .pl-wrap { padding: 18px; }
+            .pl-title h1 { font-size: 28px; }
+            .pl-card { padding: 18px; }
+            .pl-head .name { font-size: 20px; }
+            .pl-btn { padding: 12px 16px; font-size: 15px; }
+        }
+
         .btn-logout {
             background: transparent;
             border: 1px solid var(--rosa-palo);
@@ -1552,6 +1685,45 @@
             );
         }
 
+        function PlatIcon({ name, size = 18, color = 'currentColor' }) {
+            const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true };
+            switch (name) {
+                case 'check': return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#22A559" /><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+                case 'cross': return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#E5484D" /><path d="M8 8l8 8M16 8l-8 8" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" /></svg>;
+                case 'warn': return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17h-19z" fill="#F5A524" stroke="#F5A524" strokeWidth="2" strokeLinejoin="round" /><path d="M12 9.5v4.5M12 17h.01" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>;
+                case 'building': return <svg {...p}><path d="M4 21V5.5A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V21M15 9h3.5a1.5 1.5 0 0 1 1.5 1.5V21M2.5 21h19M8 8h3M8 12h3M8 16h3" /></svg>;
+                case 'whatsapp': return <svg {...p}><path d="M20 12a8 8 0 0 1-11.8 7L4 20l1.100-4.1A8 8 0 1 1 20 12z" /><path d="M9.2 8.8c0 3 2 5.2 5 5.8l1.200-1.400-1.800-.9-.8.7a4.2 4.2 0 0 1-1.800-1.8l.7-.8-.9-1.8z" /></svg>;
+                case 'key': return <svg {...p}><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" /></svg>;
+                case 'chat': return <svg {...p}><path d="M4 5h16v11H9.5L5 20v-4H4z" /><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01" /></svg>;
+                case 'chevron': return <svg {...p}><path d="M9 6l6 6-6 6" /></svg>;
+                case 'robot': return <svg {...p}><rect x="4.5" y="8" width="15" height="11" rx="3" /><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5M2.5 13v2M21.5 13v2" /></svg>;
+                case 'users': return <svg {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.5" /><path d="M17.5 14.5a5 5 0 0 1 4 5" /></svg>;
+                case 'pause': return <svg {...p}><rect x="5" y="4" width="14" height="16" rx="3" /><path d="M10 9v6M14 9v6" /></svg>;
+                case 'play': return <svg {...p}><path d="M7 4.5l12 7.500-12 7.5z" /></svg>;
+                case 'trash': return <svg {...p}><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" /></svg>;
+                case 'plus': return <svg {...p}><path d="M12 5v14M5 12h14" /></svg>;
+                case 'refresh': return <svg {...p}><path d="M20 11a8 8 0 0 0-14-4L4 9M4 4v5h5M4 13a8 8 0 0 0 14 4l2-2M20 20v-5h-5" /></svg>;
+                case 'enter': return <svg {...p}><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5M4 12h11M11 8l4 4-4 4" /></svg>;
+                case 'logout': return <svg {...p}><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M19 12H9" /></svg>;
+                case 'gear': return <svg {...p}><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" /></svg>;
+                default: return null;
+            }
+        }
+
+        function PlatRow({ icon, children, hint, sub, onClick, muted, summary, action }) {
+            const color = icon === 'robot' ? '#6C5CE7' : '#7B86B0';
+            const inner = (
+                <>
+                    <PlatIcon name={icon} size={22} color={color} />
+                    <span className="txt">{children}{hint && <span className="hint">{hint}</span>}{sub && <span className="sub">{sub}</span>}</span>
+                    {action && <span className="cfg"><PlatIcon name="gear" size={15} color="#2563EB" /> {action}</span>}
+                    {onClick && <span className="chev"><PlatIcon name="chevron" size={16} /></span>}
+                </>
+            );
+            const cls = 'pl-row' + (muted ? ' muted' : '') + (summary ? ' summary' : '');
+            return onClick ? <button type="button" className={cls} onClick={onClick}>{inner}</button> : <div className={cls}>{inner}</div>;
+        }
+
         function BusinessCard({ business, selected, onSelect, onChanged, usage }) {
             const [mode, setMode] = useState(null); // 'keys' | 'access'
             const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
@@ -1627,23 +1799,64 @@
 
             const status = (ok, text) => <span style={{ fontSize: '12px', color: ok ? '#2e7d32' : '#c62828' }}>{ok ? '✅' : '⚠️'} {text}</span>;
 
+            const readiness = business.readiness;
+            const items = readiness ? readiness.items : [];
+            let pill;
+            if (!business.active) pill = { cls: 'off', text: 'Suspendida' };
+            else if (business.legacy) pill = business.whatsapp_configured && business.openai_configured ? { cls: 'ok', text: 'Lista para usar' } : { cls: 'bad', text: 'Falta configurar' };
+            else if (!readiness) pill = { cls: 'off', text: 'Sin revisar' };
+            else if (!readiness.botReady) pill = { cls: 'bad', text: 'El bot no atiende' };
+            else if (items.some(i => !i.ok)) pill = { cls: 'warn', text: 'Configuración pendiente' };
+            else pill = { cls: 'ok', text: 'Lista para usar' };
+            const keysItems = ['whatsapp', 'webhook', 'openai'];
+            const openKeys = () => setMode(mode === 'keys' ? null : 'keys');
+            const goCompany = business.active ? () => onSelect(business.id) : undefined;
+
             return (
-                <div style={{ border: '1px solid var(--rosa-palo-suave)', borderRadius: '8px', padding: '15px', background: selected ? 'var(--rosa-palo-suave)' : 'white', opacity: business.active ? 1 : 0.6 }}>
-                    <h4 style={{ marginBottom: '6px' }}>🏢 {business.name}{business.active ? '' : ' (suspendida)'}</h4>
-                    <p style={{ fontSize: '12px', color: 'var(--texto-suave)' }}>{business.legacy ? '🔒 Claves en el servidor (instalación original)' : `📱 ${business.meta_phone_number || 'Sin número'}`}</p>
-                    {business.legacy ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', margin: '8px 0' }}>
-                            {status(business.whatsapp_configured, business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp')}
-                            {status(business.openai_configured, business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI')}
+                <div className={'pl-card' + (selected ? ' selected' : '') + (business.active ? '' : ' off')}>
+                    <div className="pl-head">
+                        <div className={'pl-tile ' + (business.legacy ? 'a' : 'b')}>
+                            <PlatIcon name="building" size={30} color={business.legacy ? '#4F7BF0' : '#7C5CF0'} />
                         </div>
-                    ) : <ReadinessList readiness={business.readiness} />}
-                    <UsageLine usage={usage} />
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-                        {business.active && <button style={buttonStyle} onClick={() => onSelect(business.id)}>Entrar</button>}
-                        {!business.legacy && <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'keys' ? null : 'keys')}>🔑 Claves</button>}
-                        <button style={secondaryButtonStyle} onClick={() => setMode(mode === 'access' ? null : 'access')}>👤 Usuarios</button>
-                        {!business.legacy && <button style={secondaryButtonStyle} onClick={toggleActive}>{business.active ? '⏸️ Suspender' : '▶️ Reactivar'}</button>}
-                        {!business.legacy && <button style={{ ...secondaryButtonStyle, background: '#fdecea', color: '#c62828' }} disabled={busy} onClick={deleteCompany}>🗑️ Eliminar</button>}
+                        <div className="info">
+                            <div className="name">{business.name}</div>
+                            <div className="wa"><PlatIcon name="whatsapp" size={20} color="#22A559" /> {business.meta_phone_number || 'Sin número configurado'}</div>
+                        </div>
+                        <span className={'pl-pill ' + pill.cls}>{pill.text}</span>
+                    </div>
+
+                    <div className="pl-rows">
+                        {business.legacy ? (
+                            <>
+                                <PlatRow icon="key" muted>Claves en el servidor (instalación original)</PlatRow>
+                                <PlatRow icon={business.whatsapp_configured ? 'check' : 'cross'}>{business.whatsapp_configured ? 'WhatsApp configurado' : 'Falta configurar WhatsApp'}</PlatRow>
+                                <PlatRow icon={business.openai_configured ? 'check' : 'cross'}>{business.openai_configured ? 'OpenAI configurado' : 'Falta la clave de OpenAI'}</PlatRow>
+                            </>
+                        ) : readiness && (
+                            <>
+                                <PlatRow icon="robot" summary>{readiness.summary}</PlatRow>
+                                {items.map(item => (
+                                    <PlatRow
+                                        key={item.key}
+                                        icon={item.ok ? 'check' : item.required ? 'cross' : 'warn'}
+                                        hint={item.ok ? undefined : item.hint}
+                                        action={item.ok ? undefined : 'Configurar'}
+                                        onClick={keysItems.includes(item.key) ? openKeys : goCompany}
+                                    >
+                                        {item.label}{item.key === 'catalog' && item.ok ? ' (' + readiness.products + ')' : ''}
+                                    </PlatRow>
+                                ))}
+                            </>
+                        )}
+                        <UsageRow usage={usage} />
+                    </div>
+
+                    <div className="pl-actions">
+                        {business.active && <button className="pl-btn primary" onClick={() => onSelect(business.id)}><PlatIcon name="enter" size={19} color="#fff" /> Entrar</button>}
+                        {!business.legacy && <button className="pl-btn" onClick={openKeys}><PlatIcon name="key" size={19} color="#4F7BF0" /> Claves</button>}
+                        <button className="pl-btn" onClick={() => setMode(mode === 'access' ? null : 'access')}><PlatIcon name="users" size={19} color="#4F7BF0" /> Usuarios</button>
+                        {!business.legacy && <button className="pl-btn" onClick={toggleActive}><PlatIcon name={business.active ? 'pause' : 'play'} size={19} color="#4F7BF0" /> {business.active ? 'Suspender' : 'Reactivar'}</button>}
+                        {!business.legacy && <button className="pl-btn danger" disabled={busy} onClick={deleteCompany}><PlatIcon name="trash" size={19} color="#D03535" /> Eliminar</button>}
                     </div>
 
                     {mode === 'keys' && (
@@ -1694,17 +1907,14 @@
             return '$' + value.toFixed(decimals).replace('.', ',');
         }
 
-        function UsageLine({ usage }) {
-            if (!usage || !usage.month?.calls) {
-                return <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px' }}>🧮 Sin consumo de IA registrado</div>;
-            }
+        function UsageRow({ usage }) {
+            if (!usage || !usage.month?.calls) return <PlatRow icon="chat" muted>Sin consumo de IA registrado</PlatRow>;
             const { today, week, month } = usage;
             const cachePct = month.input ? Math.round(month.cached * 100 / month.input) : 0;
             return (
-                <div style={{ fontSize: '11px', color: 'var(--texto-suave)', marginBottom: '6px', lineHeight: 1.5 }}>
-                    <div>💵 Gasto de IA: hoy <b>{money(today.cost)}</b> · 7 días <b>{money(week.cost)}</b> · 30 días <b>{money(month.cost)}</b></div>
-                    <div>🧮 {month.calls} respuestas en 30 días · {shortTokens(month.input)} de entrada ({cachePct}% en caché) · {shortTokens(month.output)} de salida</div>
-                </div>
+                <PlatRow icon="chat" muted sub={month.calls + ' respuestas en 30 días · ' + shortTokens(month.input) + ' de entrada (' + cachePct + '% en caché) · ' + shortTokens(month.output) + ' de salida'}>
+                    Gasto de IA: hoy <b>{money(today.cost)}</b> · 7 días <b>{money(week.cost)}</b> · 30 días <b>{money(month.cost)}</b>
+                </PlatRow>
             );
         }
 
@@ -1750,22 +1960,25 @@
             }
 
             return (
-                <div style={{ padding: '20px' }}>
-                    <h2 style={{ marginBottom: '8px' }}>🏢 Empresas</h2>
-                    <p style={{ color: 'var(--texto-suave)', fontSize: '13px', marginBottom: '20px' }}>
-                        Elige con qué empresa quieres trabajar. Cada una tiene su propio número de WhatsApp, su clave de OpenAI, su catálogo, sus chats y su configuración; nada se comparte entre ellas.
-                    </p>
+                <div className="pl-wrap">
+                    <div className="pl-title">
+                        <div className="tile"><PlatIcon name="building" size={30} color="#4F7BF0" /></div>
+                        <div>
+                            <h1>Empresas</h1>
+                            <p>Gestiona tus empresas y asistentes de WhatsApp. Cada una tiene su propio número de WhatsApp, clave de OpenAI, catálogo, chats y configuración.</p>
+                        </div>
+                    </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px', marginBottom: '30px' }}>
+                    <div className="pl-grid">
                         {businesses.map(b => (
                             <BusinessCard key={b.id} business={b} selected={currentBusinessId === b.id} onSelect={onSelect} onChanged={onChanged} usage={usage[b.id]} />
                         ))}
                     </div>
 
                     {!showForm ? (
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            <button style={buttonStyle} onClick={() => setShowForm(true)}>+ Nueva empresa</button>
-                            <button style={secondaryButtonStyle} disabled={checking} onClick={checkNow}>{checking ? 'Revisando...' : '🩺 Revisar todas ahora'}</button>
+                        <div className="pl-bottom">
+                            <button className="pl-btn grad" onClick={() => setShowForm(true)}><PlatIcon name="plus" size={19} color="#fff" /> Nueva empresa</button>
+                            <button className="pl-btn" disabled={checking} onClick={checkNow}><PlatIcon name="refresh" size={19} color="#4F7BF0" /> {checking ? 'Revisando...' : 'Revisar todas ahora'}</button>
                         </div>
                     ) : (
                         <div style={{ background: 'var(--beige-claro)', padding: '20px', borderRadius: '8px', maxWidth: '520px' }}>
@@ -1822,17 +2035,14 @@
             }
 
             return (
-                <div className="container">
+                <div className="container pl-page">
                     <div className="main">
-                        <div className="header">
-                            <div className="header-brand">
-                                <div>
-                                    <div className="subtitle">Plataforma · Asistentes de WhatsApp</div>
-                                </div>
+                        <div className="pl-topbar">
+                            <div className="pl-brand">
+                                <span className="pl-logo"><PlatIcon name="robot" size={24} color="#fff" /></span>
+                                <b>Plataforma</b><span className="dot soft">·</span><span className="soft">Asistentes de WhatsApp</span>
                             </div>
-                            <div className="header-actions">
-                                <button className="btn-logout" onClick={onLogout}>Salir</button>
-                            </div>
+                            <button className="pl-logout" onClick={onLogout}><PlatIcon name="logout" size={19} color="#D64545" /> Salir</button>
                         </div>
                         <div className="content" style={{ display: 'block', overflowY: 'auto' }}>
                             {loading
