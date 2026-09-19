@@ -3336,11 +3336,15 @@
                                 {text('sales.minimumOrder', 'Pedido mínimo', 'Ej: 2 docenas', 'Vacío = sin mínimo')}
                                 {check('sales.personalization', 'Los productos se pueden personalizar')}
                                 {check('sales.perProductUnits', 'Cada producto tiene su propia unidad y medida (cajas, tubos, metros…)')}
+                                {check('sales.genderTagging', 'Los productos se marcan como niño, niña o neutro (baby shower)')}
                                 {form.sales.personalization && text('sales.personalizationExamples', 'Qué se puede personalizar', 'Ej: colores, nombres y frases', '', true)}
                             </div>
                             <p className="hint" style={{ marginTop: '10px' }}>{form.sales.perProductUnits
                                 ? 'Activado: en el Catálogo cada producto tiene su unidad de venta, su medida y las piezas que trae, y el asistente cotiza cada uno en su unidad.'
                                 : 'Apagado: todos tus productos se venden en la misma unidad (' + form.sales.unitSingular + '), sin medidas por producto. Enciéndelo solo si vendes en cajas, tubos, metros u otras unidades distintas.'}</p>
+                            <p className="hint" style={{ marginTop: '6px' }}>{form.sales.genderTagging
+                                ? 'Activado: en el Catálogo puedes marcar cada producto como niño, niña o neutro. Si un cliente pide ver esos productos y no dijo el sexo del bebé, el asistente lo pregunta antes de enviar fotos.'
+                                : 'Apagado: el asistente muestra todos los productos de una categoría sin preguntar el sexo del bebé.'}</p>
                         </CfgCard>
 
                         <CfgCard id="pagos" icon="card" title="Pagos" subtitle="Configura las formas de pago que aceptas">
@@ -3754,6 +3758,7 @@
         /** Campos de un producto (los usa el formulario de agregar y la ventana de editar). Unidad y medida solo si el negocio las usa. */
         function ProductFields({ value, onChange, biz, categories, listId }) {
             const perProductUnits = !!biz?.sales?.perProductUnits;
+            const genderTagging = !!biz?.sales?.genderTagging;
             const unit = biz?.sales?.unitSingular || 'unidad';
             const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
             const categoryLabel = biz?.dates?.enabled ? 'Categoría / ' + biz.dates.eventLabel : 'Categoría';
@@ -3783,6 +3788,15 @@
                             </CatField>
                         </>
                     )}
+                    {genderTagging && (
+                        <CatField icon="user" label="Es para">
+                            <select value={value.gender || ''} onChange={e => set('gender', e.target.value)}>
+                                <option value="">Neutro (para ambos)</option>
+                                <option value="niño">Niño</option>
+                                <option value="niña">Niña</option>
+                            </select>
+                        </CatField>
+                    )}
                     {packagingTypes.length > 0 && (
                         <CatField icon="gift" label="Empaque incluido">
                             <select value={value.packaging} onChange={e => set('packaging', e.target.value)}>
@@ -3795,11 +3809,12 @@
             );
         }
 
-        const EMPTY_PRODUCT = { name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', photoBase64: '', photoPreview: '' };
+        const EMPTY_PRODUCT = { name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', gender: '', photoBase64: '', photoPreview: '' };
         const SORTS = { recent: 'Más recientes', name: 'Nombre (A-Z)', low: 'Precio: menor a mayor', high: 'Precio: mayor a menor' };
 
         function CatalogView({ products, biz, legacy, reload, readOnly = false }) {
             const perProductUnits = !!biz?.sales?.perProductUnits;
+            const genderTagging = !!biz?.sales?.genderTagging;
             const unit = biz?.sales?.unitSingular || 'unidad';
             const packagingTypes = biz?.packaging?.enabled ? (biz.packaging.types || []) : [];
             const [form, setForm] = useState(EMPTY_PRODUCT);
@@ -3845,7 +3860,8 @@
                         method: 'POST',
                         body: JSON.stringify({
                             name: form.name, price: parseFloat(form.price), category: form.category, packaging: form.packaging,
-                            sale_unit: form.sale_unit, measure: form.measure, pieces_per_unit: form.pieces_per_unit, image_url: imageUrl
+                            sale_unit: form.sale_unit, measure: form.measure, pieces_per_unit: form.pieces_per_unit, gender: form.gender,
+                            image_url: imageUrl
                         })
                     });
                     setForm(EMPTY_PRODUCT);
@@ -3861,7 +3877,8 @@
                 setEditing({
                     id: p.id, name: p.name || '', price: String(p.price ?? ''), category: p.category || '',
                     packaging: p.description || '', sale_unit: p.sale_unit || '', measure: p.measure || '',
-                    pieces_per_unit: p.pieces_per_unit ? String(p.pieces_per_unit) : '', image_url: p.image_url || '', photoBase64: '', photoPreview: ''
+                    pieces_per_unit: p.pieces_per_unit ? String(p.pieces_per_unit) : '', gender: p.gender || '',
+                    image_url: p.image_url || '', photoBase64: '', photoPreview: ''
                 });
             }
 
@@ -3875,6 +3892,7 @@
                 try {
                     const body = { name: e.name, price: parseFloat(e.price), category: e.category };
                     if (perProductUnits) Object.assign(body, { sale_unit: e.sale_unit, measure: e.measure, pieces_per_unit: e.pieces_per_unit });
+                    if (genderTagging) body.gender = e.gender;
                     if (packagingTypes.length > 0) body.packaging = e.packaging;
                     if (e.photoBase64) body.image_url = await uploadPhoto(e.photoBase64);
                     await api('/api/products/' + e.id, { method: 'PUT', body: JSON.stringify(body) });
@@ -3895,7 +3913,8 @@
                         body: JSON.stringify({
                             name: p.name + ' (copia)', price: Number(p.price), category: p.category,
                             packaging: packagingTypes.some(t => t.name === p.description) ? p.description : '',
-                            sale_unit: p.sale_unit || '', measure: p.measure || '', pieces_per_unit: p.pieces_per_unit || '', image_url: p.image_url || ''
+                            sale_unit: p.sale_unit || '', measure: p.measure || '', pieces_per_unit: p.pieces_per_unit || '',
+                            gender: p.gender || '', image_url: p.image_url || ''
                         })
                     });
                     reload();
@@ -3930,6 +3949,7 @@
                     if (p.measure) lines.push(['ruler', 'Medida: ' + p.measure]);
                     if (p.pieces_per_unit) lines.push(['layers', 'Unidades que trae: ' + p.pieces_per_unit]);
                 }
+                if (genderTagging && (p.gender === 'niño' || p.gender === 'niña')) lines.push(['user', 'Es para: ' + p.gender]);
                 if (biz?.packaging?.enabled) lines.push(['gift', 'Empaque: ' + (p.description || 'Sin definir')]);
                 return lines;
             };

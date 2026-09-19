@@ -40,6 +40,8 @@ export interface BusinessProfile {
     minimumOrder: string;
     /** true = cada producto puede tener su propia unidad, medida y piezas (cajas, tubos, metros). false = todo se vende en la unidad del negocio. */
     perProductUnits: boolean;
+    /** true = los productos pueden marcarse "niño", "niña" o neutro (baby shower); el asistente pregunta el sexo antes de mostrar fotos de esa categoría. */
+    genderTagging: boolean;
   };
   payments: {
     transferEnabled: boolean;
@@ -154,7 +156,8 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     personalization: true,
     personalizationExamples: 'cambios de colores, nombres, frases y detalles',
     minimumOrder: '',
-    perProductUnits: false
+    perProductUnits: false,
+    genderTagging: false
   },
   payments: { transferEnabled: true, depositPercent: 50, cardEnabled: true, cardBrands: 'Visa y Mastercard' },
   dates: { enabled: true, eventLabel: 'evento', deliveryDaysBeforeEvent: 3, urgentDays: 3, alwaysAvailable: true },
@@ -230,7 +233,8 @@ export const STORE_PROFILE: BusinessProfile = {
     personalization: false,
     personalizationExamples: '',
     minimumOrder: '',
-    perProductUnits: false
+    perProductUnits: false,
+    genderTagging: false
   },
   payments: { transferEnabled: true, depositPercent: 100, cardEnabled: false, cardBrands: '' },
   dates: { enabled: false, eventLabel: 'evento', deliveryDaysBeforeEvent: 0, urgentDays: 2, alwaysAvailable: false },
@@ -350,7 +354,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       personalization: bool(s.personalization, base.sales.personalization),
       personalizationExamples: text(s.personalizationExamples, base.sales.personalizationExamples),
       minimumOrder: text(s.minimumOrder, base.sales.minimumOrder, 120),
-      perProductUnits: bool(s.perProductUnits, base.sales.perProductUnits === true)
+      perProductUnits: bool(s.perProductUnits, base.sales.perProductUnits === true),
+      genderTagging: bool(s.genderTagging, base.sales.genderTagging === true)
     },
     payments: {
       transferEnabled: bool(p.transferEnabled, base.payments.transferEnabled),
@@ -558,6 +563,9 @@ export function useProfile(p: BusinessProfile) {
 
 /** ¿Este negocio maneja unidad, medida y piezas propias en cada producto? Si no, esos datos no se usan aunque existan. */
 export const usesProductUnits = (p: BusinessProfile = profile()) => p.sales.perProductUnits === true;
+
+/** ¿Este negocio marca "niño"/"niña"/neutro en sus productos? Si no, ese dato no se usa aunque exista. */
+export const usesGenderTagging = (p: BusinessProfile = profile()) => p.sales.genderTagging === true;
 
 export const unitWord = (quantity: number, p: BusinessProfile = profile()) =>
   quantity === 1 ? p.sales.unitSingular : p.sales.unitPlural;

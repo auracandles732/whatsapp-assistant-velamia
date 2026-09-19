@@ -77,7 +77,7 @@ import {
   deleteConversationTask
 } from './db';
 import { testBusinessCredentials, startHealthCheck, runHealthCheck } from './services/health';
-import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging, usesProductUnits } from './config/businessProfile';
+import { loadBusinessProfile, saveBusinessProfile, profile, publicProfile, normalizeProfile, PROFILE_PRESETS, findPackaging, usesProductUnits, usesGenderTagging } from './config/businessProfile';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -702,16 +702,26 @@ function cleanProductName(value: unknown): string {
  * Al editar solo se tocan los campos enviados; vacíos = el producto usa la unidad del negocio.
  */
 function productUnit(body: any, isUpdate = false) {
-  const unit: { sale_unit?: string | null; measure?: string | null; pieces_per_unit?: number | null } = {};
+  const unit: { sale_unit?: string | null; measure?: string | null; pieces_per_unit?: number | null; gender?: string | null } = {};
+  const biz = profile();
+
   // Solo los negocios que venden con unidad propia por producto guardan estos datos.
-  if (!usesProductUnits(profile())) return unit;
-  const text = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
-  if (!isUpdate || body?.sale_unit !== undefined) unit.sale_unit = text(body?.sale_unit);
-  if (!isUpdate || body?.measure !== undefined) unit.measure = text(body?.measure);
-  if (!isUpdate || body?.pieces_per_unit !== undefined) {
-    const pieces = Math.floor(Number(body?.pieces_per_unit));
-    unit.pieces_per_unit = Number.isFinite(pieces) && pieces > 1 ? pieces : null;
+  if (usesProductUnits(biz)) {
+    const text = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
+    if (!isUpdate || body?.sale_unit !== undefined) unit.sale_unit = text(body?.sale_unit);
+    if (!isUpdate || body?.measure !== undefined) unit.measure = text(body?.measure);
+    if (!isUpdate || body?.pieces_per_unit !== undefined) {
+      const pieces = Math.floor(Number(body?.pieces_per_unit));
+      unit.pieces_per_unit = Number.isFinite(pieces) && pieces > 1 ? pieces : null;
+    }
   }
+
+  // Solo los negocios que marcan niño/niña/neutro (baby shower) guardan este dato.
+  if (usesGenderTagging(biz) && (!isUpdate || body?.gender !== undefined)) {
+    const g = String(body?.gender ?? '').trim().toLowerCase();
+    unit.gender = g === 'niño' || g === 'niña' ? g : null;
+  }
+
   return unit;
 }
 

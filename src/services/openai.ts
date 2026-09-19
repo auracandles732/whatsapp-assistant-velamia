@@ -1,7 +1,7 @@
 import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
 import { recordAiUsage } from './supabase';
-import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, usesProductUnits, packagingChange, PackagingChange } from '../config/businessProfile';
+import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, usesProductUnits, usesGenderTagging, packagingChange, PackagingChange } from '../config/businessProfile';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
 const openaiClients = new Map<string, OpenAI>();
@@ -103,7 +103,7 @@ Atiende con amabilidad, responde en español natural y guía al cliente hacia un
  * sin ellas el bot podría inventar productos, enviar fotos que no vienen al caso o no ceder el chat.
  * Todo lo que depende del negocio sale del perfil.
  */
-export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del producto', ownUnits = false): string {
+export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del producto', ownUnits = false, hasGenderedProducts = false): string {
   const { business: b, sales: s, payments: pay, dates: d, shipping: sh, style } = p;
   const unit = s.unitSingular, units = s.unitPlural;
   const label = s.productLabel, model = s.productLabel.toLowerCase(), models = s.productLabelPlural.toLowerCase();
@@ -381,6 +381,9 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     'FOTOS (campo show_products):',
     `- Incluye productos SOLO cuando el cliente pide ver ${models}, fotos u opciones, o pide "más ${models}".`,
     `- Incluye TODOS los productos del catálogo que correspondan a lo que pidió (por ejemplo, todos los de la categoría o todos los que coinciden con el ${model}), usando los nombres exactos.`,
+    hasGenderedProducts && `- Algunos ${models} del catálogo indican "niño" o "niña"; los que no lo indican sirven para ambos. Si el cliente pide ver ${models} de esa categoría y todavía no dijo si el bebé es niño o niña, PREGÚNTASELO PRIMERO y deja show_products vacío en ese mensaje; no envíes fotos todavía.`,
+    hasGenderedProducts && `- Ya que sepas el sexo, en show_products incluye solo los ${models} marcados para ese sexo y los que sirven para ambos (no indican género); no incluyas los del sexo contrario salvo que el cliente pida verlos igual o pida un ${model} puntual por su nombre.`,
+    hasGenderedProducts && `- El género del catálogo es solo una guía de diseño, no una restricción: el cliente puede pedir cualquier ${model} aunque sea del sexo contrario y personalizarlo a su gusto (por ejemplo, un ${model} "de niño" en colores de niña). Nunca le digas que un ${model} "no se puede" por su género.`,
     `- No repitas fotos ya enviadas en esta conversación, salvo que el cliente pida volver a ver un ${model} concreto.`,
     `- Déjalo vacío cuando el cliente está dando detalles de su pedido (cantidad${d.enabled ? ', fecha' : ''}${s.personalization ? ', colores, nombres, personalización' : ''}), confirmando, preguntando precios o formas de pago, o conversando. En esos casos una foto no aporta y confunde.`,
     '- Si envías fotos, en reply preséntalas en una frase corta; no repitas la lista completa de nombres y precios porque cada foto ya lleva su nombre y precio.',
@@ -430,6 +433,8 @@ interface CatalogProduct {
   measure?: string | null;
   /** Piezas que trae esa unidad (10 = caja de 10); vacío = la del negocio. */
   pieces_per_unit?: number | null;
+  /** "niño", "niña" o vacío (neutro, sirve para ambos). Solo se usa si el negocio marca género (baby shower). */
+  gender?: string | null;
 }
 
 /**
@@ -437,8 +442,14 @@ interface CatalogProduct {
  * en los demás (VELAMIA vende todo por docena) se ignoran aunque el producto tenga esos datos guardados.
  */
 export function scopeCatalog<T extends CatalogProduct>(catalog: T[], p: BusinessProfile): T[] {
-  if (usesProductUnits(p)) return catalog;
-  return catalog.map(c => ({ ...c, sale_unit: null, measure: null, pieces_per_unit: null }));
+  const stripUnits = !usesProductUnits(p);
+  const stripGender = !usesGenderTagging(p);
+  if (!stripUnits && !stripGender) return catalog;
+  return catalog.map(c => ({
+    ...c,
+    ...(stripUnits ? { sale_unit: null, measure: null, pieces_per_unit: null } : {}),
+    ...(stripGender ? { gender: null } : {})
+  }));
 }
 
 /** Unidad en la que se vende y se cotiza un producto: la suya si la tiene, si no la del negocio. */
@@ -763,7 +774,8 @@ export function buildSystemPrompt(
         const pieces = Number(i.pieces_per_unit) > 1 && !own.includes(String(i.pieces_per_unit))
           ? ` = ${i.pieces_per_unit} unidades` : '';
         const measure = i.measure ? ` · mide ${i.measure}` : '';
-        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${own}${pieces}${measure}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`;
+        const gender = i.gender === 'niño' || i.gender === 'niña' ? ` · ${i.gender}` : '';
+        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${own}${pieces}${measure}${gender}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`;
       }).join('\n'))
       .join('\n\n');
   }
@@ -778,7 +790,7 @@ export function buildSystemPrompt(
     ? `TARIFAS DE ENVÍO DESDE ${p.business.city.toUpperCase()} (uso interno, todos los cantones de la provincia cuestan igual):\n${summary}\n\n`
     : p.shipping.mode === 'flat' ? `TARIFA DE ENVÍO (uso interno):\n${summary}\n\n` : '';
 
-  const rules = buildCoreRules(p, catalog[0]?.name, catalog.some(c => c.sale_unit));
+  const rules = buildCoreRules(p, catalog[0]?.name, catalog.some(c => c.sale_unit), catalog.some(c => c.gender === 'niño' || c.gender === 'niña'));
   return `${persona}\n\n${rules}\n\nFECHA DE HOY (${p.business.city || p.business.timezone}): ${today}\n\n${shippingText}${catalogText}`;
 }
 

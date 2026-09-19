@@ -768,6 +768,8 @@ export interface ProductUnit {
   sale_unit?: string | null;
   measure?: string | null;
   pieces_per_unit?: number | null;
+  /** "niño", "niña" o null (neutro, sirve para ambos). */
+  gender?: string | null;
 }
 
 export async function createProduct(name: string, price: number, category: string, imageUrl?: string, packaging?: string, unit: ProductUnit = {}) {
@@ -785,6 +787,7 @@ export async function createProduct(name: string, price: number, category: strin
       sale_unit: unit.sale_unit || null,
       measure: unit.measure || null,
       pieces_per_unit: unit.pieces_per_unit || null,
+      gender: unit.gender || null,
       created_at: new Date().toISOString()
     }])
     .select()
