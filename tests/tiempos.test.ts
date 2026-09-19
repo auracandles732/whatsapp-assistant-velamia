@@ -53,3 +53,39 @@ test('si ya pasaron 20 segundos armando la respuesta, solo espera lo que falte',
   await Promise.resolve(); await Promise.resolve();
   assert.equal(resolved, true);
 });
+
+const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test('aparece "escribiendo…" solo los últimos 20 segundos antes de contestar', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  t.mock.method(Math, 'random', () => 0);
+  let typed = 0;
+  let resolved = false;
+  waitHumanDelay(Date.now(), async () => { typed++; }).then(() => { resolved = true; });
+
+  t.mock.timers.tick(9_000);
+  await flush();
+  assert.equal(typed, 0, 'aún no debía aparecer "escribiendo…"');
+
+  t.mock.timers.tick(1_500);
+  await flush();
+  assert.equal(typed, 1, 'debía aparecer a los 10 s (20 s antes de responder)');
+  assert.equal(resolved, false);
+
+  t.mock.timers.tick(20_000);
+  await flush();
+  assert.equal(resolved, true);
+  assert.equal(typed, 1, 'solo se avisa una vez');
+});
+
+test('un fallo al mostrar "escribiendo…" no impide responder', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  t.mock.method(Math, 'random', () => 0);
+  let resolved = false;
+  waitHumanDelay(Date.now(), async () => { throw new Error('Meta no respondió'); }).then(() => { resolved = true; });
+  t.mock.timers.tick(10_000);
+  await flush();
+  t.mock.timers.tick(20_000);
+  await flush();
+  assert.equal(resolved, true);
+});

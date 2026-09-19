@@ -133,6 +133,8 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     '- Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.',
     `- Si el cliente pregunta cuántos ${models} hay de ${d.enabled ? `un ${d.eventLabel}` : 'una categoría'}, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.`,
     '- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.',
+    '- Haz UNA sola pregunta por mensaje (un solo signo de interrogación) y solo la que más ayude a avanzar; nunca juntes evento, cantidad y fecha en la misma pregunta. Si el cliente solo saluda, pregunta únicamente qué producto busca o para qué evento es.',
+    '- Todo dato que el cliente ya dio (evento, cantidad, fecha, ciudad, colores, sexo del bebé) se confirma TODO junto en una frase de tu respuesta, sin olvidar la cantidad (por ejemplo "perfecto, 3 docenas de baby shower de niño para noviembre") y NUNCA se le vuelve a preguntar; pregunta solo lo que todavía falta. Si dio solo el mes de la fecha, pídele únicamente el día.',
     '- Saluda ("Hola", "qué gusto", etc.) SOLO en tu primer mensaje de la conversación. En los siguientes mensajes ve directo al punto, sin volver a saludar aunque el cliente diga "hola" de nuevo.',
     '- Si el cliente escribe una palabra con una errata obvia pero reconocible (letras de más, de menos o cambiadas: "veliy" por "velas", "qeu" por "que"), entiende a qué se refiere y responde con normalidad; no le preguntes si quiso decir esa palabra ni se lo hagas notar.',
     ''
@@ -141,7 +143,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
   const steps = [
     'una frase corta y cálida que responda a lo que dijo el cliente (distinta a la del mensaje anterior)',
     'si das el resumen o el total, los datos en lista, un dato por línea empezando con un emoji relacionado',
-    d.enabled && 'debajo, en una línea normal, la reserva de la fecha si corresponde',
+    d.enabled && 'debajo, en una línea normal, la reserva de la fecha, solo cuando el cliente ya dio la fecha exacta (día y mes); si falta el día, no pongas esa línea y pregunta solo el día',
     'una sola pregunta corta para avanzar la venta, en su propia línea'
   ].filter(Boolean).map((step, i) => `${i + 1}) ${step}`).join('; ');
 
@@ -1049,6 +1051,20 @@ export async function planTurn(params: {
     }
   }
 
+  // Una foto ya enviada no se repite, salvo que la clienta la pida otra vez o nombre ese modelo.
+  const sentKeys = new Set(sentProducts.map(productKey));
+  const spoken = normalizeWords(customerWords);
+  const asksAgain = /otra vez|de nuevo|volver a (ver|mandar|enviar)|nuevamente|repite/.test(spoken);
+  const isRepeatedPhoto = (name: unknown) => {
+    const key = productKey(name);
+    const real = catalog.find(c => productKey(c.name) === key);
+    return !!real && sentKeys.has(key) && !asksAgain && !spoken.includes(normalizeWords(real.name));
+  };
+  const requestedPhotos: unknown[] = Array.isArray(parsed.show_products) ? parsed.show_products : [];
+  if (requestedPhotos.length > 0 && requestedPhotos.every(isRepeatedPhoto)) {
+    corrections.push('Esas fotos ya se le enviaron a la clienta en esta conversación: no las repitas. Deja show_products vacío y, sin decir que le vas a mostrar modelos, responde a lo que dijo y haz una sola pregunta para avanzar (por ejemplo cuál de los modelos que ya vio le gustó).');
+  }
+
   if (corrections.length > 0) {
     parsed = await ask(`CORRECCIÓN (obligatoria):\n- ${corrections.join('\n- ')}\nRehaz la respuesta aplicando estas correcciones.`);
     if (repeatsSummary()) {
@@ -1074,6 +1090,7 @@ export async function planTurn(params: {
   const byName = new Map(catalog.map(c => [productKey(c.name), c.name]));
   const showProducts = [...new Set(
     (Array.isArray(parsed.show_products) ? parsed.show_products : [])
+      .filter((n: any) => !isRepeatedPhoto(n))
       .map((n: any) => byName.get(productKey(n)))
       .filter(Boolean) as string[]
   )].slice(0, MAX_PHOTOS_PER_TURN);

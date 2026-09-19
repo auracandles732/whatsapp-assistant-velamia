@@ -32,7 +32,8 @@ import {
   sendImageMessage,
   getMediaUrl,
   downloadMedia,
-  getSentMessageId
+  getSentMessageId,
+  showTyping
 } from '../services/whatsapp';
 import {
   planTurn,
@@ -106,11 +107,20 @@ const MAX_RESPONSE_WAIT_MS = 20000;
  * MIN_HUMAN_REPLY_MS y MAX_HUMAN_REPLY_MS antes de responder. Arma la respuesta ya tardó
  * (la IA, las consultas a la base): eso cuenta, así que casi nunca se espera el máximo entero.
  */
-export async function waitHumanDelay(firstAt: number) {
+export const TYPING_LEAD_MS = 20_000;
+
+export async function waitHumanDelay(firstAt: number, typing?: () => Promise<void>) {
   if (shuttingDown) return;
   const target = MIN_HUMAN_REPLY_MS + Math.random() * (MAX_HUMAN_REPLY_MS - MIN_HUMAN_REPLY_MS);
   const remaining = firstAt + target - Date.now();
-  if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+  if (remaining <= 0) return;
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  if (!typing) return sleep(remaining);
+  // Como una persona: primero lo lee, y los últimos segundos antes de contestar aparece "escribiendo…".
+  const before = Math.max(0, remaining - TYPING_LEAD_MS);
+  if (before > 0) await sleep(before);
+  await typing().catch(() => undefined);
+  await sleep(Math.min(remaining, TYPING_LEAD_MS));
 }
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
@@ -625,6 +635,9 @@ async function respondToBatch(batch: PendingBatch) {
       return;
     }
 
+    const lastWaId = items[items.length - 1]?.waMessageId;
+    const typing = () => showTyping(lastWaId);
+
     // Los avisos a la dueña van primero y sin espera: solo lo que ve la clienta se demora (más abajo).
     // Siempre se confirma la fecha, pero una entrega muy justa la revisa la dueña (una vez al día por chat).
     const batchProfile = profile();
@@ -671,7 +684,7 @@ async function respondToBatch(batch: PendingBatch) {
       if (!alreadyNotified && hasQuantity) {
         await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: summaryConFoto });
         // La dueña ya tiene el aviso; la clienta igual recibe su respuesta con el tiempo humano de siempre.
-        await waitHumanDelay(batch.firstAt);
+        await waitHumanDelay(batch.firstAt, typing);
         if (plan.reply) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
         await pauseBot(conversationId);
         console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${summaryConFoto}`);
@@ -683,7 +696,7 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     // Una respuesta inmediata delata al bot: se espera un tiempo humano antes de escribirle a la clienta.
-    await waitHumanDelay(batch.firstAt);
+    await waitHumanDelay(batch.firstAt, typing);
 
     if (plan.reply) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);

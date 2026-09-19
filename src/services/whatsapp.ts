@@ -56,6 +56,23 @@ async function postMessage(payload: Record<string, any>, label: string) {
   }
 }
 
+/**
+ * Marca como leído el último mensaje de la clienta y muestra "escribiendo…" (dura unos 25 s o hasta
+ * que se envía la respuesta). Es solo un detalle de naturalidad: nunca lanza error.
+ */
+export async function showTyping(messageId: string) {
+  if (!messageId) return;
+  try {
+    await graph.post(
+      `${GRAPH_API}/${credentials().phoneId}/messages`,
+      { messaging_product: 'whatsapp', status: 'read', message_id: messageId, typing_indicator: { type: 'text' } },
+      { headers: authHeaders() }
+    );
+  } catch (error: any) {
+    console.warn('No se pudo mostrar "escribiendo…":', error.response?.data?.error?.message || error.message);
+  }
+}
+
 export function sendTextMessage(phoneNumber: string, text: string) {
   return postMessage({ to: normalizePhone(phoneNumber), type: 'text', text: { body: text } }, 'Mensaje');
 }

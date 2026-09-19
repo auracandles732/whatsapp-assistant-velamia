@@ -256,3 +256,11 @@ test('un negocio sin personalización no recibe esta regla', () => {
   const prompt = buildSystemPrompt([{ name: 'Producto', price: 30, category: 'X' }], undefined, sinEmpaques);
   assert.ok(!/color típico/.test(prompt));
 });
+
+// ---------- Una pregunta por mensaje y datos ya dados ----------
+
+test('las instrucciones piden una sola pregunta y no repetir datos que el cliente ya dio', () => {
+  const prompt = buildSystemPrompt([{ name: 'Vela', price: 30, category: 'EVENTOS' }], undefined, conEmpaques);
+  assert.ok(/UNA sola pregunta por mensaje/.test(prompt));
+  assert.ok(/NUNCA se le vuelve a preguntar/.test(prompt));
+});
