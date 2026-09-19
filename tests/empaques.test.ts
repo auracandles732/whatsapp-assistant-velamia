@@ -236,3 +236,11 @@ test('el mismo negocio sigue dejando cambiar entre los empaques de los demás mo
   assert.equal(pedido.packagingBlocked, '');
   assert.equal(pedido.missing, 'packaging_cost');
 });
+
+// ---------- Estilo de conversación: no repetir el saludo, entender erratas ----------
+
+test('las instrucciones piden saludar solo una vez y entender erratas sin preguntar', () => {
+  const prompt = buildSystemPrompt([{ name: 'Vela', price: 30, category: 'EVENTOS' }], undefined, conEmpaques);
+  assert.ok(/Saluda[\s\S]*?SOLO en tu primer mensaje/.test(prompt));
+  assert.ok(/errata obvia/.test(prompt));
+});

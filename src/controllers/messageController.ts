@@ -77,6 +77,12 @@ const WEAK_CONFIRMATION = /(?<!\p{L})(de acuerdo|listo|dale|vamos|ok|okey|okay|s
 // a todos juntos. Si no deja de escribir, se responde igual pasado el tiempo máximo.
 export const RESPONSE_DELAY_MS = 5000;
 
+// Una respuesta inmediata delata al bot: para todos los negocios, se espera un tiempo humano
+// (distinto en cada turno) antes de contestar. Se cuenta desde el primer mensaje de la tanda,
+// así que si armar la respuesta ya tardó, se completa solo lo que falte.
+export const MIN_HUMAN_REPLY_MS = 30_000;
+export const MAX_HUMAN_REPLY_MS = 60_000;
+
 // Pausas entre mensajes seguidos del bot para que no lleguen todos de golpe.
 export const MESSAGE_GAP_MS = 3000; // entre el texto, las fotos y la pregunta final
 export const PHOTO_GAP_MS = 2000;   // entre fotos de la misma tanda
@@ -94,6 +100,18 @@ async function waitGap(phoneNumber: string, gapMs: number) {
   }
 }
 const MAX_RESPONSE_WAIT_MS = 20000;
+
+/**
+ * Espera lo que falte para que, desde el primer mensaje de la clienta, hayan pasado entre
+ * MIN_HUMAN_REPLY_MS y MAX_HUMAN_REPLY_MS antes de responder. Arma la respuesta ya tardó
+ * (la IA, las consultas a la base): eso cuenta, así que casi nunca se espera el máximo entero.
+ */
+export async function waitHumanDelay(firstAt: number) {
+  if (shuttingDown) return;
+  const target = MIN_HUMAN_REPLY_MS + Math.random() * (MAX_HUMAN_REPLY_MS - MIN_HUMAN_REPLY_MS);
+  const remaining = firstAt + target - Date.now();
+  if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+}
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
 export const PHOTO_BATCH_SIZE = 4;
@@ -607,10 +625,7 @@ async function respondToBatch(batch: PendingBatch) {
       return;
     }
 
-    if (plan.reply) {
-      await sendAndSaveText(conversationId, phoneNumber, plan.reply);
-    }
-
+    // Los avisos a la dueña van primero y sin espera: solo lo que ve la clienta se demora (más abajo).
     // Siempre se confirma la fecha, pero una entrega muy justa la revisa la dueña (una vez al día por chat).
     const batchProfile = profile();
     if (plan.delivery_date && daysUntil(plan.delivery_date) <= batchProfile.dates.urgentDays
@@ -655,6 +670,9 @@ async function respondToBatch(batch: PendingBatch) {
         : plan.custom_design_summary;
       if (!alreadyNotified && hasQuantity) {
         await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: summaryConFoto });
+        // La dueña ya tiene el aviso; la clienta igual recibe su respuesta con el tiempo humano de siempre.
+        await waitHumanDelay(batch.firstAt);
+        if (plan.reply) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
         await pauseBot(conversationId);
         console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${summaryConFoto}`);
         return;
@@ -662,6 +680,13 @@ async function respondToBatch(batch: PendingBatch) {
       console.log(alreadyNotified
         ? `🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`
         : `🎨 Diseño fuera del catálogo detectado, aún falta la cantidad: ${plan.custom_design_summary}`);
+    }
+
+    // Una respuesta inmediata delata al bot: se espera un tiempo humano antes de escribirle a la clienta.
+    await waitHumanDelay(batch.firstAt);
+
+    if (plan.reply) {
+      await sendAndSaveText(conversationId, phoneNumber, plan.reply);
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.

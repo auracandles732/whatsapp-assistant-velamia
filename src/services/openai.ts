@@ -133,6 +133,8 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     '- Solo ofrece productos que estén en el catálogo de abajo, con su nombre y precio exactos. Nunca inventes productos, precios, colores ni modelos.',
     `- Si el cliente pregunta cuántos ${models} hay de ${d.enabled ? `un ${d.eventLabel}` : 'una categoría'}, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.`,
     '- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.',
+    '- Saluda ("Hola", "qué gusto", etc.) SOLO en tu primer mensaje de la conversación. En los siguientes mensajes ve directo al punto, sin volver a saludar aunque el cliente diga "hola" de nuevo.',
+    '- Si el cliente escribe una palabra con una errata obvia pero reconocible (letras de más, de menos o cambiadas: "veliy" por "velas", "qeu" por "que"), entiende a qué se refiere y responde con normalidad; no le preguntes si quiso decir esa palabra ni se lo hagas notar.',
     ''
   );
 
