@@ -182,6 +182,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       `- La personalización no cambia el precio por ${unit} del catálogo ni impide la venta.`,
       `- Anota los detalles de personalización junto con el ${model}, la cantidad${d.enabled ? ' y la fecha' : ''}, y sigue avanzando hasta cerrar la venta (confirmación del pedido y forma de pago).`,
       `- Personalizar es cambiar detalles de un ${model} del catálogo. Las fotos del catálogo son ${models} normales: nunca las presentes como "opciones personalizadas".`,
+      '- Si el cliente dice que es para un bebé o niño/niña de un sexo (por ejemplo "es niño", "es nena", "para mi bebé varón") y todavía no dio colores, ofrécele el color típico (celeste o azul para niño, rosado para niña) como sugerencia y pregunta si lo prefiere así o con otro color; no lo anotes en personalization hasta que confirme. Si el cliente ya dio otro color, respeta ese y no menciones el típico.',
       ''
     );
   } else {

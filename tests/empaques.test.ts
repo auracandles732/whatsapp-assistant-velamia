@@ -244,3 +244,15 @@ test('las instrucciones piden saludar solo una vez y entender erratas sin pregun
   assert.ok(/Saluda[\s\S]*?SOLO en tu primer mensaje/.test(prompt));
   assert.ok(/errata obvia/.test(prompt));
 });
+
+// ---------- Baby shower: sugerir color según el sexo del bebé ----------
+
+test('con personalización activa, las instrucciones piden sugerir el color típico según el sexo del bebé', () => {
+  const prompt = buildSystemPrompt([{ name: 'Vela', price: 30, category: 'EVENTOS' }], undefined, conEmpaques);
+  assert.ok(/celeste o azul para ni[ñn]o, rosado para ni[ñn]a/.test(prompt));
+});
+
+test('un negocio sin personalización no recibe esta regla', () => {
+  const prompt = buildSystemPrompt([{ name: 'Producto', price: 30, category: 'X' }], undefined, sinEmpaques);
+  assert.ok(!/color típico/.test(prompt));
+});
