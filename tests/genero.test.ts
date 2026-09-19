@@ -61,6 +61,13 @@ test('con productos marcados, las instrucciones piden preguntar el sexo antes de
   assert.ok(/Nunca le digas que un \S+ "no se puede" por su g[eé]nero/.test(prompt));
 });
 
+test('las instrucciones piden mencionar que hay del otro sexo y que se puede personalizar, solo la primera vez', () => {
+  const prompt = buildSystemPrompt(catalogoBaby, undefined, conGenero);
+  assert.ok(/menciona en una frase que también hay modelos del otro sexo/.test(prompt));
+  assert.ok(/se pueden personalizar para que queden perfectos/.test(prompt));
+  assert.ok(/solo la primera vez que muestras esa categoría/.test(prompt));
+});
+
 test('un negocio sin productos marcados no recibe la regla de género, aunque tenga el ajuste activado', () => {
   const catalogoSinMarcar = [{ name: 'Vela', price: 30, category: 'EVENTOS', gender: null }];
   const prompt = buildSystemPrompt(catalogoSinMarcar, undefined, conGenero);
