@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS } from '../src/config/businessProfile';
-import { buildSystemPrompt, computeOrderTotal } from '../src/services/openai';
+import { buildSystemPrompt, computeOrderTotal, namedByCustomer } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -263,4 +263,18 @@ test('las instrucciones piden una sola pregunta y no repetir datos que el client
   const prompt = buildSystemPrompt([{ name: 'Vela', price: 30, category: 'EVENTOS' }], undefined, conEmpaques);
   assert.ok(/UNA sola pregunta por mensaje/.test(prompt));
   assert.ok(/NUNCA se le vuelve a preguntar/.test(prompt));
+});
+
+// ---------- Fotos repetidas: reconocer cuando el cliente nombra un modelo ----------
+
+test('reconoce el modelo aunque el cliente no diga el nombre completo', () => {
+  assert.equal(namedByCustomer('OSITO GRANDE CORAZON', 'me mandas el osito grande porfa'), true);
+  assert.equal(namedByCustomer('VELA DE ANGELITO REZANDO CON ROSARIO', 'no me llego la del angelito rezando'), true);
+  assert.equal(namedByCustomer('OSITO EN NUBE CON CORAZON', 'quiero el osito en nube'), true);
+});
+
+test('no confunde un modelo con otro ni con una frase cualquiera', () => {
+  assert.equal(namedByCustomer('OSITO GRANDE CORAZON', 'quiero velitas para baby shower'), false);
+  assert.equal(namedByCustomer('VELA DE JIRAFA', 'me gustan las velas'), false);
+  assert.equal(namedByCustomer('OSITO GRANDE CORAZON', 'el osito'), false);
 });

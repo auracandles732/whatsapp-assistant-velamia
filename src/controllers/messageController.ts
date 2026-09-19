@@ -102,25 +102,27 @@ async function waitGap(phoneNumber: string, gapMs: number) {
 }
 const MAX_RESPONSE_WAIT_MS = 20000;
 
-/**
- * Espera lo que falte para que, desde el primer mensaje de la clienta, hayan pasado entre
- * MIN_HUMAN_REPLY_MS y MAX_HUMAN_REPLY_MS antes de responder. Arma la respuesta ya tardó
- * (la IA, las consultas a la base): eso cuenta, así que casi nunca se espera el máximo entero.
- */
-export const TYPING_LEAD_MS = 20_000;
+// "Escribiendo…" aparece este rato antes de contestar. Meta lo muestra unos 25 s, así que queda
+// tiempo para que la IA redacte y el mensaje llegue mientras el indicador sigue vivo.
+export const TYPING_LEAD_MS = 15_000;
 
-export async function waitHumanDelay(firstAt: number, typing?: () => Promise<void>) {
-  if (shuttingDown) return;
-  const target = MIN_HUMAN_REPLY_MS + Math.random() * (MAX_HUMAN_REPLY_MS - MIN_HUMAN_REPLY_MS);
-  const remaining = firstAt + target - Date.now();
-  if (remaining <= 0) return;
-  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-  if (!typing) return sleep(remaining);
-  // Como una persona: primero lo lee, y los últimos segundos antes de contestar aparece "escribiendo…".
-  const before = Math.max(0, remaining - TYPING_LEAD_MS);
-  if (before > 0) await sleep(before);
-  await typing().catch(() => undefined);
-  await sleep(Math.min(remaining, TYPING_LEAD_MS));
+/** A qué hora toca contestar esta tanda: un rato humano (distinto cada vez) desde el primer mensaje. */
+export function humanReadyAt(firstAt: number): number {
+  return firstAt + MIN_HUMAN_REPLY_MS + Math.random() * (MAX_HUMAN_REPLY_MS - MIN_HUMAN_REPLY_MS);
+}
+
+/**
+ * Cuánto falta para contestar: lo que sea mayor entre esperar a que el cliente deje de escribir
+ * y la espera humana. Así, lo que escriba mientras tanto entra en la misma respuesta.
+ */
+export function replyDelayMs(batch: { firstAt: number; readyAt: number }, now = Date.now()): number {
+  const silence = Math.max(0, Math.min(RESPONSE_DELAY_MS, batch.firstAt + MAX_RESPONSE_WAIT_MS - now));
+  return Math.max(silence, batch.readyAt - now);
+}
+
+/** Cuánto falta para mostrar "escribiendo…"; negativo = ya es tarde para mostrarlo. */
+export function typingDelayMs(batch: { readyAt: number }, now = Date.now()): number {
+  return batch.readyAt - TYPING_LEAD_MS - now;
 }
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
@@ -237,7 +239,10 @@ type PendingBatch = {
   customerName: string;
   items: IncomingItem[];
   firstAt: number;
+  /** Hora en que toca contestar (espera humana); no cambia aunque el cliente siga escribiendo. */
+  readyAt: number;
   timer?: NodeJS.Timeout;
+  typingTimer?: NodeJS.Timeout;
   /** Negocio que recibió los mensajes; sin negocio = VELAMIA. */
   tenant?: TenantContext;
 };
@@ -301,18 +306,34 @@ export function handleWebhookMessage(message: any, value: any): Promise<void> {
 /** Programa (o reprograma) la respuesta: se envía tras RESPONSE_DELAY_MS sin mensajes nuevos. */
 function scheduleResponse(key: string, batch: PendingBatch) {
   if (batch.timer) clearTimeout(batch.timer);
-  const remaining = batch.firstAt + MAX_RESPONSE_WAIT_MS - Date.now();
-  const delay = Math.max(0, Math.min(RESPONSE_DELAY_MS, remaining));
+  const delay = shuttingDown ? 0 : replyDelayMs(batch);
+
+  // Como una persona: lee el mensaje, y poco antes de contestar aparece "escribiendo…".
+  if (!batch.typingTimer && !shuttingDown) {
+    const lead = typingDelayMs(batch);
+    if (lead > -TYPING_LEAD_MS) {
+      batch.typingTimer = setTimeout(() => {
+        const lastWaId = batch.items[batch.items.length - 1]?.waMessageId;
+        if (lastWaId) runWithTenant(batch.tenant, () => showTyping(lastWaId));
+      }, Math.max(0, lead));
+    }
+  }
+
   // La tanda se cierra recién cuando le toca su turno en la fila: un mensaje que se estaba guardando
   // (una foto o un audio tardan) entra en esta misma respuesta en vez de quedar desordenado.
   batch.timer = setTimeout(() => {
     enqueue(key, async () => {
       if (pendingBatches.get(key) !== batch) return;
       pendingBatches.delete(key);
-      if (batch.timer) clearTimeout(batch.timer);
+      clearBatchTimers(batch);
       await respondToBatch(batch);
     });
   }, delay);
+}
+
+function clearBatchTimers(batch: PendingBatch) {
+  if (batch.timer) clearTimeout(batch.timer);
+  if (batch.typingTimer) clearTimeout(batch.typingTimer);
 }
 
 /**
@@ -322,7 +343,7 @@ function scheduleResponse(key: string, batch: PendingBatch) {
 export async function flushPendingResponses(timeoutMs: number) {
   shuttingDown = true;
   for (const [key, batch] of [...pendingBatches]) {
-    if (batch.timer) clearTimeout(batch.timer);
+    clearBatchTimers(batch);
     pendingBatches.delete(key);
     runWithTenant(batch.tenant, () => enqueue(key, () => respondToBatch(batch)));
   }
@@ -337,7 +358,7 @@ export function forgetConversation(phoneNumber: string, conversationId: string) 
   const key = customerKey(String(phoneNumber));
   const batch = pendingBatches.get(key);
   if (batch?.conversationId === conversationId) {
-    if (batch.timer) clearTimeout(batch.timer);
+    clearBatchTimers(batch);
     pendingBatches.delete(key);
   }
   pendingPhotos.delete(conversationId);
@@ -542,7 +563,8 @@ async function ingestMessage(message: any, value: any) {
     const key = customerKey(phoneNumber);
     let batch = pendingBatches.get(key);
     if (!batch) {
-      batch = { conversationId, phoneNumber, customerName, items: [], firstAt: Date.now(), tenant: currentTenant() };
+      const firstAt = Date.now();
+      batch = { conversationId, phoneNumber, customerName, items: [], firstAt, readyAt: humanReadyAt(firstAt), tenant: currentTenant() };
       pendingBatches.set(key, batch);
     }
     batch.items.push({ aiContent, storedContent, messageType, waMessageId });
@@ -635,9 +657,6 @@ async function respondToBatch(batch: PendingBatch) {
       return;
     }
 
-    const lastWaId = items[items.length - 1]?.waMessageId;
-    const typing = () => showTyping(lastWaId);
-
     // Los avisos a la dueña van primero y sin espera: solo lo que ve la clienta se demora (más abajo).
     // Siempre se confirma la fecha, pero una entrega muy justa la revisa la dueña (una vez al día por chat).
     const batchProfile = profile();
@@ -683,8 +702,7 @@ async function respondToBatch(batch: PendingBatch) {
         : plan.custom_design_summary;
       if (!alreadyNotified && hasQuantity) {
         await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: summaryConFoto });
-        // La dueña ya tiene el aviso; la clienta igual recibe su respuesta con el tiempo humano de siempre.
-        await waitHumanDelay(batch.firstAt, typing);
+        // La dueña ya tiene el aviso; la clienta igual recibe su respuesta.
         if (plan.reply) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
         await pauseBot(conversationId);
         console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${summaryConFoto}`);
@@ -694,9 +712,6 @@ async function respondToBatch(batch: PendingBatch) {
         ? `🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`
         : `🎨 Diseño fuera del catálogo detectado, aún falta la cantidad: ${plan.custom_design_summary}`);
     }
-
-    // Una respuesta inmediata delata al bot: se espera un tiempo humano antes de escribirle a la clienta.
-    await waitHumanDelay(batch.firstAt, typing);
 
     if (plan.reply) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);

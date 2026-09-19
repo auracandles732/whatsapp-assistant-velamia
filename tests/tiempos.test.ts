@@ -8,84 +8,46 @@ import './entorno';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MIN_HUMAN_REPLY_MS, MAX_HUMAN_REPLY_MS, waitHumanDelay } from '../src/controllers/messageController';
+import { MIN_HUMAN_REPLY_MS, MAX_HUMAN_REPLY_MS, TYPING_LEAD_MS, RESPONSE_DELAY_MS, humanReadyAt, replyDelayMs, typingDelayMs } from '../src/controllers/messageController';
 
 test('la ventana de espera humana es de 30 segundos a 1 minuto', () => {
   assert.equal(MIN_HUMAN_REPLY_MS, 30_000);
   assert.equal(MAX_HUMAN_REPLY_MS, 60_000);
 });
 
-test('si armar la respuesta ya tardó más del máximo, no espera nada extra', async (t) => {
-  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
-  const firstAt = Date.now() - (MAX_HUMAN_REPLY_MS + 5000);
-  let resolved = false;
-  waitHumanDelay(firstAt).then(() => { resolved = true; });
-  await Promise.resolve();
-  assert.equal(resolved, true, 'no debía quedar esperando: ya pasó de sobra el tiempo humano');
+test('la hora de contestar cae siempre dentro de la ventana de 30 s a 1 min', () => {
+  for (let i = 0; i < 200; i++) {
+    const espera = humanReadyAt(1_000_000) - 1_000_000;
+    assert.ok(espera >= MIN_HUMAN_REPLY_MS && espera <= MAX_HUMAN_REPLY_MS, `espera fuera de rango: ${espera}`);
+  }
 });
 
-test('si la respuesta está lista al instante, espera entre 30 y 60 segundos desde el primer mensaje', async (t) => {
-  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
-  const firstAt = Date.now();
-  let resolved = false;
-  waitHumanDelay(firstAt).then(() => { resolved = true; });
-
-  await t.mock.timers.tick(MIN_HUMAN_REPLY_MS - 1000);
-  await Promise.resolve(); await Promise.resolve();
-  assert.equal(resolved, false, 'no debía responder antes de los 30 segundos');
-
-  await t.mock.timers.tick(MAX_HUMAN_REPLY_MS);
-  await Promise.resolve(); await Promise.resolve();
-  assert.equal(resolved, true, 'debía haber respondido para cuando pasó 1 minuto');
+test('mientras no toque contestar, se sigue esperando; el cliente puede escribir más', () => {
+  const firstAt = 1_000_000;
+  const batch = { firstAt, readyAt: firstAt + 40_000 };
+  assert.equal(replyDelayMs(batch, firstAt), 40_000);
+  assert.equal(replyDelayMs(batch, firstAt + 30_000), 10_000);
 });
 
-test('si ya pasaron 20 segundos armando la respuesta, solo espera lo que falte', async (t) => {
-  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
-  const firstAt = Date.now() - 20_000;
-  let resolved = false;
-  waitHumanDelay(firstAt).then(() => { resolved = true; });
-
-  // Nunca debería esperar más de MAX - 20s, ni menos de MIN - 20s.
-  await t.mock.timers.tick(MIN_HUMAN_REPLY_MS - 20_000 - 500);
-  await Promise.resolve(); await Promise.resolve();
-  assert.equal(resolved, false);
-  await t.mock.timers.tick(MAX_HUMAN_REPLY_MS - 20_000);
-  await Promise.resolve(); await Promise.resolve();
-  assert.equal(resolved, true);
+test('llegada la hora, contesta aunque el cliente siga escribiendo', () => {
+  const firstAt = 1_000_000;
+  const batch = { firstAt, readyAt: firstAt + 40_000 };
+  assert.equal(replyDelayMs(batch, firstAt + 40_000), 0);
+  assert.equal(replyDelayMs(batch, firstAt + 50_000), 0);
 });
 
-const flush = () => new Promise(resolve => setImmediate(resolve));
-
-test('aparece "escribiendo…" solo los últimos 20 segundos antes de contestar', async (t) => {
-  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
-  t.mock.method(Math, 'random', () => 0);
-  let typed = 0;
-  let resolved = false;
-  waitHumanDelay(Date.now(), async () => { typed++; }).then(() => { resolved = true; });
-
-  t.mock.timers.tick(9_000);
-  await flush();
-  assert.equal(typed, 0, 'aún no debía aparecer "escribiendo…"');
-
-  t.mock.timers.tick(1_500);
-  await flush();
-  assert.equal(typed, 1, 'debía aparecer a los 10 s (20 s antes de responder)');
-  assert.equal(resolved, false);
-
-  t.mock.timers.tick(20_000);
-  await flush();
-  assert.equal(resolved, true);
-  assert.equal(typed, 1, 'solo se avisa una vez');
+test('si el cliente escribe justo antes de la hora, se le da un momento para terminar', () => {
+  const firstAt = 1_000_000;
+  // Una tanda cuya espera humana ya pasó: manda el silencio de 5 s, sin pasar del tope de 20 s.
+  const batch = { firstAt, readyAt: firstAt - 1 };
+  assert.equal(replyDelayMs(batch, firstAt + 1_000), RESPONSE_DELAY_MS);
+  assert.equal(replyDelayMs(batch, firstAt + 18_000), 2_000);
+  assert.equal(replyDelayMs(batch, firstAt + 25_000), 0);
 });
 
-test('un fallo al mostrar "escribiendo…" no impide responder', async (t) => {
-  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
-  t.mock.method(Math, 'random', () => 0);
-  let resolved = false;
-  waitHumanDelay(Date.now(), async () => { throw new Error('Meta no respondió'); }).then(() => { resolved = true; });
-  t.mock.timers.tick(10_000);
-  await flush();
-  t.mock.timers.tick(20_000);
-  await flush();
-  assert.equal(resolved, true);
+test('"escribiendo…" se programa 15 segundos antes de contestar', () => {
+  const batch = { readyAt: 1_040_000 };
+  assert.equal(typingDelayMs(batch, 1_000_000), 40_000 - TYPING_LEAD_MS);
+  // Si la respuesta ya se pasó de hora, sale negativo y no se programa.
+  assert.ok(typingDelayMs(batch, 1_060_000) < 0);
 });

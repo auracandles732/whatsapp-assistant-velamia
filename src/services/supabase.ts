@@ -772,26 +772,39 @@ export interface ProductUnit {
   gender?: string | null;
 }
 
+/**
+ * La columna gender llegó con la migración 021. Si un negocio todavía no la corrió, guardar un producto
+ * fallaría entero: se detecta ese caso y se guarda el resto, avisando en el registro del servidor.
+ */
+export function isMissingColumn(error: any, column: string): boolean {
+  return error?.code === 'PGRST204' && String(error?.message || '').includes(`'${column}' column`);
+}
+
+const MISSING_GENDER_WARNING = '⚠️ Falta correr la migración 021 (columna gender en products): el producto se guarda sin ese dato';
+
 export async function createProduct(name: string, price: number, category: string, imageUrl?: string, packaging?: string, unit: ProductUnit = {}) {
-  const { data, error } = await supabase
-    .from('products')
-    .insert([{
-      id: randomUUID(),
-      ...tenantColumns(),
-      name,
-      description: packaging || '',
-      price,
-      stock: 999,
-      category,
-      image_url: imageUrl,
-      sale_unit: unit.sale_unit || null,
-      measure: unit.measure || null,
-      pieces_per_unit: unit.pieces_per_unit || null,
-      gender: unit.gender || null,
-      created_at: new Date().toISOString()
-    }])
-    .select()
-    .single();
+  const row: Record<string, unknown> = {
+    id: randomUUID(),
+    ...tenantColumns(),
+    name,
+    description: packaging || '',
+    price,
+    stock: 999,
+    category,
+    image_url: imageUrl,
+    sale_unit: unit.sale_unit || null,
+    measure: unit.measure || null,
+    pieces_per_unit: unit.pieces_per_unit || null,
+    gender: unit.gender || null,
+    created_at: new Date().toISOString()
+  };
+
+  let { data, error } = await supabase.from('products').insert([row]).select().single();
+  if (error && isMissingColumn(error, 'gender')) {
+    console.warn(MISSING_GENDER_WARNING);
+    delete row.gender;
+    ({ data, error } = await supabase.from('products').insert([row]).select().single());
+  }
 
   if (error) throw new Error(`Error creando producto: ${error.message}`);
   return data;
@@ -810,13 +823,23 @@ export async function getAllProducts() {
 }
 
 export async function updateProduct(productId: string, updates: { name?: string; price?: number; category?: string; image_url?: string; description?: string } & ProductUnit) {
-  const { data, error } = await supabase
+  const save = (changes: Record<string, unknown>) => supabase
     .from('products')
-    .update(updates)
+    .update(changes)
     .eq('id', productId)
     .filter('business_id', tenantOp(), tenantValue())
     .select()
     .maybeSingle();
+
+  let { data, error } = await save({ ...updates });
+  if (error && isMissingColumn(error, 'gender')) {
+    console.warn(MISSING_GENDER_WARNING);
+    const { gender, ...rest } = updates;
+    // Si lo único que se cambiaba era el género, no queda nada que guardar: se devuelve el producto tal cual.
+    ({ data, error } = Object.keys(rest).length > 0
+      ? await save(rest)
+      : await supabase.from('products').select().eq('id', productId).filter('business_id', tenantOp(), tenantValue()).maybeSingle());
+  }
 
   if (error) throw new Error(`Error actualizando producto: ${error.message}`);
   return data;

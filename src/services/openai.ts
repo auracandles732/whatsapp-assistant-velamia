@@ -545,6 +545,18 @@ function summaryPatterns(p: BusinessProfile) {
   };
 }
 
+/**
+ * ¿El cliente nombró ese producto? No hace falta el nombre completo: alcanza con las palabras que lo
+ * distinguen ("el osito grande" para OSITO GRANDE CORAZON). Así, si pide una foto puntual, se le envía
+ * aunque ya se la hayan mandado antes.
+ */
+export function namedByCustomer(productName: string, customerText: string): boolean {
+  const words = normalizeWords(productName).split(/[^a-zñ0-9]+/).filter(w => w.length >= 4 && !NAME_FILLER.has(w));
+  if (words.length === 0) return false;
+  const said = words.filter(w => customerText.includes(w)).length;
+  return said >= Math.min(2, words.length);
+}
+
 /** Quita las líneas del resumen ("🕯️ *Modelo:* …") y la frase de reserva de la fecha, dejando el resto del mensaje. */
 function stripSummary(text: string): string {
   return text
@@ -578,6 +590,9 @@ export function varyEmojis(reply: string, recentEmojis: string[], decorative: st
 const GENERIC_PERSONALIZATION = /(se pued|puede[ns]? (adaptar|personalizar|cambiar)|personalizable|admite|a tu gusto|tus colores|lo que (prefieras|quieras)|personalizad[oa]s?$)/i;
 // Notas de relleno ("bicolor a definir", "aroma no confirmado"): se borran esas palabras y se conserva el dato.
 const FILLER = /\b(personalizaci[oó]n|pendientes?|(a|por|sin) (confirmar|definir|elegir)|no (confirmad|definid|elegid)[oa]s?)\b/gi;
+// Palabras que aparecen en casi todos los nombres del catálogo: no sirven para reconocer un modelo.
+const NAME_FILLER = new Set(['vela', 'velas', 'velita', 'velitas', 'para', 'con', 'del', 'los', 'las', 'base', 'medio']);
+
 const GENERIC_WORD = /^(los |las |sus |tus |el |la )?(detalles|colores?|nombres?|frases?|personalizaci[oó]n|dise[ñn]os?|aroma|empaque)$/i;
 
 // Palabras que no identifican un detalle concreto: no sirven para saber si la clienta lo pidió.
@@ -1058,7 +1073,7 @@ export async function planTurn(params: {
   const isRepeatedPhoto = (name: unknown) => {
     const key = productKey(name);
     const real = catalog.find(c => productKey(c.name) === key);
-    return !!real && sentKeys.has(key) && !asksAgain && !spoken.includes(normalizeWords(real.name));
+    return !!real && sentKeys.has(key) && !asksAgain && !namedByCustomer(real.name, spoken);
   };
   const requestedPhotos: unknown[] = Array.isArray(parsed.show_products) ? parsed.show_products : [];
   if (requestedPhotos.length > 0 && requestedPhotos.every(isRepeatedPhoto)) {
