@@ -23,6 +23,7 @@ import {
   recordFollowUp,
   hasRecentNotification,
   getRecentNotificationMessages,
+  logNotification,
   getTenantByPhoneNumberId
 } from '../db';
 import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
@@ -47,6 +48,7 @@ import { profile, todayLocal, formatDate, quantityText, usesProductUnits } from 
 import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
+import { customDesignAlerts } from '../services/customDesign';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -689,30 +691,42 @@ async function respondToBatch(batch: PendingBatch) {
       }
     }
 
-    // Diseño fuera del catálogo: se avisa cuando el resumen ya trae la cantidad (el último dato que se pide).
-    // Al avisar, el bot se pausa para que la dueña conteste con el precio; el cliente nunca se entera.
-    // El mismo diseño no se vuelve a avisar, pero uno distinto en otra ocasión sí.
-    if (plan.custom_design_summary) {
+    // Diseño fuera del catálogo: la dueña recibe DOS avisos y el asistente NUNCA se pausa por ellos, sigue conversando.
+    //  1) apenas se detecta la idea (sin esperar la cantidad): para que alguien la revise a tiempo;
+    //  2) cuando el resumen ya trae la cantidad: "listo para cotizar".
+    // Cuando una persona escribe desde el CRM, el chat sí se pausa solo (eso no cambia).
+    if (plan.custom_design_requested || plan.custom_design_summary) {
+      const summary = plan.custom_design_summary;
       // Umbral más bajo: la IA vuelve a redactar el mismo diseño con otras palabras en cada mensaje.
-      const alreadyNotified = isRepeatedQuestion(plan.custom_design_summary, pendingCustomDesigns, catalog, 0.6);
-      const hasQuantity = quantityPattern().test(plan.custom_design_summary);
+      const finalAlreadySent = summary ? isRepeatedQuestion(summary, pendingCustomDesigns, catalog, 0.6) : false;
+      const alerts = customDesignAlerts({
+        requested: plan.custom_design_requested,
+        summary,
+        hasQuantity: summary ? quantityPattern().test(summary) : false,
+        earlyRecentlySent: await hasRecentNotification(conversationId, 'custom_design_new', 24),
+        finalAlreadySent
+      });
+
       // Si la clienta envió una foto en el chat, se anota en el aviso para que la dueña abra el chat y la vea.
       const clientSentPhoto = history.some((m: any) => m.sender === 'customer' && m.type === 'image')
         || items.some(i => i.messageType === 'image');
-      const summaryConFoto = clientSentPhoto && !/foto|imagen|referencia/i.test(plan.custom_design_summary)
-        ? `${plan.custom_design_summary} · con foto de referencia`
-        : plan.custom_design_summary;
-      if (!alreadyNotified && hasQuantity) {
-        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail: summaryConFoto });
-        // La dueña ya tiene el aviso; la clienta igual recibe su respuesta.
-        if (plan.reply) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
-        await pauseBot(conversationId);
-        console.log(`🎨 Diseño fuera del catálogo: aviso enviado y bot pausado — ${summaryConFoto}`);
-        return;
+      const conFoto = (text: string) => clientSentPhoto && !/foto|imagen|referencia/i.test(text) ? `${text} · con foto de referencia` : text;
+
+      if (alerts.final) {
+        const detail = conFoto(summary);
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_request', detail });
+        // Con este aviso ya no hace falta el temprano: se anota como enviado para no repetirlo en el siguiente mensaje.
+        if (alerts.early) await logNotification(conversationId, 'custom_design_new', detail.slice(0, 500));
+        console.log(`🎨 Diseño personalizado listo para cotizar (el asistente sigue atendiendo): ${detail}`);
+      } else if (alerts.early) {
+        const detail = conFoto(summary || customerDetail);
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'custom_design_new', detail });
+        console.log(`🎨 Nueva idea de diseño personalizado avisada (el asistente sigue atendiendo): ${detail}`);
+      } else if (summary) {
+        console.log(finalAlreadySent
+          ? `🎨 Diseño fuera del catálogo ya avisado, no se repite: ${summary}`
+          : `🎨 Diseño fuera del catálogo en preparación, aún falta la cantidad: ${summary}`);
       }
-      console.log(alreadyNotified
-        ? `🎨 Diseño fuera del catálogo ya avisado, no se repite: ${plan.custom_design_summary}`
-        : `🎨 Diseño fuera del catálogo detectado, aún falta la cantidad: ${plan.custom_design_summary}`);
     }
 
     if (plan.reply) {
