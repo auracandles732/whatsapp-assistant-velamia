@@ -722,18 +722,27 @@ function periodLimits() {
   return { startOfToday, weekAgo: now.getTime() - 7 * 24 * 60 * 60 * 1000 };
 }
 
+/** Lee todas las filas de una consulta: Supabase entrega máximo 1000 por vez y el resto se perdería del total. */
+async function fetchAllRows(build: () => any): Promise<any[]> {
+  const rows: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().order('created_at', { ascending: true }).range(from, from + 999);
+    if (error) throw new Error(`Error obteniendo consumo: ${error.message}`);
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) return rows;
+  }
+}
+
 /** Consumo de los últimos 30 días por empresa (clave VELAMIA_ID para la instalación original). */
 export async function getUsageByBusiness(days = 30): Promise<Record<string, UsagePeriods>> {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
+  const data = await fetchAllRows(() => supabase
     .from('ai_usage')
     .select('business_id,created_at,model,input_tokens,cached_tokens,output_tokens')
-    .gte('created_at', since);
-
-  if (error) throw new Error(`Error obteniendo consumo: ${error.message}`);
+    .gte('created_at', since));
   const { startOfToday, weekAgo } = periodLimits();
   const totals: Record<string, UsagePeriods> = {};
-  for (const row of data || []) {
+  for (const row of data) {
     const key = row.business_id || VELAMIA_ID;
     addToPeriods((totals[key] ||= emptyPeriods()), row, startOfToday, weekAgo);
   }
@@ -743,17 +752,15 @@ export async function getUsageByBusiness(days = 30): Promise<Record<string, Usag
 /** Consumo de la empresa actual: hoy, semana, mes y el detalle por día. */
 export async function getTenantUsage(days = 30) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
+  const data = await fetchAllRows(() => supabase
     .from('ai_usage')
     .select('created_at,model,input_tokens,cached_tokens,output_tokens')
     .filter('business_id', tenantOp(), tenantValue())
-    .gte('created_at', since);
-
-  if (error) throw new Error(`Error obteniendo consumo: ${error.message}`);
+    .gte('created_at', since));
   const { startOfToday, weekAgo } = periodLimits();
   const periods = emptyPeriods();
   const byDay: Record<string, AiUsageSummary> = {};
-  for (const row of data || []) {
+  for (const row of data) {
     addToPeriods(periods, row, startOfToday, weekAgo);
     addUsage((byDay[String(row.created_at).slice(0, 10)] ||= EMPTY_USAGE()), row);
   }

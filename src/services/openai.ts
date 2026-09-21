@@ -51,8 +51,11 @@ export async function transcribeAudio(buffer: Buffer, mimeType: string, p: Busin
     const transcription = await client.audio.transcriptions.create({
       file,
       model: 'whisper-1',
-      language: 'es'
+      language: 'es',
+      response_format: 'verbose_json'
     });
+    // Se anota como segundos de audio (cobra por minuto) para que el gasto coincida con la factura.
+    void recordAiUsage({ model: 'whisper-1', purpose: 'audio', input: Math.ceil((transcription as any).duration || 0), cached: 0, output: 0 });
     return transcription.text;
   } catch (error: any) {
     console.error('Error transcribiendo audio:', error.message);

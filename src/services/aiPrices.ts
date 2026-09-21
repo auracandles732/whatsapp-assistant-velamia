@@ -21,7 +21,9 @@ const PRICES: Record<string, ModelPrice> = {
   'gpt-5.1': { input: 1.25, cached: 0.125, output: 10 },
   'gpt-5': { input: 1.25, cached: 0.125, output: 10 },
   'gpt-5-mini': { input: 0.25, cached: 0.025, output: 2 },
-  'gpt-5-nano': { input: 0.05, cached: 0.005, output: 0.4 }
+  'gpt-5-nano': { input: 0.05, cached: 0.005, output: 0.4 },
+  // Whisper cobra US$0.006 por minuto: se anota en segundos (input_tokens = segundos de audio).
+  'whisper-1': { input: 100, cached: 0, output: 0 }
 };
 
 const DEFAULT_PRICE = PRICES['gpt-5.4-mini'];
