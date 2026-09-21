@@ -234,6 +234,57 @@ app.post('/api/login', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Registro de una empresa nueva por su cuenta: crea la empresa con la plantilla que eligió, su usuario dueño y la deja
+ * dentro del CRM. El bot no atiende a nadie hasta que conecte su número de WhatsApp.
+ */
+const SIGNUP_MAX_PER_HOUR = 3;
+const signupsByIp = new Map<string, number[]>();
+
+app.post('/api/signup', async (req: Request, res: Response) => {
+  // Campo trampa: las personas no lo ven ni lo llenan, los programas automáticos sí.
+  if (req.body?.website) return res.status(201).json({ ok: true });
+
+  const ip = req.ip || 'desconocida';
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  const recent = (signupsByIp.get(ip) || []).filter(at => at > hourAgo);
+  if (recent.length >= SIGNUP_MAX_PER_HOUR) return res.status(429).json({ error: 'Demasiados registros desde este lugar. Intenta más tarde.' });
+
+  const businessName = String(req.body?.businessName || '').trim().slice(0, 80);
+  const fullName = String(req.body?.fullName || '').trim().slice(0, 80);
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if (businessName.length < 2) return res.status(400).json({ error: 'Escribe el nombre de tu negocio' });
+  if (fullName.length < 2) return res.status(400).json({ error: 'Escribe tu nombre' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Escribe un correo válido' });
+
+  let businessId = '';
+  try {
+    const preset = PROFILE_PRESETS[String(req.body?.preset || 'tienda')] || PROFILE_PRESETS.tienda;
+    const base = normalizeProfile(preset.profile, preset.profile);
+    const profile = normalizeProfile({ ...base, business: { ...base.business, name: businessName } }, base);
+
+    const business = await createBusiness(businessName, profile);
+    businessId = business.id;
+    try {
+      const user = await createBusinessUser(business.id, email, fullName, 'owner', password);
+      signupsByIp.set(ip, [...recent, Date.now()]);
+      console.log(`🆕 Empresa nueva por registro propio: ${businessName} (${email})`);
+      res.status(201).json({ token: issueSessionToken({ userId: user.id, businessId: business.id }), role: 'owner', businessId: business.id });
+    } catch (error) {
+      // Sin dueño la empresa quedaría huérfana: se deshace.
+      await deleteBusinessCompletely(business.id).catch(() => {});
+      throw error;
+    }
+  } catch (error: any) {
+    console.error('Error en registro:', error.message);
+    const message = String(error.message || error);
+    if (/ya existe/.test(message)) return res.status(409).json({ error: 'Ese correo ya tiene una cuenta. Inicia sesión.' });
+    if (/contraseña debe/.test(message)) return res.status(400).json({ error: message });
+    res.status(500).json({ error: 'No se pudo crear la cuenta, intenta de nuevo' });
+  }
+});
+
 // ---------- Perfil del negocio ----------
 
 app.get('/api/business-profile', requireCrmSession, (_req: Request, res: Response) => {
@@ -247,6 +298,8 @@ app.get('/api/business-profile/presets', requireCrmSession, (_req: Request, res:
 // Prueba real del asistente: pasa un mensaje de cliente por el mismo camino que un chat de verdad (planTurn) y devuelve
 // lo que respondería. No envía nada por WhatsApp ni guarda mensajes; sí gasta tokens de la clave de OpenAI del negocio.
 const previewLastAt = new Map<string, number>();
+const PREVIEWS_PER_DAY = 60;
+const previewsToday = new Map<string, { day: string; count: number }>();
 
 app.post('/api/business-profile/preview', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
   try {
@@ -255,6 +308,12 @@ app.post('/api/business-profile/preview', requireCrmSession, requireEditorRole, 
       return res.status(429).json({ error: 'Espera unos segundos entre pruebas' });
     }
     previewLastAt.set(businessKey, Date.now());
+    // Las pruebas gastan la IA de la plataforma: un tope diario por empresa evita abusos.
+    const day = new Date().toISOString().slice(0, 10);
+    const used = previewsToday.get(businessKey);
+    const count = used?.day === day ? used.count : 0;
+    if (count >= PREVIEWS_PER_DAY) return res.status(429).json({ error: 'Llegaste al límite de pruebas de hoy. Mañana puedes seguir probando.' });
+    previewsToday.set(businessKey, { day, count: count + 1 });
 
     const message = String(req.body?.message || 'Hola').trim().slice(0, 300) || 'Hola';
     // Con el perfil que la persona tiene en pantalla (aunque no lo haya guardado), para probar antes de aplicar cambios.
