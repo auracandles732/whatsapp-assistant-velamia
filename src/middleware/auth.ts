@@ -14,11 +14,14 @@ const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
  * Llave con que se firman las sesiones. Antes era la contraseña maestra: cualquiera con una sesión (incluso el usuario
  * de una empresa cliente) podía adivinarla probando contraseñas en su computador. Ahora sale de la llave de cifrado
  * del servidor (256 bits) junto con la contraseña: sin esa llave no se puede falsificar ni adivinar nada, y cambiar
- * la contraseña maestra sigue cerrando todas las sesiones.
+ * la contraseña maestra sigue cerrando todas las sesiones. Sin la llave el servidor no arranca: volver a firmar con la
+ * contraseña dejaría las sesiones adivinables.
  */
-const SESSION_KEY: Buffer | string = (process.env.BUSINESS_SECRETS_KEY || '').length >= 16
-  ? createHmac('sha256', process.env.BUSINESS_SECRETS_KEY as string).update(`sesiones-crm:${CRM_PASSWORD}`).digest()
-  : CRM_PASSWORD;
+const SECRETS_KEY = process.env.BUSINESS_SECRETS_KEY || '';
+if (SECRETS_KEY.length < 16) {
+  throw new Error('Falta la variable BUSINESS_SECRETS_KEY (mínimo 16 caracteres): sin ella no se pueden firmar sesiones seguras');
+}
+const SESSION_KEY = createHmac('sha256', SECRETS_KEY).update(`sesiones-crm:${CRM_PASSWORD}`).digest();
 
 /** Contraseña maestra débil: el servidor lo avisa al arrancar. */
 export function weakMasterPassword(): boolean {
@@ -188,8 +191,13 @@ export function requireAdminSession(req: Request, res: Response, next: NextFunct
  */
 export function verifyWebhookSignature(req: Request, res: Response, next: NextFunction) {
   if (APP_SECRETS.length === 0) {
-    console.warn('⚠️  META_APP_SECRET no configurado: el webhook acepta peticiones sin verificar firma');
-    return next();
+    // Solo en la computadora de desarrollo se aceptan mensajes sin firma; en el servidor se rechazan.
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️  META_APP_SECRET no configurado: el webhook acepta peticiones sin verificar firma (solo desarrollo)');
+      return next();
+    }
+    console.error('🚫 Webhook rechazado: falta META_APP_SECRET en el servidor');
+    return res.status(503).send('Webhook sin configurar');
   }
 
   const signature = req.headers['x-hub-signature-256'] as string | undefined;

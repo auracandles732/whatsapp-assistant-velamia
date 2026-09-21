@@ -43,7 +43,8 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 | `src/services/whatsapp.ts` | Envío de mensajes y descarga de archivos (Graph API v25.0) |
 | `src/services/storage.ts` | Subida y borrado de archivos en Supabase Storage |
 | `src/services/notifications.ts` | Avisos a la dueña por WhatsApp |
-| `migrations/` | Historial de VELAMIA. **002 borra todo: no re-ejecutar en producción** |
+| `migrations/` | Historial de VELAMIA. Ninguna borra tablas ni datos |
+| `migrations/NO_EJECUTAR/` | Migración antigua que **borra todas las tablas**: solo como referencia, nunca correrla |
 | `setup/base_nueva.sql` | Instalación completa de la base para un negocio nuevo |
 | `scripts/perfil.js` | Carga o muestra el perfil del negocio desde la consola |
 
