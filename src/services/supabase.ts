@@ -136,7 +136,7 @@ export async function deleteConversationCompletely(conversationId: string): Prom
 
 export async function saveMessage(
   conversationId: string,
-  sender: 'customer' | 'bot',
+  sender: 'customer' | 'bot' | 'human',
   type: string,
   content: string,
   waMessageId?: string

@@ -50,7 +50,7 @@ import {
 } from './db';
 import { removeFilesByPublicUrls, storagePath } from './services/storage';
 import { currentTenant, decryptSecret } from './services/tenant';
-import { handleWebhookMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
+import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -156,6 +156,9 @@ app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
   for (const entry of data.entry || []) {
     for (const change of entry.changes || []) {
       const value = change.value;
+      for (const echo of value?.message_echoes || []) {
+        handleEchoMessage(echo, value);
+      }
       for (const message of value?.messages || []) {
         handleWebhookMessage(message, value).catch(error => {
           console.error('Error procesando mensaje:', error);
@@ -599,10 +602,11 @@ app.post('/api/send-message', requireCrmSession, requireEditorRole, async (req: 
     if (text.length > 4096) return res.status(400).json({ error: 'WhatsApp no permite mensajes de más de 4096 caracteres' });
     const conv = await conversationForSending(req, res);
     if (!conv) return;
-    const sent = await sendTextMessage(conv.phone_number, text);
-    await saveMessage(conv.id, 'bot', 'text', text, getSentMessageId(sent));
-    // Una persona tomó el chat: el bot se calla aquí hasta que lo reactiven desde el CRM.
+    // Una persona tomó el chat: el bot se calla aquí hasta que lo reactiven desde el CRM. Se pausa ANTES de enviar
+    // para que el bot no conteste encima mientras el mensaje viaja.
     await pauseBot(conv.id);
+    const sent = await sendTextMessage(conv.phone_number, text);
+    await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando mensaje manual:', error.response?.data || error.message);
@@ -618,9 +622,9 @@ app.post('/api/send-image', requireCrmSession, requireEditorRole, async (req: Re
     }
     const conv = await conversationForSending(req, res);
     if (!conv) return;
-    const sent = await sendImageMessage(conv.phone_number, imageUrl, caption);
-    await saveMessage(conv.id, 'bot', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl, getSentMessageId(sent));
     await pauseBot(conv.id);
+    const sent = await sendImageMessage(conv.phone_number, imageUrl, caption);
+    await saveMessage(conv.id, 'human', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl, getSentMessageId(sent));
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.response?.data || error.message);

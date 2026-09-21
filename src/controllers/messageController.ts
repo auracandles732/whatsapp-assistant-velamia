@@ -41,6 +41,7 @@ import {
   transcribeAudio,
   describeImage,
   extractOrderItems,
+  TEAM_MARK,
   OrderItem,
   TurnPlan
 } from '../services/openai';
@@ -305,6 +306,34 @@ export function handleWebhookMessage(message: any, value: any): Promise<void> {
   });
 }
 
+/**
+ * Mensaje que alguien del equipo escribió desde la app de WhatsApp Business del celular (Meta lo avisa como "eco").
+ * Se guarda como del equipo y el bot se pausa en ese chat, igual que cuando se escribe desde el CRM.
+ */
+export function handleEchoMessage(echo: any, value: any): Promise<void> {
+  const to = String(echo?.to || '');
+  if (!to || !echo?.id) return Promise.resolve();
+  // Se espera un momento: si el mensaje lo envió el propio bot, ya quedará guardado con este id y no es del equipo.
+  return new Promise(resolve => setTimeout(resolve, 4000)).then(() => enqueue(`route:${value?.metadata?.phone_number_id || ''}:${to}`, async () => {
+    const tenant = await resolveTenant(value);
+    if (tenant === null) return;
+    await new Promise<void>(done => runWithTenant(tenant, () => {
+      enqueue(customerKey(to, tenant), async () => {
+        if (await isMessageAlreadyProcessed(String(echo.id))) return;
+        const conversation = await getConversation(to);
+        if (!conversation) return;
+        const type = String(echo.type || 'text');
+        const text = type === 'text' ? String(echo.text?.body || '') : `[${type} enviado desde el celular] ${echo[type]?.caption || ''}`.trim();
+        if (!text) return;
+        await saveMessage(conversation.id, 'human', 'text', text, String(echo.id));
+        await touchConversation(conversation.id);
+        await pauseBot(conversation.id);
+        console.log(`📱 El equipo escribió desde el celular a ${to}: el bot se pausa en ese chat`);
+      }).then(() => done(), () => done());
+    }));
+  })).catch(error => console.error('Error procesando eco del celular:', error.message));
+}
+
 /** Programa (o reprograma) la respuesta: se envía tras RESPONSE_DELAY_MS sin mensajes nuevos. */
 function scheduleResponse(key: string, batch: PendingBatch) {
   if (batch.timer) clearTimeout(batch.timer);
@@ -370,6 +399,8 @@ export function forgetConversation(phoneNumber: string, conversationId: string) 
 function toAiText(msg: any): string {
   const raw = String(msg.content || '');
   const text = MEDIA_TYPES.has(msg.type) ? raw.replace(/^https?:\/\/\S+\n?/, '').trim() : raw.trim();
+  // Lo que escribió una persona del equipo: la IA lo lee como dicho al cliente y retoma desde ahí.
+  if (msg.sender === 'human') return `${TEAM_MARK}${MEDIA_TYPES.has(msg.type) ? '[Archivo] ' : ''}${text}`.trim();
   if (msg.sender === 'bot' && msg.type === 'image') {
     const name = productNameFromCaption(raw);
     return name ? `[Foto enviada del producto: ${name}]` : `[Foto enviada] ${text}`;
@@ -382,9 +413,23 @@ function toAiText(msg: any): string {
   return text;
 }
 
+/** Una persona del equipo tomó el chat mientras el bot preparaba su respuesta: no se envía nada más. */
+class BotStoodDown extends Error {}
+
+/**
+ * Se revisa justo antes de cada envío, no solo al empezar a pensar la respuesta: la IA tarda segundos y en ese lapso
+ * alguien pudo escribir desde el CRM o desde el celular. Si el último mensaje del chat es del equipo, el bot se calla.
+ */
+async function stepAsideIfHumanTookOver(conversationId: string) {
+  if (await isBotPaused(conversationId)) throw new BotStoodDown('chat pausado');
+  const [last] = await getConversationHistory(conversationId, 1);
+  if (last?.sender === 'human') throw new BotStoodDown('el equipo acaba de escribir');
+}
+
 /** Envía un texto y lo guarda con el id de WhatsApp, para reconocerlo si el cliente lo responde. */
 async function sendAndSaveText(conversationId: string, phoneNumber: string, text: string) {
   await waitGap(phoneNumber, MESSAGE_GAP_MS);
+  await stepAsideIfHumanTookOver(conversationId);
   const sent = await sendTextMessage(phoneNumber, text);
   await saveMessage(conversationId, 'bot', 'text', text, getSentMessageId(sent));
 }
@@ -808,6 +853,10 @@ async function respondToBatch(batch: PendingBatch) {
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile);
     }
   } catch (error) {
+    if (error instanceof BotStoodDown) {
+      console.log(`⏸️ El bot se calla en este chat: ${error.message}`);
+      return;
+    }
     console.error('❌ Error respondiendo mensaje:', error);
   }
 }
@@ -834,9 +883,11 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
       const measure = ownUnits && product.measure ? `\n📏 ${product.measure}` : '';
       const caption = `${business.productEmoji} *${product.name}*${measure}\n💰 $${Number(product.price).toFixed(2)} ${priceUnit}${packaging}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
+      await stepAsideIfHumanTookOver(conversationId);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);
       await saveMessage(conversationId, 'bot', 'image', `${product.image_url}\n${caption}`, getSentMessageId(sent));
     } catch (error: any) {
+      if (error instanceof BotStoodDown) throw error;
       console.error(`❌ No se pudo enviar la foto de ${product.name}:`, error.message);
     }
   }

@@ -40,6 +40,9 @@ function track(purpose: string, model: string, response: any) {
   });
 }
 
+/** Marca con la que la IA lee los mensajes que escribió una persona del equipo (el cliente nunca la ve). */
+export const TEAM_MARK = '[Mensaje del equipo] ';
+
 // Máximo de fotos que la IA puede elegir en un turno; el controlador las envía de 4 en 4.
 export const MAX_PHOTOS_PER_TURN = 40;
 
@@ -1051,7 +1054,7 @@ export async function planTurn(params: {
   const patterns = summaryPatterns(p);
 
   const previousReplies = history
-    .filter(m => m.role === 'assistant' && !m.content.startsWith('[Foto') && !m.content.startsWith('🏦'))
+    .filter(m => m.role === 'assistant' && !m.content.startsWith('[Foto') && !m.content.startsWith('🏦') && !m.content.startsWith(TEAM_MARK))
     .map(m => m.content);
 
   const baseMessages = [
@@ -1064,6 +1067,9 @@ export async function planTurn(params: {
         + (cardChosen && usesDeposit ? '\nFORMA DE PAGO ELEGIDA: tarjeta. Se paga el 100% del total: no menciones anticipo; la fecha se reserva "al recibir el pago".' : '')
         + `\nDISEÑOS FUERA DEL CATÁLOGO YA ENVIADOS A LA DUEÑA: ${pendingCustomDesigns.length ? pendingCustomDesigns.join(' | ') : 'ninguno'}`
         + `\nÚLTIMO PEDIDO DE ESTE CLIENTE: ${lastOrder || 'no tiene pedidos registrados'}`
+        + (history.some(m => m.role === 'assistant' && m.content.startsWith(TEAM_MARK))
+          ? `\nATENCIÓN DEL EQUIPO: los mensajes marcados "${TEAM_MARK.trim()}" los escribió una persona del equipo y el cliente los recibió como tuyos. Retoma la conversación desde ahí: usa lo que dijeron o prometieron, no repitas preguntas ni datos que ya se dieron y no los contradigas. Nunca escribas esa marca.`
+          : '')
     },
     { role: 'user' as const, content: userMessage }
   ];
@@ -1310,6 +1316,8 @@ export async function planTurn(params: {
     console.warn('🗣️ Muletilla repetida al abrir: se quita de la respuesta');
     parsed.reply = stripFillerOpening(reply());
   }
+
+  parsed.reply = reply().split(TEAM_MARK.trim()).join('').trim();
 
   const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
 
