@@ -592,6 +592,41 @@ export function removeUnverifiedTotals(text: string): { text: string; removed: b
   return { text: kept.join('\n').replace(/\n{3,}/g, '\n\n').trim(), removed };
 }
 
+/**
+ * "Solo la vela" es un empaque, no una personalización: si la IA lo escribe en la línea "Personalización:" del resumen,
+ * esa línea sobra (el empaque ya tiene su propia línea o va en el texto).
+ */
+export function removeBareFromPersonalization(text: string, p: BusinessProfile): string {
+  const bare = p.packaging.types.find(t => t.bare);
+  if (!bare) return text;
+  const bareWords = new Set([normalizeWords(bare.name), 'solo la vela', 'sin empaque', 'sin nada', 'sin caja', 'sin frasco']);
+  return text
+    .split('\n')
+    .filter(line => {
+      const match = line.match(/^\s*\P{L}*\*?Personalizaci[oó]n:?\*?:?\s*(.+)$/iu);
+      if (!match) return true;
+      const value = normalizeWords(match[1].replace(/[*_]/g, '')).replace(/[.\s]+$/, '').trim();
+      return !bareWords.has(value);
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Si el cliente cambió el empaque de su pedido y el resumen en lista no lo dice, se agrega su línea
+ * ("📦 Empaque: Solo la vela"): el cliente debe ver exactamente qué se está cotizando.
+ */
+export function ensurePackagingLine(text: string, items: { packaging?: string; packagingChanged?: boolean }[]): string {
+  const changed = items.filter(i => i.packagingChanged && i.packaging);
+  if (changed.length !== 1) return text;
+  const lines = text.split('\n');
+  const quantityAt = lines.findIndex(l => /\*Cantidad:?\*/i.test(l));
+  if (quantityAt < 0 || lines.some(l => /\*(Empaque|Presentaci[oó]n):?\*/i.test(l))) return text;
+  lines.splice(quantityAt + 1, 0, `📦 *Empaque:* ${changed[0].packaging}`);
+  return lines.join('\n');
+}
+
 /** Si la IA repite un emoji de adorno de los últimos mensajes, se cambia por otro de la lista que no se haya usado. */
 export function varyEmojis(reply: string, recentEmojis: string[], decorative: string[] = profile().style.decorativeEmojis): string {
   const clean = (e: string) => e.replace(/️/g, '');
@@ -1186,6 +1221,8 @@ export async function planTurn(params: {
         : safe.text;
     }
   }
+
+  parsed.reply = ensurePackagingLine(removeBareFromPersonalization(reply(), p), order.items);
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
   const byName = new Map(catalog.map(c => [productKey(c.name), c.name]));

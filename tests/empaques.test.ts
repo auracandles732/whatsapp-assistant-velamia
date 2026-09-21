@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS } from '../src/config/businessProfile';
-import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion, removeUnverifiedTotals } from '../src/services/openai';
+import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion, removeUnverifiedTotals, removeBareFromPersonalization, ensurePackagingLine } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -401,4 +401,40 @@ test('no toca los precios de catálogo ni las respuestas sin totales', () => {
   const limpio = removeUnverifiedTotals(precio);
   assert.equal(limpio.removed, false);
   assert.equal(limpio.text, precio);
+});
+
+test('quita la línea "Personalización: solo la vela" del resumen y conserva el resto', () => {
+  const resumen = [
+    'Perfecto 🤍',
+    '🕯️ *Modelo:* VELA DE LEONCITO',
+    '📦 *Cantidad:* 4 docenas',
+    '🎨 *Personalización:* solo la vela',
+    '📦 *Empaque:* Solo la vela',
+    '💰 *Total:* $116.00'
+  ].join('\n');
+  const limpio = removeBareFromPersonalization(resumen, conSoloVela);
+  assert.ok(!/Personalizaci/.test(limpio));
+  assert.ok(limpio.includes('*Empaque:* Solo la vela'));
+  assert.ok(limpio.includes('*Total:* $116.00'));
+});
+
+test('no toca una personalización real, ni a los negocios sin empaque "solo el producto"', () => {
+  const conColor = '🎨 *Personalización:* color celeste y nombre Emma\n📦 *Cantidad:* 2 docenas';
+  assert.equal(removeBareFromPersonalization(conColor, conSoloVela), conColor);
+  const otra = '🎨 *Personalización:* solo la vela';
+  assert.equal(removeBareFromPersonalization(otra, conEmpaques), otra);
+});
+
+test('si se cambió el empaque y el resumen no lo dice, se agrega su línea debajo de la cantidad', () => {
+  const resumen = 'Claro 🤍\n\n🕯️ *Modelo:* VELA DE LEONCITO\n📦 *Cantidad:* 4 docenas\n💰 *Total:* $116.00';
+  const con = ensurePackagingLine(resumen, [{ packaging: 'Solo la vela', packagingChanged: true }]);
+  assert.ok(con.includes('*Cantidad:* 4 docenas\n📦 *Empaque:* Solo la vela\n💰'));
+});
+
+test('no agrega nada si ya lo dice, si no hubo cambio o si no hay resumen', () => {
+  const yaLoDice = '📦 *Cantidad:* 4 docenas\n🎀 *Empaque:* Solo la vela';
+  assert.equal(ensurePackagingLine(yaLoDice, [{ packaging: 'Solo la vela', packagingChanged: true }]), yaLoDice);
+  const sinCambio = '📦 *Cantidad:* 4 docenas';
+  assert.equal(ensurePackagingLine(sinCambio, [{ packaging: 'Tul', packagingChanged: false }]), sinCambio);
+  assert.equal(ensurePackagingLine('Hola 🤍', [{ packaging: 'Solo la vela', packagingChanged: true }]), 'Hola 🤍');
 });
