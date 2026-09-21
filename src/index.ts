@@ -50,6 +50,7 @@ import {
 } from './db';
 import { removeFilesByPublicUrls, storagePath, uploadBufferToStorage } from './services/storage';
 import { toWhatsAppVoice } from './services/audio';
+import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
 import {
@@ -1310,6 +1311,56 @@ app.post('/api/me/connect-whatsapp', requireCrmSession, requireOwnerRole, async 
     await runConnectWhatsApp(tenant.businessId, res);
   } catch (error: any) {
     sendBusinessError(res, error);
+  }
+});
+
+/**
+ * Alta del número por la propia empresa: escribe su número, recibe un código por SMS o llamada y lo ingresa.
+ * El número queda en la cuenta de Meta de Nexly y se conecta solo al asistente.
+ */
+app.post('/api/me/whatsapp/start', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    if (!tenant) return res.status(400).json({ error: 'Elige una empresa primero' });
+    const meta = platformMeta();
+    if (!meta) return res.status(503).json({ error: 'Falta configurar la cuenta de WhatsApp de Nexly en el servidor (NEXLY_WABA_ID y NEXLY_META_TOKEN)' });
+    const phone = splitPhone(String(req.body?.phone || ''));
+    if (!phone) return res.status(400).json({ error: 'Escribe el número completo, por ejemplo 099 123 4567 o +593 99 123 4567' });
+    const displayName = String(req.body?.displayName || '').trim();
+    if (displayName.length < 3 || displayName.length > 60) return res.status(400).json({ error: 'Escribe el nombre del negocio (entre 3 y 60 letras)' });
+    const method = req.body?.method === 'VOICE' ? 'VOICE' : 'SMS';
+
+    const { phoneNumberId } = await addNumberAndRequestCode(meta, phone, displayName, method);
+    await updateBusinessCredentials(tenant.businessId, {
+      displayPhoneNumber: `${phone.cc}${phone.national}`, phoneNumberId, wabaId: meta.wabaId, metaAccessToken: meta.token
+    });
+    console.log(`📲 ${tenant.name}: se pidió el código de verificación para su número (${method})`);
+    res.json({ success: true, method });
+  } catch (error: any) {
+    console.error('Error agregando número:', error.message);
+    res.status(400).json({ error: `Meta no pudo agregar el número: ${error.message}` });
+  }
+});
+
+app.post('/api/me/whatsapp/verify', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    if (!tenant) return res.status(400).json({ error: 'Elige una empresa primero' });
+    const meta = platformMeta();
+    if (!meta) return res.status(503).json({ error: 'Falta configurar la cuenta de WhatsApp de Nexly en el servidor' });
+    const code = String(req.body?.code || '').replace(/\D/g, '');
+    if (code.length !== 6) return res.status(400).json({ error: 'El código tiene 6 números' });
+    const row = await getBusinessRow(tenant.businessId);
+    if (!row?.meta_phone_number_id) return res.status(400).json({ error: 'Primero escribe tu número para recibir el código' });
+
+    await verifyAndRegister(meta, row.meta_phone_number_id, code);
+    const result = await connectBusinessWhatsApp(row);
+    await markWebhookConnected(row.id, result.ok);
+    console.log(`📲 ${tenant.name}: número verificado y conectado (${result.ok ? 'ok' : 'falló la conexión'})`);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error verificando número:', error.message);
+    res.status(400).json({ error: `No se pudo verificar: ${error.message}` });
   }
 });
 

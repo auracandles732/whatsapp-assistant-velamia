@@ -2741,6 +2741,76 @@
             );
         }
 
+        // ---------- Conectar el número de WhatsApp con solo el número y un código ----------
+        function ConnectNumberCard({ onDone }) {
+            const [step, setStep] = useState('number');
+            const [phone, setPhone] = useState('');
+            const [name, setName] = useState('');
+            const [code, setCode] = useState('');
+            const [method, setMethod] = useState('SMS');
+            const [busy, setBusy] = useState(false);
+            const [message, setMessage] = useState('');
+
+            async function requestCode(chosen) {
+                setBusy(true);
+                setMessage('');
+                try {
+                    await api('/api/me/whatsapp/start', { method: 'POST', body: JSON.stringify({ phone, displayName: name, method: chosen }) });
+                    setMethod(chosen);
+                    setStep('code');
+                } catch (err) {
+                    setMessage(err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            async function verify() {
+                setBusy(true);
+                setMessage('');
+                try {
+                    const result = await api('/api/me/whatsapp/verify', { method: 'POST', body: JSON.stringify({ code }) });
+                    if (result.ok) { setStep('done'); onDone && onDone(); }
+                    else setMessage((result.steps || []).map(s => s.detail).join(' · ') || 'No se pudo conectar');
+                } catch (err) {
+                    setMessage(err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            const box = { border: '1px solid #DCE2F5', borderRadius: '14px', padding: '16px', marginBottom: '18px', background: '#F8FAFF' };
+            const input = { padding: '12px', borderRadius: '10px', border: '1px solid #DCE2F5', fontSize: '15px', width: '100%', marginBottom: '10px' };
+            return (
+                <div style={box}>
+                    <h3 style={{ marginBottom: '6px' }}>📲 Conecta tu WhatsApp</h3>
+                    {step === 'number' && (
+                        <React.Fragment>
+                            <p style={{ fontSize: '13px', color: 'var(--texto-suave)', marginBottom: '10px' }}>Escribe el número del negocio. Te llegará un código de 6 números para confirmar que es tuyo. El número no debe estar activo en el WhatsApp del celular.</p>
+                            <input style={input} placeholder="Nombre del negocio (como lo verán tus clientes)" value={name} onChange={e => setName(e.target.value)} />
+                            <input style={input} placeholder="Número de WhatsApp, ej. 099 123 4567" value={phone} onChange={e => setPhone(e.target.value)} inputMode="tel" />
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <button style={buttonStyle} disabled={busy || !phone || !name} onClick={() => requestCode('SMS')}>{busy ? 'Enviando...' : 'Enviarme el código por SMS'}</button>
+                                <button style={secondaryButtonStyle} disabled={busy || !phone || !name} onClick={() => requestCode('VOICE')}>Recibirlo por llamada</button>
+                            </div>
+                        </React.Fragment>
+                    )}
+                    {step === 'code' && (
+                        <React.Fragment>
+                            <p style={{ fontSize: '13px', color: 'var(--texto-suave)', marginBottom: '10px' }}>Te enviamos el código {method === 'VOICE' ? 'por llamada' : 'por SMS'} al {phone}. Escríbelo aquí:</p>
+                            <input style={input} placeholder="Código de 6 números" value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" maxLength={7} />
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <button style={buttonStyle} disabled={busy || code.replace(/\D/g, '').length !== 6} onClick={verify}>{busy ? 'Conectando...' : 'Confirmar y conectar'}</button>
+                                <button style={secondaryButtonStyle} disabled={busy} onClick={() => { setStep('number'); setMessage(''); }}>Cambiar número</button>
+                            </div>
+                        </React.Fragment>
+                    )}
+                    {step === 'done' && <div style={{ color: '#2e7d32', fontWeight: 600 }}>✅ ¡Listo! Tu número quedó conectado y el asistente ya puede responder.</div>}
+                    {message && <div style={{ marginTop: '10px', color: '#c62828', fontSize: '13px' }}>⚠️ {message}</div>}
+                </div>
+            );
+        }
+
         // ---------- Claves del propio negocio (dueño) ----------
         function OwnerKeysPanel({ business, onChanged }) {
             const [form, setForm] = useState(EMPTY_BUSINESS_FORM);
@@ -2802,6 +2872,7 @@
                         El bot responde desde tu número de WhatsApp y usa tu propia cuenta de OpenAI. Las claves se guardan cifradas y nunca se muestran completas.
                     </p>
                     <ReadinessList readiness={readiness} />
+                    <ConnectNumberCard onDone={() => { onChanged(); loadReadiness(); }} />
                     <CredentialFields form={form} setForm={setForm} business={business} />
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button style={buttonStyle} disabled={busy} onClick={save}>{busy ? 'Guardando...' : 'Guardar claves'}</button>
