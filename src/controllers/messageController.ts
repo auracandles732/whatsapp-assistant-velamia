@@ -27,6 +27,7 @@ import {
   getTenantByPhoneNumberId
 } from '../db';
 import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
+import { maskPhone } from '../services/privacy';
 import { isFollowUpMessage, followUpText } from '../services/followups';
 import {
   sendTextMessage,
@@ -328,7 +329,7 @@ export function handleEchoMessage(echo: any, value: any): Promise<void> {
         await saveMessage(conversation.id, 'human', 'text', text, String(echo.id));
         await touchConversation(conversation.id);
         await pauseBot(conversation.id);
-        console.log(`📱 El equipo escribió desde el celular a ${to}: el bot se pausa en ese chat`);
+        console.log(`📱 El equipo escribió desde el celular a ${maskPhone(to)}: el bot se pausa en ese chat`);
       }).then(() => done(), () => done());
     }));
   })).catch(error => console.error('Error procesando eco del celular:', error.message));
@@ -561,11 +562,11 @@ async function ingestMessage(message: any, value: any) {
       return;
     }
 
-    console.log(`📱 Mensaje recibido de ${phoneNumber} (${messageType})`);
+    console.log(`📱 Mensaje recibido de ${maskPhone(phoneNumber)} (${messageType})`);
 
     const content = await readIncomingContent(message);
     if (!content) {
-      console.log(`↪️  Mensaje ${messageType} de ${phoneNumber} ignorado`);
+      console.log(`↪️  Mensaje ${messageType} de ${maskPhone(phoneNumber)} ignorado`);
       return;
     }
     let { userContent, aiContent } = content;
@@ -613,7 +614,7 @@ async function ingestMessage(message: any, value: any) {
     // También cuenta si toca un botón "No" de la plantilla.
     if (answeredFollowUp && ['text', 'button', 'interactive'].includes(messageType) && /^\s*no\s*[.!¡]*\s*$/i.test(userContent)) {
       await recordFollowUp(conversationId, 'opt_out', 'La clienta respondió NO a los seguimientos');
-      console.log(`🔕 ${phoneNumber} no quiere más seguimientos`);
+      console.log(`🔕 ${maskPhone(phoneNumber)} no quiere más seguimientos`);
       if ((await getConfig('bot_enabled')) !== 'false' && !(await isBotPaused(conversationId))) {
         await sendAndSaveText(conversationId, phoneNumber, profile().followUps.optOutMessage);
       }

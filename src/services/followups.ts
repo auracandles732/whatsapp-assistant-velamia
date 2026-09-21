@@ -10,6 +10,7 @@ import {
   getActiveTenants
 } from './supabase';
 import { currentTenant, runWithTenant } from './tenant';
+import { maskPhone } from './privacy';
 import { profile, hourLocal } from '../config/businessProfile';
 
 /** Inicio del texto guardado de cada seguimiento: el CRM y la IA lo reconocen por esto. */
@@ -192,7 +193,7 @@ async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skippe
       await recordFollowUp(conv.id, 'auto_followup', step.template);
       sent++;
     } catch (error: any) {
-      console.error(`❌ No se pudo enviar seguimiento a ${conv.phone_number}:`, error.response?.data?.error?.message || error.message);
+      console.error(`❌ No se pudo enviar seguimiento a ${maskPhone(conv.phone_number)}:`, error.response?.data?.error?.message || error.message);
     }
   }
 

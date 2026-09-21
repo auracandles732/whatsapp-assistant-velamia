@@ -10,6 +10,14 @@ import { createHmac } from 'crypto';
 import { issueSessionToken, requireAdminSession, weakMasterPassword } from '../src/middleware/auth';
 import { isRecordedAudio } from '../src/services/audio';
 import { withoutTeamMark } from '../src/controllers/messageController';
+import { maskPhone } from '../src/services/privacy';
+
+test('los registros del servidor solo guardan los últimos 4 dígitos del teléfono', () => {
+  assert.equal(maskPhone('593991234567'), '••••••••4567');
+  assert.equal(maskPhone('+593 99 123 4567'), '••••••••4567');
+  assert.equal(maskPhone('123'), '••••');
+  assert.equal(maskPhone(undefined), '••••');
+});
 
 function adminCheck(token: string): number {
   let status = 200;

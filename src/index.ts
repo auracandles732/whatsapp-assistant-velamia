@@ -53,6 +53,7 @@ import {
 } from './db';
 import { removeFilesByPublicUrls, storagePath, uploadBufferToStorage } from './services/storage';
 import { toWhatsAppVoice, isRecordedAudio } from './services/audio';
+import { maskPhone } from './services/privacy';
 import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/signupCodes';
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret } from './services/tenant';
@@ -481,7 +482,7 @@ app.delete('/api/conversations/:id', requireCrmSession, requireUuidParam, requir
       console.error('No se pudieron borrar archivos del chat:', error.message);
     }
 
-    console.log(`🗑️ Chat ${conv.phone_number} eliminado (${filesRemoved} archivo(s))`);
+    console.log(`🗑️ Chat ${maskPhone(conv.phone_number)} eliminado (${filesRemoved} archivo(s))`);
     res.json({ success: true, filesRemoved });
   } catch (error: any) {
     console.error('Error eliminando chat:', error.message);

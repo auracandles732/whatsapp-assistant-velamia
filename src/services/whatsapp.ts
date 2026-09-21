@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { currentTenant } from './tenant';
+import { maskPhone } from './privacy';
 
 // Meta retira cada versión de la Graph API a los ~2 años; al pedir una vencida la sustituye
 // sin avisar. Revisar la cabecera "facebook-api-version" de las respuestas al actualizar.
@@ -48,7 +49,7 @@ async function postMessage(payload: Record<string, any>, label: string) {
       { messaging_product: 'whatsapp', ...payload },
       { headers: authHeaders() }
     );
-    console.log(`✅ ${label} enviado a ${payload.to}`);
+    console.log(`✅ ${label} enviado a ${maskPhone(payload.to)}`);
     return response.data;
   } catch (error: any) {
     console.error(`Error enviando ${label}:`, error.response?.data || error.message);
