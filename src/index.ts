@@ -49,6 +49,7 @@ import {
   changeOwnPassword
 } from './db';
 import { removeFilesByPublicUrls, storagePath, uploadBufferToStorage } from './services/storage';
+import { toWhatsAppVoice } from './services/audio';
 import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
 import {
@@ -62,7 +63,7 @@ import {
   issueSessionToken,
   verifyWebhookSignature
 } from './middleware/auth';
-import { sendTextMessage, sendImageMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
+import { sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
@@ -636,6 +637,28 @@ app.post('/api/send-image', requireCrmSession, requireEditorRole, async (req: Re
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.response?.data || error.message);
+    res.status(500).json({ error: describeWhatsAppError(error) });
+  }
+});
+
+/** Nota de voz grabada en el CRM: se convierte al formato de WhatsApp, se envía y el chat pasa a atención humana. */
+app.post('/api/send-audio', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const matches = String(req.body?.audioBase64 || '').match(/^data:audio\/[\w.+-]+(?:;[^,]*)?;base64,(.+)$/);
+    if (!matches) return res.status(400).json({ error: 'No llegó el audio' });
+    const original = Buffer.from(matches[1], 'base64');
+    if (original.length < 500) return res.status(400).json({ error: 'El audio quedó vacío, graba de nuevo' });
+    if (original.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'La nota de voz es demasiado larga' });
+    const conv = await conversationForSending(req, res);
+    if (!conv) return;
+    const voice = await toWhatsAppVoice(original);
+    const audioUrl = await uploadBufferToStorage(voice, 'audio/ogg');
+    await pauseBot(conv.id);
+    const sent = await sendAudioMessage(conv.phone_number, audioUrl);
+    await saveMessage(conv.id, 'human', 'audio', audioUrl, getSentMessageId(sent));
+    res.json({ success: true, bot_paused: true });
+  } catch (error: any) {
+    console.error('Error enviando nota de voz:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
   }
 });

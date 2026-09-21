@@ -4167,6 +4167,8 @@
             const [listFilter, setListFilter] = useState('all');
             const [noteMode, setNoteMode] = useState(false);
             const [photoPicker, setPhotoPicker] = useState(false);
+            const [recordingSeconds, setRecordingSeconds] = useState(null);
+            const recorderRef = useRef(null);
             const [noteText, setNoteText] = useState('');
             const isAdmin = session?.role === 'admin';
             // Mientras carga la sesión se muestra todo; el servidor igual rechaza lo que el rol no permite.
@@ -4384,6 +4386,59 @@
                 } catch (err) {
                     alert('Error enviando foto: ' + err.message);
                 }
+            }
+
+            // Nota de voz: graba con el micrófono y la envía al chat (el servidor la convierte al formato de WhatsApp).
+            async function startVoice() {
+                if (!selectedConv || recorderRef.current) return;
+                if (!navigator.mediaDevices || !window.MediaRecorder) return alert('Este navegador no permite grabar audio');
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (err) {
+                    return alert('Permite el uso del micrófono en el navegador para grabar notas de voz');
+                }
+                const conv = selectedConv;
+                const recorder = new MediaRecorder(stream);
+                const chunks = [];
+                const state = { recorder, cancelled: false, timer: null, started: Date.now() };
+                recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                recorder.onstop = async () => {
+                    clearInterval(state.timer);
+                    stream.getTracks().forEach(t => t.stop());
+                    recorderRef.current = null;
+                    setRecordingSeconds(null);
+                    if (state.cancelled) return;
+                    const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+                    try {
+                        const audioBase64 = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(blob);
+                        });
+                        await api('/api/send-audio', { method: 'POST', body: JSON.stringify({ conversationId: conv.id, phoneNumber: conv.phone_number, audioBase64 }) });
+                    } catch (err) {
+                        alert('Error enviando la nota de voz: ' + err.message);
+                    }
+                    loadMessages(conv.id);
+                    loadConversations();
+                };
+                recorderRef.current = state;
+                recorder.start();
+                setRecordingSeconds(0);
+                state.timer = setInterval(() => {
+                    const seconds = Math.round((Date.now() - state.started) / 1000);
+                    setRecordingSeconds(seconds);
+                    if (seconds >= 300) recorder.stop();
+                }, 500);
+            }
+
+            function stopVoice(cancel) {
+                const state = recorderRef.current;
+                if (!state) return;
+                state.cancelled = !!cancel;
+                if (state.recorder.state !== 'inactive') state.recorder.stop();
             }
 
             // Abre la galería o los archivos para elegir una o varias fotos y las envía al chat.
@@ -4908,6 +4963,12 @@
                                     {!canEdit && <div className="nx-readonly"><PlatIcon name="user" size={18} color="#6B7599" /> Tu usuario es solo de consulta: puedes ver los chats, pero no responder.</div>}
                                     {canEdit && <div className={'nx-input' + (noteMode ? ' note' : '')}>
                                         <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} title="Enviar foto"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
+                                        {recordingSeconds === null
+                                            ? <button type="button" className="nx-round" onClick={startVoice} title="Grabar nota de voz" style={{ fontSize: '20px' }}>🎤</button>
+                                            : <React.Fragment>
+                                                <button type="button" className="nx-round" onClick={() => stopVoice(true)} title="Cancelar grabación" style={{ fontSize: '18px' }}>✖️</button>
+                                                <button type="button" onClick={() => stopVoice(false)} title="Enviar nota de voz" style={{ height: '46px', padding: '0 16px', borderRadius: '12px', background: '#E5484D', color: '#fff', fontWeight: 700, fontSize: '14px', whiteSpace: 'nowrap', flexShrink: 0 }}>⏹ {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')} · Enviar</button>
+                                            </React.Fragment>}
                                         <textarea
                                             placeholder={noteMode ? 'Nota interna: el cliente no la ve...' : 'Escribe un mensaje...'}
                                             value={noteMode ? noteText : inputText}

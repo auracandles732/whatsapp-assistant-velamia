@@ -77,6 +77,11 @@ export function sendTextMessage(phoneNumber: string, text: string) {
   return postMessage({ to: normalizePhone(phoneNumber), type: 'text', text: { body: text } }, 'Mensaje');
 }
 
+/** Nota de voz: el audio debe ser OGG con códec Opus (ver toWhatsAppVoice). */
+export function sendAudioMessage(phoneNumber: string, audioUrl: string) {
+  return postMessage({ to: normalizePhone(phoneNumber), type: 'audio', audio: { link: audioUrl } }, 'Nota de voz');
+}
+
 export function sendImageMessage(phoneNumber: string, imageUrl: string, caption?: string) {
   return postMessage({
     to: normalizePhone(phoneNumber),
