@@ -50,6 +50,7 @@ import {
 } from './db';
 import { removeFilesByPublicUrls, storagePath, uploadBufferToStorage } from './services/storage';
 import { toWhatsAppVoice } from './services/audio';
+import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/signupCodes';
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
@@ -234,6 +235,18 @@ app.post('/api/login', async (req: Request, res: Response) => {
   }
 });
 
+/** La administradora crea un código de registro (por ahora a mano; después lo generará solo el pago aprobado). */
+app.post('/api/signup-codes', requireAdminSession, async (req: Request, res: Response) => {
+  try {
+    const days = Math.min(Math.max(Number(req.body?.days) || 30, 1), 365);
+    const entry = await createSignupCode(days);
+    console.log('🎟️ Código de registro creado');
+    res.status(201).json(entry);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /**
  * Registro de una empresa nueva por su cuenta: crea la empresa con la plantilla que eligió, su usuario dueño y la deja
  * dentro del CRM. El bot no atiende a nadie hasta que conecte su número de WhatsApp.
@@ -249,6 +262,12 @@ app.post('/api/signup', async (req: Request, res: Response) => {
   const hourAgo = Date.now() - 60 * 60 * 1000;
   const recent = (signupsByIp.get(ip) || []).filter(at => at > hourAgo);
   if (recent.length >= SIGNUP_MAX_PER_HOUR) return res.status(429).json({ error: 'Demasiados registros desde este lugar. Intenta más tarde.' });
+
+  // Solo se registra quien ya pagó su mensualidad: el código se entrega al pagar.
+  const signupCode = String(req.body?.code || '');
+  if (!(await isSignupCodeUsable(signupCode))) {
+    return res.status(403).json({ error: 'Necesitas un código de registro válido. Lo recibes al pagar tu mensualidad.' });
+  }
 
   const businessName = String(req.body?.businessName || '').trim().slice(0, 80);
   const fullName = String(req.body?.fullName || '').trim().slice(0, 80);
@@ -269,6 +288,7 @@ app.post('/api/signup', async (req: Request, res: Response) => {
     try {
       const user = await createBusinessUser(business.id, email, fullName, 'owner', password);
       signupsByIp.set(ip, [...recent, Date.now()]);
+      await useSignupCode(signupCode, business.id);
       console.log(`🆕 Empresa nueva por registro propio: ${businessName} (${email})`);
       res.status(201).json({ token: issueSessionToken({ userId: user.id, businessId: business.id }), role: 'owner', businessId: business.id });
     } catch (error) {

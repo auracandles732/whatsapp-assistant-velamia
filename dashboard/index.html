@@ -2616,6 +2616,15 @@
                 api('/api/businesses/usage').then(data => setUsage(data.usage || {})).catch(err => console.error('Error cargando consumo:', err));
             }, []);
 
+            async function newSignupCode() {
+                try {
+                    const entry = await api('/api/signup-codes', { method: 'POST', body: JSON.stringify({ days: 30 }) });
+                    prompt('Código de registro (sirve una sola vez y dura 30 días). Cópialo y envíaselo a quien pagó:', entry.code);
+                } catch (err) {
+                    alert('Error creando el código: ' + err.message);
+                }
+            }
+
             async function checkNow() {
                 setChecking(true);
                 try {
@@ -2665,6 +2674,7 @@
                     {!showForm ? (
                         <div className="pl-bottom">
                             <button className="pl-btn grad" onClick={() => setShowForm(true)}><PlatIcon name="plus" size={19} color="#fff" /> Nueva empresa</button>
+                            <button className="pl-btn" onClick={newSignupCode}>🎟️ Crear código de registro</button>
                             <button className="pl-btn" disabled={checking} onClick={checkNow}><PlatIcon name="refresh" size={19} color="#4F7BF0" /> {checking ? 'Revisando...' : 'Revisar todas ahora'}</button>
                         </div>
                     ) : (
@@ -2924,10 +2934,10 @@
             const [showPassword, setShowPassword] = useState(false);
             const [remember, setRemember] = useState(true);
             const [signup, setSignup] = useState(false);
-            const [form, setForm] = useState({ businessName: '', fullName: '', email: '', password: '', preset: 'tienda', website: '' });
+            const [form, setForm] = useState({ businessName: '', fullName: '', email: '', password: '', preset: 'tienda', website: '', code: '' });
 
             async function createAccount() {
-                if (!form.businessName.trim() || !form.fullName.trim() || !form.email.trim() || form.password.length < 8) {
+                if (!form.code.trim() || !form.businessName.trim() || !form.fullName.trim() || !form.email.trim() || form.password.length < 8) {
                     setError('Completa todos los datos; la contraseña debe tener al menos 8 caracteres');
                     return;
                 }
@@ -3020,7 +3030,8 @@
 
                             {signup && (
                                 <React.Fragment>
-                                    <div className="login-field"><input type="text" placeholder="Nombre de tu negocio" value={form.businessName} onChange={e => setForm({ ...form, businessName: e.target.value })} autoFocus /></div>
+                                    <div className="login-field"><input type="text" placeholder="Código de registro (lo recibes al pagar tu mensualidad)" autoCapitalize="characters" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} autoFocus /></div>
+                                    <div className="login-field"><input type="text" placeholder="Nombre de tu negocio" value={form.businessName} onChange={e => setForm({ ...form, businessName: e.target.value })} /></div>
                                     <div className="login-field"><input type="text" placeholder="Tu nombre" autoComplete="name" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} /></div>
                                     <div className="login-field"><input type="email" placeholder="Tu correo" autoComplete="email" autoCapitalize="none" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
                                     <div className="login-field"><input type="password" placeholder="Contraseña (mínimo 8 caracteres)" autoComplete="new-password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} onKeyDown={e => e.key === 'Enter' && createAccount()} /></div>
@@ -3082,7 +3093,7 @@
                             </label>
                             {error && <div className="login-error">{error}</div>}
                             <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '14px' }}>
-                                ¿Tu negocio aún no usa Nexly? <a href="#" onClick={e => { e.preventDefault(); setSignup(true); setError(''); }}>Crea tu cuenta</a>
+                                ¿Ya pagaste tu mensualidad? <a href="#" onClick={e => { e.preventDefault(); setSignup(true); setError(''); }}>Crea tu cuenta con tu código</a>
                             </div>
                             </div>
                             <div className="login-foot">AUTOMATIZA &nbsp;•&nbsp; VENDE &nbsp;•&nbsp; CRECE</div>
