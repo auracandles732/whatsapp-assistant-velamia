@@ -2146,10 +2146,7 @@
 
         // Como en WhatsApp: *negrita*, _cursiva_ y ~tachado~ se ven con su formato, sin los signos.
         function renderWa(text) {
-            const parts = String(text || '').split(/((?<![w*])*[^*
-]+*(?![w*])|(?<![w_])_[^_
-]+_(?![w_])|(?<![w~])~[^~
-]+~(?![w~]))/);
+            const parts = String(text || '').split(/((?<![\w*])\*[^*\n]+\*(?![\w*])|(?<![\w_])_[^_\n]+_(?![\w_])|(?<![\w~])~[^~\n]+~(?![\w~]))/);
             return parts.map((part, i) => {
                 if (i % 2 === 0) return part;
                 const inner = part.slice(1, -1);
@@ -4169,6 +4166,7 @@
             const [search, setSearch] = useState('');
             const [listFilter, setListFilter] = useState('all');
             const [noteMode, setNoteMode] = useState(false);
+            const [photoPicker, setPhotoPicker] = useState(false);
             const [noteText, setNoteText] = useState('');
             const isAdmin = session?.role === 'admin';
             // Mientras carga la sesión se muestra todo; el servidor igual rechaza lo que el rol no permite.
@@ -4351,27 +4349,75 @@
                 window.location.reload();
             }
 
-            async function sendPhoto() {
-                if (!selectedConv) return;
-                const imageUrl = prompt('Pega la URL de la foto a enviar:');
-                if (!imageUrl) return;
-                const caption = prompt('Descripción (opcional):') || '';
+            // Reduce la foto a un JPG de hasta 1600 px: así siempre cumple lo que exige WhatsApp (JPG o PNG, máx. 5 MB).
+            function photoToJpeg(file) {
+                return new Promise((resolve, reject) => {
+                    const url = URL.createObjectURL(file);
+                    const img = new Image();
+                    img.onload = () => {
+                        const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.round(img.width * scale);
+                        canvas.height = Math.round(img.height * scale);
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        URL.revokeObjectURL(url);
+                        resolve(canvas.toDataURL('image/jpeg', 0.85));
+                    };
+                    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la foto')); };
+                    img.src = url;
+                });
+            }
 
+            // Envía la foto de un producto del catálogo con su nombre y precio, igual que lo hace el asistente.
+            async function sendCatalogPhoto(product) {
+                if (!selectedConv || !product.image_url) return;
+                setPhotoPicker(false);
+                const suffix = biz?.sales?.priceSuffix || '';
+                const caption = productEmoji + ' *' + product.name + '*\n💰 $' + Number(product.price).toFixed(2) + (suffix ? ' ' + suffix : '');
                 try {
                     await api('/api/send-image', {
                         method: 'POST',
-                        body: JSON.stringify({
-                            conversationId: selectedConv.id,
-                            phoneNumber: selectedConv.phone_number,
-                            imageUrl,
-                            caption
-                        })
+                        body: JSON.stringify({ conversationId: selectedConv.id, phoneNumber: selectedConv.phone_number, imageUrl: product.image_url, caption })
                     });
                     loadMessages(selectedConv.id);
                     loadConversations();
                 } catch (err) {
                     alert('Error enviando foto: ' + err.message);
                 }
+            }
+
+            // Abre la galería o los archivos para elegir una o varias fotos y las envía al chat.
+            function sendPhoto() {
+                if (!selectedConv) return;
+                const conv = selectedConv;
+                setPhotoPicker(false);
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.multiple = true;
+                input.onchange = async () => {
+                    const files = Array.from(input.files || []).slice(0, 10);
+                    if (files.length === 0) return;
+                    const caption = prompt('Texto para acompañar la foto (opcional):') || '';
+                    try {
+                        for (let i = 0; i < files.length; i++) {
+                            await api('/api/send-image', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    conversationId: conv.id,
+                                    phoneNumber: conv.phone_number,
+                                    imageBase64: await photoToJpeg(files[i]),
+                                    caption: i === 0 ? caption : ''
+                                })
+                            });
+                        }
+                    } catch (err) {
+                        alert('Error enviando foto: ' + err.message);
+                    }
+                    loadMessages(conv.id);
+                    loadConversations();
+                };
+                input.click();
             }
 
             // La lista se refresca cada 5 s, así la pausa que active el bot (reclamo, pago...)
@@ -4839,9 +4885,29 @@
                                         })}
                                     </div>
 
+                                    {photoPicker && (
+                                        <div className="cat-modal-bg" onMouseDown={e => { if (e.target === e.currentTarget) setPhotoPicker(false); }}>
+                                            <div className="cat-modal">
+                                                <h2>Enviar foto</h2>
+                                                <button type="button" onClick={sendPhoto} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #DCE2F5', color: '#2563EB', fontWeight: 700, fontSize: '15px', marginBottom: '16px', background: '#F5F8FF', cursor: 'pointer' }}>📷 Subir desde este equipo (computador o celular)</button>
+                                                <div style={{ fontWeight: 700, color: '#141C3A', marginBottom: '10px' }}>O elige una del catálogo</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
+                                                    {products.filter(p => p.image_url).map(p => (
+                                                        <button type="button" key={p.id || p.name} onClick={() => sendCatalogPhoto(p)} style={{ textAlign: 'left', background: '#fff', border: '1px solid #EEF1F9', borderRadius: '12px', padding: '6px', cursor: 'pointer' }}>
+                                                            <img src={p.image_url} style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: '8px' }} />
+                                                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#1E2A4A', marginTop: '4px' }}>{p.name}</div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {products.filter(p => p.image_url).length === 0 && <div className="cat-empty">Aún no hay productos con foto en el catálogo.</div>}
+                                                <div className="foot"><button type="button" className="cancel" onClick={() => setPhotoPicker(false)}>Cancelar</button></div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {!canEdit && <div className="nx-readonly"><PlatIcon name="user" size={18} color="#6B7599" /> Tu usuario es solo de consulta: puedes ver los chats, pero no responder.</div>}
                                     {canEdit && <div className={'nx-input' + (noteMode ? ' note' : '')}>
-                                        <button type="button" className="nx-round" onClick={sendPhoto} title="Enviar foto"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
+                                        <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} title="Enviar foto"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
                                         <textarea
                                             placeholder={noteMode ? 'Nota interna: el cliente no la ve...' : 'Escribe un mensaje...'}
                                             value={noteMode ? noteText : inputText}

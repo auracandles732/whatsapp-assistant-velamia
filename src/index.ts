@@ -48,7 +48,7 @@ import {
   authenticateBusinessUser,
   changeOwnPassword
 } from './db';
-import { removeFilesByPublicUrls, storagePath } from './services/storage';
+import { removeFilesByPublicUrls, storagePath, uploadBufferToStorage } from './services/storage';
 import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
 import {
@@ -616,9 +616,17 @@ app.post('/api/send-message', requireCrmSession, requireEditorRole, async (req: 
 
 app.post('/api/send-image', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
   try {
-    const { imageUrl, caption } = req.body || {};
-    if (!/^https:\/\/\S+$/.test(String(imageUrl || ''))) {
-      return res.status(400).json({ error: 'La foto debe ser un enlace que empiece con https://' });
+    const { caption, imageBase64 } = req.body || {};
+    let imageUrl = String(req.body?.imageUrl || '');
+    // Foto elegida desde el computador o el celular: se guarda y se envía. WhatsApp solo acepta JPG o PNG de hasta 5 MB.
+    if (imageBase64) {
+      const matches = String(imageBase64).match(/^data:(image\/(?:jpeg|jpg|png));base64,(.+)$/);
+      if (!matches) return res.status(400).json({ error: 'La foto debe ser JPG o PNG' });
+      const buffer = Buffer.from(matches[2], 'base64');
+      if (buffer.length > 5 * 1024 * 1024) return res.status(400).json({ error: 'La foto pesa más de 5 MB; WhatsApp no la podría enviar' });
+      imageUrl = await uploadBufferToStorage(buffer, matches[1] === 'image/jpg' ? 'image/jpeg' : matches[1]);
+    } else if (!/^https:\/\/\S+$/.test(imageUrl)) {
+      return res.status(400).json({ error: 'Elige una foto para enviar' });
     }
     const conv = await conversationForSending(req, res);
     if (!conv) return;
