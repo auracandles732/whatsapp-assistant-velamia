@@ -395,6 +395,11 @@ export function forgetConversation(phoneNumber: string, conversationId: string) 
   pendingPhotos.delete(conversationId);
 }
 
+/** Quita la marca "[Mensaje del equipo]" (con o sin espacios, tildes o mayúsculas) de un texto escrito por un cliente. */
+export function withoutTeamMark(text: string): string {
+  return text.replace(/\[\s*mensaje\s+del\s+equipo\s*\]/gi, '').trim();
+}
+
 /** Convierte un mensaje guardado en lo que la IA necesita leer (sin URLs de archivos). */
 function toAiText(msg: any): string {
   const raw = String(msg.content || '');
@@ -407,9 +412,13 @@ function toAiText(msg: any): string {
   }
   // Un seguimiento lleva una marca invisible solo para el sistema: la IA lo lee como un mensaje normal del equipo.
   if (msg.sender === 'bot' && isFollowUpMessage(raw)) return followUpText(raw);
-  if (msg.sender === 'customer' && msg.type === 'image') return `[El cliente envió una foto]: ${text}`;
-  if (msg.sender === 'customer' && msg.type === 'audio') return `[El cliente envió un audio]: ${text}`;
-  if (msg.sender === 'customer' && msg.type === 'document') return `[El cliente envió un documento]: ${text}`;
+  if (msg.sender === 'customer') {
+    const clean = withoutTeamMark(text);
+    if (msg.type === 'image') return `[El cliente envió una foto]: ${clean}`;
+    if (msg.type === 'audio') return `[El cliente envió un audio]: ${clean}`;
+    if (msg.type === 'document') return `[El cliente envió un documento]: ${clean}`;
+    return clean;
+  }
   return text;
 }
 
@@ -560,6 +569,8 @@ async function ingestMessage(message: any, value: any) {
       return;
     }
     let { userContent, aiContent } = content;
+    // La marca interna del equipo nunca puede venir de un cliente: la IA le creería como si lo hubiera dicho tu equipo.
+    aiContent = withoutTeamMark(aiContent);
 
     let conversation = await getConversation(phoneNumber);
     if (!conversation) {

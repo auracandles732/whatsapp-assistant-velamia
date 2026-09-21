@@ -52,7 +52,7 @@ import {
   changeOwnPassword
 } from './db';
 import { removeFilesByPublicUrls, storagePath, uploadBufferToStorage } from './services/storage';
-import { toWhatsAppVoice } from './services/audio';
+import { toWhatsAppVoice, isRecordedAudio } from './services/audio';
 import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/signupCodes';
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret } from './services/tenant';
@@ -65,6 +65,7 @@ import {
   getCrmSession,
   VELAMIA_ID,
   isPasswordValid,
+  weakMasterPassword,
   issueSessionToken,
   verifyWebhookSignature
 } from './middleware/auth';
@@ -91,11 +92,52 @@ const PORT = process.env.PORT || 3000;
 // Render pone un proxy delante: sin esto todas las peticiones parecerían venir de la misma IP.
 app.set('trust proxy', 1);
 
-// El raw body es necesario para validar la firma HMAC que envía Meta.
-app.use(express.json({
-  limit: '15mb',
-  verify: (req, _res, buf) => { (req as any).rawBody = buf; }
-}));
+app.disable('x-powered-by');
+
+/**
+ * Cabeceras de seguridad. La política de contenido deja cargar scripts solo del propio servidor y de unpkg (React y
+ * Babel, con huella verificada), y conectar solo con el propio servidor: aunque alguien lograra meter código en la
+ * pantalla, no podría enviar las sesiones a otro sitio. Tampoco se puede mostrar el CRM dentro de otra página.
+ */
+// Solo el almacenamiento de fotos de este proyecto, no cualquier proyecto de Supabase.
+const STORAGE_ORIGIN = (() => {
+  try { return new URL(process.env.SUPABASE_URL || '').origin; } catch { return 'https://*.supabase.co'; }
+})();
+
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com",
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' data: blob: ${STORAGE_ORIGIN}`,
+  `media-src 'self' blob: ${STORAGE_ORIGIN}`,
+  "font-src 'self' data:",
+  `connect-src 'self' https://unpkg.com ${STORAGE_ORIGIN}`,
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'"
+].join('; ');
+
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'microphone=(self), camera=(), geolocation=(), payment=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  next();
+});
+
+// El raw body es necesario para validar la firma HMAC que envía Meta. Solo las rutas que reciben fotos o audios
+// aceptan cuerpos grandes; el resto (incluido el ingreso y el registro, que son públicos) tiene un límite chico.
+const keepRawBody = (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; };
+const bigJson = express.json({ limit: '15mb', verify: keepRawBody });
+const smallJson = express.json({ limit: '1mb', verify: keepRawBody });
+const BIG_BODY_PATHS = new Set(['/api/upload-image', '/api/send-image', '/api/send-audio']);
+app.use((req: Request, res: Response, next: NextFunction) => (BIG_BODY_PATHS.has(req.path) ? bigJson : smallJson)(req, res, next));
 
 // La app instalable es de la plataforma (Nexly), igual para todas las empresas: la marca de cada empresa
 // se ve recién dentro de su cuenta.
@@ -191,6 +233,22 @@ app.get('/health', (_req: Request, res: Response) => {
 const LOGIN_MAX_FAILURES = 10;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const loginFailures = new Map<string, { count: number; resetAt: number }>();
+// Intentos fallidos por cuenta (desde cualquier IP) y un tope general para "admin": frena a quien pruebe desde muchas IP.
+const ACCOUNT_MAX_FAILURES = 10;
+const ADMIN_MAX_FAILURES_PER_HOUR = 30;
+const accountFailures = new Map<string, { count: number; resetAt: number }>();
+function accountBlocked(username: string, now: number): boolean {
+  const record = accountFailures.get(username);
+  if (!record) return false;
+  if (record.resetAt < now) { accountFailures.delete(username); return false; }
+  return record.count >= (username === 'admin' ? ADMIN_MAX_FAILURES_PER_HOUR : ACCOUNT_MAX_FAILURES);
+}
+function countAccountFailure(username: string, now: number) {
+  const record = accountFailures.get(username);
+  const windowMs = username === 'admin' ? 60 * 60 * 1000 : LOGIN_WINDOW_MS;
+  if (!record || record.resetAt < now) accountFailures.set(username, { count: 1, resetAt: now + windowMs });
+  else record.count++;
+}
 
 /**
  * Una sola pantalla de ingreso: usuario "admin" con la contraseña maestra para la administradora;
@@ -215,15 +273,21 @@ app.post('/api/login', async (req: Request, res: Response) => {
   const password = String(req.body?.password || '');
   const fail = () => {
     loginFailures.set(ip, { count: (current?.count || 0) + 1, resetAt: current?.resetAt || now + LOGIN_WINDOW_MS });
+    if (username) countAccountFailure(username, now);
     res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   };
 
   if (!username) return fail();
+  if (accountBlocked(username, now)) {
+    console.warn(`🔒 Ingreso bloqueado temporalmente por demasiados intentos: ${username === 'admin' ? 'admin' : 'usuario de empresa'}`);
+    return res.status(429).json({ error: 'Demasiados intentos con esta cuenta. Espera un rato e intenta de nuevo.' });
+  }
 
   // Administradora: usuario "admin" con la contraseña maestra.
   if (username === 'admin') {
     if (!isPasswordValid(password)) return fail();
     loginFailures.delete(ip);
+    accountFailures.delete(username);
     return res.json({ token: issueSessionToken(), role: 'admin' });
   }
 
@@ -231,6 +295,7 @@ app.post('/api/login', async (req: Request, res: Response) => {
     const user = await authenticateBusinessUser(username, password);
     if (!user) return fail();
     loginFailures.delete(ip);
+    accountFailures.delete(username);
     res.json({ token: issueSessionToken(user), role: user.role, businessId: user.businessId });
   } catch (error: any) {
     console.error('Error validando acceso:', error.message);
@@ -256,6 +321,8 @@ app.post('/api/signup-codes', requireAdminSession, async (req: Request, res: Res
  */
 const SIGNUP_MAX_PER_HOUR = 3;
 const signupsByIp = new Map<string, number[]>();
+// Códigos que se están canjeando en este momento: dos registros simultáneos con el mismo código no pasan ambos.
+const redeemingCodes = new Set<string>();
 
 app.post('/api/signup', async (req: Request, res: Response) => {
   // Campo trampa: las personas no lo ven ni lo llenan, los programas automáticos sí.
@@ -268,9 +335,12 @@ app.post('/api/signup', async (req: Request, res: Response) => {
 
   // Solo se registra quien ya pagó su mensualidad: el código se entrega al pagar.
   const signupCode = String(req.body?.code || '');
-  if (!(await isSignupCodeUsable(signupCode))) {
+  const codeKey = signupCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!codeKey || redeemingCodes.has(codeKey) || !(await isSignupCodeUsable(signupCode))) {
     return res.status(403).json({ error: 'Necesitas un código de registro válido. Lo recibes al pagar tu mensualidad.' });
   }
+  redeemingCodes.add(codeKey);
+  res.on('finish', () => redeemingCodes.delete(codeKey));
 
   const businessName = String(req.body?.businessName || '').trim().slice(0, 80);
   const fullName = String(req.body?.fullName || '').trim().slice(0, 80);
@@ -734,6 +804,7 @@ app.post('/api/send-audio', requireCrmSession, requireEditorRole, async (req: Re
     if (original.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'La nota de voz es demasiado larga' });
     const conv = await conversationForSending(req, res);
     if (!conv) return;
+    if (!isRecordedAudio(original)) return res.status(400).json({ error: 'El audio no tiene un formato válido, graba de nuevo' });
     const voice = await toWhatsAppVoice(original);
     const audioUrl = await uploadBufferToStorage(voice, 'audio/ogg');
     await pauseBot(conv.id);
@@ -1433,10 +1504,17 @@ app.post('/api/me/connect-whatsapp', requireCrmSession, requireOwnerRole, async 
  * Alta del número por la propia empresa: escribe su número, recibe un código por SMS o llamada y lo ingresa.
  * El número queda en la cuenta de Meta de Nexly y se conecta solo al asistente.
  */
+const NUMBER_ATTEMPTS_PER_DAY = 5;
+const numberAttempts = new Map<string, number[]>();
+
 app.post('/api/me/whatsapp/start', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
   try {
     const tenant = currentTenant();
     if (!tenant) return res.status(400).json({ error: 'Elige una empresa primero' });
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const attempts = (numberAttempts.get(tenant.businessId) || []).filter(at => at > dayAgo);
+    if (attempts.length >= NUMBER_ATTEMPTS_PER_DAY) return res.status(429).json({ error: 'Llegaste al límite de intentos de hoy. Intenta mañana o escríbenos.' });
+    numberAttempts.set(tenant.businessId, [...attempts, Date.now()]);
     const meta = platformMeta();
     if (!meta) return res.status(503).json({ error: 'Falta configurar la cuenta de WhatsApp de Nexly en el servidor (NEXLY_WABA_ID y NEXLY_META_TOKEN)' });
     const phone = splitPhone(String(req.body?.phone || ''));
@@ -1546,6 +1624,9 @@ async function start() {
   // Si otra instancia (por ejemplo durante un despliegue) guarda cambios, se toman en pocos minutos.
   setInterval(() => loadBusinessProfile().catch(error => console.error('❌ Perfil del negocio:', error.message)), 5 * 60 * 1000);
 
+  if (weakMasterPassword()) {
+    console.warn('⚠️  La contraseña maestra del CRM (CRM_PASSWORD) es débil: usa al menos 14 caracteres con mayúsculas, minúsculas, números y símbolos.');
+  }
   app.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
 

@@ -9,6 +9,23 @@ const APP_SECRETS = [process.env.META_APP_SECRET || '', ...(process.env.META_APP
   .map(secret => secret.trim())
   .filter(Boolean);
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Llave con que se firman las sesiones. Antes era la contraseña maestra: cualquiera con una sesión (incluso el usuario
+ * de una empresa cliente) podía adivinarla probando contraseñas en su computador. Ahora sale de la llave de cifrado
+ * del servidor (256 bits) junto con la contraseña: sin esa llave no se puede falsificar ni adivinar nada, y cambiar
+ * la contraseña maestra sigue cerrando todas las sesiones.
+ */
+const SESSION_KEY: Buffer | string = (process.env.BUSINESS_SECRETS_KEY || '').length >= 16
+  ? createHmac('sha256', process.env.BUSINESS_SECRETS_KEY as string).update(`sesiones-crm:${CRM_PASSWORD}`).digest()
+  : CRM_PASSWORD;
+
+/** Contraseña maestra débil: el servidor lo avisa al arrancar. */
+export function weakMasterPassword(): boolean {
+  const p = CRM_PASSWORD;
+  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter(r => r.test(p)).length;
+  return p.length < 14 || kinds < 3;
+}
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type CrmRole = 'admin' | 'owner' | 'manager' | 'staff';
@@ -44,7 +61,7 @@ export function issueSessionToken(access?: { userId: string; businessId: string 
     data.bid = access.businessId;
   }
   const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
-  const signature = createHmac('sha256', CRM_PASSWORD).update(payload).digest('base64url');
+  const signature = createHmac('sha256', SESSION_KEY).update(payload).digest('base64url');
   return `${payload}.${signature}`;
 }
 
@@ -54,7 +71,7 @@ function readSessionToken(token: string): { exp: number; uid?: string; bid?: str
   const [payload, signature] = token.split('.');
   if (!payload || !signature) return null;
 
-  const expected = createHmac('sha256', CRM_PASSWORD).update(payload).digest('base64url');
+  const expected = createHmac('sha256', SESSION_KEY).update(payload).digest('base64url');
   if (!safeCompare(signature, expected)) return null;
 
   try {
