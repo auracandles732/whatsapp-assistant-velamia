@@ -13,7 +13,25 @@ import { currentTenant, runWithTenant } from './tenant';
 import { profile, hourLocal } from '../config/businessProfile';
 
 /** Inicio del texto guardado de cada seguimiento: el CRM y la IA lo reconocen por esto. */
-export const FOLLOW_UP_MARKER = '📩 Seguimiento automático';
+/**
+ * Marca INVISIBLE al inicio de un seguimiento guardado: el sistema lo reconoce, pero ni el cliente ni el CRM ven ningún rótulo.
+ * (Los seguimientos guardados antes decían "📩 Seguimiento automático" y se siguen reconociendo.)
+ */
+export const FOLLOW_UP_MARKER = '\u2063\u2063';
+const OLD_FOLLOW_UP_LABEL = '📩 Seguimiento automático';
+
+/** ¿Este mensaje guardado es un seguimiento enviado por el sistema? */
+export function isFollowUpMessage(content: unknown): boolean {
+  const text = String(content || '');
+  return text.startsWith(FOLLOW_UP_MARKER) || text.startsWith(OLD_FOLLOW_UP_LABEL);
+}
+
+/** El texto del seguimiento tal como lo recibió el cliente, sin marcas. */
+export function followUpText(content: unknown): string {
+  const text = String(content || '');
+  if (text.startsWith(FOLLOW_UP_MARKER)) return text.slice(FOLLOW_UP_MARKER.length).trim();
+  return text.split('\n').slice(1).join('\n').trim();
+}
 
 /** Plantillas aprobadas en Meta y días sin respuesta de la clienta para enviar cada una (perfil del negocio). */
 export const followUpSteps = () => profile().followUps.steps;
@@ -170,7 +188,7 @@ async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skippe
 
     try {
       const response = await sendTemplateMessage(conv.phone_number, step.template, template.language);
-      await saveMessage(conv.id, 'bot', 'text', `${FOLLOW_UP_MARKER} ${step.index + 1}/${chatSteps.length}\n${template.text}`, getSentMessageId(response));
+      await saveMessage(conv.id, 'bot', 'text', `${FOLLOW_UP_MARKER}${template.text}`, getSentMessageId(response));
       await recordFollowUp(conv.id, 'auto_followup', step.template);
       sent++;
     } catch (error: any) {

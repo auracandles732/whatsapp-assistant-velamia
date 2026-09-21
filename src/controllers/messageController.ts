@@ -27,7 +27,7 @@ import {
   getTenantByPhoneNumberId
 } from '../db';
 import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
-import { FOLLOW_UP_MARKER } from '../services/followups';
+import { isFollowUpMessage, followUpText } from '../services/followups';
 import {
   sendTextMessage,
   sendImageMessage,
@@ -405,8 +405,8 @@ function toAiText(msg: any): string {
     const name = productNameFromCaption(raw);
     return name ? `[Foto enviada del producto: ${name}]` : `[Foto enviada] ${text}`;
   }
-  // El rótulo "Seguimiento automático" es solo para el CRM: la IA lo lee como un mensaje normal del equipo.
-  if (msg.sender === 'bot' && raw.startsWith(FOLLOW_UP_MARKER)) return raw.split('\n').slice(1).join('\n').trim();
+  // Un seguimiento lleva una marca invisible solo para el sistema: la IA lo lee como un mensaje normal del equipo.
+  if (msg.sender === 'bot' && isFollowUpMessage(raw)) return followUpText(raw);
   if (msg.sender === 'customer' && msg.type === 'image') return `[El cliente envió una foto]: ${text}`;
   if (msg.sender === 'customer' && msg.type === 'audio') return `[El cliente envió un audio]: ${text}`;
   if (msg.sender === 'customer' && msg.type === 'document') return `[El cliente envió un documento]: ${text}`;
@@ -598,7 +598,7 @@ async function ingestMessage(message: any, value: any) {
     await touchConversation(conversationId);
 
     // Las plantillas de seguimiento dicen "responde NO": se respeta siempre, aunque el bot esté pausado.
-    const answeredFollowUp = lastMessage?.sender === 'bot' && String(lastMessage.content || '').startsWith(FOLLOW_UP_MARKER);
+    const answeredFollowUp = lastMessage?.sender === 'bot' && isFollowUpMessage(lastMessage.content);
     // También cuenta si toca un botón "No" de la plantilla.
     if (answeredFollowUp && ['text', 'button', 'interactive'].includes(messageType) && /^\s*no\s*[.!¡]*\s*$/i.test(userContent)) {
       await recordFollowUp(conversationId, 'opt_out', 'La clienta respondió NO a los seguimientos');

@@ -33,3 +33,8 @@ function fixSentence(sentence: string): string {
   }
   return sentence.slice(0, start) + '¿' + sentence.slice(start);
 }
+
+/** Sin comillas: el asistente resalta con *negrita*, no con "comillas". */
+export function withoutQuotes(text: string): string {
+  return text.replace(/[\u0022\u201C\u201D\u00AB\u00BB]/g, '');
+}
