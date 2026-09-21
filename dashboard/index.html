@@ -3434,10 +3434,11 @@
                                 <>
                                     <p className="hint">El empaque de cada producto se elige en el Catálogo y va incluido en su precio. "Costo del cambio" es lo que se suma por {form.sales.unitSingular} si la clienta pide cambiar a ese empaque; si lo dejas vacío, el asistente no da el total y te avisa para que lo confirmes.</p>
                                     {(form.packaging.types || []).map((type, i) => (
-                                        <div key={i} className="step-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr) 90px auto' }}>
+                                        <div key={i} className="step-row" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr) 90px auto auto' }}>
                                             <input type="text" placeholder="Nombre (Kraft)" value={type.name} onChange={e => set('packaging.types.' + i + '.name', e.target.value)} />
                                             <input type="text" placeholder="Cómo es" value={type.description} onChange={e => set('packaging.types.' + i + '.description', e.target.value)} />
-                                            <input type="number" min="0" step="0.01" placeholder="Costo" title={'Costo del cambio por ' + form.sales.unitSingular + ' ($)'} value={type.changeCost ?? ''} onChange={e => set('packaging.types.' + i + '.changeCost', e.target.value === '' ? null : Number(e.target.value))} />
+                                            <input type="number" min="-1000" step="0.01" placeholder="Costo" title={'Costo del cambio por ' + form.sales.unitSingular + ' ($)'} value={type.changeCost ?? ''} onChange={e => set('packaging.types.' + i + '.changeCost', e.target.value === '' ? null : Number(e.target.value))} />
+                                            <label className="check-row" title="Es lo que el cliente pide con 'sin empaque', 'sin nada' o 'solo la vela'" style={{ margin: 0 }}><input type="checkbox" checked={!!type.bare} onChange={e => set('packaging.types.' + i + '.bare', e.target.checked)} /> Solo el producto</label>
                                             <button type="button" className="btn-link" onClick={() => set('packaging.types', form.packaging.types.filter((_, j) => j !== i))}>Quitar</button>
                                         </div>
                                     ))}
@@ -3460,7 +3461,7 @@
                                                 <option value="yes">Sí se puede</option>
                                                 <option value="no">No se puede</option>
                                             </select>
-                                            <input type="number" min="0" step="0.01" placeholder="Extra $" disabled={c.allowed === false} title={'Extra por ' + form.sales.unitSingular + ' ($). Vacío = por confirmar'} value={c.cost ?? ''} onChange={e => set('packaging.changes.' + i + '.cost', e.target.value === '' ? null : Number(e.target.value))} />
+                                            <input type="number" min="-1000" step="0.01" placeholder="Extra $" disabled={c.allowed === false} title={'Extra por ' + form.sales.unitSingular + ' ($). Vacío = por confirmar'} value={c.cost ?? ''} onChange={e => set('packaging.changes.' + i + '.cost', e.target.value === '' ? null : Number(e.target.value))} />
                                             <input type="text" className="note" placeholder="Lo que se le dice al cliente (por qué no se puede o no conviene)" value={c.note || ''} onChange={e => set('packaging.changes.' + i + '.note', e.target.value)} />
                                             <button type="button" className="btn-link" onClick={() => set('packaging.changes', (form.packaging.changes || []).filter((_, j) => j !== i))}>Quitar</button>
                                         </div>

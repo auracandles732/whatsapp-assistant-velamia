@@ -299,7 +299,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
 
   const packagingOn = p.packaging.enabled && p.packaging.types.length > 0;
   if (packagingOn) {
-    const cost = (c: number | null) => c === null ? 'costo por confirmar' : c === 0 ? 'sin costo' : `+${money(c)} por ${unit}`;
+    const cost = (c: number | null) => c === null ? 'costo por confirmar' : c === 0 ? 'sin costo' : c < 0 ? `descuento de ${money(-c)} por ${unit}` : `+${money(c)} por ${unit}`;
     const rules: PackagingChange[] = p.packaging.changes || [];
     const defaults = p.packaging.types.map(t => `${t.name} (${cost(t.changeCost)})`).join(', ');
     const changeRules = rules.length
@@ -312,6 +312,13 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
         '- No menciones costos ni reglas de cambio si el cliente no pregunta por cambiar el empaque.'
       ]
       : [`- El cliente puede cambiar a otro empaque. Costo del cambio por ${unit}: ${defaults}. No menciones estos costos si no pregunta por cambiar el empaque.`];
+    const bareType = p.packaging.types.find(t => t.bare);
+    const bareRule = bareType
+      ? [
+        `- Si el cliente pide el ${model} solo, sin empaque, sin nada, sin caja, sin tul, sin frasco o "solo la vela", eso es un CAMBIO DE EMPAQUE a "${bareType.name}" (ponlo en packaging), NO es elegir entre modelos: cotiza el ${model} del que hablan con ese cambio, con el costo o descuento de la lista de cambios.`,
+        `- Si hay dos ${models} posibles y no sabes cuál quiere, hazle UNA sola pregunta para saberlo y en esa misma pregunta dile que en cualquiera de los dos puede ir "${bareType.name}". Si ya respondió, nunca vuelvas a preguntar cuál ${model}: usa el que dijo o el que más encaje y avanza.`
+      ]
+      : [];
     add(
       'EMPAQUE (campo packaging de order_items):',
       `- Cada ${model} viene con su empaque, indicado en el catálogo como "empaque: …", y ese empaque ya está incluido en el precio.`,
@@ -320,6 +327,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       `- Si preguntan por los empaques en general, describe TODOS los tipos, uno por línea con su descripción, y pregunta qué ${model} le interesa para decirle cuál lleva.`,
       `- Si preguntan por la presentación o el empaque de un ${model}, dile el empaque de ESE ${model} según el catálogo y descríbelo en una frase. Si ese ${model} no tiene empaque en el catálogo, no inventes uno: dile que confirmas cuál lleva, menciona brevemente los tipos disponibles (${p.packaging.types.map(t => t.name).join(', ')}), pregúntale si tiene preferencia y escribe la consulta en owner_question.`,
       ...changeRules,
+      ...bareRule,
 
       `- Personalizar el ${model} (${s.personalizationExamples || 'colores, nombres, frases'}) no es lo mismo que personalizar el empaque. Un empaque solo se personaliza si su descripción lo dice; si preguntan por personalizar otro empaque, aclara que ese empaque no se personaliza (el ${model} sí) y menciona el que sí se puede.`,
       '- Si el cliente elige o pregunta por un empaque personalizable, pregúntale qué color le gustaría para cada parte que se personaliza. No ofrezcas una lista de colores: hay mucha variedad, así que deja que el cliente lo diga. Guarda los colores del empaque en personalization (ejemplo: "tul rosado con lazo blanco").',
@@ -590,6 +598,23 @@ export function varyEmojis(reply: string, recentEmojis: string[], decorative: st
 const GENERIC_PERSONALIZATION = /(se pued|puede[ns]? (adaptar|personalizar|cambiar)|personalizable|admite|a tu gusto|tus colores|lo que (prefieras|quieras)|personalizad[oa]s?$)/i;
 // Notas de relleno ("bicolor a definir", "aroma no confirmado"): se borran esas palabras y se conserva el dato.
 const FILLER = /\b(personalizaci[oó]n|pendientes?|(a|por|sin) (confirmar|definir|elegir)|no (confirmad|definid|elegid)[oa]s?)\b/gi;
+/** La última pregunta de un mensaje (lo que va entre ¿ y ?), sin tildes ni mayúsculas. */
+function lastQuestion(text: string): string {
+  const found = text.match(/[^.!?¿\n]*\?/g);
+  return found ? normalizeWords(found[found.length - 1]).replace(/[¿?]/g, '').trim() : '';
+}
+
+/** ¿Es la misma pregunta que la del mensaje anterior? Compara por palabras (4 primeras letras), sin importar el orden. */
+export function sameQuestion(current: string, previous: string): boolean {
+  const a = lastQuestion(current), b = lastQuestion(previous);
+  if (!a || !b) return false;
+  const stems = (q: string) => new Set(q.split(/[^a-zñ0-9]+/).filter(w => w.length >= 4).map(w => w.slice(0, 4)));
+  const A = stems(a), B = stems(b);
+  if (A.size === 0 || B.size === 0) return false;
+  const shared = [...A].filter(x => B.has(x)).length;
+  return shared / Math.min(A.size, B.size) >= 0.75 && shared >= 2;
+}
+
 // Palabras que aparecen en casi todos los nombres del catálogo: no sirven para reconocer un modelo.
 const NAME_FILLER = new Set(['vela', 'velas', 'velita', 'velitas', 'para', 'con', 'del', 'los', 'las', 'base', 'medio']);
 
@@ -723,7 +748,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
       const extra = changed ? rule!.cost || 0 : 0;
       return {
         name: i.product.name,
-        price: round2(Number(i.product.price) + extra),
+        price: Math.max(0, round2(Number(i.product.price) + extra)),
         quantity: i.quantity,
         personalization: i.personalization,
         packaging: changed ? wanted!.name : included,
@@ -1046,7 +1071,7 @@ export async function planTurn(params: {
     // El costo de cambiar de empaque se puede mencionar cuando la clienta lo pregunta.
     const catalogPrices = [
       ...catalog.map(c => Number(c.price)),
-      ...(p.packaging.enabled ? [...p.packaging.types.map(t => t.changeCost), ...(p.packaging.changes || []).map(c => c.cost)].filter((c): c is number => typeof c === 'number' && c > 0) : [])
+      ...(p.packaging.enabled ? [...p.packaging.types.map(t => t.changeCost), ...(p.packaging.changes || []).map(c => c.cost)].filter((c): c is number => typeof c === 'number' && c !== 0).map(Math.abs) : [])
     ];
     const givesTotal = quotedTotal > 0 || quotedDeposit > 0 || amountsInReply.some(a => [firstOrder.total, firstOrder.deposit].some(v => Math.abs(a - v) < 0.009));
     const wrongTotal = (quotedTotal > 0 && Math.abs(quotedTotal - firstOrder.total) > 0.009)
@@ -1064,6 +1089,13 @@ export async function planTurn(params: {
           `sin precio por ${p.sales.unitSingular}${hasShipping ? `, sin subtotal de ${p.sales.goodsWord} y sin mencionar el envío por separado` : ''}.`
       );
     }
+  }
+
+  // Nunca la misma pregunta dos veces seguidas: si el cliente no la respondió como se esperaba, se cambia de enfoque.
+  const lastBotText = [...history].reverse().find(m => m.role === 'assistant' && !m.content.startsWith('[Foto'))?.content || '';
+  const repeatsQuestion = () => sameQuestion(reply(), lastBotText);
+  if (repeatsQuestion()) {
+    corrections.push('Esa pregunta ya se la hiciste al cliente en tu mensaje anterior y no la respondió como esperabas: NO la repitas. Cambia de enfoque: dile con tus palabras lo que entendiste de lo que pidió y propón UNA salida concreta (por ejemplo cotizar con el supuesto más probable). Si de verdad no puedes avanzar, dile que lo consultas con el equipo y escríbelo en owner_question.');
   }
 
   // Una foto ya enviada no se repite, salvo que la clienta la pida otra vez o nombre ese modelo.
@@ -1099,6 +1131,10 @@ export async function planTurn(params: {
     parsed.reply = `${reply().trim()}\n\n${advice.note}`.trim();
   }
 
+  // Si aun corregida repite la pregunta, el bot está atascado: la dueña recibe el aviso para que intervenga.
+  const stuck = repeatsQuestion();
+  if (stuck) console.warn('🔁 El asistente insiste en repetir la misma pregunta: se avisa a la dueña');
+
   const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
@@ -1118,7 +1154,7 @@ export async function planTurn(params: {
     handoff: parsed.handoff === 'card_payment' && !pay.cardEnabled ? 'none' : parsed.handoff || 'none',
     // Aunque la corrección falle, sin elección de transferencia nunca se envían las cuentas.
     send_bank_details: parsed.send_bank_details === true && choseTransfer,
-    owner_question: String(parsed.owner_question || '').trim(),
+    owner_question: String(parsed.owner_question || '').trim() || (stuck ? 'El cliente parece atascado: el asistente repitió la misma pregunta. Revisa el chat y responde tú.' : ''),
     custom_design_requested: parsed.custom_design_requested === true,
     custom_design_summary: String(parsed.custom_design_summary || '').trim(),
     event_date: eventDate,

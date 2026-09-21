@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS } from '../src/config/businessProfile';
-import { buildSystemPrompt, computeOrderTotal, namedByCustomer } from '../src/services/openai';
+import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -277,4 +277,78 @@ test('no confunde un modelo con otro ni con una frase cualquiera', () => {
   assert.equal(namedByCustomer('OSITO GRANDE CORAZON', 'quiero velitas para baby shower'), false);
   assert.equal(namedByCustomer('VELA DE JIRAFA', 'me gustan las velas'), false);
   assert.equal(namedByCustomer('OSITO GRANDE CORAZON', 'el osito'), false);
+});
+
+// ---------- "Solo la vela": quitar el empaque (descuento) ----------
+
+const conSoloVela = normalizeProfile({
+  ...PROFILE_PRESETS.eventos.profile,
+  shipping: { ...PROFILE_PRESETS.eventos.profile.shipping, mode: 'flat', flatRate: 10, unitsIncludedInRate: 0, extraCost: 0 },
+  packaging: {
+    enabled: true,
+    types: [
+      { name: 'Caja lazo personalizable', description: 'caja con lazo', changeCost: null },
+      { name: 'Sin empaque', description: 'va tal cual en su frasco', changeCost: null },
+      { name: 'Solo la vela', description: 'la vela sola, sin empaque', changeCost: -2, bare: true }
+    ],
+    changes: [
+      { from: 'Sin empaque', to: 'Solo la vela', cost: null, allowed: true, note: 'Sin el frasco el precio lo confirma el equipo.' }
+    ]
+  }
+});
+
+const catalogoSoloVela = [
+  { name: 'Vela con caja', price: 30, category: 'BABY SHOWER', description: 'Caja lazo personalizable' },
+  { name: 'Vela en frasco', price: 45, category: 'BABY SHOWER', description: 'Sin empaque' }
+];
+
+test('los costos de cambio pueden ser negativos (descuentos) y se guardan', () => {
+  assert.equal(conSoloVela.packaging.types.find(t => t.name === 'Solo la vela')?.changeCost, -2);
+  assert.equal(conSoloVela.packaging.types.find(t => t.name === 'Solo la vela')?.bare, true);
+  assert.equal(conSoloVela.packaging.types.find(t => t.name === 'Caja lazo personalizable')?.bare, false);
+});
+
+test('"solo la vela" en un modelo con caja cuesta $2 menos por docena (caso Sandra: $30 → $28)', () => {
+  const pedido = computeOrderTotal([{ name: 'Vela con caja', quantity: 4, packaging: 'Solo la vela' }], 'Quito', catalogoSoloVela, conSoloVela);
+  assert.equal(pedido.items[0].price, 28);
+  assert.equal(pedido.items[0].packaging, 'Solo la vela');
+  assert.equal(pedido.items[0].packagingChanged, true);
+  assert.equal(pedido.missing, '');
+  assert.equal(pedido.total, 4 * 28 + 10);
+});
+
+test('"sin frasco" en un modelo en frasco queda por confirmar y no da total', () => {
+  const pedido = computeOrderTotal([{ name: 'Vela en frasco', quantity: 4, packaging: 'Solo la vela' }], 'Quito', catalogoSoloVela, conSoloVela);
+  assert.equal(pedido.missing, 'packaging_cost');
+  assert.equal(pedido.total, 0);
+});
+
+test('un descuento nunca deja el precio en negativo', () => {
+  const barato = [{ name: 'Vela barata', price: 1, category: 'X', description: 'Caja lazo personalizable' }];
+  const pedido = computeOrderTotal([{ name: 'Vela barata', quantity: 1, packaging: 'Solo la vela' }], 'Quito', barato, conSoloVela);
+  assert.equal(pedido.items[0].price, 0);
+});
+
+test('las instrucciones explican que "solo la vela" es un cambio de empaque y muestran el descuento', () => {
+  const prompt = buildSystemPrompt(catalogoSoloVela, undefined, conSoloVela);
+  assert.ok(prompt.includes('Solo la vela (descuento de $2.00 por docena)'));
+  assert.ok(/sin frasco o "solo la vela", eso es un CAMBIO DE EMPAQUE a "Solo la vela"/.test(prompt));
+  assert.ok(/NO es elegir entre modelos/.test(prompt));
+  assert.ok(/nunca vuelvas a preguntar cuál/.test(prompt));
+});
+
+test('un negocio sin empaque marcado como "solo el producto" no recibe esa regla', () => {
+  const prompt = buildSystemPrompt(catalogoSoloVela, undefined, conEmpaques);
+  assert.ok(!/CAMBIO DE EMPAQUE a "/.test(prompt));
+});
+
+// ---------- Freno anti-bucle ----------
+
+test('reconoce la misma pregunta dicha con palabras parecidas (caso Sandra)', () => {
+  const a = 'Sí, claro 🤍 la *VELA DE LEON EN FRASCO DE VIDRIO* ya va *sin empaque*.\n\n¿Cuál de las dos deseas?';
+  const b = 'Sí, claro 🤍 la *VELA DE LEON EN FRASCO DE VIDRIO* ya va *sin empaque*.\n\n¿Cuál de los dos modelos deseas?';
+  assert.equal(sameQuestion(b, a), true);
+  assert.equal(sameQuestion('¿Para qué ciudad sería el envío?', '¿Cuál de los dos modelos deseas?'), false);
+  assert.equal(sameQuestion('Perfecto, gracias.', '¿Cuál de los dos modelos deseas?'), false);
+  assert.equal(sameQuestion('', ''), false);
 });

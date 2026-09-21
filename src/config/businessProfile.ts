@@ -132,6 +132,8 @@ export interface PackagingType {
   description: string;
   /** Costo adicional por unidad de venta al cambiar a este empaque; null = aún no definido. */
   changeCost: number | null;
+  /** true = "solo el producto, sin empaque": lo que el cliente pide con "sin empaque", "sin nada", "solo la vela". */
+  bare?: boolean;
 }
 
 /** Cambio de un empaque a otro (del que trae el modelo al que pide la clienta): si se puede, cuánto cuesta y qué explicarle. */
@@ -433,7 +435,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
             name: text(t?.name, '', 40),
             description: text(t?.description, '', 160),
             // Vacío = costo del cambio sin definir: el bot no da un total con ese cambio.
-            changeCost: t?.changeCost === null || t?.changeCost === undefined || t?.changeCost === '' ? null : num(t.changeCost, 0, 0, 10000)
+            changeCost: t?.changeCost === null || t?.changeCost === undefined || t?.changeCost === '' ? null : num(t.changeCost, 0, -1000, 10000),
+            bare: t?.bare === true
           }))
           .filter((t: PackagingType) => t.name)
           .slice(0, 10)
@@ -443,7 +446,7 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
           .map((c: any) => ({
             from: text(c?.from, '', 40),
             to: text(c?.to, '', 40),
-            cost: c?.cost === null || c?.cost === undefined || c?.cost === '' ? null : num(c.cost, 0, 0, 10000),
+            cost: c?.cost === null || c?.cost === undefined || c?.cost === '' ? null : num(c.cost, 0, -1000, 10000),
             allowed: c?.allowed !== false,
             note: text(c?.note, '', 240)
           }))
