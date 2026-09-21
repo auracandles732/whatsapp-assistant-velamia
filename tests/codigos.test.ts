@@ -1,3 +1,4 @@
+import './entorno';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newCode, findUsable } from '../src/services/signupCodes';
