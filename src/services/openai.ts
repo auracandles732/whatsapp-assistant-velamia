@@ -2,6 +2,7 @@ import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
 import { recordAiUsage } from './supabase';
 import { ticsIn, stripFillerOpening, withoutBrokenChars } from './muletillas';
+import { addOpeningQuestionMarks } from './puntuacion';
 import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, getOpenAIVisionModel, usesProductUnits, usesGenderTagging, packagingChange, PackagingChange } from '../config/businessProfile';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
@@ -1317,7 +1318,7 @@ export async function planTurn(params: {
     parsed.reply = stripFillerOpening(reply());
   }
 
-  parsed.reply = reply().split(TEAM_MARK.trim()).join('').trim();
+  parsed.reply = addOpeningQuestionMarks(reply().split(TEAM_MARK.trim()).join('').trim());
 
   const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
 

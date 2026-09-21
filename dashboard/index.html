@@ -2144,6 +2144,21 @@
             return date ? date.toLocaleString('es-EC', { timeZone: BUSINESS_TZ, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
         }
 
+        // Como en WhatsApp: *negrita*, _cursiva_ y ~tachado~ se ven con su formato, sin los signos.
+        function renderWa(text) {
+            const parts = String(text || '').split(/((?<![w*])*[^*
+]+*(?![w*])|(?<![w_])_[^_
+]+_(?![w_])|(?<![w~])~[^~
+]+~(?![w~]))/);
+            return parts.map((part, i) => {
+                if (i % 2 === 0) return part;
+                const inner = part.slice(1, -1);
+                if (part[0] === '*') return <strong key={i}>{inner}</strong>;
+                if (part[0] === '_') return <em key={i}>{inner}</em>;
+                return <s key={i}>{inner}</s>;
+            });
+        }
+
         function formatTime(value) {
             const date = parseTs(value);
             return date ? date.toLocaleTimeString('es-EC', { timeZone: BUSINESS_TZ, hour: 'numeric', minute: '2-digit' }) : '';
@@ -4815,7 +4830,7 @@
                                                             {msg.type === 'image' && mediaUrl ? <img src={mediaUrl} onLoad={keepAtBottom} onClick={() => window.open(mediaUrl, '_blank')} /> : null}
                                                             {msg.type === 'audio' && mediaUrl ? <audio controls src={mediaUrl} style={{ maxWidth: '220px', marginBottom: '6px', display: 'block' }} /> : null}
                                                             {msg.type === 'document' && mediaUrl ? <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>📎 Abrir documento</a> : null}
-                                                            {textPart}
+                                                            {renderWa(textPart)}
                                                             <div className="nx-time">{formatTime(msg.timestamp)}</div>
                                                         </div>
                                                     </div>
