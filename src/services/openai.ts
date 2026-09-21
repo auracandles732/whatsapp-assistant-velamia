@@ -1,7 +1,7 @@
 import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
 import { recordAiUsage } from './supabase';
-import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, usesProductUnits, usesGenderTagging, packagingChange, PackagingChange } from '../config/businessProfile';
+import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, getOpenAIVisionModel, usesProductUnits, usesGenderTagging, packagingChange, PackagingChange } from '../config/businessProfile';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
 const openaiClients = new Map<string, OpenAI>();
@@ -59,29 +59,62 @@ export async function transcribeAudio(buffer: Buffer, mimeType: string, p: Busin
   }
 }
 
+/**
+ * Lo que la IA debe fijarse al mirar una foto del cliente. Una descripción genérica ("foto de referencia de un producto")
+ * no sirve: hace falta la figura exacta, los colores de cada parte, el empaque y los textos, porque con eso se cotiza.
+ */
+export function buildImagePrompt(p: BusinessProfile): string {
+  const lines = [
+    `Un cliente de un negocio de ${p.business.description} te envió esta foto por WhatsApp. Descríbela en español con TODO el detalle útil para atenderlo, en líneas cortas con estas etiquetas (omite las que no apliquen):`,
+    'Tipo: foto de referencia de un producto o diseño / comprobante de pago o transferencia / imagen del catálogo del propio negocio / documento / otra cosa.',
+    'Figura: qué es exactamente y cómo es, con el nombre concreto ("conejita sentada de orejas largas caídas", "peonía abierta", "oso abrazando un corazón"), su postura y su acabado.',
+    'Colores: el color de cada parte visible (cuerpo, moño o lazo, detalles, base), con nombres precisos (blanco hueso, rosado pastel, dorado…).',
+    'Presentación: cómo viene empacado (bolsita con ventana, caja, tul, frasco, vasito, acetato, cinta) y los colores del empaque.',
+    'Detalles: textos o nombres escritos (cópialos tal cual), adornos (perlas, flores, tarjeta, estrellas), tamaño aproximado si se nota y cuántas piezas se ven.'
+  ];
+  lines.push(
+    'Si es un comprobante de pago: Tipo: comprobante de pago, y además el banco, el monto, la fecha y el número de referencia si se leen.',
+    'Privacidad: en documentos, guías o capturas NO copies datos personales (cédula, teléfonos, correos, direcciones, nombres de personas): solo di de qué documento se trata. En un comprobante de pago sí anota banco, monto, fecha y referencia.',
+    'Reglas: sé específico, nunca genérico; no inventes lo que no se ve (usa "posiblemente" o "no se distingue"); no opines sobre el negocio. Máximo 7 líneas.'
+  );
+  return lines.join('\n');
+}
+
 export async function describeImage(imageUrl: string, p: BusinessProfile = profile()): Promise<string> {
-  const b = p.business;
-  try {
-    const client = getOpenAIClient(p);
-    const model = getOpenAIModel(p);
+  const client = getOpenAIClient(p);
+  const ask = async (model: string) => {
     const response = await client.chat.completions.create({
       model,
       ...reasoningFor(model),
-      max_completion_tokens: 600,
+      // Con modelos que razonan, parte del límite se gasta pensando: se deja margen para que la descripción salga completa.
+      max_completion_tokens: 1500,
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: `Describe brevemente en español qué se ve en esta imagen, en el contexto de ${b.name}, ${b.description} (por ejemplo si parece una foto de referencia, un producto, un comprobante de pago, etc). Máximo 2 líneas.` },
-          { type: 'image_url', image_url: { url: imageUrl } }
+          { type: 'text', text: buildImagePrompt(p) },
+          { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
         ]
       }]
-    });
+    } as any);
     track('foto', model, response);
-    return response.choices[0]?.message?.content || '';
+    return (response.choices[0]?.message?.content || '').trim();
+  };
+
+  const visionModel = getOpenAIVisionModel(p);
+  try {
+    const description = await ask(visionModel);
+    if (description) return description;
+  } catch (error: any) {
+    // La clave de un negocio puede no tener acceso al modelo de imágenes: se intenta con su modelo de siempre.
+    console.error(`Error describiendo imagen con ${visionModel}:`, error.message);
+  }
+  try {
+    const fallback = getOpenAIModel(p);
+    if (fallback !== visionModel) return await ask(fallback);
   } catch (error: any) {
     console.error('Error describiendo imagen:', error.message);
-    return '[No se pudo analizar la imagen]';
   }
+  return '[No se pudo analizar la imagen]';
 }
 
 const money = (value: number) => `$${value.toFixed(2)}`;
@@ -344,6 +377,16 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
 
   const packagingList = packagingOn ? p.packaging.types.map(t => t.name).join(', ') : '';
   add(
+    'FOTOS QUE ENVÍA EL CLIENTE (mensajes que empiezan con "[El cliente envió una foto]"):',
+    '- La descripción trae lo que se ve en la foto: figura exacta, colores de cada parte, empaque, textos y cantidad de piezas. Úsala con precisión y NUNCA inventes lo que no diga.',
+    `- Si es una foto de referencia, confírmale en UNA frase lo que entendiste con esos detalles concretos (por ejemplo "una conejita blanca de orejas largas con moño rosado, en bolsita rosa con su nombre"). No la describas dos veces ni le pidas lo que ya se ve en la foto (la figura, los colores, el empaque): pregunta solo lo que falte.`,
+    `- Si la descripción dice "Tipo: imagen del catálogo del propio negocio" o el diseño coincide CLARAMENTE (misma figura y mismos textos) con un ${model} del catálogo, es ese ${model}: dile cuál es y avanza con él. Si solo se parece o es de otro estilo, NO lo trates como el del catálogo: sigue el proceso de diseño fuera del catálogo.`,
+    '- Los nombres, fechas y textos impresos en la foto son de EJEMPLO (de otra persona o del catálogo), no del cliente: no los repitas como si fueran suyos ni los anotes en personalization. Si aplica, pregúntale qué nombre o frase quiere en la suya.',
+    '- Si dice "Tipo: comprobante de pago", sigue las reglas de pagos.',
+    ''
+  );
+
+  add(
     'DISEÑO FUERA DEL CATÁLOGO (campos custom_design_requested y custom_design_summary):',
     `- Si el cliente pide CUALQUIER ${model} que NO esté en el catálogo (una temática, un animal, un motivo, una figura, un estilo, cualquier cosa) o si dice que ninguno de los ${models} que le mostraste le gusta y quiere algo distinto, es un diseño fuera del catálogo. Da igual qué sea: cualquier cosa que no aparezca en el catálogo entra aquí.`,
     '- NUNCA aceptes ni rechaces el pedido, ni digas que "lo verificas", "lo consultas", "lo confirmas con el equipo" ni nada parecido: el cliente no debe darse cuenta de esta gestión.',
@@ -357,7 +400,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     d.enabled && `  6) fecha del ${d.eventLabel}`,
     '- No repitas todas las preguntas juntas: una por respuesta, avanzando la conversación.',
     '- Marca custom_design_requested = true en cuanto entiendas que quiere algo fuera del catálogo.',
-    '- Si el cliente envió una foto de referencia en la conversación, agrega "con foto de referencia" al resumen para que la dueña sepa que debe abrir el chat y verla.',
+    '- Si el cliente envió una foto de referencia en la conversación, agrega "con foto de referencia" al resumen y anota en él lo que se ve en la foto (figura, colores, empaque, textos), para que la dueña entienda la idea sin abrir el chat.',
     '- Deja order_items VACÍO mientras sea un diseño fuera del catálogo (no está en el catálogo, no lo pongas).',
     `- Cuando ya tengas al menos la descripción del diseño${s.personalization ? ', los colores' : ''}${packagingOn ? ', el empaque' : ''} y la cantidad, llena custom_design_summary con una sola línea que junte TODO lo que dijo (ejemplo: "${label} temático${s.personalization ? ' · colores' : ''}${packagingOn && p.packaging.types[0] ? ` · empaque ${p.packaging.types[0].name}` : ''} · nombre · 2 ${units}${hasShipping ? ' · ciudad' : ''}${d.enabled ? ` · ${d.eventLabel} DD/MM/YYYY` : ''}"). Antes de tener esos datos, custom_design_summary va vacío.`,
     '- Después de llenar custom_design_summary responde algo cálido y natural (por ejemplo: "Qué idea tan linda 🥰 En un momento te preparo la propuesta"), sin decir que consultas ni prometer una hora.',

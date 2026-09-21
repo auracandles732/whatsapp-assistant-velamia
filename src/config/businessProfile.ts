@@ -124,6 +124,8 @@ export interface BusinessProfile {
     openai_api_key?: string;
     /** Modelo OpenAI para este negocio; default = gpt-5.4-mini. */
     model?: string;
+    /** Modelo para mirar las fotos del cliente; default = gpt-5.4 (distingue mejor figuras, colores y textos que el mini). */
+    visionModel?: string;
   };
 }
 
@@ -456,7 +458,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
     },
     ai: {
       openai_api_key: typeof ai.openai_api_key === 'string' && ai.openai_api_key.length > 0 ? ai.openai_api_key : (base.ai?.openai_api_key || ''),
-      model: typeof ai.model === 'string' && ai.model.length > 0 ? ai.model : (base.ai?.model || 'gpt-5.4-mini')
+      model: typeof ai.model === 'string' && ai.model.length > 0 ? ai.model : (base.ai?.model || 'gpt-5.4-mini'),
+      visionModel: typeof ai.visionModel === 'string' && ai.visionModel.length > 0 ? ai.visionModel : base.ai?.visionModel
     }
   };
 }
@@ -644,6 +647,11 @@ export function getOpenAIKey(p: BusinessProfile = profile()): string {
     return tenant.openaiApiKey;
   }
   return (p.ai?.openai_api_key || process.env.OPENAI_API_KEY || '').trim();
+}
+
+/** Modelo para mirar las fotos del cliente. Default = gpt-5.4: el mini confundía una conejita con un pollito. */
+export function getOpenAIVisionModel(p: BusinessProfile = profile()): string {
+  return (p.ai?.visionModel || 'gpt-5.4').trim();
 }
 
 /** Obtiene el modelo OpenAI del negocio. Default = gpt-5.4-mini. */

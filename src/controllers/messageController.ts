@@ -413,7 +413,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
         const description = await describeImage(publicUrl, p);
         const caption = message.image.caption;
         return {
-          userContent: `${publicUrl}\n${caption || description}`,
+          userContent: `${publicUrl}\n${caption ? `${caption}\n📷 ${description}` : description}`,
           aiContent: `[El cliente envió una foto]: ${description}${caption ? ` (con el mensaje: "${caption}")` : ''}`
         };
       }

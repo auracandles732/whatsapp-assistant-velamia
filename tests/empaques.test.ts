@@ -7,8 +7,8 @@ import './entorno';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS } from '../src/config/businessProfile';
-import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion, removeUnverifiedTotals, removeBareFromPersonalization, ensurePackagingLine, bareOffer } from '../src/services/openai';
+import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS, getOpenAIVisionModel, getOpenAIModel } from '../src/config/businessProfile';
+import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion, removeUnverifiedTotals, removeBareFromPersonalization, ensurePackagingLine, bareOffer, buildImagePrompt } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -477,4 +477,31 @@ test('sigue quitando un total escrito en una frase corrida', () => {
   const limpio = removeUnverifiedTotals('Para 4 docenas en Guayaquil el total es $184.00');
   assert.equal(limpio.removed, true);
   assert.equal(limpio.text, '');
+});
+
+// ---------- Fotos del cliente: descripción detallada ----------
+
+test('la petición a la IA de imágenes pide figura, colores, empaque, textos y no copiar datos personales', () => {
+  const pedido = buildImagePrompt(conEmpaques);
+  for (const etiqueta of ['Tipo:', 'Figura:', 'Colores:', 'Presentación:', 'Detalles:']) assert.ok(pedido.includes(etiqueta), etiqueta);
+  assert.ok(/comprobante de pago/.test(pedido));
+  assert.ok(/NO copies datos personales/.test(pedido));
+  assert.ok(/no inventes lo que no se ve/.test(pedido));
+  assert.ok(!/breve/i.test(pedido), 'ya no se pide una descripción breve');
+});
+
+test('las instrucciones del asistente le piden usar los detalles de la foto sin inventar y sin repetir nombres de ejemplo', () => {
+  const prompt = buildSystemPrompt([{ name: 'Vela', price: 30, category: 'EVENTOS' }], undefined, conEmpaques);
+  assert.ok(/FOTOS QUE ENVÍA EL CLIENTE/.test(prompt));
+  assert.ok(/NUNCA inventes lo que no diga/.test(prompt));
+  assert.ok(/ni le pidas lo que ya se ve en la foto/.test(prompt));
+  assert.ok(/son de EJEMPLO/.test(prompt));
+  assert.ok(/coincide CLARAMENTE/.test(prompt));
+});
+
+test('el modelo para mirar fotos es aparte del de conversar y se puede cambiar por negocio', () => {
+  assert.equal(getOpenAIVisionModel(conEmpaques), 'gpt-5.4');
+  const propio = normalizeProfile({ ...PROFILE_PRESETS.eventos.profile, ai: { model: 'gpt-5.4-mini', visionModel: 'gpt-4.1' } });
+  assert.equal(getOpenAIVisionModel(propio), 'gpt-4.1');
+  assert.equal(getOpenAIModel(propio), 'gpt-5.4-mini');
 });
