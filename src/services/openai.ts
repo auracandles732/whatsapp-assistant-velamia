@@ -1,6 +1,7 @@
 import { OpenAI, toFile } from 'openai';
 import { shippingCost, shippingRatesSummary } from './shippingRates';
 import { recordAiUsage } from './supabase';
+import { ticsIn, stripFillerOpening, withoutBrokenChars } from './muletillas';
 import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, getOpenAIVisionModel, usesProductUnits, usesGenderTagging, packagingChange, PackagingChange } from '../config/businessProfile';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
@@ -169,6 +170,9 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     '- Haz UNA sola pregunta por mensaje (un solo signo de interrogación) y solo la que más ayude a avanzar; nunca juntes evento, cantidad y fecha en la misma pregunta. Si el cliente solo saluda, pregunta únicamente qué producto busca o para qué evento es.',
     '- Si ya le hiciste una pregunta y el cliente responde otra cosa sin contestarla (por ejemplo vuelve a pedir lo mismo), NO repitas la pregunta: elige tú la opción que mejor encaje con lo que pide, dile cuál elegiste y avanza (cotiza), dejando claro que puede cambiarla. No pidas permiso para cotizar.',
     '- Todo dato que el cliente ya dio (evento, cantidad, fecha, ciudad, colores, sexo del bebé) se confirma TODO junto en una frase de tu respuesta, sin olvidar la cantidad (por ejemplo "perfecto, 3 docenas de baby shower de niño para noviembre") y NUNCA se le vuelve a preguntar; pregunta solo lo que todavía falta. Si dio solo el mes de la fecha, pídele únicamente el día.',
+    '- NATURALIDAD: escribe como una persona real, no como un robot. Empieza la mayoría de tus mensajes directo con la respuesta o la información. Una exclamación de relleno ("Qué lindo", "Qué linda elección", "Claro", "Perfecto", "Listo", "Con gusto", "Entendido") como máximo cada cuatro mensajes, nunca dos seguidas y nunca la misma dos veces en un chat.',
+    '- No repitas en el mismo chat las mismas fórmulas ("te comparto", "te muestro", "cuéntame", "con gusto te ayudo", "qué gusto", "me encanta", "va a quedar hermoso"): dilo con otras palabras o no lo digas. Revisa "TUS ÚLTIMAS APERTURAS" antes de escribir.',
+    '- No elogies cada elección del cliente. Reconócela con un hecho concreto ("en rosado con lazo blanco queda muy delicado") o simplemente avanza con lo siguiente.',
     '- Saluda ("Hola", "qué gusto", etc.) SOLO en tu primer mensaje de la conversación. En los siguientes mensajes ve directo al punto, sin volver a saludar aunque el cliente diga "hola" de nuevo.',
     '- Si el cliente escribe una palabra con una errata obvia pero reconocible (letras de más, de menos o cambiadas: "veliy" por "velas", "qeu" por "que"), entiende a qué se refiere y responde con normalidad; no le preguntes si quiso decir esa palabra ni se lo hagas notar.',
     ''
@@ -977,12 +981,22 @@ export function buildSystemPrompt(
  * Lo que cambia en cada mensaje. Va después del historial: si fuera antes, OpenAI dejaría de
  * reconocer como repetido todo lo que viene detrás y se cobraría el historial completo cada vez.
  */
+/** Cómo empezaron tus últimos mensajes en este chat: para que la IA no repita las mismas aperturas ni fórmulas. */
+export function recentOpeningsText(previousReplies: string[]): string {
+  const last = previousReplies.filter(r => r && r.trim()).slice(-5);
+  if (last.length === 0) return '';
+  // Se recorta por caracteres completos: cortar un emoji por la mitad deja un carácter roto y OpenAI rechaza todo el mensaje.
+  const openings = last.map(r => `"${[...r.replace(/\s+/g, ' ').replace(/[*_]/g, '').trim().split(/(?<=[.!?])\s|\n/)[0]].slice(0, 60).join('')}"`);
+  return `\nTUS ÚLTIMAS APERTURAS EN ESTE CHAT (no las repitas ni abras con una exclamación de relleno parecida): ${openings.join(' | ')}`;
+}
+
 export function buildTurnContext(
   sentProducts: string[],
   bankDetailsSent: boolean,
   pendingProducts: string[],
   recentEmojis: string[],
-  p: BusinessProfile = profile()
+  p: BusinessProfile = profile(),
+  previousReplies: string[] = []
 ) {
   const models = p.sales.productLabelPlural.toLowerCase();
   const pendingText = pendingProducts.length > 0
@@ -994,7 +1008,8 @@ export function buildTurnContext(
       : '\nDATOS BANCARIOS: aún no se han enviado en esta conversación.';
   return `FOTOS YA ENVIADAS EN ESTA CONVERSACIÓN: ${sentProducts.length ? sentProducts.join(', ') : 'ninguna'}`
     + pendingText + bankText
-    + `\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`;
+    + `\nEMOJIS USADOS RECIENTEMENTE: ${recentEmojis.length ? recentEmojis.join(' ') : 'ninguno'}`
+    + recentOpeningsText(previousReplies);
 }
 
 /**
@@ -1040,12 +1055,16 @@ export async function planTurn(params: {
   const cardChosen = cardChosenBefore && !choseTransfer;
   const patterns = summaryPatterns(p);
 
+  const previousReplies = history
+    .filter(m => m.role === 'assistant' && !m.content.startsWith('[Foto') && !m.content.startsWith('🏦'))
+    .map(m => m.content);
+
   const baseMessages = [
     { role: 'system' as const, content: buildSystemPrompt(catalog, customPrompt, p) },
     ...history,
     {
       role: 'system' as const,
-      content: buildTurnContext(sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p)
+      content: buildTurnContext(sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p, previousReplies)
         + `\nPREGUNTAS YA ENVIADAS A LA DUEÑA: ${pendingOwnerQuestions.length ? pendingOwnerQuestions.join(' | ') : 'ninguna'}`
         + (cardChosen && usesDeposit ? '\nFORMA DE PAGO ELEGIDA: tarjeta. Se paga el 100% del total: no menciones anticipo; la fecha se reserva "al recibir el pago".' : '')
         + `\nDISEÑOS FUERA DEL CATÁLOGO YA ENVIADOS A LA DUEÑA: ${pendingCustomDesigns.length ? pendingCustomDesigns.join(' | ') : 'ninguno'}`
@@ -1065,7 +1084,9 @@ export async function planTurn(params: {
         type: 'json_schema',
         json_schema: { name: 'turno_whatsapp', strict: true, schema: TURN_SCHEMA }
       },
-      messages: extraSystem ? [...baseMessages, { role: 'system' as const, content: extraSystem }] : baseMessages
+      // Ningún texto con un carácter roto (un emoji partido al recortar) puede tumbar la respuesta entera.
+      messages: (extraSystem ? [...baseMessages, { role: 'system' as const, content: extraSystem }] : baseMessages)
+        .map(m => (typeof m.content === 'string' ? { ...m, content: withoutBrokenChars(m.content) } : m))
     });
     track('respuesta', model, response);
     return JSON.parse(response.choices[0]?.message?.content || '{}');
@@ -1234,6 +1255,24 @@ export async function planTurn(params: {
     corrections.push('Esa pregunta ya se la hiciste al cliente en tu mensaje anterior y no la respondió como esperabas: NO la repitas ni la reformules con otras palabras. Elige tú la opción que mejor encaje con lo que pidió, dile cuál elegiste y avanza con eso (cotiza), aclarando que puede cambiarla. Solo si es imposible avanzar, dile que lo consultas con el equipo y escríbelo en owner_question.');
   }
 
+  // Muletillas: nunca la misma exclamación de relleno ni las mismas fórmulas que ya usó en este chat.
+  let firstTics = ticsIn(reply(), previousReplies);
+  // Una exclamación de relleno aislada ("Perfecto 🤍 …") se quita directamente, sin gastar otra llamada a la IA.
+  if (firstTics.why) {
+    const stripped = stripFillerOpening(reply());
+    if (stripped !== reply()) {
+      parsed.reply = stripped;
+      firstTics = ticsIn(reply(), previousReplies);
+    }
+  }
+  if (firstTics.violates) {
+    console.warn(`🗣️ Muletilla detectada, se corrige: ${firstTics.why || firstTics.formulas.join(', ')}`);
+    const partes: string[] = [];
+    if (firstTics.why) partes.push(`Tu mensaje abre con una exclamación de relleno y ${firstTics.why}. Empieza directo con la respuesta o la información, sin "Qué lindo", "Claro", "Perfecto", "Listo" ni parecidos.`);
+    if (firstTics.formulas.length > 0) partes.push(`Ya usaste en este chat estas fórmulas: ${firstTics.formulas.join(', ')}. Dilo con otras palabras o no lo digas.`);
+    corrections.push(`Estás sonando repetitivo, como un robot. ${partes.join(' ')}`);
+  }
+
   // Una foto ya enviada no se repite, salvo que la clienta la pida otra vez o nombre ese modelo.
   const sentKeys = new Set(sentProducts.map(productKey));
   const spoken = normalizeWords(customerWords);
@@ -1270,6 +1309,12 @@ export async function planTurn(params: {
   // Si aun corregida repite la pregunta, el bot está atascado: la dueña recibe el aviso para que intervenga.
   const stuck = repeatsQuestion();
   if (stuck) console.warn('🔁 El asistente insiste en repetir la misma pregunta: se avisa a la dueña');
+
+  // Última defensa: si aun corregida abre con la misma exclamación de relleno, se quita y empieza directo.
+  if (ticsIn(reply(), previousReplies).opening) {
+    console.warn('🗣️ Muletilla repetida al abrir: se quita de la respuesta');
+    parsed.reply = stripFillerOpening(reply());
+  }
 
   const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
 
