@@ -749,22 +749,28 @@ export async function getUsageByBusiness(days = 30): Promise<Record<string, Usag
   return totals;
 }
 
-/** Consumo de la empresa actual: hoy, semana, mes y el detalle por día. */
+/** Consumo de la empresa actual: hoy, semana, mes, detalle por día y por tipo de uso. */
 export async function getTenantUsage(days = 30) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const data = await fetchAllRows(() => supabase
     .from('ai_usage')
-    .select('created_at,model,input_tokens,cached_tokens,output_tokens')
+    .select('created_at,model,purpose,input_tokens,cached_tokens,output_tokens')
     .filter('business_id', tenantOp(), tenantValue())
     .gte('created_at', since));
   const { startOfToday, weekAgo } = periodLimits();
   const periods = emptyPeriods();
   const byDay: Record<string, AiUsageSummary> = {};
+  const byPurpose: Record<string, AiUsageSummary> = {};
+  const byModel: Record<string, AiUsageSummary> = {};
   for (const row of data) {
     addToPeriods(periods, row, startOfToday, weekAgo);
     addUsage((byDay[String(row.created_at).slice(0, 10)] ||= EMPTY_USAGE()), row);
+    const purpose = row.purpose || 'otro';
+    addUsage((byPurpose[purpose] ||= EMPTY_USAGE()), row);
+    const model = row.model || 'unknown';
+    addUsage((byModel[model] ||= EMPTY_USAGE()), row);
   }
-  return { days, ...periods, byDay };
+  return { days, ...periods, byDay, byPurpose, byModel };
 }
 
 // ---------- PRODUCTOS ----------

@@ -4951,6 +4951,7 @@
                                 <div className={'nx-tab' + (activeTab === 'pedidos' ? ' active' : '')} onClick={() => setActiveTab('pedidos')}><PlatIcon name="bag" size={19} /><span className="lbl">Pedidos</span></div>
                                 <div className={'nx-tab' + (activeTab === 'catalogo' ? ' active' : '')} onClick={() => setActiveTab('catalogo')}><PlatIcon name="box" size={19} /><span className="lbl">Catálogo</span></div>
                                 <div className={'nx-tab' + (activeTab === 'configuracion' ? ' active' : '')} onClick={() => setActiveTab('configuracion')}><PlatIcon name="gear" size={19} /><span className="lbl">Configuración</span></div>
+                                <div className={'nx-tab' + (activeTab === 'consumo' ? ' active' : '')} onClick={() => setActiveTab('consumo')}><PlatIcon name="chart" size={19} /><span className="lbl">Consumo</span></div>
                             </div>
 
                             <div className="nx-actions">
@@ -5354,6 +5355,102 @@
                             />
                         </div>
                         )}
+
+                        {activeTab === 'consumo' && (
+                        <ConsumptionView />
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function ConsumptionView() {
+            const [usage, setUsage] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                setLoading(true);
+                api('/api/me/usage?days=7')
+                    .then(data => setUsage(data))
+                    .catch(err => console.error('Error cargando consumo:', err))
+                    .finally(() => setLoading(false));
+            }, []);
+
+            if (loading) return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando consumo...</div>;
+            if (!usage) return <div style={{ padding: '40px', textAlign: 'center' }}>Error al cargar el consumo</div>;
+
+            const purposeLabels = { respuesta: 'Respuestas', foto: 'Fotos', audio: 'Audio', pedido: 'Pedidos', otro: 'Otro' };
+
+            return (
+                <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+                    <h2>📊 Consumo de IA — Últimos 7 Días</h2>
+                    {usage.byDay && Object.keys(usage.byDay).length > 0 && (
+                        <p style={{ fontSize: '13px', color: '#9C8880', marginTop: '6px' }}>
+                            El CRM mide desde el {Object.keys(usage.byDay).sort()[0].split('-').reverse().join('/')}: lo gastado antes de esa fecha solo aparece en OpenAI.
+                        </p>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '20px' }}>
+                        <div style={{ background: '#F0DAD3', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', color: '#9C5740', fontWeight: 600 }}>Total Llamadas</div>
+                            <div style={{ fontSize: '32px', fontWeight: 700, color: '#B96B4F' }}>{usage.week?.calls || 0}</div>
+                        </div>
+                        <div style={{ background: '#A8C5D6', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', color: '#4A6B7A', fontWeight: 600 }}>Tokens (entrada)</div>
+                            <div style={{ fontSize: '28px', fontWeight: 700, color: '#3A5A6B' }}>{(usage.week?.input || 0).toLocaleString()}</div>
+                        </div>
+                        <div style={{ background: '#A8D5BA', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', color: '#4A6B4A', fontWeight: 600 }}>Tokens (salida)</div>
+                            <div style={{ fontSize: '28px', fontWeight: 700, color: '#3A5A3B' }}>{(usage.week?.output || 0).toLocaleString()}</div>
+                        </div>
+                        <div style={{ background: '#E8C88A', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', color: '#8B6B2F', fontWeight: 600 }}>Costo USD</div>
+                            <div style={{ fontSize: '32px', fontWeight: 700, color: '#9C7A2F' }}>${(usage.week?.cost || 0).toFixed(2)}</div>
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: '40px' }}>
+                        <h3>Desglose por Tipo de Uso</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                            {usage.byPurpose && Object.entries(usage.byPurpose).map(([purpose, data]) => (
+                                <div key={purpose} style={{ background: '#F7EFEA', padding: '12px', borderRadius: '6px', border: '1px solid #E3B7AC' }}>
+                                    <div style={{ fontSize: '11px', color: '#9C8880', fontWeight: 600 }}>{purposeLabels[purpose] || purpose}</div>
+                                    <div style={{ fontSize: '16px', fontWeight: 700, color: '#4A3B35', marginTop: '4px' }}>{data.calls} llamadas</div>
+                                    <div style={{ fontSize: '12px', color: '#9C8880', marginTop: '4px' }}>${data.cost.toFixed(2)}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: '40px' }}>
+                        <h3>Desglose por Día</h3>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '2px solid #E3B7AC' }}>
+                                        <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, color: '#4A3B35' }}>Fecha</th>
+                                        <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600, color: '#4A3B35' }}>Llamadas</th>
+                                        <th style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: '#4A3B35' }}>Entrada</th>
+                                        <th style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: '#4A3B35' }}>Salida</th>
+                                        <th style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: '#4A3B35' }}>Costo USD</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {usage.byDay && Object.entries(usage.byDay).sort().reverse().map(([date, data]) => (
+                                        <tr key={date} style={{ borderBottom: '1px solid #FCF8F5', background: date === new Date().toISOString().slice(0, 10) ? '#F0DAD3' : 'transparent' }}>
+                                            <td style={{ padding: '10px', color: '#4A3B35' }}>{new Date(date).toLocaleDateString('es-ES')}</td>
+                                            <td style={{ padding: '10px', textAlign: 'center', color: '#4A3B35' }}>{data.calls}</td>
+                                            <td style={{ padding: '10px', textAlign: 'right', color: '#4A3B35' }}>{data.input.toLocaleString()}</td>
+                                            <td style={{ padding: '10px', textAlign: 'right', color: '#4A3B35' }}>{data.output.toLocaleString()}</td>
+                                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: '#B96B4F' }}>${data.cost.toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: '40px', padding: '16px', background: '#F0DAD3', borderRadius: '6px', fontSize: '12px', color: '#6B4540', lineHeight: '1.6' }}>
+                        <strong>📌 Nota:</strong> Los datos se calculan desde la tabla `ai_usage` del servidor. El costo es una estimación basada en precios de OpenAI consultados el 17-sep-2026. La factura real de OpenAI siempre es autoridad. Si ves discrepancias, verifica en el dashboard de OpenAI que los tokens y modelos coincidan.
                     </div>
                 </div>
             );
