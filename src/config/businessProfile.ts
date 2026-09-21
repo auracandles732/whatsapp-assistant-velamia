@@ -643,8 +643,11 @@ export function getProductWeight(productId: string, p: BusinessProfile = profile
 export function getOpenAIKey(p: BusinessProfile = profile()): string {
   const tenant = currentTenant();
   if (tenant) {
-    if (!tenant.openaiApiKey) throw new Error(`El negocio ${tenant.name} no tiene clave de OpenAI configurada`);
-    return tenant.openaiApiKey;
+    // Sin llave propia, la empresa usa la de la plataforma: el gasto de IA va incluido en su mensualidad
+    // (cada llamada queda anotada por empresa en ai_usage).
+    const key = (tenant.openaiApiKey || process.env.OPENAI_API_KEY || '').trim();
+    if (!key) throw new Error(`El negocio ${tenant.name} no tiene clave de OpenAI y la plataforma tampoco`);
+    return key;
   }
   return (p.ai?.openai_api_key || process.env.OPENAI_API_KEY || '').trim();
 }

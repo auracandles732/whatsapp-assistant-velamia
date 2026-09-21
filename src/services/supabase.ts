@@ -1363,7 +1363,7 @@ export async function getBusinessReadiness(row: BusinessRow) {
     },
     {
       key: 'openai', label: 'Clave de OpenAI', required: true,
-      ok: !!row.openai_api_key,
+      ok: !!row.openai_api_key || !!process.env.OPENAI_API_KEY,
       hint: 'Sin esta clave el bot no puede pensar ni responder'
     },
     {
