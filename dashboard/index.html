@@ -5437,7 +5437,7 @@
                                 <tbody>
                                     {usage.byDay && Object.entries(usage.byDay).sort().reverse().map(([date, data]) => (
                                         <tr key={date} style={{ borderBottom: '1px solid #FCF8F5', background: date === new Date().toISOString().slice(0, 10) ? '#F0DAD3' : 'transparent' }}>
-                                            <td style={{ padding: '10px', color: '#4A3B35' }}>{new Date(date).toLocaleDateString('es-ES')}</td>
+                                            <td style={{ padding: '10px', color: '#4A3B35' }}>{date.split('-').reverse().join('/')}</td>
                                             <td style={{ padding: '10px', textAlign: 'center', color: '#4A3B35' }}>{data.calls}</td>
                                             <td style={{ padding: '10px', textAlign: 'right', color: '#4A3B35' }}>{data.input.toLocaleString()}</td>
                                             <td style={{ padding: '10px', textAlign: 'right', color: '#4A3B35' }}>{data.output.toLocaleString()}</td>
