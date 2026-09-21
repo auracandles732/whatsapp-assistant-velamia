@@ -316,7 +316,11 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     const bareType = p.packaging.types.find(t => t.bare);
     const bareRule = bareType
       ? [
-        `- Si el cliente pide el ${model} solo, sin empaque, sin nada, sin caja, sin tul, sin frasco o "solo la vela", eso es un CAMBIO DE EMPAQUE a "${bareType.name}" (ponlo en packaging), NO es elegir entre modelos: cotiza el ${model} del que hablan con ese cambio, con el costo o descuento de la lista de cambios. No escribas "${bareType.name}" en personalization: ese campo es solo para colores, nombres y frases.`,
+        `- VENTA DE "${bareType.name.toUpperCase()}": si el cliente quiere el ${model} solo, sin empaque, sin nada, sin caja, sin tul o sin frasco, es una VENTA, no un problema: eso es un CAMBIO DE EMPAQUE a "${bareType.name}" y hay que cerrarla.`,
+        `  1) Primero confirma con amabilidad que sí se puede y hazle UNA pregunta de sí o no para confirmar la presentación, con el ${model} que ya eligió. Ejemplos: "Claro que sí 🤍 ¿Entonces deseas la velita sin el frasco de vidrio?" o "Claro que sí 🤍 ¿Entonces la deseas solo la vela, sin el empaque? Así te queda en $28.00 la docena". Si la línea del catálogo de ese modelo trae su precio de "${bareType.name.toLowerCase()}", dilo en esa misma frase con esa cifra exacta; si dice "precio por confirmar", NO menciones ningún monto ni descuento. En este mensaje NO des el total todavía.`,
+        `  2) Si responde que sí (o "ok", "dale", "perfecto"), pon "${bareType.name}" en packaging y sigue vendiendo hasta el total: cantidad, ${hasShipping ? 'ciudad, ' : ''}${d.enabled ? 'fecha y ' : ''}forma de pago. Sin volver a preguntar lo mismo. Si dice que no, deja el empaque original y sigue.`,
+        `  3) Si el cambio tiene "costo por confirmar", después del sí sigue pidiendo esos datos y dile UNA sola vez, con estas palabras u otras parecidas: "el valor de esa presentación te lo confirma nuestro equipo enseguida" (escríbelo también en owner_question); no repitas esa frase en cada mensaje y nunca inventes el precio.`,
+        `  4) No escribas "${bareType.name}" en personalization: ese campo es solo para colores, nombres y frases.`,
         `- Si hay dos ${models} posibles y no sabes cuál quiere, hazle UNA sola pregunta para saberlo y en esa misma pregunta dile que en cualquiera de los dos puede ir "${bareType.name}". Si ya respondió, nunca vuelvas a preguntar cuál ${model}: usa el que dijo o el que más encaje y avanza.`
       ]
       : [];
@@ -464,6 +468,21 @@ export function scopeCatalog<T extends CatalogProduct>(catalog: T[], p: Business
   }));
 }
 
+/**
+ * Lo que dice el catálogo de cada modelo sobre "solo la vela": su precio con ese cambio (calculado con la lista de
+ * cambios, no deducido por la IA) o "precio por confirmar". Vacío si el negocio no tiene ese empaque o el cambio no se puede.
+ */
+export function bareOffer(product: { price: number; description?: string | null }, p: BusinessProfile): string {
+  const bare = p.packaging.enabled ? p.packaging.types.find(t => t.bare) : undefined;
+  const current = String(product.description || '').trim();
+  if (!bare || !current || productKey(current) === productKey(bare.name)) return '';
+  const rule = packagingChange(current, bare.name, p);
+  if (!rule || !rule.allowed) return '';
+  return rule.cost === null
+    ? ` · ${bare.name.toLowerCase()}: precio por confirmar`
+    : ` · ${bare.name.toLowerCase()}: $${Math.max(0, Number(product.price) + rule.cost).toFixed(2)}`;
+}
+
 /** Unidad en la que se vende y se cotiza un producto: la suya si la tiene, si no la del negocio. */
 export function unitOf(product: { sale_unit?: string | null } | undefined, p: BusinessProfile): string {
   return product?.sale_unit?.trim() || p.sales.unitSingular;
@@ -584,7 +603,8 @@ export function removeUnverifiedTotals(text: string): { text: string; removed: b
   const lines = text.split('\n');
   const kept = lines.filter(line => {
     const hasMoney = /\$\s?\d/.test(line);
-    const totalLine = hasMoney && /\b(total|anticipo|abono|saldo|te queda)\b/i.test(line);
+    // "Total", "Anticipo"… con un monto. El precio por docena ("te queda en $28.00 la docena") no es un total.
+    const totalLine = hasMoney && /\b(total|anticipo|abono|saldo)\b/i.test(line);
     const payQuestion = /\?/.test(line) && /transferencia|tarjeta|forma de pago/i.test(line);
     return !totalLine && !payQuestion;
   });
@@ -890,7 +910,7 @@ export function buildSystemPrompt(
           ? ` = ${i.pieces_per_unit} unidades` : '';
         const measure = i.measure ? ` · mide ${i.measure}` : '';
         const gender = i.gender === 'niño' || i.gender === 'niña' ? ` · ${i.gender}` : '';
-        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${own}${pieces}${measure}${gender}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}`;
+        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${own}${pieces}${measure}${gender}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}${bareOffer(i, p)}`;
       }).join('\n'))
       .join('\n\n');
   }
@@ -1216,9 +1236,13 @@ export async function planTurn(params: {
       console.warn('💲 La IA escribió un total que el sistema no pudo calcular: se quita de la respuesta');
       const pendingCost = order.missing === 'packaging_cost';
       const alreadyTold = /confirm|verific|revis/i.test(safe.text);
-      parsed.reply = pendingCost && !alreadyTold
-        ? `${safe.text}\n\nEl valor de esa presentación lo confirma nuestro equipo y te avisamos enseguida.`.trim()
-        : safe.text;
+      // Nunca se deja a la clienta sin respuesta: si al quitar el total no quedó nada, se manda un aviso seguro.
+      const fallback = pendingCost
+        ? 'Claro 🤍 el valor de esa presentación te lo confirma nuestro equipo enseguida.'
+        : 'Enseguida te confirmo el valor 🤍';
+      parsed.reply = safe.text
+        ? (pendingCost && !alreadyTold ? `${safe.text}\n\nEl valor de esa presentación lo confirma nuestro equipo y te avisamos enseguida.` : safe.text)
+        : fallback;
     }
   }
 

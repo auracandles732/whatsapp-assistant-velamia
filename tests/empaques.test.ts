@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS } from '../src/config/businessProfile';
-import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion, removeUnverifiedTotals, removeBareFromPersonalization, ensurePackagingLine } from '../src/services/openai';
+import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion, removeUnverifiedTotals, removeBareFromPersonalization, ensurePackagingLine, bareOffer } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -329,11 +329,15 @@ test('un descuento nunca deja el precio en negativo', () => {
   assert.equal(pedido.items[0].price, 0);
 });
 
-test('las instrucciones explican que "solo la vela" es un cambio de empaque y muestran el descuento', () => {
+test('las instrucciones piden confirmar con sí o no y luego vender "solo la vela", mostrando el descuento', () => {
   const prompt = buildSystemPrompt(catalogoSoloVela, undefined, conSoloVela);
   assert.ok(prompt.includes('Solo la vela (descuento de $2.00 por docena)'));
-  assert.ok(/sin frasco o "solo la vela", eso es un CAMBIO DE EMPAQUE a "Solo la vela"/.test(prompt));
-  assert.ok(/NO es elegir entre modelos/.test(prompt));
+  assert.ok(/es una VENTA, no un problema/.test(prompt));
+  assert.ok(/CAMBIO DE EMPAQUE a "Solo la vela"/.test(prompt));
+  assert.ok(/UNA pregunta de sí o no/.test(prompt));
+  assert.ok(/Claro que sí 🤍 ¿Entonces deseas la velita sin el frasco de vidrio\?/.test(prompt));
+  assert.ok(/Si responde que sí.*sigue vendiendo hasta el total/.test(prompt));
+  assert.ok(/nunca inventes el precio/.test(prompt));
   assert.ok(/nunca vuelvas a preguntar cuál/.test(prompt));
 });
 
@@ -437,4 +441,40 @@ test('no agrega nada si ya lo dice, si no hubo cambio o si no hay resumen', () =
   const sinCambio = '📦 *Cantidad:* 4 docenas';
   assert.equal(ensurePackagingLine(sinCambio, [{ packaging: 'Tul', packagingChanged: false }]), sinCambio);
   assert.equal(ensurePackagingLine('Hola 🤍', [{ packaging: 'Solo la vela', packagingChanged: true }]), 'Hola 🤍');
+});
+
+// ---------- Cada modelo dice su precio de "solo la vela" ----------
+
+test('un modelo con caja muestra su precio de "solo la vela" con el descuento ya aplicado', () => {
+  assert.equal(bareOffer({ price: 30, description: 'Caja lazo personalizable' }, conSoloVela), ' · solo la vela: $28.00');
+});
+
+test('un modelo en frasco muestra "precio por confirmar", nunca un descuento inventado', () => {
+  assert.equal(bareOffer({ price: 45, description: 'Sin empaque' }, conSoloVela), ' · solo la vela: precio por confirmar');
+});
+
+test('no ofrece "solo la vela" donde no aplica', () => {
+  assert.equal(bareOffer({ price: 30, description: 'Solo la vela' }, conSoloVela), '');
+  assert.equal(bareOffer({ price: 30, description: '' }, conSoloVela), '');
+  assert.equal(bareOffer({ price: 30, description: 'Caja lazo personalizable' }, conEmpaques), '');
+});
+
+test('el catálogo que ve la IA lleva el precio de "solo la vela" de cada modelo', () => {
+  const prompt = buildSystemPrompt(catalogoSoloVela, undefined, conSoloVela);
+  assert.ok(prompt.includes('Vela con caja: $30.00 por docena · empaque: Caja lazo personalizable · solo la vela: $28.00'));
+  assert.ok(prompt.includes('Vela en frasco: $45.00 por docena · empaque: Sin empaque · solo la vela: precio por confirmar'));
+  assert.ok(/NO menciones ningún monto ni descuento/.test(prompt));
+});
+
+test('un precio por docena en una sola línea NO se borra como si fuera un total (causa de la respuesta vacía)', () => {
+  const soloPrecio = 'Claro que sí 🤍 ¿Entonces la deseas solo la vela, sin empaque? Así te queda en $28.00 la docena.';
+  const limpio = removeUnverifiedTotals(soloPrecio);
+  assert.equal(limpio.removed, false);
+  assert.equal(limpio.text, soloPrecio);
+});
+
+test('sigue quitando un total escrito en una frase corrida', () => {
+  const limpio = removeUnverifiedTotals('Para 4 docenas en Guayaquil el total es $184.00');
+  assert.equal(limpio.removed, true);
+  assert.equal(limpio.text, '');
 });
