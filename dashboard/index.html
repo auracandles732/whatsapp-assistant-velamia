@@ -3391,6 +3391,7 @@
                         <CfgCard id="seguimientos" icon="bell" title="Seguimientos automáticos" subtitle="Mensajes a clientes que dejaron de responder">
                             <div className="profile-grid">
                                 {check('followUps.enabled', 'Enviar seguimientos a clientas que no responden')}
+                                {form.followUps.enabled && check('followUps.requireInterest', 'Solo a quien mostró interés (no a quien solo saludó)')}
                             </div>
                             {form.followUps.enabled && (
                                 <>
@@ -3404,6 +3405,18 @@
                                         </div>
                                     ))}
                                     <button type="button" className="btn-link" onClick={() => set('followUps.steps', [...steps, { template: '', days: (steps[steps.length - 1]?.days || 0) + 1 }])}>+ Agregar seguimiento</button>
+
+                                    <h4 className="nx-sub">Para chats que nunca recibieron una cotización</h4>
+                                    <p className="hint">Quien solo saludó o vio fotos no debe recibir plantillas que hablen de "la cotización" o de su pedido. Aquí eliges las plantillas neutras para esos chats. Si lo dejas vacío, todos reciben la lista de arriba.</p>
+                                    {(form.followUps.stepsNoQuote || []).map((step, i) => (
+                                        <div key={i} className="step-row">
+                                            <input type="text" placeholder="nombre_de_la_plantilla" value={step.template} onChange={e => set('followUps.stepsNoQuote.' + i + '.template', e.target.value.trim())} />
+                                            <input type="number" min="1" value={step.days} onChange={e => set('followUps.stepsNoQuote.' + i + '.days', Number(e.target.value))} />
+                                            <span>días</span>
+                                            <button type="button" className="btn-link" onClick={() => set('followUps.stepsNoQuote', (form.followUps.stepsNoQuote || []).filter((_, j) => j !== i))}>Quitar</button>
+                                        </div>
+                                    ))}
+                                    <button type="button" className="btn-link" onClick={() => set('followUps.stepsNoQuote', [...(form.followUps.stepsNoQuote || []), { template: '', days: ((form.followUps.stepsNoQuote || []).slice(-1)[0]?.days || 0) + 1 }])}>+ Agregar seguimiento sin cotización</button>
                                     <div className="profile-grid" style={{ marginTop: '10px' }}>
                                         {number('followUps.fromHour', 'Desde la hora (0-23)')}
                                         {number('followUps.untilHour', 'Hasta la hora (1-24)')}

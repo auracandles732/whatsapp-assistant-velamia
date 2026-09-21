@@ -5,6 +5,7 @@ import {
   saveMessage,
   parseDbTimestamp,
   getFollowUpActivity,
+  getCustomerMessages,
   recordFollowUp,
   getActiveTenants
 } from './supabase';
@@ -17,13 +18,22 @@ export const FOLLOW_UP_MARKER = '📩 Seguimiento automático';
 /** Plantillas aprobadas en Meta y días sin respuesta de la clienta para enviar cada una (perfil del negocio). */
 export const followUpSteps = () => profile().followUps.steps;
 
+/**
+ * Qué lista de seguimientos le toca a un chat: quien nunca recibió cotización no debe recibir
+ * plantillas que hablan de "la cotización" o del pedido. Sin lista propia, todos usan la general.
+ */
+export function followUpStepsFor(hasQuotation: boolean, p = profile()) {
+  const { steps, stepsNoQuote } = p.followUps;
+  return !hasQuotation && stepsNoQuote.length > 0 ? stepsNoQuote : steps;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Tras un reinicio pueden "vencer" varios pasos a la vez: nunca dos seguimientos seguidos el mismo día.
 const MIN_GAP_MS = 20 * 60 * 60 * 1000;
 const CHECK_EVERY_MS = 15 * 60 * 1000;
 const TEMPLATE_CACHE_MS = 30 * 60 * 1000;
 // Pasado el último paso más una semana, ya no se escribe.
-const maxSilenceDays = () => Math.max(0, ...followUpSteps().map(step => step.days)) + 7;
+const maxSilenceDays = () => Math.max(0, ...followUpSteps().map(step => step.days), ...profile().followUps.stepsNoQuote.map(step => step.days)) + 7;
 // Pedido reciente = la clienta ya compró, no se le insiste. Debe superar maxSilenceDays:
 // si no, los seguimientos viejos saldrían de la consulta y la serie volvería a empezar.
 const activityWindowDays = () => Math.max(60, maxSilenceDays() + 30);
@@ -32,8 +42,7 @@ const activityWindowDays = () => Math.max(60, maxSilenceDays() + 30);
  * Decide qué seguimiento le toca a un chat. Sin efectos, para poder probarla.
  * sentSinceLast: fechas de seguimientos enviados después del último mensaje de la clienta.
  */
-export function nextFollowUp(lastCustomerAt: Date, sentSinceLast: Date[], now: Date) {
-  const steps = followUpSteps();
+export function nextFollowUp(lastCustomerAt: Date, sentSinceLast: Date[], now: Date, steps: { template: string; days: number }[] = followUpSteps()) {
   const index = sentSinceLast.length;
   if (index >= steps.length) return null;
 
@@ -64,6 +73,26 @@ async function getApprovedTemplates() {
 
   templateCaches.set(cacheKey, { loadedAt: Date.now(), templates });
   return templates;
+}
+
+// No dicen qué busca la persona, así que no cuentan como interés: un saludo suelto, o el texto que Meta escribe al tocar un anuncio ("¡Hola! Quiero más información sobre esto").
+const ONLY_GREETING = /^[\s¡!¿?.,]*(?:(?:hola|holi|hey|saludos|buenas(?:\s+(?:tardes|noches))?|buen(?:os)?\s+d[ií]as?)[\s¡!.,]*)+(?:(?:quiero|quisiera|necesito|me\s+gustar[ií]a)\s+(?:conseguir\s+|obtener\s+|recibir\s+)?(?:m[aá]s\s+)?informaci[oó]n(?:\s+sobre\s+(?:esto|esta|este|ello|eso))?)?[\s¡!.,]*$/i;
+
+/** ¿Alguno de los mensajes del cliente dice algo más que un saludo? Fotos, audios y documentos siempre cuentan. */
+export function hasRealInterest(messages: { type: string; content: string }[]): boolean {
+  return messages.some(m => m.type !== 'text' || !ONLY_GREETING.test(m.content.trim()));
+}
+
+// Quien ya mostró interés no deja de tenerlo; el "todavía no" se vuelve a revisar cada rato por si escribe.
+const interestCache = new Map<string, { interested: boolean; at: number }>();
+const NOT_YET_RECHECK_MS = 30 * 60 * 1000;
+
+async function showedInterest(conversationId: string): Promise<boolean> {
+  const cached = interestCache.get(conversationId);
+  if (cached && (cached.interested || Date.now() - cached.at < NOT_YET_RECHECK_MS)) return cached.interested;
+  const interested = hasRealInterest(await getCustomerMessages(conversationId));
+  interestCache.set(conversationId, { interested, at: Date.now() });
+  return interested;
 }
 
 let running = false;
@@ -101,8 +130,8 @@ export async function runFollowUps(now: Date = new Date()): Promise<{ sent: numb
 }
 
 async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skipped?: string }> {
-  const { enabled, steps, fromHour, untilHour } = profile().followUps;
-  if (!enabled || steps.length === 0) return { sent: 0, skipped: 'seguimientos desactivados en el perfil' };
+  const { enabled, steps, stepsNoQuote, requireInterest, fromHour, untilHour } = profile().followUps;
+  if (!enabled || (steps.length === 0 && stepsNoQuote.length === 0)) return { sent: 0, skipped: 'seguimientos desactivados en el perfil' };
   const hour = hourLocal(now);
   if (hour < fromHour || hour >= untilHour) return { sent: 0, skipped: 'fuera de horario' };
   if ((await getConfig('bot_enabled')) === 'false') return { sent: 0, skipped: 'bot apagado' };
@@ -126,8 +155,12 @@ async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skippe
       .filter(date => date > lastCustomerAt)
       .sort((a, b) => a.getTime() - b.getTime());
 
-    const step = nextFollowUp(lastCustomerAt, sentSinceLast, now);
+    const chatSteps = followUpStepsFor(activity.withQuotation.has(conv.id));
+    const step = nextFollowUp(lastCustomerAt, sentSinceLast, now, chatSteps);
     if (!step) continue;
+
+    // Solo a quien de verdad quiere algo: con cotización, o que dijo más que el saludo del anuncio.
+    if (requireInterest && !activity.withQuotation.has(conv.id) && !(await showedInterest(conv.id))) continue;
 
     const template = templates.get(step.template);
     if (!template) {
@@ -137,7 +170,7 @@ async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skippe
 
     try {
       const response = await sendTemplateMessage(conv.phone_number, step.template, template.language);
-      await saveMessage(conv.id, 'bot', 'text', `${FOLLOW_UP_MARKER} ${step.index + 1}/${steps.length}\n${template.text}`, getSentMessageId(response));
+      await saveMessage(conv.id, 'bot', 'text', `${FOLLOW_UP_MARKER} ${step.index + 1}/${chatSteps.length}\n${template.text}`, getSentMessageId(response));
       await recordFollowUp(conv.id, 'auto_followup', step.template);
       sent++;
     } catch (error: any) {

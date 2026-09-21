@@ -920,13 +920,14 @@ export async function recordFollowUp(conversationId: string, type: 'auto_followu
 export async function getFollowUpActivity(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-  const [followUps, optOuts, orders] = await Promise.all([
+  const [followUps, optOuts, orders, quotations] = await Promise.all([
     supabase.from('followups').select('conversation_id, created_at').eq('type', 'auto_followup').gte('created_at', since),
     supabase.from('followups').select('conversation_id').eq('type', 'opt_out'),
-    supabase.from('orders').select('conversation_id').neq('status', 'cancelled').gte('created_at', since)
+    supabase.from('orders').select('conversation_id').neq('status', 'cancelled').gte('created_at', since),
+    supabase.from('quotations').select('conversation_id').gte('created_at', since)
   ]);
 
-  for (const result of [followUps, optOuts, orders]) {
+  for (const result of [followUps, optOuts, orders, quotations]) {
     if (result.error) throw new Error(`Error leyendo actividad de seguimientos: ${result.error.message}`);
   }
 
@@ -940,8 +941,22 @@ export async function getFollowUpActivity(days: number) {
   return {
     followUps: sentByConversation,
     optedOut: new Set((optOuts.data || []).map(r => r.conversation_id)),
-    withOrder: new Set((orders.data || []).map(r => r.conversation_id))
+    withOrder: new Set((orders.data || []).map(r => r.conversation_id)),
+    withQuotation: new Set((quotations.data || []).map(r => r.conversation_id))
   };
+}
+
+/** Lo que ha escrito el cliente en un chat (tipo y texto), para saber si mostró interés real. */
+export async function getCustomerMessages(conversationId: string, limit = 60): Promise<{ type: string; content: string }[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('type, content')
+    .eq('conversation_id', conversationId)
+    .eq('sender', 'customer')
+    .limit(limit);
+
+  if (error) throw new Error(`Error leyendo mensajes del cliente: ${error.message}`);
+  return (data || []).map(m => ({ type: String(m.type || 'text'), content: String(m.content || '') }));
 }
 
 // ---------- AVISOS A LA DUEÑA ----------

@@ -372,6 +372,8 @@ function toAiText(msg: any): string {
     const name = productNameFromCaption(raw);
     return name ? `[Foto enviada del producto: ${name}]` : `[Foto enviada] ${text}`;
   }
+  // El rótulo "Seguimiento automático" es solo para el CRM: la IA lo lee como un mensaje normal del equipo.
+  if (msg.sender === 'bot' && raw.startsWith(FOLLOW_UP_MARKER)) return raw.split('\n').slice(1).join('\n').trim();
   if (msg.sender === 'customer' && msg.type === 'image') return `[El cliente envió una foto]: ${text}`;
   if (msg.sender === 'customer' && msg.type === 'audio') return `[El cliente envió un audio]: ${text}`;
   if (msg.sender === 'customer' && msg.type === 'document') return `[El cliente envió un documento]: ${text}`;

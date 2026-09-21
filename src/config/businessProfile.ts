@@ -83,6 +83,16 @@ export interface BusinessProfile {
   followUps: {
     enabled: boolean;
     steps: FollowUpStep[];
+    /**
+     * Seguimientos para chats que nunca recibieron una cotización. Las plantillas que hablan de "la cotización"
+     * o del pedido no tienen sentido para quien solo saludó. Vacío = todos los chats usan "steps".
+     */
+    stepsNoQuote: FollowUpStep[];
+    /**
+     * true = solo se le escribe a quien mostró interés real: recibió una cotización o dijo algo más que el saludo
+     * automático del anuncio. Quien solo saludó no recibe seguimientos.
+     */
+    requireInterest: boolean;
     fromHour: number;
     untilHour: number;
     optOutMessage: string;
@@ -185,6 +195,8 @@ export const VELAMIA_PROFILE: BusinessProfile = {
       { template: 'velamia_seguimiento_04_v2', days: 7 },
       { template: 'velamia_seguimiento_05_v2', days: 14 }
     ],
+    stepsNoQuote: [],
+    requireInterest: false,
     fromHour: 9,
     untilHour: 19,
     optOutMessage: 'Listo 🤍 No te enviaré más mensajes de seguimiento. Si más adelante necesitas velitas para tu evento, aquí estaré ✨'
@@ -256,6 +268,8 @@ export const STORE_PROFILE: BusinessProfile = {
   followUps: {
     enabled: false,
     steps: [],
+    stepsNoQuote: [],
+    requireInterest: false,
     fromHour: 9,
     untilHour: 19,
     optOutMessage: 'Listo 😊 No te enviaré más mensajes de seguimiento. Si más adelante necesitas algo, aquí estaré.'
@@ -317,13 +331,15 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
 
   const timezone = text(b.timezone, base.business.timezone, 60);
   const mode = ['ecuador_table', 'flat', 'none'].includes(sh.mode) ? sh.mode : base.shipping.mode;
-  const steps = Array.isArray(f.steps)
-    ? f.steps
+  const parseSteps = (raw: unknown, fallback: FollowUpStep[]): FollowUpStep[] => Array.isArray(raw)
+    ? raw
       .map((x: any) => ({ template: text(x?.template, '', 120), days: num(x?.days, 0, 1, 90) }))
       .filter((x: FollowUpStep) => /^[a-z0-9_]+$/.test(x.template) && x.days > 0)
       .sort((x: FollowUpStep, y: FollowUpStep) => x.days - y.days)
       .slice(0, 10)
-    : base.followUps.steps;
+    : fallback;
+  const steps = parseSteps(f.steps, base.followUps.steps);
+  const stepsNoQuote = parseSteps(f.stepsNoQuote, base.followUps.stepsNoQuote || []);
   const emojis = Array.isArray(st.decorativeEmojis)
     ? st.decorativeEmojis.map((e: unknown) => text(e, '', 16)).filter(Boolean).slice(0, 40)
     : base.style.decorativeEmojis;
@@ -388,6 +404,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
     followUps: {
       enabled: bool(f.enabled, base.followUps.enabled),
       steps,
+      stepsNoQuote,
+      requireInterest: bool(f.requireInterest, base.followUps.requireInterest === true),
       fromHour,
       untilHour: Math.max(fromHour + 1, num(f.untilHour, base.followUps.untilHour, 1, 24)),
       optOutMessage: text(f.optOutMessage, base.followUps.optOutMessage, 500) || base.followUps.optOutMessage
