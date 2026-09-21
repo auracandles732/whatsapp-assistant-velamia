@@ -65,7 +65,7 @@ test('con empaques, el asistente recibe la lista completa y qué hacer si un pro
   assert.ok(prompt.includes('Tipos de empaque'));
   assert.ok(prompt.includes('Caja lazo personalizable: caja con lazo'));
   assert.ok(prompt.includes('describe TODOS los tipos'));
-  assert.ok(prompt.includes('no inventes uno'));
+  assert.ok(prompt.includes('no inventes: dile que confirmas cuál lleva'));
   assert.ok(prompt.includes('Acetato, Tul, Kraft, Caja lazo personalizable'));
 });
 
@@ -494,7 +494,7 @@ test('las instrucciones del asistente le piden usar los detalles de la foto sin 
   const prompt = buildSystemPrompt([{ name: 'Vela', price: 30, category: 'EVENTOS' }], undefined, conEmpaques);
   assert.ok(/FOTOS QUE ENVÍA EL CLIENTE/.test(prompt));
   assert.ok(/NUNCA inventes lo que no diga/.test(prompt));
-  assert.ok(/ni le pidas lo que ya se ve en la foto/.test(prompt));
+  assert.ok(/ni pidas lo que ya se ve/.test(prompt));
   assert.ok(/son de EJEMPLO/.test(prompt));
   assert.ok(/coincide CLARAMENTE/.test(prompt));
 });
