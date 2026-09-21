@@ -134,6 +134,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     `- Si el cliente pregunta cuántos ${models} hay de ${d.enabled ? `un ${d.eventLabel}` : 'una categoría'}, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.`,
     '- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.',
     '- Haz UNA sola pregunta por mensaje (un solo signo de interrogación) y solo la que más ayude a avanzar; nunca juntes evento, cantidad y fecha en la misma pregunta. Si el cliente solo saluda, pregunta únicamente qué producto busca o para qué evento es.',
+    '- Si ya le hiciste una pregunta y el cliente responde otra cosa sin contestarla (por ejemplo vuelve a pedir lo mismo), NO repitas la pregunta: elige tú la opción que mejor encaje con lo que pide, dile cuál elegiste y avanza (cotiza), dejando claro que puede cambiarla. No pidas permiso para cotizar.',
     '- Todo dato que el cliente ya dio (evento, cantidad, fecha, ciudad, colores, sexo del bebé) se confirma TODO junto en una frase de tu respuesta, sin olvidar la cantidad (por ejemplo "perfecto, 3 docenas de baby shower de niño para noviembre") y NUNCA se le vuelve a preguntar; pregunta solo lo que todavía falta. Si dio solo el mes de la fecha, pídele únicamente el día.',
     '- Saluda ("Hola", "qué gusto", etc.) SOLO en tu primer mensaje de la conversación. En los siguientes mensajes ve directo al punto, sin volver a saludar aunque el cliente diga "hola" de nuevo.',
     '- Si el cliente escribe una palabra con una errata obvia pero reconocible (letras de más, de menos o cambiadas: "veliy" por "velas", "qeu" por "que"), entiende a qué se refiere y responde con normalidad; no le preguntes si quiso decir esa palabra ni se lo hagas notar.',
@@ -315,7 +316,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     const bareType = p.packaging.types.find(t => t.bare);
     const bareRule = bareType
       ? [
-        `- Si el cliente pide el ${model} solo, sin empaque, sin nada, sin caja, sin tul, sin frasco o "solo la vela", eso es un CAMBIO DE EMPAQUE a "${bareType.name}" (ponlo en packaging), NO es elegir entre modelos: cotiza el ${model} del que hablan con ese cambio, con el costo o descuento de la lista de cambios.`,
+        `- Si el cliente pide el ${model} solo, sin empaque, sin nada, sin caja, sin tul, sin frasco o "solo la vela", eso es un CAMBIO DE EMPAQUE a "${bareType.name}" (ponlo en packaging), NO es elegir entre modelos: cotiza el ${model} del que hablan con ese cambio, con el costo o descuento de la lista de cambios. No escribas "${bareType.name}" en personalization: ese campo es solo para colores, nombres y frases.`,
         `- Si hay dos ${models} posibles y no sabes cuál quiere, hazle UNA sola pregunta para saberlo y en esa misma pregunta dile que en cualquiera de los dos puede ir "${bareType.name}". Si ya respondió, nunca vuelvas a preguntar cuál ${model}: usa el que dijo o el que más encaje y avanza.`
       ]
       : [];
@@ -575,6 +576,22 @@ function stripSummary(text: string): string {
     .trim();
 }
 
+/**
+ * Red de seguridad de dinero: si el sistema no pudo calcular el total (falta la ciudad, el costo de un cambio de empaque…),
+ * la respuesta no puede traer un "Total" ni un "Anticipo" inventado por la IA. Se quitan esas líneas y la pregunta de pago.
+ */
+export function removeUnverifiedTotals(text: string): { text: string; removed: boolean } {
+  const lines = text.split('\n');
+  const kept = lines.filter(line => {
+    const hasMoney = /\$\s?\d/.test(line);
+    const totalLine = hasMoney && /\b(total|anticipo|abono|saldo|te queda)\b/i.test(line);
+    const payQuestion = /\?/.test(line) && /transferencia|tarjeta|forma de pago/i.test(line);
+    return !totalLine && !payQuestion;
+  });
+  const removed = kept.length !== lines.length;
+  return { text: kept.join('\n').replace(/\n{3,}/g, '\n\n').trim(), removed };
+}
+
 /** Si la IA repite un emoji de adorno de los últimos mensajes, se cambia por otro de la lista que no se haya usado. */
 export function varyEmojis(reply: string, recentEmojis: string[], decorative: string[] = profile().style.decorativeEmojis): string {
   const clean = (e: string) => e.replace(/️/g, '');
@@ -605,9 +622,17 @@ function lastQuestion(text: string): string {
 }
 
 /** ¿Es la misma pregunta que la del mensaje anterior? Compara por palabras (4 primeras letras), sin importar el orden. */
-export function sameQuestion(current: string, previous: string): boolean {
+export function sameQuestion(current: string, previous: string, productNames: string[] = []): boolean {
   const a = lastQuestion(current), b = lastQuestion(previous);
   if (!a || !b) return false;
+
+  // Cualquier pregunta que pida elegir entre modelos ("¿Te cotizo el A o el B?", "¿Con cuál de las dos?", "¿Qué modelo prefieres?")
+  // cuenta como la misma: si el cliente no eligió, preguntarlo otra vez con otras palabras es dar vueltas.
+  const mentioned = (q: string) => productNames.map(normalizeWords).filter(n => q.includes(n)).length;
+  const asksWhichModel = (q: string) => mentioned(q) >= 2
+    || /\b(cual|cuales|que)\b[^?]*\b(modelo|modelos|velita|velitas|vela|velas|opcion|opciones|dos)\b/.test(q)
+    || /\bprefieres (la|el|los|las|cual)\b/.test(q);
+  if (asksWhichModel(a) && asksWhichModel(b)) return true;
   const stems = (q: string) => new Set(q.split(/[^a-zñ0-9]+/).filter(w => w.length >= 4).map(w => w.slice(0, 4)));
   const A = stems(a), B = stems(b);
   if (A.size === 0 || B.size === 0) return false;
@@ -710,6 +735,18 @@ export function normalizeQuantities(rawItems: any, customerText: string, p: Busi
  * Calcula el valor total a partir de lo que la IA entendió de la conversación.
  * Los precios salen del catálogo y el envío del perfil del negocio: la IA no hace las cuentas.
  */
+/** Quita de la personalización el empaque "solo el producto" ("solo la vela"), que va en el campo de empaque. */
+function withoutBareWords(personalization: string, p: BusinessProfile): string {
+  const bare = p.packaging.types.find(t => t.bare);
+  if (!bare || !personalization) return personalization;
+  const cleaned = personalization
+    .split(/[,;·]| y /)
+    .map(part => part.trim())
+    .filter(part => part && !/^(solo|sólo)( la| el| las| los)? \p{L}+$|^sin (empaque|nada|caja|frasco)/iu.test(part) && normalizeWords(part) !== normalizeWords(bare.name))
+    .join(', ');
+  return cleaned;
+}
+
 export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: CatalogProduct[], p: BusinessProfile = profile()) {
   const byName = new Map(catalog.map(c => [productKey(c.name), c]));
   const packagingOn = p.packaging.enabled && p.packaging.types.length > 0;
@@ -723,7 +760,7 @@ export function computeOrderTotal(rawItems: any, rawPlace: any, catalog: Catalog
     .map((i: any) => ({
       product: byName.get(productKey(i?.name)),
       quantity: Number(i?.quantity),
-      personalization: cleanPersonalization(i?.personalization),
+      personalization: withoutBareWords(cleanPersonalization(i?.personalization), p),
       packaging: i?.packaging
     }))
     .filter((i: any) => i.product && Number.isFinite(i.quantity) && i.quantity > 0)
@@ -1093,9 +1130,9 @@ export async function planTurn(params: {
 
   // Nunca la misma pregunta dos veces seguidas: si el cliente no la respondió como se esperaba, se cambia de enfoque.
   const lastBotText = [...history].reverse().find(m => m.role === 'assistant' && !m.content.startsWith('[Foto'))?.content || '';
-  const repeatsQuestion = () => sameQuestion(reply(), lastBotText);
+  const repeatsQuestion = () => sameQuestion(reply(), lastBotText, catalog.map(c => c.name));
   if (repeatsQuestion()) {
-    corrections.push('Esa pregunta ya se la hiciste al cliente en tu mensaje anterior y no la respondió como esperabas: NO la repitas. Cambia de enfoque: dile con tus palabras lo que entendiste de lo que pidió y propón UNA salida concreta (por ejemplo cotizar con el supuesto más probable). Si de verdad no puedes avanzar, dile que lo consultas con el equipo y escríbelo en owner_question.');
+    corrections.push('Esa pregunta ya se la hiciste al cliente en tu mensaje anterior y no la respondió como esperabas: NO la repitas ni la reformules con otras palabras. Elige tú la opción que mejor encaje con lo que pidió, dile cuál elegiste y avanza con eso (cotiza), aclarando que puede cambiarla. Solo si es imposible avanzar, dile que lo consultas con el equipo y escríbelo en owner_question.');
   }
 
   // Una foto ya enviada no se repite, salvo que la clienta la pida otra vez o nombre ese modelo.
@@ -1136,6 +1173,19 @@ export async function planTurn(params: {
   if (stuck) console.warn('🔁 El asistente insiste en repetir la misma pregunta: se avisa a la dueña');
 
   const order = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
+
+  // Sin total calculado por el sistema, ningún total escrito por la IA es confiable.
+  if (order.missing) {
+    const safe = removeUnverifiedTotals(reply());
+    if (safe.removed) {
+      console.warn('💲 La IA escribió un total que el sistema no pudo calcular: se quita de la respuesta');
+      const pendingCost = order.missing === 'packaging_cost';
+      const alreadyTold = /confirm|verific|revis/i.test(safe.text);
+      parsed.reply = pendingCost && !alreadyTold
+        ? `${safe.text}\n\nEl valor de esa presentación lo confirma nuestro equipo y te avisamos enseguida.`.trim()
+        : safe.text;
+    }
+  }
 
   // Solo nombres que existen de verdad en el catálogo, sin duplicados.
   const byName = new Map(catalog.map(c => [productKey(c.name), c.name]));

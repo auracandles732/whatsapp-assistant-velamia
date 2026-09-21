@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { findPackaging, normalizeProfile, packagingChange, PROFILE_PRESETS } from '../src/config/businessProfile';
-import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion } from '../src/services/openai';
+import { buildSystemPrompt, computeOrderTotal, namedByCustomer, sameQuestion, removeUnverifiedTotals } from '../src/services/openai';
 
 const conEmpaques = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -351,4 +351,54 @@ test('reconoce la misma pregunta dicha con palabras parecidas (caso Sandra)', ()
   assert.equal(sameQuestion('¿Para qué ciudad sería el envío?', '¿Cuál de los dos modelos deseas?'), false);
   assert.equal(sameQuestion('Perfecto, gracias.', '¿Cuál de los dos modelos deseas?'), false);
   assert.equal(sameQuestion('', ''), false);
+});
+
+test('el freno anti-bucle reconoce "elige entre los mismos modelos" con palabras distintas', () => {
+  const nombres = ['VELA DE LEONCITO', 'VELA DE LEON EN FRASCO DE VIDRIO'];
+  const a = '¿Te cotizo *VELA DE LEONCITO* o *VELA DE LEON EN FRASCO DE VIDRIO* con ese cambio?';
+  const b = '¿Con cuál de las dos velitas quieres la cotización?';
+  const c = 'Para darte el valor exacto, ¿cuál de las dos quieres: *VELA DE LEONCITO* o *VELA DE LEON EN FRASCO DE VIDRIO*?';
+  assert.equal(sameQuestion(c, a, nombres), true);
+  assert.equal(sameQuestion('¿A qué ciudad va el pedido?', a, nombres), false);
+  assert.equal(sameQuestion('¿Prefieres pagar por transferencia o con tarjeta?', a, nombres), false);
+  assert.equal(sameQuestion(b, a, nombres), true, 'también es pedir elegir entre los mismos modelos');
+  assert.equal(sameQuestion('¿Qué modelo prefieres?', a, nombres), true);
+});
+
+test('"solo la vela" nunca queda anotado como personalización', () => {
+  const pedido = computeOrderTotal(
+    [{ name: 'Vela con caja', quantity: 2, packaging: 'Solo la vela', personalization: 'solo la vela' }],
+    'Quito', catalogoSoloVela, conSoloVela);
+  assert.equal(pedido.items[0].personalization, '');
+  const conColor = computeOrderTotal(
+    [{ name: 'Vela con caja', quantity: 2, packaging: 'Solo la vela', personalization: 'color celeste, solo la vela' }],
+    'Quito', catalogoSoloVela, conSoloVela);
+  assert.equal(conColor.items[0].personalization, 'color celeste');
+});
+
+// ---------- Red de seguridad: nunca un total que el sistema no calculó ----------
+
+test('quita el total, el anticipo y la pregunta de pago cuando el sistema no pudo calcular el total (caso $184)', () => {
+  const respuesta = [
+    'Ya con envío a *Guayaquil* te queda así 🤍',
+    '🕯️ *Modelo:* VELA DE LEON EN FRASCO DE VIDRIO',
+    '📦 *Cantidad:* 4 docenas',
+    '💰 *Total:* $184.00',
+    '💳 *Anticipo 50%:* $92.00',
+    '¿Prefieres pagar por transferencia o con tarjeta?'
+  ].join('\n');
+  const limpio = removeUnverifiedTotals(respuesta);
+  assert.equal(limpio.removed, true);
+  assert.ok(!limpio.text.includes('184'));
+  assert.ok(!limpio.text.includes('92'));
+  assert.ok(!/transferencia/.test(limpio.text));
+  assert.ok(limpio.text.includes('*Modelo:*'));
+  assert.ok(limpio.text.includes('*Cantidad:* 4 docenas'));
+});
+
+test('no toca los precios de catálogo ni las respuestas sin totales', () => {
+  const precio = 'La *VELA DE LEONCITO* cuesta $30.00 la docena 🤍\n¿Cuántas docenas necesitas?';
+  const limpio = removeUnverifiedTotals(precio);
+  assert.equal(limpio.removed, false);
+  assert.equal(limpio.text, precio);
 });
