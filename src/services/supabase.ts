@@ -1572,3 +1572,65 @@ export async function changeOwnPassword(userId: string, currentPassword: string,
   await updateBusinessUser(userId, { password: newPassword });
   return true;
 }
+
+// ---------- PAGOS DE LA MENSUALIDAD ----------
+
+const PAYMENTS_TABLE_MISSING = 'Falta crear la tabla de pagos en Supabase: ejecuta la migración 022_pagos_de_suscripcion.sql en el SQL Editor';
+
+function paymentsError(error: { code?: string; message: string }) {
+  return /subscription_payments/.test(error.message) && /(does not exist|schema cache|Could not find)/i.test(error.message)
+    ? new Error(PAYMENTS_TABLE_MISSING)
+    : new Error(`Error en pagos: ${error.message}`);
+}
+
+/** Último vencimiento y último pago de cada empresa. Sin la tabla creada, devuelve vacío (el panel sigue funcionando). */
+export async function getSubscriptionSummary(): Promise<Record<string, { paid_until: string; last_amount: number; last_method: string; last_at: string }>> {
+  const { data, error } = await supabase
+    .from('subscription_payments')
+    .select('business_id,amount,method,paid_until,created_at')
+    .order('created_at', { ascending: true });
+  if (error) return {};
+  const summary: Record<string, any> = {};
+  for (const row of data || []) {
+    summary[row.business_id] = { paid_until: row.paid_until, last_amount: Number(row.amount), last_method: row.method, last_at: row.created_at };
+  }
+  return summary;
+}
+
+export async function getBusinessPayments(businessId: string) {
+  const { data, error } = await supabase
+    .from('subscription_payments')
+    .select('id,amount,method,months,note,reference,paid_until,created_at')
+    .eq('business_id', businessId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw paymentsError(error);
+  return data || [];
+}
+
+/**
+ * Anota un pago de la mensualidad y extiende la fecha hasta la que está pagada la empresa.
+ * Sirve tanto para pagos manuales (transferencia, efectivo) como, más adelante, para los de tarjeta.
+ */
+export async function recordSubscriptionPayment(
+  businessId: string,
+  payment: { amount: number; months: number; method: string; note?: string; reference?: string }
+) {
+  const { nextPaidUntil } = await import('./subscription');
+  const summary = (await getSubscriptionSummary())[businessId];
+  const paidUntil = nextPaidUntil(summary ? parseDbTimestamp(summary.paid_until) : null, payment.months);
+
+  const { error } = await supabase.from('subscription_payments').insert([{
+    id: randomUUID(),
+    business_id: businessId,
+    amount: payment.amount,
+    method: payment.method,
+    months: payment.months,
+    note: payment.note || null,
+    reference: payment.reference || null,
+    paid_until: paidUntil.toISOString(),
+    created_at: new Date().toISOString()
+  }]);
+  if (error) throw paymentsError(error);
+  return { paid_until: paidUntil.toISOString() };
+}

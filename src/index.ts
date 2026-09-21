@@ -29,6 +29,9 @@ import {
   parseDbTimestamp,
   createBusiness,
   getAllBusinesses,
+  getSubscriptionSummary,
+  getBusinessPayments,
+  recordSubscriptionPayment,
   getBusinessRow,
   toPublicBusiness,
   updateBusinessCredentials,
@@ -1021,9 +1024,42 @@ function sendBusinessError(res: Response, error: any) {
   res.status(status).json({ error: message });
 }
 
+/** Anota un pago manual (transferencia, efectivo…): suma los meses pagados y deja la empresa activa. */
+app.post('/api/businesses/:businessId/payments', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    const amount = Number(req.body?.amount);
+    const months = Math.round(Number(req.body?.months) || 1);
+    const method = String(req.body?.method || 'transferencia').trim().slice(0, 30) || 'transferencia';
+    if (!Number.isFinite(amount) || amount < 0 || amount > 100000) return res.status(400).json({ error: 'Escribe un monto válido' });
+    if (months < 1 || months > 24) return res.status(400).json({ error: 'Los meses deben estar entre 1 y 24' });
+    const business = await getBusinessRow(req.params.businessId);
+    if (!business) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const result = await recordSubscriptionPayment(business.id, {
+      amount, months, method, note: String(req.body?.note || '').trim().slice(0, 200), reference: String(req.body?.reference || '').trim().slice(0, 80)
+    });
+    // Si estaba suspendida por falta de pago, vuelve a atender.
+    if (!business.active) await updateBusinessInfo(business.id, { active: true });
+    console.log(`💵 Pago manual de ${business.name}: $${amount} por ${months} mes(es)`);
+    res.status(201).json({ ...result, reactivated: !business.active });
+  } catch (error: any) {
+    console.error('Error registrando pago:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/businesses/:businessId/payments', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
+  try {
+    res.json(await getBusinessPayments(req.params.businessId));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/businesses', requireAdminSession, async (_req: Request, res: Response) => {
   try {
-    res.json(await getAllBusinesses());
+    const [businesses, subscriptions] = await Promise.all([getAllBusinesses(), getSubscriptionSummary()]);
+    res.json(businesses.map((b: any) => ({ ...b, subscription: subscriptions[b.id] || null })));
   } catch (error: any) {
     console.error('Error cargando negocios:', error.message);
     res.status(500).json({ error: error.message });

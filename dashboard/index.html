@@ -2486,6 +2486,38 @@
 
             const status = (ok, text) => <span style={{ fontSize: '12px', color: ok ? '#2e7d32' : '#c62828' }}>{ok ? '✅' : '⚠️'} {text}</span>;
 
+            // Mensualidad: hasta cuándo está pagada. Los pagos se anotan a mano o, más adelante, llegan solos con la tarjeta.
+            const paidUntil = business.subscription ? parseTs(business.subscription.paid_until) : null;
+            const daysLeft = paidUntil ? Math.ceil((paidUntil.getTime() - Date.now()) / 86400000) : null;
+            const payLine = !paidUntil
+                ? { color: '#8a6d00', text: '💵 Mensualidad: sin pagos registrados' }
+                : daysLeft < 0
+                    ? { color: '#c62828', text: '💵 Mensualidad vencida el ' + paidUntil.toLocaleDateString('es-EC') }
+                    : { color: daysLeft <= 5 ? '#b26a00' : '#2e7d32', text: '💵 Mensualidad pagada hasta el ' + paidUntil.toLocaleDateString('es-EC') + (daysLeft <= 5 ? ' (vence en ' + daysLeft + ' día' + (daysLeft === 1 ? '' : 's') + ')' : '') };
+
+            async function registerPayment() {
+                const amount = prompt('Monto pagado en dólares (ej. 25):');
+                if (amount === null || amount.trim() === '') return;
+                const months = prompt('¿Cuántos meses cubre este pago?', '1');
+                if (months === null) return;
+                const method = prompt('¿Cómo pagó? (transferencia, efectivo, otro):', 'transferencia');
+                if (method === null) return;
+                const note = prompt('Nota o número de comprobante (opcional):') || '';
+                setBusy(true);
+                try {
+                    const result = await api('/api/businesses/' + business.id + '/payments', {
+                        method: 'POST',
+                        body: JSON.stringify({ amount: Number(amount.replace(',', '.')), months: Number(months), method, note })
+                    });
+                    alert('Pago registrado. Mensualidad pagada hasta el ' + parseTs(result.paid_until).toLocaleDateString('es-EC') + (result.reactivated ? '.\nLa empresa estaba suspendida y volvió a quedar activa.' : '.'));
+                    onChanged();
+                } catch (err) {
+                    alert('Error registrando el pago: ' + err.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
             const readiness = business.readiness;
             const items = readiness ? readiness.items : [];
             let pill;
@@ -2536,10 +2568,12 @@
                             </>
                         )}
                         <UsageRow usage={usage} />
+                        {!business.legacy && <div style={{ fontSize: '13px', fontWeight: 600, color: payLine.color, padding: '6px 2px' }}>{payLine.text}</div>}
                     </div>
 
                     <div className="pl-actions">
                         {business.active && <button className="pl-btn primary" onClick={() => onSelect(business.id)}><PlatIcon name="enter" size={19} color="#fff" /> Entrar</button>}
+                        {!business.legacy && <button className="pl-btn" disabled={busy} onClick={registerPayment}>💵 Registrar pago</button>}
                         {!business.legacy && <button className="pl-btn" onClick={openKeys}><PlatIcon name="key" size={19} color="#4F7BF0" /> Claves</button>}
                         <button className="pl-btn" onClick={() => setMode(mode === 'access' ? null : 'access')}><PlatIcon name="users" size={19} color="#4F7BF0" /> Usuarios</button>
                         {!business.legacy && <button className="pl-btn" onClick={toggleActive}><PlatIcon name={business.active ? 'pause' : 'play'} size={19} color="#4F7BF0" /> {business.active ? 'Suspender' : 'Reactivar'}</button>}
