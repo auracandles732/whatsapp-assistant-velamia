@@ -15,3 +15,27 @@ export function productsNamedWithPrice(reply: string, catalog: { name: string; i
     .slice(0, 4)
     .map(p => p.name);
 }
+
+type GenderedProduct = { name: string; category?: string | null; gender?: string | null; image_url?: string | null };
+
+/**
+ * Cuando se muestran modelos de un solo sexo (por ejemplo niña + neutros), se agregan al final los del otro sexo de la
+ * misma categoría, porque se pueden personalizar en sus colores. Primero van los del sexo pedido y los neutros.
+ * Con un solo modelo elegido no se agrega nada: la clienta pidió ese.
+ */
+export function withOppositeGender(selected: string[], catalog: GenderedProduct[], alreadySent: string[]): string[] {
+  if (selected.length < 2) return selected;
+  const chosen = selected.map(n => catalog.find(p => p.name === n)).filter((p): p is GenderedProduct => !!p);
+  const genders = new Set(chosen.map(p => p.gender).filter(g => g === 'niño' || g === 'niña'));
+  if (genders.size !== 1) return selected;
+  const wanted = [...genders][0];
+  const other = wanted === 'niña' ? 'niño' : 'niña';
+  const categories = new Set(chosen.map(p => p.category).filter(Boolean));
+  const sent = new Set([...alreadySent, ...selected]);
+  const extra = catalog
+    .filter(p => p.gender === other && p.image_url && categories.has(p.category) && !sent.has(p.name))
+    .map(p => p.name);
+  const first = chosen.filter(p => p.gender !== other).map(p => p.name);
+  const oppositeChosen = chosen.filter(p => p.gender === other).map(p => p.name);
+  return [...first, ...oppositeChosen, ...extra];
+}

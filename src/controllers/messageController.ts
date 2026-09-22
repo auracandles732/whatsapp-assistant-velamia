@@ -46,12 +46,12 @@ import {
   OrderItem,
   TurnPlan
 } from '../services/openai';
-import { profile, todayLocal, formatDate, quantityText, usesProductUnits } from '../config/businessProfile';
+import { profile, todayLocal, formatDate, quantityText, usesProductUnits, usesGenderTagging } from '../config/businessProfile';
 import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
-import { productsNamedWithPrice } from '../services/photoBackup';
+import { productsNamedWithPrice, withOppositeGender } from '../services/photoBackup';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -873,7 +873,8 @@ async function respondToBatch(batch: PendingBatch) {
       const continuesPending = pendingProducts.length > 0
         && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
         && plan.show_products.every(n => pendingProducts.includes(n));
-      const photos = continuesPending ? pendingProducts : plan.show_products;
+      const photos = continuesPending ? pendingProducts
+        : usesGenderTagging(batchProfile) ? withOppositeGender(plan.show_products, catalog, sentProducts) : plan.show_products;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile);
     }

@@ -63,8 +63,8 @@ test('con productos marcados, las instrucciones piden preguntar el sexo antes de
 
 test('las instrucciones piden mencionar que hay del otro sexo y que se puede personalizar, solo la primera vez', () => {
   const prompt = buildSystemPrompt(catalogoBaby, undefined, conGenero);
-  assert.ok(/menciona en una frase que también hay modelos del otro sexo/.test(prompt));
-  assert.ok(/se pueden personalizar para que queden perfectos/.test(prompt));
+  assert.ok(/también le muestras los del otro sexo porque se pueden personalizar/.test(prompt));
+  assert.ok(/PRIMERO los \S+ marcados para ese sexo y los que sirven para ambos/.test(prompt));
   assert.ok(/solo la primera vez que muestras esa categoría/.test(prompt));
 });
 
