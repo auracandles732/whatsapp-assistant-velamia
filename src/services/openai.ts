@@ -1126,7 +1126,9 @@ export async function planTurn(params: {
   const dateAlreadyGiven = !!expectedDelivery
     && history.some(m => m.role === 'assistant' && String(m.content || '').includes(formatDate(expectedDelivery)))
     && !DATE_TALK.test(customerWords);
-  if (p.dates.enabled && !expectedDelivery && (mentioned || /entrega\W*\s*\d{1,2}\/\d{1,2}/i.test(reply()))) {
+  const SPECIFIC_DAY = /\d{1,2}\s*(de\s+)?(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)|\d{1,2}\s*[/-]\s*\d{1,2}|(?<!\p{L})(hoy|mañana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)(?!\p{L})/iu;
+  const customerGaveDay = [...history.filter(m => m.role === 'user').map(m => String(m.content || '')), customerWords].some(t => SPECIFIC_DAY.test(t));
+  if (p.dates.enabled && !expectedDelivery && !customerGaveDay && (mentioned || /entrega\W*\s*\d{1,2}\/\d{1,2}/i.test(reply()))) {
     // Sin fecha del evento, la IA a veces toma hoy como fecha y le dice a la clienta una entrega ya pasada.
     console.warn('📅 La IA puso una fecha de entrega sin que la clienta diera la fecha del evento');
     corrections.push(`El cliente todavía no dio la fecha del ${ev}: no menciones ninguna fecha de entrega ni la frase de la reserva. Si ya das el total, termina preguntándole la fecha de su ${ev}.`);

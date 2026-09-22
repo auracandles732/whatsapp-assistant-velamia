@@ -5057,7 +5057,7 @@
                             </div>
 
                             {selectedConv ? (
-                                <div className="nx-panel nx-chat" style={dragOver ? { outline: '3px dashed #4F5BD5', outlineOffset: '-6px' } : undefined} onDragOver={e => { if (canEdit && Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={e => { setDragOver(false); const dropped = photosFrom(e.dataTransfer); if (canEdit && dropped.length) { e.preventDefault(); sendPhotoFiles(selectedConv, dropped); } }}>
+                                <div className="nx-panel nx-chat" style={dragOver ? { outline: '3px dashed #4F5BD5', outlineOffset: '-6px' } : undefined} onDragOver={e => { if (canEdit && Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={e => { setDragOver(false); if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return; e.preventDefault(); if (canEdit && selectedConv) sendPhotoFiles(selectedConv, e.dataTransfer.files); }}>
                                     <div className="nx-chat-head">
                                         <button type="button" className="nx-icon-btn nx-back" onClick={() => setSelectedConv(null)}>← Chats</button>
                                         <Avatar name={currentConv.customer_name || currentConv.phone_number} size={48} />

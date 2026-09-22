@@ -805,11 +805,13 @@ async function respondToBatch(batch: PendingBatch) {
       }
     }
 
+    let photosFromBackup = false;
     if (plan.show_products.length === 0 && plan.reply) {
       const missingPhotos = productsNamedWithPrice(plan.reply, catalog, sentProducts);
       if (missingPhotos.length) {
         console.log(`📸 La IA escribió el modelo con precio sin enviar la foto: se envía igual (${missingPhotos.join(', ')})`);
         plan.show_products = missingPhotos;
+        photosFromBackup = true;
       }
     }
 
@@ -892,7 +894,7 @@ async function respondToBatch(batch: PendingBatch) {
         && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
         && plan.show_products.every(n => pendingProducts.includes(n));
       const photos = continuesPending ? pendingProducts
-        : usesGenderTagging(batchProfile) ? withOppositeGender(plan.show_products, catalog, sentProducts) : plan.show_products;
+        : usesGenderTagging(batchProfile) && !photosFromBackup ? withOppositeGender(plan.show_products, catalog, sentProducts) : plan.show_products;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile,
         afterPhotosQuestion({ quantityKnown, photos: photos.length }));
