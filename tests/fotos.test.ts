@@ -5,7 +5,7 @@ import './entorno';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { productsNamedWithPrice, withOppositeGender, isGenericFirstContact, introSelection, afterPhotosQuestion } from '../src/services/photoBackup';
+import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion } from '../src/services/photoBackup';
 
 const catalog = [
   { name: 'VELA DE ANGELITO REZANDO CON ROSARIO', image_url: 'https://x/a.png' },
@@ -63,32 +63,8 @@ test('no agrega nada con un solo modelo pedido o sin género marcado', () => {
   assert.deepEqual(withOppositeGender(['Osito neutro', 'Cruz niño'].slice(0, 1), baby, []), ['Osito neutro']);
 });
 
-test('reconoce el primer mensaje genérico del anuncio o un saludo, pero no una consulta concreta', () => {
-  assert.equal(isGenericFirstContact('¡Hola! Quiero más información'), true);
-  assert.equal(isGenericFirstContact('¡Hola! Me gustaría conseguir más información sobre esto.'), true);
-  assert.equal(isGenericFirstContact('Hola'), true);
-  assert.equal(isGenericFirstContact('Buenas tardes'), true);
-  assert.equal(isGenericFirstContact('¡Hola! Quiero más información\nHola de dónde son'), false);
-  assert.equal(isGenericFirstContact('Buenas noches tiene rosarios para bautizos para niña'), false);
-  assert.equal(isGenericFirstContact('Precio'), false);
-});
-
-test('presentación: un modelo por categoría, las más grandes primero y los neutros antes', () => {
-  const cat = [
-    { name: 'Boda 1', category: 'BODA', gender: null, image_url: 'u' },
-    { name: 'Baby niña', category: 'BABY', gender: 'niña', image_url: 'u' },
-    { name: 'Baby neutro', category: 'BABY', gender: null, image_url: 'u' },
-    { name: 'Baby niño', category: 'BABY', gender: 'niño', image_url: 'u' },
-    { name: 'Boda 2', category: 'BODA', gender: null, image_url: 'u' },
-    { name: 'Quince', category: 'QUINCE', gender: null, image_url: 'u' },
-    { name: 'Sin foto', category: 'OTRA', gender: null, image_url: '' }
-  ];
-  assert.deepEqual(introSelection(cat, 4), ['Baby neutro', 'Boda 1', 'Quince', 'Baby niña']);
-});
-
-test('después de las fotos pregunta la ocasión, la cantidad o cuál le gustó según lo que falte', () => {
-  assert.equal(afterPhotosQuestion({ intro: true, quantityKnown: false, photos: 4 }), 'event');
-  assert.equal(afterPhotosQuestion({ intro: false, quantityKnown: false, photos: 4 }), 'quantity');
-  assert.equal(afterPhotosQuestion({ intro: false, quantityKnown: true, photos: 4 }), 'liked');
-  assert.equal(afterPhotosQuestion({ intro: false, quantityKnown: false, photos: 1 }), 'liked');
+test('después de las fotos pregunta la cantidad si aún no la dio, o cuál le gustó', () => {
+  assert.equal(afterPhotosQuestion({ quantityKnown: false, photos: 4 }), 'quantity');
+  assert.equal(afterPhotosQuestion({ quantityKnown: true, photos: 4 }), 'liked');
+  assert.equal(afterPhotosQuestion({ quantityKnown: false, photos: 1 }), 'liked');
 });
