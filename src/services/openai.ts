@@ -1464,3 +1464,34 @@ Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."
     return [];
   }
 }
+
+/**
+ * Seguimiento rápido cuando la clienta vio fotos y no respondió: un mensaje corto que retoma lo que vio y
+ * avanza la venta con una sola pregunta fácil.
+ */
+export async function writePhotoNudge(params: { history: Message[]; askQuantity: boolean; customPrompt?: string; profile?: BusinessProfile }): Promise<string> {
+  const p = params.profile || profile();
+  const s = p.sales;
+  const rules = [
+    params.customPrompt?.trim() || defaultPersona(p),
+    '',
+    `La clienta vio las fotos de ${s.productLabelPlural.toLowerCase()} que le enviaste hace un rato y no ha respondido. Escribe UN mensaje de seguimiento por WhatsApp, como una vendedora con experiencia:`,
+    '- Máximo 2 líneas, cálido y natural. Menciona algo concreto de la conversación (su evento o los modelos que vio).',
+    params.askQuantity
+      ? `- Termina con UNA sola pregunta sobre la cantidad, dicha con tus palabras y tuteándola (por ejemplo "${p.dates.enabled && s.piecesPerUnit > 1 ? '¿Para cuántos invitados sería?' : `¿Cuántas ${s.unitPlural} necesitarías?`}").`
+      : '- Termina con UNA sola pregunta sobre cuál modelo le gustó, dicha con tus palabras y tuteándola (por ejemplo "¿Cuál te gustó más?").',
+    '- No digas que son los más vendidos, los que más gustan ni nada que no sepas con certeza.',
+    '- No saludes de nuevo, no digas que no te respondió, no presiones, no des precios ni totales y no repitas frases que ya usaste en el chat.',
+    p.style.humanPersona ? `- Eres una persona del equipo de ${p.business.name}: nunca digas ni insinúes que eres un bot o una IA.` : '',
+    '- Responde solo con el texto del mensaje.'
+  ].filter(Boolean).join('\n');
+  const model = getOpenAIModel(p);
+  const response = await getOpenAIClient(p).chat.completions.create({
+    model,
+    ...reasoningFor(model),
+    max_completion_tokens: 800,
+    messages: [{ role: 'system', content: rules }, ...params.history.slice(-20)]
+  } as any);
+  track('seguimiento', model, response);
+  return addOpeningQuestionMarks(withoutQuotes(withoutBrokenChars(String(response.choices[0]?.message?.content || '').trim())));
+}

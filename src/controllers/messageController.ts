@@ -24,7 +24,12 @@ import {
   hasRecentNotification,
   getRecentNotificationMessages,
   logNotification,
-  getTenantByPhoneNumberId
+  getTenantByPhoneNumberId,
+  getRecentMessages,
+  getActiveTenants,
+  getConversationById,
+  hasOptedOut,
+  parseDbTimestamp
 } from '../db';
 import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
 import { maskPhone } from '../services/privacy';
@@ -42,6 +47,7 @@ import {
   transcribeAudio,
   describeImage,
   extractOrderItems,
+  writePhotoNudge,
   TEAM_MARK,
   OrderItem,
   TurnPlan
@@ -51,7 +57,7 @@ import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
-import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion } from '../services/photoBackup';
+import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge } from '../services/photoBackup';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -1103,4 +1109,64 @@ function quantityPattern(): RegExp {
     .filter(Boolean)
     .map(w => w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   return new RegExp(`\\d+\\s*(${[...new Set(words)].join('|')})`, 'i');
+}
+
+
+// ---------- Seguimiento rápido tras las fotos ----------
+
+const NUDGE_EVENT = 'photo_nudge';
+const photoQuestions = () => [...likedPhotoQuestions(), ...likedSinglePhotoQuestions(), ...quantityAfterPhotosQuestions(), ...morePhotosQuestions()];
+const asNudgeMessage = (m: any) => ({ sender: m.sender, type: m.type, content: m.content, at: parseDbTimestamp(m.timestamp).getTime() });
+
+/** Revisa los chats del negocio actual y le escribe una vez al día a quien vio fotos y no respondió (también de noche). */
+async function runPhotoNudgesForCurrent(now: number): Promise<number> {
+  if ((await getConfig('bot_enabled')) === 'false') return 0;
+  const recent = await getRecentMessages(new Date(now - 4 * 60 * 60 * 1000).toISOString());
+  const byChat = new Map<string, any[]>();
+  for (const m of recent) byChat.set(m.conversation_id, [...(byChat.get(m.conversation_id) || []), m]);
+  let sent = 0;
+  for (const [conversationId, msgs] of byChat) {
+    if (!needsPhotoNudge(msgs.map(asNudgeMessage), now, photoQuestions())) continue;
+    const conv = await getConversationById(conversationId);
+    if (!conv || conv.status === 'closed' || pendingBatches.has(customerKey(conv.phone_number))) continue;
+    if (await isBotPaused(conversationId) || await hasOptedOut(conversationId) || await hasRecentNotification(conversationId, NUDGE_EVENT, 24)) continue;
+    await enqueue(customerKey(conv.phone_number), async () => {
+      // Se revisa otra vez dentro de la fila: la clienta pudo escribir mientras tanto.
+      const history = await getConversationHistory(conversationId, HISTORY_LIMIT);
+      if (!needsPhotoNudge(history.map(asNudgeMessage), Date.now(), photoQuestions())) return;
+      let text = '';
+      try {
+        const askQuantity = !history.some((m: any) => m.sender === 'customer' && (quantityPattern().test(String(m.content || '')) || /\d+\s*(invitad|persona)/i.test(String(m.content || ''))));
+        text = await writePhotoNudge({ askQuantity, history: history.map((m: any) => ({ role: m.sender === 'customer' ? 'user' : 'assistant', content: toAiText(m) })), customPrompt: (await getConfig('system_prompt')) || undefined });
+      } catch (error: any) {
+        console.error('❌ La IA no redactó el seguimiento rápido:', error.message);
+      }
+      if (!text || text.includes('$')) text = `¿Pudiste ver los ${profile().sales.productLabelPlural.toLowerCase()}? ${pick(quantityAfterPhotosQuestions())}`;
+      // Se anota antes de enviar: si el envío fallara, no se reintenta en bucle.
+      await logNotification(conversationId, NUDGE_EVENT, text.slice(0, 500));
+      await sendAndSaveText(conversationId, conv.phone_number, text);
+      console.log(`👋 Seguimiento rápido a ${maskPhone(conv.phone_number)}: vio fotos y no respondió`);
+      sent++;
+    }).catch(error => console.error('❌ Seguimiento rápido:', error.message));
+  }
+  return sent;
+}
+
+let nudging = false;
+export async function runPhotoNudges(now = Date.now()) {
+  if (nudging) return;
+  nudging = true;
+  try {
+    await runWithTenant(undefined, () => runPhotoNudgesForCurrent(now));
+    for (const tenant of await getActiveTenants().catch(() => [])) {
+      await runWithTenant(tenant, () => runPhotoNudgesForCurrent(now)).catch(error => console.error(`❌ Seguimiento rápido de ${tenant.name}:`, error.message));
+    }
+  } finally {
+    nudging = false;
+  }
+}
+
+export function startPhotoNudgeScheduler() {
+  setInterval(() => runPhotoNudges().catch(error => console.error('❌ Seguimiento rápido:', error.message)), 5 * 60 * 1000);
+  console.log('👋 Seguimiento rápido activo: 40 min después de ver fotos sin responder, una vez al día por clienta');
 }

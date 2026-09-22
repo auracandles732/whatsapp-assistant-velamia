@@ -57,7 +57,7 @@ import { maskPhone } from './services/privacy';
 import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/signupCodes';
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret } from './services/tenant';
-import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation } from './controllers/messageController';
+import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -1639,6 +1639,7 @@ async function start() {
 
   keepAwake();
   startFollowUpScheduler();
+  startPhotoNudgeScheduler();
   startHealthCheck();
   });
 }

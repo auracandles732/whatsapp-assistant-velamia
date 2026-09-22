@@ -45,3 +45,25 @@ export function afterPhotosQuestion(input: { quantityKnown: boolean; photos: num
   if (!input.quantityKnown && input.photos > 1) return 'quantity';
   return 'liked';
 }
+
+export const PHOTO_NUDGE_AFTER_MS = 40 * 60 * 1000;
+// Pasado este rato ya no se escribe: evita mandarles a todos los chats viejos de golpe y lo de más tarde lo cubren los seguimientos diarios.
+const PHOTO_NUDGE_UNTIL_MS = 3 * 60 * 60 * 1000;
+// Fuera de las 24 h desde el último mensaje de la clienta, WhatsApp exige plantilla.
+const WHATSAPP_WINDOW_MS = 23 * 60 * 60 * 1000;
+
+/**
+ * La clienta vio fotos y no respondió: después de su último mensaje el asistente mandó fotos, lo último del chat son
+ * esas fotos (o la pregunta que el sistema hace tras ellas) y pasaron entre 40 minutos y 3 horas.
+ */
+export function needsPhotoNudge(messages: { sender: string; type: string; content: string | null; at: number }[], now: number, systemQuestions: string[]): boolean {
+  const sorted = [...messages].sort((a, b) => a.at - b.at);
+  const lastCustomer = sorted.map(m => m.sender).lastIndexOf('customer');
+  if (lastCustomer < 0 || now - sorted[lastCustomer].at > WHATSAPP_WINDOW_MS) return false;
+  const after = sorted.slice(lastCustomer + 1);
+  if (!after.some(m => m.sender === 'bot' && m.type === 'image') || after.some(m => m.sender === 'human')) return false;
+  const last = after[after.length - 1];
+  const endsWithPhotos = last.sender === 'bot' && (last.type === 'image' || systemQuestions.includes(String(last.content || '')));
+  const quiet = now - last.at;
+  return endsWithPhotos && quiet >= PHOTO_NUDGE_AFTER_MS && quiet <= PHOTO_NUDGE_UNTIL_MS;
+}

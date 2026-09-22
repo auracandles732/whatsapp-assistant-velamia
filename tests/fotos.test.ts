@@ -5,7 +5,7 @@ import './entorno';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion } from '../src/services/photoBackup';
+import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge } from '../src/services/photoBackup';
 
 const catalog = [
   { name: 'VELA DE ANGELITO REZANDO CON ROSARIO', image_url: 'https://x/a.png' },
@@ -67,4 +67,31 @@ test('después de las fotos pregunta la cantidad si aún no la dio, o cuál le g
   assert.equal(afterPhotosQuestion({ quantityKnown: false, photos: 4 }), 'quantity');
   assert.equal(afterPhotosQuestion({ quantityKnown: true, photos: 4 }), 'liked');
   assert.equal(afterPhotosQuestion({ quantityKnown: false, photos: 1 }), 'liked');
+});
+
+const MIN = 60 * 1000;
+const chat = (minutosDesdeFotos: number, extra: any[] = []) => {
+  const now = 1_000_000_000_000;
+  const fotos = now - minutosDesdeFotos * MIN;
+  return { now, msgs: [
+    { sender: 'customer', type: 'text', content: 'baby shower de niña', at: fotos - MIN },
+    { sender: 'bot', type: 'text', content: 'Te muestro los modelos ✨', at: fotos - 30_000 },
+    { sender: 'bot', type: 'image', content: 'u\n🕯️ *OSITO*', at: fotos - 10_000 },
+    { sender: 'bot', type: 'text', content: '¿Para cuántos invitados sería?', at: fotos },
+    ...extra.map(e => ({ ...e, at: fotos + e.min * MIN }))
+  ] };
+};
+const preguntas = ['¿Para cuántos invitados sería?'];
+
+test('seguimiento rápido: le escribe a los 40 minutos de ver fotos sin responder', () => {
+  let c = chat(39); assert.equal(needsPhotoNudge(c.msgs, c.now, preguntas), false);
+  c = chat(41); assert.equal(needsPhotoNudge(c.msgs, c.now, preguntas), true);
+  c = chat(200); assert.equal(needsPhotoNudge(c.msgs, c.now, preguntas), false);
+});
+
+test('seguimiento rápido: no le escribe si respondió, si intervino el equipo o si ya se le escribió', () => {
+  let c = chat(60, [{ sender: 'customer', type: 'text', content: 'me gusta', min: 5 }]); assert.equal(needsPhotoNudge(c.msgs, c.now, preguntas), false);
+  c = chat(60, [{ sender: 'human', type: 'text', content: 'hola', min: 5 }]); assert.equal(needsPhotoNudge(c.msgs, c.now, preguntas), false);
+  c = chat(60, [{ sender: 'bot', type: 'text', content: '¿Pudiste ver los modelos?', min: -15 }]);
+  c.msgs[c.msgs.length - 1].at = c.now - 20 * MIN; assert.equal(needsPhotoNudge(c.msgs, c.now, preguntas), false);
 });

@@ -1640,3 +1640,10 @@ export async function recordSubscriptionPayment(
   if (error) throw paymentsError(error);
   return { paid_until: paidUntil.toISOString() };
 }
+
+/** La clienta respondió NO a los seguimientos: no se le vuelve a escribir por iniciativa propia. */
+export async function hasOptedOut(conversationId: string): Promise<boolean> {
+  const { data, error } = await supabase.from('followups').select('id').eq('conversation_id', conversationId).eq('type', 'opt_out').limit(1);
+  if (error) throw new Error(`Error revisando si la clienta pidió no recibir mensajes: ${error.message}`);
+  return (data || []).length > 0;
+}
