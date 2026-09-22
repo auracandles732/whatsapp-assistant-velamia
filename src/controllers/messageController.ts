@@ -51,6 +51,7 @@ import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
+import { productsNamedWithPrice } from '../services/photoBackup';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -787,6 +788,14 @@ async function respondToBatch(batch: PendingBatch) {
         console.log(finalAlreadySent
           ? `🎨 Diseño fuera del catálogo ya avisado, no se repite: ${summary}`
           : `🎨 Diseño fuera del catálogo en preparación, aún falta la cantidad: ${summary}`);
+      }
+    }
+
+    if (plan.show_products.length === 0 && plan.reply) {
+      const missingPhotos = productsNamedWithPrice(plan.reply, catalog, sentProducts);
+      if (missingPhotos.length) {
+        console.log(`📸 La IA escribió el modelo con precio sin enviar la foto: se envía igual (${missingPhotos.join(', ')})`);
+        plan.show_products = missingPhotos;
       }
     }
 
