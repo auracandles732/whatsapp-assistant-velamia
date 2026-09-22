@@ -37,6 +37,7 @@ import { isFollowUpMessage, followUpText } from '../services/followups';
 import {
   sendTextMessage,
   sendImageMessage,
+  sendAudioMessage,
   getMediaUrl,
   downloadMedia,
   getSentMessageId,
@@ -58,6 +59,7 @@ import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
 import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge } from '../services/photoBackup';
+import { textToVoice } from '../services/elevenlabs';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -459,6 +461,39 @@ async function sendAndSaveText(conversationId: string, phoneNumber: string, text
   await saveMessage(conversationId, 'bot', 'text', text, getSentMessageId(sent));
 }
 
+/** Detecta si el último mensaje del bot incluía fotos (inicio de conversación de venta). */
+async function shouldSendAudio(conversationId: string, history: any[]): Promise<boolean> {
+  if (history.length === 0) return false;
+
+  const lastBotMessage = [...history].reverse().find((m: any) => m.sender === 'bot');
+  if (!lastBotMessage) return false;
+
+  if (lastBotMessage.type === 'audio') return true;
+  if (lastBotMessage.type === 'image') return true;
+  if (lastBotMessage.type === 'text' && /🎙️|nota\s+de\s+voz/i.test(lastBotMessage.content || '')) return true;
+
+  return false;
+}
+
+/** Convierte texto a audio vía Elevenlabs, sube a storage y envía vía WhatsApp. */
+async function sendAndSaveAudio(conversationId: string, phoneNumber: string, text: string) {
+  try {
+    await waitGap(phoneNumber, MESSAGE_GAP_MS);
+    await stepAsideIfHumanTookOver(conversationId);
+
+    const audioBuffer = await textToVoice(text);
+    const audioUrl = await uploadBufferToStorage(audioBuffer, 'audio/ogg');
+    const sent = await sendAudioMessage(phoneNumber, audioUrl);
+
+    // Guardar referencia al audio en la base de datos
+    await saveMessage(conversationId, 'bot', 'audio', `🎙️ Nota de voz: ${text}`, getSentMessageId(sent));
+    console.log(`✅ Nota de voz enviada a ${maskPhone(phoneNumber)}`);
+  } catch (error: any) {
+    console.error('❌ Error enviando nota de voz:', error.message);
+    // No lanzar error: continuar con texto normal si el audio falla
+  }
+}
+
 /** Descarga un archivo de WhatsApp y lo sube al almacenamiento; devuelve su URL pública. */
 async function storeIncomingMedia(mediaId: string) {
   const media = await getMediaUrl(mediaId);
@@ -817,6 +852,10 @@ async function respondToBatch(batch: PendingBatch) {
 
     if (plan.reply) {
       await sendAndSaveText(conversationId, phoneNumber, plan.reply);
+
+      if (await shouldSendAudio(conversationId, history)) {
+        await sendAndSaveAudio(conversationId, phoneNumber, plan.reply);
+      }
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.
