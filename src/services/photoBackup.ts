@@ -19,16 +19,16 @@ export function productsNamedWithPrice(reply: string, catalog: { name: string; i
 type GenderedProduct = { name: string; category?: string | null; gender?: string | null; image_url?: string | null };
 
 /**
- * Cuando se muestran modelos de un solo sexo (por ejemplo niña + neutros), se agregan al final los del otro sexo de la
- * misma categoría, porque se pueden personalizar en sus colores. Primero van los del sexo pedido y los neutros.
+ * Ordena las fotos: primero los modelos del sexo pedido y los neutros, después los del otro sexo, y agrega los del otro
+ * sexo de la misma categoría que falten, porque se pueden personalizar en sus colores.
  * Con un solo modelo elegido no se agrega nada: la clienta pidió ese.
  */
 export function withOppositeGender(selected: string[], catalog: GenderedProduct[], alreadySent: string[]): string[] {
   if (selected.length < 2) return selected;
   const chosen = selected.map(n => catalog.find(p => p.name === n)).filter((p): p is GenderedProduct => !!p);
-  const genders = new Set(chosen.map(p => p.gender).filter(g => g === 'niño' || g === 'niña'));
-  if (genders.size !== 1) return selected;
-  const wanted = [...genders][0];
+  // El sexo pedido es el del primer modelo con género: la IA pone primero los de ese sexo.
+  const wanted = chosen.find(p => p.gender === 'niño' || p.gender === 'niña')?.gender;
+  if (!wanted) return selected;
   const other = wanted === 'niña' ? 'niño' : 'niña';
   const categories = new Set(chosen.map(p => p.category).filter(Boolean));
   const sent = new Set([...alreadySent, ...selected]);

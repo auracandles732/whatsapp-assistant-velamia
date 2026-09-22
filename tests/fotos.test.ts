@@ -53,8 +53,12 @@ test('niño: al revés, y sin repetir fotos ya vistas', () => {
     ['Osito celeste', 'Osito neutro', 'Osito rosado']);
 });
 
-test('no agrega nada con un solo modelo pedido, sin género marcado o si ya van los dos sexos', () => {
+test('si la IA mezcla el orden, los neutros van antes que los del otro sexo (caso real del 22-sep)', () => {
+  assert.deepEqual(withOppositeGender(['Osito rosado', 'Osito celeste', 'Osito neutro', 'Conejita rosa'], baby, []),
+    ['Osito rosado', 'Osito neutro', 'Conejita rosa', 'Osito celeste', 'Carrito azul']);
+});
+
+test('no agrega nada con un solo modelo pedido o sin género marcado', () => {
   assert.deepEqual(withOppositeGender(['Osito rosado'], baby, []), ['Osito rosado']);
   assert.deepEqual(withOppositeGender(['Osito neutro', 'Cruz niño'].slice(0, 1), baby, []), ['Osito neutro']);
-  assert.deepEqual(withOppositeGender(['Osito rosado', 'Osito celeste'], baby, []), ['Osito rosado', 'Osito celeste']);
 });
