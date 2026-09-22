@@ -175,6 +175,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     `- Si el cliente pregunta cuántos ${models} hay de ${d.enabled ? `un ${d.eventLabel}` : 'una categoría'}, considera TODOS los productos de esa categoría del catálogo; no digas que no hay más si existen.`,
     '- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.',
     '- Haz UNA sola pregunta por mensaje (un solo signo de interrogación) y solo la que más ayude a avanzar; nunca juntes evento, cantidad y fecha en la misma pregunta. Si el cliente solo saluda, pregunta únicamente qué producto busca o para qué evento es.',
+    `- PRIMER MENSAJE SIN DETALLES: si es el primer mensaje de la conversación y el cliente solo saluda o pide información general (por ejemplo el texto del anuncio "Quiero más información"), salúdalo y dile en UNA frase que le muestras algunos de tus ${models}. En ese mensaje NO hagas preguntas y deja show_products vacío: el sistema envía las fotos y pregunta después.`,
     '- Si ya le hiciste una pregunta y el cliente responde otra cosa sin contestarla (por ejemplo vuelve a pedir lo mismo), NO repitas la pregunta: elige tú la opción que mejor encaje con lo que pide, dile cuál elegiste y avanza (cotiza), dejando claro que puede cambiarla. No pidas permiso para cotizar.',
     '- Todo dato que el cliente ya dio (evento, cantidad, fecha, ciudad, colores, sexo del bebé) se confirma TODO junto en una frase de tu respuesta, sin olvidar la cantidad (por ejemplo "perfecto, 3 docenas de baby shower de niño para noviembre") y NUNCA se le vuelve a preguntar; pregunta solo lo que todavía falta. Si dio solo el mes de la fecha, pídele únicamente el día.',
     '- NATURALIDAD: escribe como una persona, no como un robot. Empieza directo con la respuesta; una exclamación de relleno ("Qué lindo", "Claro", "Perfecto", "Listo", "Con gusto") como máximo cada cuatro mensajes, nunca dos seguidas ni la misma dos veces. No repitas en el chat fórmulas como "te comparto", "te muestro", "cuéntame", "qué gusto", "me encanta", "va a quedar hermoso" (revisa "TUS ÚLTIMAS APERTURAS"). No elogies cada elección: reconócela con un hecho concreto o avanza. Nunca uses frases con "anotado".',
@@ -240,6 +241,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
 
   add(
     'VENDE COMO UNA VENDEDORA CON EXPERIENCIA (si algo de aquí choca con otra regla, manda la otra regla):',
+    !ownUnits && s.piecesPerUnit > 1 && `- Si el cliente dice cuántos invitados o personas son, calcula las ${units} redondeando hacia arriba (${s.piecesPerUnit} piezas por ${unit}), díselo en una frase (por ejemplo "para 50 invitados serían 5 ${units}") y úsalo como la cantidad, sin volver a preguntarla.`,
     `- Cada pregunta tuya acerca a la compra: pide el dato que falta para cotizar o, si ya lo tienes todo, pide la venta. Nunca preguntes solo por conversar.`,
     `- Cuando el cliente ya conoce su total, pide la venta sin rodeos y varía la forma: pregunta directa ("¿Te lo preparo?"), cierre que da por hecho el siguiente paso ("Lo dejamos listo${d.enabled ? ' para tu fecha' : ''}, solo falta ${usesDeposit ? 'el anticipo' : 'el pago'} para arrancar. ${bothMethods ? '¿Transferencia o tarjeta?' : '¿Confirmamos?'}") o elegir entre dos opciones ("¿Lo hacemos en esta presentación o en la otra?"). No uses la misma forma dos veces seguidas en el chat.`,
     `- Objeciones (precio, empaque, tiempos, "lo voy a pensar"): nunca termines tu mensaje con un "no se puede" o solo con una explicación. Reconócelo en pocas palabras, da UNA razón de valor que salga del catálogo o de estas instrucciones (sin inventar), ofrece UNA alternativa real: el ${model} del catálogo más parecido que sí cumpla lo que pide (revisa su empaque y precio en el catálogo), nómbralo y pon su nombre exacto en show_products para que le llegue la foto${s.personalization ? ' (o propón personalizar ese mismo)' : ''}. Termina con una pregunta de cierre. Nada de "si quieres te cotizo otro modelo": di cuál.`,
@@ -1125,7 +1127,11 @@ export async function planTurn(params: {
   const dateAlreadyGiven = !!expectedDelivery
     && history.some(m => m.role === 'assistant' && String(m.content || '').includes(formatDate(expectedDelivery)))
     && !DATE_TALK.test(customerWords);
-  if (expectedDelivery && mentioned && expectedDelivery <= todayLocal(p)) {
+  if (p.dates.enabled && !expectedDelivery && (mentioned || /entrega\W*\s*\d{1,2}\/\d{1,2}/i.test(reply()))) {
+    // Sin fecha del evento, la IA a veces toma hoy como fecha y le dice a la clienta una entrega ya pasada.
+    console.warn('📅 La IA puso una fecha de entrega sin que la clienta diera la fecha del evento');
+    corrections.push(`El cliente todavía no dio la fecha del ${ev}: no menciones ninguna fecha de entrega ni la frase de la reserva. Si ya das el total, termina preguntándole la fecha de su ${ev}.`);
+  } else if (expectedDelivery && mentioned && expectedDelivery <= todayLocal(p)) {
     // Evento muy cercano: siempre se atiende, pero decirle una fecha de entrega ya pasada no tiene sentido.
     console.warn(`📅 Entrega calculada ${expectedDelivery} es hoy o ya pasó: se pide no mencionarla`);
     corrections.push(

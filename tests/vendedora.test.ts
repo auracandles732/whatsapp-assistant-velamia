@@ -24,3 +24,14 @@ test('nunca inventa escasez ni descuentos', () => {
   const prompt = buildSystemPrompt(catalogo, undefined, perfil);
   assert.ok(/Nunca inventes escasez/.test(prompt));
 });
+
+test('primer mensaje sin detalles: saluda y presenta sin preguntar, el sistema manda las fotos', () => {
+  const prompt = buildSystemPrompt(catalogo, undefined, perfil);
+  assert.ok(prompt.includes('PRIMER MENSAJE SIN DETALLES'));
+  assert.ok(/NO hagas preguntas y deja show_products vacío/.test(prompt));
+});
+
+test('convierte invitados en unidades de venta redondeando hacia arriba', () => {
+  const prompt = buildSystemPrompt(catalogo, undefined, perfil);
+  if (perfil.sales.piecesPerUnit > 1) assert.ok(/cuántos invitados o personas son/.test(prompt));
+});

@@ -51,7 +51,7 @@ import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
-import { productsNamedWithPrice, withOppositeGender } from '../services/photoBackup';
+import { productsNamedWithPrice, withOppositeGender, isGenericFirstContact, introSelection, afterPhotosQuestion } from '../services/photoBackup';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -219,6 +219,22 @@ function lastDeliveryDateFromHistory(history: any[]): string {
 
 const daysUntil = (isoDate: string) =>
   Math.round((Date.parse(`${isoDate}T00:00:00Z`) - Date.parse(`${todayLocal()}T00:00:00Z`)) / 86_400_000);
+
+// Tras varias fotos, si aún no dijo cuánto necesita: la cantidad acerca a la cotización más que elegir entre fotos.
+export const quantityAfterPhotosQuestions = () => {
+  const { sales: s, dates } = profile();
+  if (dates.enabled && s.piecesPerUnit > 1) {
+    return withEmojis(['¿Para cuántos invitados sería? Así te calculo la cantidad de ' + s.unitPlural, '¿Cuántos invitados tendrás? Con eso te digo cuántas ' + s.unitPlural + ' necesitas', '¿Para cuántas personas sería? Así te armo la cantidad exacta']);
+  }
+  return withEmojis(['¿Qué cantidad de ' + s.unitPlural + ' necesitas?', '¿Qué cantidad tienes en mente?', '¿Para qué cantidad sería?']);
+};
+// Tras las fotos de presentación del primer mensaje.
+export const introAfterPhotosQuestions = () => {
+  const { sales: s, dates } = profile();
+  return dates.enabled
+    ? withEmojis(['¿Para qué ' + dates.eventLabel + ' las buscas?', 'Cuéntame, ¿qué ' + dates.eventLabel + ' estás organizando?', '¿Para qué ' + dates.eventLabel + ' sería?'])
+    : withEmojis(['¿Qué ' + s.productLabel.toLowerCase() + ' estás buscando?', '¿Cuál te llamó la atención?', 'Cuéntame, ¿qué estás buscando?']);
+};
 
 // Varias formas de preguntar para no repetir siempre la misma frase y los mismos emojis.
 export const morePhotosQuestions = () => {
@@ -867,16 +883,28 @@ async function respondToBatch(batch: PendingBatch) {
       }
     }
 
+    // Primer mensaje que no dice qué busca (el del anuncio): se presentan los modelos antes de preguntar,
+    // porque a quien solo recibía un saludo con una pregunta casi nunca volvía a escribir.
+    const intro = !history.some((m: any) => m.sender !== 'customer') && isGenericFirstContact(aiContent);
+    if (intro) {
+      const introPhotos = introSelection(catalog, PHOTO_BATCH_SIZE);
+      if (introPhotos.length) plan.show_products = introPhotos;
+    }
+    const quantityKnown = plan.order_items.some(i => Number(i.quantity) > 0)
+      || [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), aiContent]
+        .some(t => quantityPattern().test(t) || /\d+\s*(invitad|persona)/i.test(t));
+
     if (plan.show_products.length > 0) {
       // Si la IA eligió una tanda de las pendientes, se toman todas: las que no entren quedan para la
       // siguiente pregunta en vez de perderse. Si pidió uno o dos modelos concretos, se envían solo esos.
       const continuesPending = pendingProducts.length > 0
         && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
         && plan.show_products.every(n => pendingProducts.includes(n));
-      const photos = continuesPending ? pendingProducts
+      const photos = continuesPending || intro ? (intro ? plan.show_products : pendingProducts)
         : usesGenderTagging(batchProfile) ? withOppositeGender(plan.show_products, catalog, sentProducts) : plan.show_products;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
-      await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile);
+      await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile,
+        afterPhotosQuestion({ intro, quantityKnown, photos: photos.length }));
     }
   } catch (error) {
     if (error instanceof BotStoodDown) {
@@ -888,7 +916,7 @@ async function respondToBatch(batch: PendingBatch) {
 }
 
 /** Envía hasta PHOTO_BATCH_SIZE fotos; si quedan más, las guarda y pregunta si desea verlas. */
-async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true, batchProfile?: any) {
+async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true, batchProfile?: any, kind: 'liked' | 'quantity' | 'event' = 'liked') {
   const products = names
     .map(name => catalog.find(p => p.name === name))
     .filter(p => p && p.image_url);
@@ -925,7 +953,9 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
     pendingPhotos.delete(conversationId);
     // Ya vio las fotos: recién ahora tiene sentido preguntarle cuál le gustó.
     if (askAfter && batch.length > 0) {
-      await sendAndSaveText(conversationId, phoneNumber, pick(batch.length === 1 ? likedSinglePhotoQuestions() : likedPhotoQuestions()));
+      const questions = kind === 'event' ? introAfterPhotosQuestions() : kind === 'quantity' ? quantityAfterPhotosQuestions()
+        : batch.length === 1 ? likedSinglePhotoQuestions() : likedPhotoQuestions();
+      await sendAndSaveText(conversationId, phoneNumber, pick(questions));
     }
   }
 }
