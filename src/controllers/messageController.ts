@@ -50,7 +50,7 @@ import { profile, todayLocal, formatDate, quantityText, usesProductUnits } from 
 import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
-import { customDesignAlerts } from '../services/customDesign';
+import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -752,12 +752,16 @@ async function respondToBatch(batch: PendingBatch) {
     //  1) apenas se detecta la idea (sin esperar la cantidad): para que alguien la revise a tiempo;
     //  2) cuando el resumen ya trae la cantidad: "listo para cotizar".
     // Cuando una persona escribe desde el CRM, el chat sí se pausa solo (eso no cambia).
-    if (plan.custom_design_requested || plan.custom_design_summary) {
+    const photoDescriptions = items.filter(i => i.messageType === 'image').map(i => String(i.storedContent || '').replace(/^\S+\n?/, ''));
+    const designBackup = !plan.custom_design_requested && !plan.custom_design_summary
+      && looksLikeCustomDesign({ reply: plan.reply || '', photoDescriptions, orderItems: plan.order_items.length });
+    if (designBackup) console.log('🎨 La IA no marcó el diseño personalizado, pero la conversación lo indica: se avisa igual');
+    if (plan.custom_design_requested || plan.custom_design_summary || designBackup) {
       const summary = plan.custom_design_summary;
       // Umbral más bajo: la IA vuelve a redactar el mismo diseño con otras palabras en cada mensaje.
       const finalAlreadySent = summary ? isRepeatedQuestion(summary, pendingCustomDesigns, catalog, 0.6) : false;
       const alerts = customDesignAlerts({
-        requested: plan.custom_design_requested,
+        requested: plan.custom_design_requested || designBackup,
         summary,
         hasQuantity: summary ? quantityPattern().test(summary) : false,
         earlyRecentlySent: await hasRecentNotification(conversationId, 'custom_design_new', 24),

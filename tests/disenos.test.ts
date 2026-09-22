@@ -7,7 +7,7 @@ import './entorno';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { customDesignAlerts } from '../src/services/customDesign';
+import { customDesignAlerts, looksLikeCustomDesign } from '../src/services/customDesign';
 import { buildSystemPrompt } from '../src/services/openai';
 import { normalizeProfile, PROFILE_PRESETS } from '../src/config/businessProfile';
 
@@ -53,4 +53,19 @@ test('las instrucciones piden llenar el resumen desde el principio y que el asis
   assert.ok(/Solo pon la cantidad cuando el cliente la haya dicho/.test(prompt));
   assert.ok(/El asistente sigue atendiendo con normalidad/.test(prompt));
   assert.ok(!/Antes de tener esos datos, custom_design_summary va vacío/.test(prompt));
+});
+
+test('respaldo: avisa el diseño aunque la IA no lo marque (casos reales del 21-sep)', () => {
+  // Velas navideñas: el asistente dijo "fuera del catálogo" pero la IA no marcó el diseño.
+  assert.equal(looksLikeCustomDesign({ reply: 'Qué lindo tema navideño 🎀 Si buscas algo *navideño*, ese sería un diseño fuera del catálogo y podemos prepararlo a tu gusto', photoDescriptions: [], orderItems: 0 }), true);
+  // Conejita: el asistente pidió foto de referencia.
+  assert.equal(looksLikeCustomDesign({ reply: 'Qué linda idea para baby shower 🐰✨ ¿Me envías una foto de referencia para ver exactamente cómo la quieres?', photoDescriptions: [], orderItems: 0 }), true);
+  // La clienta mandó una foto de referencia que no es del catálogo.
+  assert.equal(looksLikeCustomDesign({ reply: 'Qué linda referencia 😊', photoDescriptions: ['Parece una foto de referencia de producto: velas/recuerdos para baby shower'], orderItems: 0 }), true);
+});
+
+test('respaldo: no avisa por comprobantes, guías ni productos del catálogo', () => {
+  assert.equal(looksLikeCustomDesign({ reply: 'Gracias, ya vi la guía 🌸', photoDescriptions: ['Se ve una guía de gestión / comprobante de envío y recolección (referencia de entrega)'], orderItems: 0 }), false);
+  assert.equal(looksLikeCustomDesign({ reply: 'Perfecto, es el OSITO EN NUBE 🤍', photoDescriptions: ['Foto de referencia similar al osito en nube'], orderItems: 1 }), false);
+  assert.equal(looksLikeCustomDesign({ reply: 'Te muestro los modelos de baby shower ✨', photoDescriptions: [], orderItems: 0 }), false);
 });

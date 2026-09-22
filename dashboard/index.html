@@ -4337,6 +4337,8 @@
             const [listFilter, setListFilter] = useState('all');
             const [noteMode, setNoteMode] = useState(false);
             const [photoPicker, setPhotoPicker] = useState(false);
+            const [photoStatus, setPhotoStatus] = useState('');
+            const [dragOver, setDragOver] = useState(false);
             const [recordingSeconds, setRecordingSeconds] = useState(null);
             const recorderRef = useRef(null);
             const [noteText, setNoteText] = useState('');
@@ -4611,38 +4613,55 @@
                 if (state.recorder.state !== 'inactive') state.recorder.stop();
             }
 
-            // Abre la galería o los archivos para elegir una o varias fotos y las envía al chat.
+            // Envía al chat las fotos elegidas, pegadas (Ctrl+V) o arrastradas, de una en una y mostrando el avance.
+            async function sendPhotoFiles(conv, list) {
+                const all = Array.from(list || []);
+                const heic = all.filter(f => /hei[cf]/i.test(f.type) || /\.hei[cf]$/i.test(f.name || ''));
+                const files = all.filter(f => f.type.startsWith('image/') && !heic.includes(f)).slice(0, 10);
+                if (heic.length && !files.length) return alert('Esa foto está en formato HEIC (iPhone) y el navegador no la puede abrir. Guárdala como JPG o PNG y vuelve a intentar.');
+                if (!files.length) return alert('Solo se pueden enviar fotos (JPG, PNG o WEBP).');
+                const caption = prompt('Texto para acompañar la foto (opcional):');
+                if (caption === null) return;
+                try {
+                    for (let i = 0; i < files.length; i++) {
+                        setPhotoStatus(files.length > 1 ? 'Enviando foto ' + (i + 1) + ' de ' + files.length + '...' : 'Enviando foto...');
+                        let imageBase64;
+                        try {
+                            imageBase64 = await photoToJpeg(files[i]);
+                        } catch {
+                            throw new Error('No se pudo abrir "' + (files[i].name || 'la foto') + '". Guárdala como JPG o PNG y vuelve a intentar.');
+                        }
+                        await api('/api/send-image', {
+                            method: 'POST',
+                            body: JSON.stringify({ conversationId: conv.id, phoneNumber: conv.phone_number, imageBase64, caption: i === 0 ? caption : '' })
+                        });
+                    }
+                    if (heic.length) alert(heic.length + ' foto(s) en formato HEIC no se enviaron: guárdalas como JPG o PNG.');
+                } catch (err) {
+                    alert('Error enviando foto: ' + err.message);
+                } finally {
+                    setPhotoStatus('');
+                }
+                loadMessages(conv.id);
+                loadConversations();
+            }
+
+            // Abre la galería o los archivos para elegir una o varias fotos.
             function sendPhoto() {
                 if (!selectedConv) return;
                 const conv = selectedConv;
                 setPhotoPicker(false);
                 const input = document.createElement('input');
                 input.type = 'file';
-                input.accept = 'image/*';
+                input.accept = 'image/*,.heic,.heif';
                 input.multiple = true;
-                input.onchange = async () => {
-                    const files = Array.from(input.files || []).slice(0, 10);
-                    if (files.length === 0) return;
-                    const caption = prompt('Texto para acompañar la foto (opcional):') || '';
-                    try {
-                        for (let i = 0; i < files.length; i++) {
-                            await api('/api/send-image', {
-                                method: 'POST',
-                                body: JSON.stringify({
-                                    conversationId: conv.id,
-                                    phoneNumber: conv.phone_number,
-                                    imageBase64: await photoToJpeg(files[i]),
-                                    caption: i === 0 ? caption : ''
-                                })
-                            });
-                        }
-                    } catch (err) {
-                        alert('Error enviando foto: ' + err.message);
-                    }
-                    loadMessages(conv.id);
-                    loadConversations();
-                };
+                input.onchange = () => sendPhotoFiles(conv, input.files);
                 input.click();
+            }
+
+            // Fotos pegadas con Ctrl+V o arrastradas al chat desde el computador.
+            function photosFrom(transfer) {
+                return Array.from(transfer?.files || []).filter(f => f.type.startsWith('image/') || /\.hei[cf]$/i.test(f.name || ''));
             }
 
             // La lista se refresca cada 5 s, así la pausa que active el bot (reclamo, pago...)
@@ -5038,7 +5057,7 @@
                             </div>
 
                             {selectedConv ? (
-                                <div className="nx-panel nx-chat">
+                                <div className="nx-panel nx-chat" style={dragOver ? { outline: '3px dashed #4F5BD5', outlineOffset: '-6px' } : undefined} onDragOver={e => { if (canEdit && Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={e => { setDragOver(false); const dropped = photosFrom(e.dataTransfer); if (canEdit && dropped.length) { e.preventDefault(); sendPhotoFiles(selectedConv, dropped); } }}>
                                     <div className="nx-chat-head">
                                         <button type="button" className="nx-icon-btn nx-back" onClick={() => setSelectedConv(null)}>← Chats</button>
                                         <Avatar name={currentConv.customer_name || currentConv.phone_number} size={48} />
@@ -5131,9 +5150,10 @@
                                         </div>
                                     )}
 
+                                    {photoStatus && <div style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: '#4F5BD5', background: '#F5F8FF', borderTop: '1px solid #DCE2F5' }}>📤 {photoStatus} No cierres el chat.</div>}
                                     {!canEdit && <div className="nx-readonly"><PlatIcon name="user" size={18} color="#6B7599" /> Tu usuario es solo de consulta: puedes ver los chats, pero no responder.</div>}
                                     {canEdit && <div className={'nx-input' + (noteMode ? ' note' : '')}>
-                                        <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} title="Enviar foto"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
+                                        <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} disabled={!!photoStatus} title="Enviar foto (también puedes pegarla con Ctrl+V o arrastrarla al chat)"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
                                         {recordingSeconds === null
                                             ? <button type="button" className="nx-round" onClick={startVoice} title="Grabar nota de voz" style={{ fontSize: '20px' }}>🎤</button>
                                             : <React.Fragment>
@@ -5144,6 +5164,10 @@
                                             placeholder={noteMode ? 'Nota interna: el cliente no la ve...' : 'Escribe un mensaje...'}
                                             value={noteMode ? noteText : inputText}
                                             onChange={e => (noteMode ? setNoteText(e.target.value) : setInputText(e.target.value))}
+                                            onPaste={e => {
+                                                const pasted = photosFrom(e.clipboardData);
+                                                if (pasted.length && selectedConv && !noteMode) { e.preventDefault(); sendPhotoFiles(selectedConv, pasted); }
+                                            }}
                                             onKeyPress={e => {
                                                 if (e.key === 'Enter' && !e.shiftKey) {
                                                     e.preventDefault();
