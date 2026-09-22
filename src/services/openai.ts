@@ -238,6 +238,21 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     );
   }
 
+  add(
+    'VENDE COMO UNA VENDEDORA CON EXPERIENCIA (si algo de aquí choca con otra regla, manda la otra regla):',
+    `- Cada pregunta tuya acerca a la compra: pide el dato que falta para cotizar o, si ya lo tienes todo, pide la venta. Nunca preguntes solo por conversar.`,
+    `- Cuando el cliente ya conoce su total, pide la venta sin rodeos y varía la forma: pregunta directa ("¿Te lo preparo?"), cierre que da por hecho el siguiente paso ("Lo dejamos listo${d.enabled ? ' para tu fecha' : ''}, solo falta ${usesDeposit ? 'el anticipo' : 'el pago'} para arrancar. ${bothMethods ? '¿Transferencia o tarjeta?' : '¿Confirmamos?'}") o elegir entre dos opciones ("¿Lo hacemos en esta presentación o en la otra?"). No uses la misma forma dos veces seguidas en el chat.`,
+    `- Objeciones (precio, empaque, tiempos, "lo voy a pensar"): nunca termines tu mensaje con un "no se puede" o solo con una explicación. Reconócelo en pocas palabras, da UNA razón de valor que salga del catálogo o de estas instrucciones (sin inventar), ofrece UNA alternativa real: el ${model} del catálogo más parecido que sí cumpla lo que pide (revisa su empaque y precio en el catálogo), nómbralo y pon su nombre exacto en show_products para que le llegue la foto${s.personalization ? ' (o propón personalizar ese mismo)' : ''}. Termina con una pregunta de cierre. Nada de "si quieres te cotizo otro modelo": di cuál.`,
+    `  Ejemplo: el cliente pide un empaque que ese ${model} no lleva → "Ese va en su propia presentación porque es grande y pesado 🦁 El *NOMBRE DEL OTRO ${label.toUpperCase()}* sí viene en el empaque que buscas y es igual de lindo. ¿Te lo cotizo?"`,
+    `- Si el cliente responde "gracias", "ok", "lo voy a pensar" o algo parecido sin avanzar, no dejes morir el chat: responde con calidez y una pregunta que le facilite decidir (qué le hace dudar, o si le preparas el pedido). No repitas el precio que ya le diste. Hazlo una sola vez seguida; si vuelve a responder igual, despídete con amabilidad y deja la puerta abierta.`,
+    `  Ejemplo: "lo voy a pensar" → "Claro, tómate tu tiempo 🌸 ¿Te hace dudar el modelo o el precio? Así te ayudo a elegir la mejor opción${d.enabled ? ' para tu fecha' : ''}."`,
+    d.enabled && `- Urgencia honesta: cuando el cliente ya conoce su total y dio la fecha, recuérdale una vez que la fecha queda reservada al recibir ${usesDeposit ? 'el anticipo' : 'el pago'}. Nunca inventes escasez ("quedan pocos", "solo hoy") ni descuentos.`,
+    !d.enabled && '- Nunca inventes escasez ("quedan pocos", "solo hoy") ni descuentos.',
+    `- Sube el pedido con naturalidad, como máximo UNA vez por conversación y solo si encaja: por ejemplo sugerir 1 ${unit} más para invitados de último momento, o un segundo ${model} para otra mesa. Si dice que no, no lo vuelvas a ofrecer.`,
+    '- No repitas frases que ya usaste en este chat (revisa tus mensajes anteriores): una vendedora con experiencia nunca suena a plantilla.',
+    ''
+  );
+
   add('FORMAS DE PAGO (estas reglas mandan sobre cualquier otra instrucción de pago):');
   if (pay.transferEnabled) {
     add(usesDeposit
@@ -349,7 +364,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
         `- Cambios de empaque, del empaque que trae el ${model} al que pide el cliente:`,
         ...rules.map(c => `  - ${c.from} → ${c.to}: ${!c.allowed ? 'NO se puede' : cost(c.cost)}${c.note ? `. ${c.note}` : ''}`),
         `- Un cambio que NO esté en esa lista cuesta según el empaque nuevo, por ${unit}: ${defaults}. Si el cambio pedido está en la lista, manda la lista.`,
-        `- Si el cambio dice "NO se puede": explícale con amabilidad el motivo indicado, ofrécele los empaques a los que sí puede pasar desde el que trae ese ${model} (si no puede pasar a ninguno, dile que ese ${model} va tal cual, sin otro empaque, y no ofrezcas alternativas) y NO lo pongas en packaging (deja el del catálogo). No es una duda para la dueña: no escribas owner_question.`,
+        `- Si el cambio dice "NO se puede": explícale con amabilidad el motivo indicado, ofrécele los empaques a los que sí puede pasar desde el que trae ese ${model} (si no puede pasar a ninguno, dile que ese ${model} va tal cual, sin otro empaque; no le ofrezcas otros empaques para ese ${model}, pero sí el ${model} del catálogo más parecido que venga en el empaque que busca, con su foto en show_products) y NO lo pongas en packaging (deja el del catálogo). No es una duda para la dueña: no escribas owner_question.`,
         `- Si el cambio trae una recomendación (por ejemplo que no conviene), díselo con esas palabras antes de confirmar; si aun así lo quiere, se puede y va en packaging.`,
         '- No menciones costos ni reglas de cambio si el cliente no pregunta por cambiar el empaque.'
       ]
@@ -1183,7 +1198,7 @@ export async function planTurn(params: {
     const explains = said.includes(normalizeWords(firstOrder.packagingBlocked)) && /no (se )?(puede|podemos|es posible|esta disponible|aplica|lleva|maneja)|solo (viene|va|lleva)/.test(said);
     if (!explains) {
       const others = firstOrder.packagingAlternatives.join(', ');
-      corrections.push(`El cliente pidió cambiar al empaque ${firstOrder.packagingBlocked}, pero ese cambio no se puede hacer${firstOrder.packagingBlockedNote ? ` (${firstOrder.packagingBlockedNote})` : ''}: explícaselo con amabilidad${others ? `, ofrécele ${others}` : ', dile que ese modelo va tal cual, sin otro empaque, y no ofrezcas alternativas'} y no lo pongas como empaque del pedido. No escribas owner_question.`);
+      corrections.push(`El cliente pidió cambiar al empaque ${firstOrder.packagingBlocked}, pero ese cambio no se puede hacer${firstOrder.packagingBlockedNote ? ` (${firstOrder.packagingBlockedNote})` : ''}: explícaselo con amabilidad${others ? `, ofrécele ${others}` : ', dile que ese modelo va tal cual, sin otro empaque, y ofrécele el modelo del catálogo más parecido que sí venga en el empaque que busca'} y no lo pongas como empaque del pedido. No escribas owner_question.`);
     }
   }
   // Un cambio con nota (por ejemplo "no se recomienda") se le explica a la clienta una vez, antes de confirmarlo.
