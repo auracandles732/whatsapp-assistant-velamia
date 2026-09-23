@@ -856,7 +856,7 @@
             color: #fff;
             background:
                 linear-gradient(rgba(10, 15, 70, 0.10), rgba(10, 15, 70, 0.10)),
-                url('fondo.png') center / cover no-repeat,
+                url('fondo.jpg') center / cover no-repeat,
                 linear-gradient(135deg, #1E2A9A 0%, #5B6CF0 55%, #A99BF5 100%);
         }
 
@@ -1133,6 +1133,25 @@
 
         @media (max-width: 480px) {
             .login-card { padding: 30px 22px 20px; }
+        }
+
+        @media (max-width: 700px) {
+            .login-screen {
+                align-items: flex-start;
+                min-height: 100vh;
+                min-height: 100dvh;
+                padding: 37vh 14px 18px;
+                background:
+                    linear-gradient(180deg, rgba(42, 53, 144, 0) 0, rgba(42, 53, 144, 0) 27vh, #4E5DC0 40vh, #2A3590 100%),
+                    url('fondo-movil.jpg') center top / 100% auto no-repeat,
+                    #2A3590;
+            }
+            .login-card { padding: 22px 20px 16px; border-radius: 24px; }
+            .login-logo { margin-bottom: 10px; }
+            .login-logo svg { width: 46px; height: 46px; }
+            .login-logo .name { font-size: 24px; }
+            .login-tagline { margin-bottom: 14px; }
+            .login-foot { margin-top: 14px; padding-top: 12px; }
         }
 
         /* ---------- Pantalla de empresas (plataforma) ---------- */
@@ -1425,9 +1444,15 @@
         .nx-prod .times { padding: 3px 10px; border-radius: 999px; background: #E8EEFF; color: #3B4FD8; font-size: 12px; font-weight: 600; white-space: nowrap; }
         .nx-soft { font-size: 14px; color: #7A84AE; }
 
+        .nx-side-btn, .nx-side-head { display: none; }
+
         @media (max-width: 1250px) {
             .nx-content { grid-template-columns: 320px minmax(0, 1fr); }
             .nx-side { display: none; }
+            .nx-side-btn { display: inline-flex; }
+            .nx-side.open { display: flex; position: fixed; inset: 0; z-index: 80; background: #F4F7FD; padding: 0 12px 24px; overflow-y: auto; }
+            .nx-side.open .nx-side-head { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 1; background: #F4F7FD; padding: 12px 0 4px; }
+            .nx-side.open .nx-side-head .t { font-size: 16px; font-weight: 800; color: #141C3A; }
         }
 
         @media (max-width: 900px) {
@@ -4315,6 +4340,8 @@
         function App({ onLogout, branding, onBrandingChange }) {
             const [conversations, setConversations] = useState([]);
             const [selectedConv, setSelectedConv] = useState(null);
+            const [sideOpen, setSideOpen] = useState(false);
+            useEffect(() => { setSideOpen(false); }, [selectedConv?.id]);
             const [messages, setMessages] = useState([]);
             const [inputText, setInputText] = useState('');
             const [botEnabled, setBotEnabled] = useState(true);
@@ -5084,6 +5111,9 @@
                                             {summary && summary.phase2 && <TagBar tags={summary.tags || []} onChange={saveTags} readOnly={!canEdit} />}
                                         </div>
                                         <div className="nx-head-actions">
+                                            <button type="button" className="nx-icon-btn nx-side-btn" onClick={() => setSideOpen(true)} title="Resumen del cliente, productos, tareas y alertas">
+                                                <PlatIcon name="user" size={18} color="#4F5BD5" /> <span>Cliente</span>
+                                            </button>
                                             {canEdit && (
                                                 <>
                                                     <button type="button" className="nx-icon-btn" onClick={toggleClosed}>
@@ -5206,12 +5236,17 @@
                                 </div>
                             )}
 
-                            <div className="nx-side">
-                                <TodayCard data={today} />
+                            <div className={'nx-side' + (sideOpen && selectedConv ? ' open' : '')}>
+                                <div className="nx-side-head">
+                                    <button type="button" className="nx-icon-btn" onClick={() => setSideOpen(false)}>← Volver al chat</button>
+                                    <span className="t">{contactName(currentConv)}</span>
+                                </div>
+                                {!sideOpen && <TodayCard data={today} />}
                                 {selectedConv && <ClientCard summary={summary} conv={currentConv} />}
                                 {selectedConv && <ProductsCard summary={summary} onCatalog={() => setActiveTab('catalogo')} />}
                                 {selectedConv && summary && summary.phase2 && <TasksCard tasks={summary.tasks} onAdd={addTask} onToggle={setTaskDone} onRemove={removeTask} readOnly={!canEdit} />}
                                 {selectedConv && <AlertsCard alerts={summary ? summary.alerts : []} loading={!summary} />}
+                                {sideOpen && <TodayCard data={today} />}
                             </div>
                         </div>
                         )}
