@@ -1660,6 +1660,12 @@ async function start() {
   startFollowUpScheduler();
   startPhotoNudgeScheduler();
   startHealthCheck();
+  // Con la página de Facebook configurada, se suscribe sola a la App al arrancar (repetirlo no hace daño).
+  if (process.env.META_PAGE_ID && process.env.META_PAGE_TOKEN) {
+    subscribePage()
+      .then(detail => console.log(`📘 Instagram/Messenger: ${detail}`))
+      .catch(error => console.error('❌ No se pudo conectar la página de Facebook:', error.response?.data?.error?.message || error.message));
+  }
   });
 }
 
