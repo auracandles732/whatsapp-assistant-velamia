@@ -96,3 +96,28 @@ test('la respuesta pública es corta, sin precios, y solo dice "te escribimos" s
   assert.ok(!/ana\.p/.test(publicReplyText('lead', 'instagram', 'ana.p', true)));
   assert.ok(/[Gg]racias|lindo/.test(publicReplyText('praise', 'instagram', 'ana.p', false)));
 });
+
+test('el sello de "Conectar con Facebook" sirve una sola vez, vence y no se puede falsificar', async () => {
+  const { createConnectState, verifyConnectState } = await import('../src/services/metaChannels');
+  const now = Date.now();
+  const sello = createConnectState(now);
+  assert.equal(verifyConnectState(sello, now + 1000), true);
+  assert.equal(verifyConnectState(sello, now + 2000), false);
+  assert.equal(verifyConnectState(createConnectState(now), now + 16 * 60 * 1000), false);
+  const [vence, azar] = createConnectState(now).split('.');
+  assert.equal(verifyConnectState(`${vence}.${azar}.firmaFalsa`, now), false);
+  assert.equal(verifyConnectState('', now), false);
+});
+
+test('el botón pide los permisos de mensajes, comentarios y publicación, y vuelve al servidor', async () => {
+  process.env.META_APP_ID = '123';
+  const { connectUrl, CONNECT_SCOPES, REQUIRED_SCOPES } = await import('../src/services/metaChannels');
+  const url = new URL(await connectUrl('https://srv/api/meta/callback', 'sello'));
+  assert.equal(url.searchParams.get('client_id'), '123');
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://srv/api/meta/callback');
+  const scopes = String(url.searchParams.get('scope')).split(',');
+  for (const s of REQUIRED_SCOPES) assert.ok(scopes.includes(s), s);
+  assert.ok(scopes.includes('instagram_content_publish'));
+  assert.deepEqual(scopes, CONNECT_SCOPES);
+  delete process.env.META_APP_ID;
+});

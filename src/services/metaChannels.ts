@@ -1,6 +1,8 @@
 import axios from 'axios';
-import { currentTenant } from './tenant';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { currentTenant, encryptSecret, decryptSecret } from './tenant';
 import { maskPhone } from './privacy';
+import { getConfig, setConfig } from './supabase';
 
 /**
  * Instagram y Messenger (Facebook). Los chats se guardan igual que los de WhatsApp, pero en lugar del número llevan
@@ -64,12 +66,14 @@ let lastCredentialsError = '';
 const metaError = (error: any) => String(error?.response?.data?.error?.message || error?.message || error);
 
 /**
- * Página de Facebook (y su Instagram conectado) de VELAMIA. Basta META_PAGE_ID y META_PAGE_TOKEN: sirve la clave de la
- * página o la de un usuario del sistema (que se cambia por la de la página), y la cuenta de Instagram se detecta sola.
- * Las demás empresas todavía no tienen estos canales: sin credenciales, nada cambia para ellas.
+ * Página de Facebook (y su Instagram conectado) de VELAMIA. Primero la conexión hecha con el botón del CRM; si no hay,
+ * META_PAGE_ID y META_PAGE_TOKEN de Render (clave de la página o de un usuario del sistema, que se cambia por la de la
+ * página). Las demás empresas todavía no tienen estos canales: sin credenciales, nada cambia para ellas.
  */
 export async function pageCredentials(): Promise<PageCredentials | null> {
   if (currentTenant()) return null;
+  const stored = await storedCredentials();
+  if (stored.creds) return stored.creds;
   // Al pegar en Render es fácil que se cuele un espacio o un salto de línea.
   const pageId = (process.env.META_PAGE_ID || '').trim();
   const token = (process.env.META_PAGE_TOKEN || '').trim();
@@ -104,9 +108,10 @@ export async function pageCredentials(): Promise<PageCredentials | null> {
   return cached.creds;
 }
 
-// Lo que el asistente necesita para mensajes y comentarios en los dos canales.
+// Lo que el asistente necesita para mensajes y comentarios en los dos canales. Responder en público un comentario de
+// Facebook además pide pages_manage_engagement, que la App aún no tiene: sin él solo sale el mensaje privado.
 export const REQUIRED_SCOPES = [
-  'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'pages_manage_engagement',
+  'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement',
   'instagram_basic', 'instagram_manage_messages', 'instagram_manage_comments'
 ];
 
@@ -272,8 +277,10 @@ let statusCache: { at: number; value: Record<string, string> } | null = null;
 
 /** Estado de Instagram y Messenger para /health (nunca muestra la clave): conexión, vencimiento y permisos concedidos. */
 export async function socialStatus(): Promise<Record<string, string>> {
-  if (!process.env.META_PAGE_ID || !process.env.META_PAGE_TOKEN) return { estado: 'sin configurar' };
+  if (currentTenant()) return { estado: 'no disponible para esta empresa' };
   if (statusCache && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
+  const stored = await storedCredentials();
+  if (!stored.creds && (!process.env.META_PAGE_ID || !process.env.META_PAGE_TOKEN)) return { estado: 'sin configurar' };
   const creds = await pageCredentials();
   let value: Record<string, string> = { estado: 'la clave no funciona', motivo: lastCredentialsError };
   let complete = false;
@@ -283,6 +290,7 @@ export async function socialStatus(): Promise<Record<string, string>> {
     complete = missing.length === 0 && !!creds.instagramId;
     value = {
       estado: missing.length ? 'conectado, pero faltan permisos' : 'conectado',
+      origen: stored.creds ? 'botón Conectar con Facebook del CRM' : 'variables de Render',
       instagram: creds.instagramId ? `conectado (${creds.instagramId})` : 'sin Instagram: a la clave le falta permiso o la página no tiene Instagram profesional',
       clave_vence: info.expiresAt === 0 ? 'nunca' : new Date(info.expiresAt * 1000).toISOString().slice(0, 10),
       permisos: info.scopes.filter(s => /^(pages|instagram)_/.test(s)).join(', ')
@@ -304,4 +312,132 @@ export async function subscribePage(): Promise<string> {
   return creds.instagramId
     ? `Página ${creds.pageId} suscrita; Instagram ${creds.instagramId} conectado`
     : `Página ${creds.pageId} suscrita; no tiene una cuenta de Instagram profesional conectada`;
+}
+
+// ---------- Conectar con Facebook desde el CRM ----------
+
+// Permisos que se piden al conectar. Solo los que la App tiene agregados: uno que no esté hace fallar la ventana de Facebook.
+export const CONNECT_SCOPES = [
+  'pages_show_list', 'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement',
+  'instagram_basic', 'instagram_manage_messages', 'instagram_manage_comments', 'instagram_content_publish', 'business_management'
+];
+
+const STORED_KEY = 'meta_page_connection';
+const CONNECT_STATE_MS = 15 * 60 * 1000;
+const usedStates = new Set<string>();
+
+function stateSignature(body: string): string {
+  const secret = process.env.BUSINESS_SECRETS_KEY || '';
+  if (secret.length < 16) throw new Error('Falta BUSINESS_SECRETS_KEY');
+  return createHmac('sha256', secret).update(`conectar-meta:${body}`).digest('base64url');
+}
+
+/** Sello de un solo uso que viaja a Facebook y vuelve: prueba que la conexión la pidió alguien con sesión en el CRM. */
+export function createConnectState(now = Date.now()): string {
+  const body = `${now + CONNECT_STATE_MS}.${randomBytes(12).toString('base64url')}`;
+  return `${body}.${stateSignature(body)}`;
+}
+
+export function verifyConnectState(state: unknown, now = Date.now()): boolean {
+  const text = String(state || '');
+  const cut = text.lastIndexOf('.');
+  if (cut < 0) return false;
+  const body = text.slice(0, cut);
+  const given = Buffer.from(text.slice(cut + 1));
+  const expected = Buffer.from(stateSignature(body));
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return false;
+  if (Number(body.split('.')[0]) < now || usedStates.has(body)) return false;
+  usedStates.add(body);
+  return true;
+}
+
+let cachedAppId = '';
+/** Id de la App de Meta: el de META_APP_ID o el de la clave de WhatsApp, que es de la misma App. */
+async function metaAppId(): Promise<string> {
+  if (process.env.META_APP_ID) return process.env.META_APP_ID.trim();
+  if (cachedAppId) return cachedAppId;
+  const token = process.env.WHATSAPP_TOKEN || '';
+  const { data } = await graph.get(`${GRAPH_API}/debug_token`, { params: { input_token: token, access_token: token } });
+  cachedAppId = String(data?.data?.app_id || '');
+  if (!cachedAppId) throw new Error('No se pudo saber el id de la App de Meta');
+  return cachedAppId;
+}
+
+export async function connectUrl(redirectUri: string, state: string): Promise<string> {
+  const params = new URLSearchParams({
+    client_id: await metaAppId(),
+    redirect_uri: redirectUri,
+    state,
+    response_type: 'code',
+    scope: CONNECT_SCOPES.join(','),
+    // Si antes rechazó algún permiso, Facebook lo vuelve a preguntar.
+    auth_type: 'rerequest'
+  });
+  return `https://www.facebook.com/v25.0/dialog/oauth?${params}`;
+}
+
+/**
+ * Vuelta de Facebook: cambia el código por una clave de usuario de larga duración y de ahí saca la de la página, que así
+ * no vence. Se guarda cifrada en la base (ya no hace falta tocar Render) y la página queda suscrita a la App.
+ */
+export async function completeConnection(code: string, redirectUri: string) {
+  const clientId = await metaAppId();
+  const clientSecret = process.env.META_APP_SECRET || '';
+  if (!clientSecret) throw new Error('Falta META_APP_SECRET en el servidor');
+  const short = await graph.get(`${GRAPH_API}/oauth/access_token`, { params: { client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, code } });
+  const long = await graph.get(`${GRAPH_API}/oauth/access_token`, {
+    params: { grant_type: 'fb_exchange_token', client_id: clientId, client_secret: clientSecret, fb_exchange_token: short.data.access_token }
+  }).catch(() => short);
+  const userToken = String(long.data.access_token);
+
+  const { data } = await graph.get(`${GRAPH_API}/me/accounts`, {
+    params: { fields: 'id,name,access_token,instagram_business_account{id,username}', limit: 100, access_token: userToken }
+  });
+  const pages: any[] = data?.data || [];
+  if (pages.length === 0) throw new Error('No elegiste ninguna página de Facebook. Vuelve a conectar y marca tu página.');
+  const wanted = (process.env.META_PAGE_ID || '').trim();
+  const page = pages.find(p => String(p.id) === wanted) || pages[0];
+
+  const record = {
+    pageId: String(page.id),
+    pageName: String(page.name || ''),
+    pageToken: String(page.access_token),
+    instagramId: String(page.instagram_business_account?.id || ''),
+    instagramUsername: String(page.instagram_business_account?.username || ''),
+    connectedAt: new Date().toISOString()
+  };
+  await setConfig(STORED_KEY, encryptSecret(JSON.stringify(record)));
+  resetPageCredentials();
+  const subscribed = await subscribePage().then(() => true).catch(error => {
+    console.error('❌ No se pudo suscribir la página a la App:', metaError(error));
+    return false;
+  });
+  console.log(`📘 Conectado desde el CRM: página ${record.pageName}${record.instagramUsername ? `, Instagram @${record.instagramUsername}` : ''}`);
+  return { pageName: record.pageName, instagramUsername: record.instagramUsername, subscribed, otherPages: pages.length - 1 };
+}
+
+let storedCache: { at: number; value: PageCredentials | null; raw: string } | null = null;
+
+/** La conexión hecha desde el CRM (si existe). Se relee cada minuto para no consultar la base en cada mensaje. */
+async function storedCredentials(): Promise<{ creds: PageCredentials | null; raw: string }> {
+  if (storedCache && Date.now() - storedCache.at < 60_000) return { creds: storedCache.value, raw: storedCache.raw };
+  let value: PageCredentials | null = null;
+  let raw = '';
+  try {
+    raw = (await getConfig(STORED_KEY)) || '';
+    if (raw) {
+      const record = JSON.parse(decryptSecret(raw));
+      value = { pageId: String(record.pageId), pageToken: String(record.pageToken), instagramId: String(record.instagramId || '') };
+    }
+  } catch (error: any) {
+    console.error('❌ No se pudo leer la conexión de Facebook guardada:', error.message);
+  }
+  storedCache = { at: Date.now(), value, raw };
+  return { creds: value, raw };
+}
+
+export function resetPageCredentials() {
+  cached = null;
+  storedCache = null;
+  statusCache = null;
 }

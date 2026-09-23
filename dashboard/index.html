@@ -5366,6 +5366,11 @@
                                         )
                                     },
                                     {
+                                        id: 'redes', icon: 'instagram', label: 'Instagram y Facebook', title: 'Instagram y Facebook',
+                                        subtitle: 'Mensajes y comentarios atendidos por el mismo asistente',
+                                        node: <SocialConnect available={!!session?.business?.legacy || !session?.business} canConfigure={canConfigure} />
+                                    },
+                                    {
                                         id: 'instrucciones', icon: 'sparkle', label: 'Instrucciones', title: 'Instrucciones del asistente',
                                         subtitle: 'El tono y los detalles de tu negocio que no están en el perfil',
                                         node: (
@@ -5397,6 +5402,60 @@
                         )}
                     </div>
                 </div>
+            );
+        }
+
+        // Conecta la página de Facebook y su Instagram: se abre la ventana de Facebook y el servidor guarda la clave.
+        function SocialConnect({ available, canConfigure }) {
+            const [status, setStatus] = useState(null);
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+
+            const load = () => api('/api/meta/status').then(setStatus).catch(() => setStatus({ estado: 'no se pudo revisar' }));
+            useEffect(() => { if (available) load(); }, [available]);
+
+            async function connect() {
+                setError('');
+                // La ventana se abre al instante: si se abre después de esperar al servidor, el navegador la bloquea.
+                const win = window.open('about:blank', 'conectar-facebook', 'width=620,height=760');
+                setBusy(true);
+                try {
+                    const { url } = await api('/api/meta/connect-url');
+                    if (!win) { window.location.href = url; return; }
+                    win.location.href = url;
+                    const timer = setInterval(() => {
+                        if (win.closed) { clearInterval(timer); setBusy(false); load(); }
+                    }, 1000);
+                } catch (e) {
+                    if (win) win.close();
+                    setError(e.message);
+                    setBusy(false);
+                }
+            }
+
+            if (!available) return <p className="hint">Instagram y Facebook todavía no están disponibles para esta empresa.</p>;
+            const connected = status && /^conectado/.test(status.estado || '');
+            const row = (label, value) => value ? <div style={{ display: 'flex', gap: '8px', padding: '6px 0', borderBottom: '1px solid #EEF1F8' }}><span style={{ color: '#6B7599', minWidth: '130px' }}>{label}</span><span style={{ fontWeight: 600, wordBreak: 'break-word' }}>{value}</span></div> : null;
+            return (
+                <>
+                    <p className="hint">El asistente responde los mensajes de Instagram y Messenger y los comentarios de tus publicaciones, igual que en WhatsApp. Al presionar el botón se abre Facebook: inicia sesión, elige tu página y tu Instagram, y <b>acepta todos los permisos</b>.</p>
+                    {!status ? <div className="hint">Revisando...</div> : (
+                        <div style={{ margin: '8px 0 12px', fontSize: '14px' }}>
+                            {row('Estado', status.estado)}
+                            {row('Instagram', status.instagram)}
+                            {row('La clave vence', status.clave_vence)}
+                            {row('Faltan permisos', status.faltan)}
+                            {row('Motivo', status.motivo)}
+                        </div>
+                    )}
+                    {error && <div style={{ color: '#E5484D', fontWeight: 600, margin: '8px 0' }}>{error}</div>}
+                    <div className="settings-actions">
+                        <span className="save-status">{connected && !status.faltan ? '✅ Todo conectado' : ''}</span>
+                        <button type="button" className="btn-save-prompt" onClick={connect} disabled={busy || !canConfigure}>
+                            {busy ? 'Esperando a Facebook...' : connected ? 'Volver a conectar con Facebook' : 'Conectar con Facebook'}
+                        </button>
+                    </div>
+                </>
             );
         }
 

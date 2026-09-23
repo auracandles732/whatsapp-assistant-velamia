@@ -59,7 +59,7 @@ import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } 
 import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
-import { subscribePage, isSocialAddress, socialStatus } from './services/metaChannels';
+import { subscribePage, isSocialAddress, socialStatus, connectUrl, createConnectState, verifyConnectState, completeConnection } from './services/metaChannels';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -233,6 +233,54 @@ app.post('/api/me/connect-social', requireCrmSession, requireOwnerRole, async (_
   } catch (error: any) {
     res.status(500).json({ error: error.response?.data?.error?.message || error.message });
   }
+});
+
+// ---------- Conectar Facebook e Instagram desde el CRM ----------
+
+const metaRedirectUri = () =>
+  `${(process.env.RENDER_EXTERNAL_URL || 'https://whatsapp-assistant-velamia.onrender.com').replace(/\/$/, '')}/api/meta/callback`;
+
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
+function metaResultPage(ok: boolean, lines: string[]) {
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conectar con Facebook</title>
+<style>body{font-family:system-ui,sans-serif;background:#F5F6FB;color:#1B2140;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:16px}
+.card{background:#fff;border-radius:16px;padding:28px;max-width:440px;box-shadow:0 8px 30px rgba(20,30,80,.08)}h1{font-size:20px;margin:0 0 12px}p{margin:6px 0;line-height:1.5}</style></head>
+<body><div class="card"><h1>${ok ? '✅ Conectado' : '⚠️ No se pudo conectar'}</h1>${lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')}
+<p style="margin-top:16px;color:#6B7599">Ya puedes cerrar esta ventana y volver al CRM.</p></div></body></html>`;
+}
+
+app.get('/api/meta/connect-url', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
+  if (currentTenant()) return res.status(400).json({ error: 'Instagram y Facebook todavía no están disponibles para esta empresa' });
+  try {
+    res.json({ url: await connectUrl(metaRedirectUri(), createConnectState()) });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Facebook devuelve aquí a quien aceptó los permisos. No lleva la sesión del CRM: la protege el sello de un solo uso.
+app.get('/api/meta/callback', async (req: Request, res: Response) => {
+  if (req.query.error) {
+    return res.status(400).send(metaResultPage(false, ['Se canceló la conexión en Facebook. Vuelve a intentarlo desde el CRM y acepta todos los permisos.']));
+  }
+  if (!verifyConnectState(req.query.state)) {
+    return res.status(400).send(metaResultPage(false, ['El enlace venció o ya se usó. Vuelve a presionar "Conectar con Facebook" en el CRM.']));
+  }
+  try {
+    const result = await completeConnection(String(req.query.code || ''), metaRedirectUri());
+    const lines = [`Página de Facebook: ${result.pageName}`];
+    lines.push(result.instagramUsername ? `Instagram: @${result.instagramUsername}` : 'Instagram: esta página no tiene una cuenta de Instagram profesional conectada.');
+    if (!result.subscribed) lines.push('Aviso: la página no quedó suscrita a la App; revisa el estado en el CRM.');
+    res.send(metaResultPage(true, lines));
+  } catch (error: any) {
+    console.error('❌ Error conectando con Facebook:', error.response?.data || error.message);
+    res.status(500).send(metaResultPage(false, [error.response?.data?.error?.message || error.message]));
+  }
+});
+
+app.get('/api/meta/status', requireCrmSession, async (_req: Request, res: Response) => {
+  res.json(await socialStatus().catch(() => ({ estado: 'no se pudo revisar' })));
 });
 
 // ---------- Salud ----------
