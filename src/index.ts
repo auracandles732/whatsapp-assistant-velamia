@@ -291,7 +291,8 @@ app.get('/health', async (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     // Solo indica si la configuración existe, nunca su valor.
     followups: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? 'activo' : 'falta WHATSAPP_BUSINESS_ACCOUNT_ID',
-    instagram_messenger: await socialStatus().catch(() => ({ estado: 'no se pudo revisar' }))
+    // Público: solo el estado. Permisos, cuenta y vencimiento se ven en el CRM (/api/meta/status, con sesión).
+    instagram_messenger: (await socialStatus().catch(() => ({ estado: 'no se pudo revisar' }))).estado
   });
 });
 

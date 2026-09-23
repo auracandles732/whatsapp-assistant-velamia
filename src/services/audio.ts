@@ -20,6 +20,21 @@ export async function toWhatsAppVoice(input: Buffer): Promise<Buffer> {
   // Un archivo disfrazado (por ejemplo una lista de reproducción) podría hacer que el convertidor lea archivos del
   // servidor o visite direcciones de internet: se rechaza todo lo que no sea una grabación.
   if (!isRecordedAudio(input)) throw new Error('El audio no tiene un formato de grabación válido');
+  return encodeVoice(input);
+}
+
+/** MP3 que devuelve ElevenLabs: se acepta solo si de verdad es MP3 (cabecera ID3 o marco de audio). */
+export function isMp3(input: Buffer): boolean {
+  if (input.length < 4) return false;
+  return input.subarray(0, 3).toString('latin1') === 'ID3' || (input[0] === 0xff && (input[1] & 0xe0) === 0xe0);
+}
+
+export async function mp3ToWhatsAppVoice(input: Buffer): Promise<Buffer> {
+  if (!isMp3(input)) throw new Error('La voz generada no es un MP3 válido');
+  return encodeVoice(input);
+}
+
+async function encodeVoice(input: Buffer): Promise<Buffer> {
   const ffmpeg: string | null = require('ffmpeg-static');
   if (!ffmpeg) throw new Error('No hay convertidor de audio disponible en el servidor');
 

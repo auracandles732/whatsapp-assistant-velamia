@@ -164,6 +164,22 @@ export function publicReplyText(kind: CommentKind, channel: SocialChannel, fromN
 
 // Meta puede repetir el mismo aviso: un comentario se atiende una sola vez.
 const inProgress = new Set<string>();
+// Quien comenta muchas veces seguidas recibe una sola respuesta automática cada 6 horas: evita spam y gasto de IA.
+const COMMENTER_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const lastAnswerByCommenter = new Map<string, number>();
+
+export function commenterOnCooldown(fromId: string, now = Date.now()): boolean {
+  const last = lastAnswerByCommenter.get(fromId);
+  return !!fromId && last !== undefined && now - last < COMMENTER_COOLDOWN_MS;
+}
+
+function markCommenterAnswered(fromId: string, now = Date.now()) {
+  if (!fromId) return;
+  lastAnswerByCommenter.set(fromId, now);
+  if (lastAnswerByCommenter.size > 5000) {
+    for (const [id, at] of lastAnswerByCommenter) if (now - at >= COMMENTER_COOLDOWN_MS) lastAnswerByCommenter.delete(id);
+  }
+}
 // Una persona real no contesta al segundo.
 const COMMENT_DELAY_MS = [20_000, 60_000];
 
@@ -179,6 +195,12 @@ async function handleComment(channel: SocialChannel, comment: IncomingComment, d
     const kind = commentKind(comment.text);
     console.log(`💬 Comentario en ${channelName(channel)} (${kind}): "${comment.text.slice(0, 80)}"`);
     if (kind === 'ignore') return;
+    // Un reclamo siempre se atiende y se avisa, aunque la persona haya comentado hace poco.
+    if (kind !== 'complaint' && commenterOnCooldown(comment.fromId)) {
+      console.log('💬 Esa persona ya recibió respuesta automática hace poco: este comentario queda para el equipo');
+      return;
+    }
+    markCommenterAnswered(comment.fromId);
 
     await new Promise(resolve => setTimeout(resolve, delayMs[0] + Math.random() * (delayMs[1] - delayMs[0])));
 

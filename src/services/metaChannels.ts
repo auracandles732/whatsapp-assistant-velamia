@@ -265,9 +265,21 @@ export async function socialProfileName(address: string): Promise<string> {
   }
 }
 
+const META_MEDIA_HOSTS = /(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com|facebook\.com|instagram\.com)$/;
+
+export function isMetaMediaUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && META_MEDIA_HOSTS.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** Fotos y audios que envía la clienta: Instagram y Messenger los dan con un enlace directo y temporal. */
 export async function downloadSocialMedia(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
-  if (!/^https:\/\//.test(url)) throw new Error('Enlace de archivo inválido');
+  // Solo servidores de Meta: el servidor nunca descarga de una dirección cualquiera que venga en un mensaje.
+  if (!isMetaMediaUrl(url)) throw new Error('Enlace de archivo inválido');
   const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 60_000, maxContentLength: 25 * 1024 * 1024 });
   const mimeType = String(response.headers['content-type'] || 'application/octet-stream').split(';')[0].trim();
   return { buffer: Buffer.from(response.data), mimeType };

@@ -60,7 +60,8 @@ import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
 import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge, sameCategoryAsMost } from '../services/photoBackup';
 import { textToVoice } from '../services/elevenlabs';
-import { downloadSocialMedia, socialProfileName, wasSentByUs } from '../services/metaChannels';
+import { downloadSocialMedia, socialProfileName, wasSentByUs, isSocialAddress } from '../services/metaChannels';
+import { voiceNoteFits } from '../services/voiceNotes';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -499,38 +500,36 @@ async function sendAndSaveText(conversationId: string, phoneNumber: string, text
   await saveMessage(conversationId, 'bot', 'text', text, getSentMessageId(sent));
 }
 
-/** Detecta si el último mensaje del bot incluía fotos (inicio de conversación de venta). */
-async function shouldSendAudio(conversationId: string, history: any[]): Promise<boolean> {
-  // La voz de ElevenLabs es la de VELAMIA: ninguna otra empresa puede hablar con ella.
-  if (currentTenant() || !process.env.ELEVENLABS_API_KEY) return false;
-  if (history.length === 0) return false;
-
-  const lastBotMessage = [...history].reverse().find((m: any) => m.sender === 'bot');
-  if (!lastBotMessage) return false;
-
-  if (lastBotMessage.type === 'audio') return true;
-  if (lastBotMessage.type === 'image') return true;
-  if (lastBotMessage.type === 'text' && /🎙️|nota\s+de\s+voz/i.test(lastBotMessage.content || '')) return true;
-
-  return false;
+/**
+ * Nota de voz con la voz de VELAMIA: solo VELAMIA y solo por WhatsApp, una por chat al día, cuando la clienta responde
+ * después de ver fotos y la respuesta es conversación (sin precios ni listas, que se leen mejor escritos).
+ */
+function wantsVoiceNote(history: any[], phoneNumber: string, reply: string, now = Date.now()): boolean {
+  if (currentTenant() || isSocialAddress(phoneNumber)) return false;
+  if (!process.env.ELEVENLABS_API_KEY || !process.env.ELEVENLABS_VOICE_ID) return false;
+  return voiceNoteFits({ history, reply, now });
 }
 
-/** Convierte texto a audio vía Elevenlabs, sube a storage y envía vía WhatsApp. */
-async function sendAndSaveAudio(conversationId: string, phoneNumber: string, text: string) {
+/** Envía la respuesta como nota de voz en lugar de texto. Si algo falla devuelve false y se envía el texto. */
+async function sendAndSaveVoiceNote(conversationId: string, phoneNumber: string, text: string): Promise<boolean> {
+  let audioUrl: string;
   try {
-    await waitGap(phoneNumber, MESSAGE_GAP_MS);
-    await stepAsideIfHumanTookOver(conversationId);
-
-    const audioBuffer = await textToVoice(text);
-    const audioUrl = await uploadBufferToStorage(audioBuffer, 'audio/ogg');
-    const sent = await sendAudioMessage(phoneNumber, audioUrl);
-
-    // Guardar referencia al audio en la base de datos
-    await saveMessage(conversationId, 'bot', 'audio', `🎙️ Nota de voz: ${text}`, getSentMessageId(sent));
-    console.log(`✅ Nota de voz enviada a ${maskPhone(phoneNumber)}`);
+    audioUrl = await uploadBufferToStorage(await textToVoice(text), 'audio/ogg');
   } catch (error: any) {
-    console.error('❌ Error enviando nota de voz:', error.message);
-    // No lanzar error: continuar con texto normal si el audio falla
+    console.error('❌ No se pudo crear la nota de voz; se envía el texto:', error.response?.status || '', error.message);
+    return false;
+  }
+  await waitGap(phoneNumber, MESSAGE_GAP_MS);
+  await stepAsideIfHumanTookOver(conversationId);
+  try {
+    const sent = await sendAudioMessage(phoneNumber, audioUrl);
+    // Como las notas de voz de las clientas: la dirección primero (el CRM la reproduce) y lo que dice (lo lee la IA).
+    await saveMessage(conversationId, 'bot', 'audio', `${audioUrl}\n🎤 "${text}"`, getSentMessageId(sent));
+    console.log(`🎙️ Nota de voz enviada a ${maskPhone(phoneNumber)}`);
+    return true;
+  } catch (error: any) {
+    console.error('❌ No se pudo enviar la nota de voz; se envía el texto:', error.response?.data?.error?.message || error.message);
+    return false;
   }
 }
 
@@ -892,11 +891,9 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     if (plan.reply) {
-      await sendAndSaveText(conversationId, phoneNumber, plan.reply);
-
-      if (await shouldSendAudio(conversationId, history)) {
-        await sendAndSaveAudio(conversationId, phoneNumber, plan.reply);
-      }
+      const voiceSent = wantsVoiceNote(history, phoneNumber, plan.reply)
+        && await sendAndSaveVoiceNote(conversationId, phoneNumber, plan.reply);
+      if (!voiceSent) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.
