@@ -226,6 +226,32 @@ export async function downloadSocialMedia(url: string): Promise<{ buffer: Buffer
   return { buffer: Buffer.from(response.data), mimeType };
 }
 
+let statusCache: { at: number; value: Record<string, string> } | null = null;
+
+/** Estado de Instagram y Messenger para /health (nunca muestra la clave): conexión, vencimiento y permisos concedidos. */
+export async function socialStatus(): Promise<Record<string, string>> {
+  if (!process.env.META_PAGE_ID || !process.env.META_PAGE_TOKEN) return { estado: 'sin configurar' };
+  if (statusCache && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
+  const creds = await pageCredentials();
+  let value: Record<string, string> = { estado: 'la clave no funciona' };
+  if (creds) {
+    value = { estado: 'conectado', instagram: creds.instagramId ? 'conectado' : 'la página no tiene Instagram profesional conectado' };
+    try {
+      const { data } = await graph.get(`${GRAPH_API}/debug_token`, { params: { input_token: creds.pageToken, access_token: creds.pageToken } });
+      const info = data?.data || {};
+      const expires = Number(info.expires_at || 0);
+      const dataAccess = Number(info.data_access_expires_at || 0);
+      value.clave_vence = expires === 0 ? 'nunca' : new Date(expires * 1000).toISOString().slice(0, 10);
+      if (dataAccess) value.acceso_a_datos_vence = new Date(dataAccess * 1000).toISOString().slice(0, 10);
+      value.permisos = (info.scopes || []).filter((s: string) => /^(pages|instagram)_/.test(s)).join(', ');
+    } catch {
+      value.clave_vence = 'no se pudo revisar';
+    }
+  }
+  statusCache = { at: Date.now(), value };
+  return value;
+}
+
 /** Suscribe la página a la App para que Meta envíe al servidor los mensajes y comentarios. Se puede repetir sin problema. */
 export async function subscribePage(): Promise<string> {
   const creds = await requireCredentials();

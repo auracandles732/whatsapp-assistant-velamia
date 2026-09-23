@@ -59,7 +59,7 @@ import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } 
 import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
-import { subscribePage, isSocialAddress } from './services/metaChannels';
+import { subscribePage, isSocialAddress, socialStatus } from './services/metaChannels';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -237,12 +237,13 @@ app.post('/api/me/connect-social', requireCrmSession, requireOwnerRole, async (_
 
 // ---------- Salud ----------
 
-app.get('/health', (_req: Request, res: Response) => {
+app.get('/health', async (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     // Solo indica si la configuración existe, nunca su valor.
-    followups: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? 'activo' : 'falta WHATSAPP_BUSINESS_ACCOUNT_ID'
+    followups: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? 'activo' : 'falta WHATSAPP_BUSINESS_ACCOUNT_ID',
+    instagram_messenger: await socialStatus().catch(() => ({ estado: 'no se pudo revisar' }))
   });
 });
 
