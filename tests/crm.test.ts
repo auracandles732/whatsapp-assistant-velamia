@@ -71,3 +71,15 @@ test('nunca muestra más de tres avisos', () => {
   const cotizacion = { status: 'pending', total_amount: 50, created_at: hace(40 * HORA), expires_at: null };
   assert.equal(buildAlerts(pausado, chat, [cotizacion]).length, 3);
 });
+
+test('el CRM se prepara en el servidor: sin Babel, sin scripts en línea y con el registro del service worker', async () => {
+  const { readFileSync } = await import('fs');
+  const { buildCrm } = await import('../src/services/crmBuild');
+  const built = buildCrm(readFileSync('dashboard/index.html', 'utf8'));
+  assert.equal(built.strictScripts, true);
+  assert.ok(!/babel/i.test(built.html));
+  assert.ok(built.html.includes(`<script src="app.js?v=${built.version}"></script>`));
+  assert.ok(!/<script type="text\/babel">/.test(built.html));
+  assert.ok(built.js.includes('serviceWorker'));
+  assert.ok(!/<\w+[^>]*\/>|className=/.test(built.js.slice(0, 5000)), 'el JSX quedó traducido');
+});

@@ -2,6 +2,8 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import { readFileSync } from 'fs';
+import { buildCrm, BuiltCrm } from './services/crmBuild';
 import { randomUUID } from 'crypto';
 import {
   supabase,
@@ -107,9 +109,23 @@ const STORAGE_ORIGIN = (() => {
   try { return new URL(process.env.SUPABASE_URL || '').origin; } catch { return 'https://*.supabase.co'; }
 })();
 
+// El CRM se traduce al arrancar (ver crmBuild): así la página no necesita código en línea ni evaluado. Si la traducción
+// fallara, se sirve como antes (Babel en el navegador) y solo entonces se permiten.
+const DASHBOARD_DIR = path.join(__dirname, '..', 'dashboard');
+let builtCrm: BuiltCrm | null = null;
+try {
+  builtCrm = buildCrm(readFileSync(path.join(DASHBOARD_DIR, 'index.html'), 'utf8'));
+  console.log(`🧩 CRM preparado en el servidor (versión ${builtCrm.version})`);
+} catch (error: any) {
+  console.error('⚠️ No se pudo preparar el CRM; se sirve con Babel en el navegador:', error.message);
+}
+const SCRIPT_SOURCES = builtCrm?.strictScripts
+  ? "script-src 'self' https://unpkg.com"
+  : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com";
+
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com",
+  SCRIPT_SOURCES,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: ${STORAGE_ORIGIN}`,
   `media-src 'self' blob: ${STORAGE_ORIGIN}`,
@@ -163,8 +179,20 @@ app.get('/crm/manifest.json', (_req: Request, res: Response) => {
   });
 });
 
+app.get(['/crm/', '/crm/index.html'], (_req: Request, res: Response, next: NextFunction) => {
+  if (!builtCrm) return next();
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('html').send(builtCrm.html);
+});
+// El nombre lleva la versión (app.js?v=...): cada publicación cambia la dirección y el navegador nunca usa una vieja.
+app.get('/crm/app.js', (_req: Request, res: Response, next: NextFunction) => {
+  if (!builtCrm) return next();
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.type('application/javascript').send(builtCrm.js);
+});
+
 // Sin esto el navegador se queda con la versión vieja del CRM después de publicar cambios.
-app.use('/crm', express.static(path.join(__dirname, '..', 'dashboard'), {
+app.use('/crm', express.static(DASHBOARD_DIR, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
   }

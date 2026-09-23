@@ -5458,9 +5458,18 @@
                     const { url } = await api('/api/meta/connect-url');
                     if (!win) { window.location.href = url; return; }
                     win.location.href = url;
-                    const timer = setInterval(() => {
-                        if (win.closed) { clearInterval(timer); setBusy(false); load(); }
-                    }, 1000);
+                    // Al pasar a Facebook el navegador corta el vínculo con la ventana (protección de seguridad), así que
+                    // no se sabe cuándo termina: se revisa el estado cada pocos segundos hasta que cambie o pasen 5 minutos.
+                    const before = JSON.stringify(status);
+                    const started = Date.now();
+                    const timer = setInterval(async () => {
+                        const now = await api('/api/meta/status').catch(() => null);
+                        if (now) setStatus(now);
+                        if ((now && JSON.stringify(now) !== before) || Date.now() - started > 5 * 60 * 1000) {
+                            clearInterval(timer);
+                            setBusy(false);
+                        }
+                    }, 4000);
                 } catch (e) {
                     if (win) win.close();
                     setError(e.message);
