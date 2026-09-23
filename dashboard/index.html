@@ -2385,6 +2385,7 @@
                 case 'warn': return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17h-19z" fill="#F5A524" stroke="#F5A524" strokeWidth="2" strokeLinejoin="round" /><path d="M12 9.5v4.5M12 17h.01" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>;
                 case 'building': return <svg {...p}><path d="M4 21V5.5A1.5 1.5 0 0 1 5.5 4h8A1.5 1.5 0 0 1 15 5.5V21M15 9h3.5a1.5 1.5 0 0 1 1.5 1.5V21M2.5 21h19M8 8h3M8 12h3M8 16h3" /></svg>;
                 case 'instagram': return <svg {...p}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><path d="M17.5 6.5h.01" /></svg>;
+                case 'tiktok': return <svg {...p}><path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5" /><path d="M14 3c.4 2.6 2.3 4.4 5 4.6" /></svg>;
                 case 'messenger': return <svg {...p}><path d="M12 3C7 3 3 6.7 3 11.3c0 2.6 1.3 4.9 3.3 6.4V21l3-1.7c.9.3 1.8.4 2.7.4 5 0 9-3.7 9-8.3S17 3 12 3z" /><path d="M7.5 13.5l3-3.2 2 2 3-3.2" /></svg>;
                 case 'whatsapp': return <svg {...p}><path d="M20 12a8 8 0 0 1-11.8 7L4 20l1.100-4.1A8 8 0 1 1 20 12z" /><path d="M9.2 8.8c0 3 2 5.2 5 5.8l1.200-1.400-1.800-.9-.8.7a4.2 4.2 0 0 1-1.800-1.8l.7-.8-.9-1.8z" /></svg>;
                 case 'key': return <svg {...p}><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" /></svg>;
@@ -5406,6 +5407,11 @@
                                         node: <SocialConnect available={!!session?.business?.legacy || !session?.business} canConfigure={canConfigure} />
                                     },
                                     {
+                                        id: 'tiktok', icon: 'tiktok', label: 'TikTok', title: 'TikTok',
+                                        subtitle: 'Mensajes y comentarios de TikTok en el mismo asistente',
+                                        node: <TikTokConnect />
+                                    },
+                                    {
                                         id: 'instrucciones', icon: 'sparkle', label: 'Instrucciones', title: 'Instrucciones del asistente',
                                         subtitle: 'El tono y los detalles de tu negocio que no están en el perfil',
                                         node: (
@@ -5498,6 +5504,25 @@
                         <button type="button" className="btn-save-prompt" onClick={connect} disabled={busy || !canConfigure}>
                             {busy ? 'Esperando a Facebook...' : connected ? 'Volver a conectar con Facebook' : 'Conectar con Facebook'}
                         </button>
+                    </div>
+                </>
+            );
+        }
+
+        // TikTok: el botón queda visible pero inactivo hasta que TikTok apruebe los permisos de mensajes y comentarios.
+        function TikTokConnect() {
+            return (
+                <>
+                    <p className="hint">Cuando esté activo, el asistente responderá los mensajes privados de tu cuenta de empresa de TikTok y los comentarios de tus videos, igual que en Instagram: a quien pregunta le responde corto en el comentario y sigue la venta por mensaje privado. Todo llega a este mismo CRM.</p>
+                    <div style={{ margin: '8px 0 12px', fontSize: '14px' }}>
+                        <div style={{ display: 'flex', gap: '8px', padding: '6px 0', borderBottom: '1px solid #EEF1F8' }}>
+                            <span style={{ color: '#6B7599', minWidth: '130px' }}>Estado</span>
+                            <span style={{ fontWeight: 600 }}>Esperando la aprobación de TikTok</span>
+                        </div>
+                    </div>
+                    <div className="settings-actions">
+                        <span className="save-status"></span>
+                        <button type="button" className="btn-save-prompt" disabled title="Se activa cuando TikTok apruebe los permisos">Conectar con TikTok</button>
                     </div>
                 </>
             );
