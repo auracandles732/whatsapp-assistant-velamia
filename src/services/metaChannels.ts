@@ -59,32 +59,42 @@ interface PageCredentials {
 }
 
 let cached: { key: string; creds: PageCredentials } | null = null;
+let lastCredentialsError = '';
+
+const metaError = (error: any) => String(error?.response?.data?.error?.message || error?.message || error);
 
 /**
- * Página de Facebook (y su Instagram conectado) de VELAMIA. Basta META_PAGE_ID y META_PAGE_TOKEN: si la clave es de un
- * usuario del sistema se cambia por la de la página, y la cuenta de Instagram se detecta sola. Las demás empresas todavía
- * no tienen estos canales: sin credenciales, nada cambia para ellas.
+ * Página de Facebook (y su Instagram conectado) de VELAMIA. Basta META_PAGE_ID y META_PAGE_TOKEN: sirve la clave de la
+ * página o la de un usuario del sistema (que se cambia por la de la página), y la cuenta de Instagram se detecta sola.
+ * Las demás empresas todavía no tienen estos canales: sin credenciales, nada cambia para ellas.
  */
 export async function pageCredentials(): Promise<PageCredentials | null> {
   if (currentTenant()) return null;
-  const pageId = process.env.META_PAGE_ID || '';
-  const token = process.env.META_PAGE_TOKEN || '';
+  // Al pegar en Render es fácil que se cuele un espacio o un salto de línea.
+  const pageId = (process.env.META_PAGE_ID || '').trim();
+  const token = (process.env.META_PAGE_TOKEN || '').trim();
   if (!pageId || !token) return null;
   const key = `${pageId}:${token}`;
   if (cached?.key === key) return cached.creds;
 
-  let pageToken = token;
-  let instagramId = process.env.INSTAGRAM_ACCOUNT_ID || '';
+  let instagramId = (process.env.INSTAGRAM_ACCOUNT_ID || '').trim();
   try {
-    const { data } = await graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'access_token,instagram_business_account', access_token: token } });
-    if (data.access_token) pageToken = data.access_token;
-    if (!instagramId && data.instagram_business_account?.id) instagramId = String(data.instagram_business_account.id);
+    // Solo una clave de usuario puede pedir la de la página; si ya es de la página, se usa tal cual.
+    const exchanged = await graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'access_token', access_token: token } })
+      .then(r => String(r.data?.access_token || ''))
+      .catch(() => '');
+    const pageToken = exchanged || token;
+    const { data } = await graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'id,name,instagram_business_account', access_token: pageToken } })
+      .catch(() => graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'id,name', access_token: pageToken } }));
+    if (!instagramId && data?.instagram_business_account?.id) instagramId = String(data.instagram_business_account.id);
+    lastCredentialsError = '';
+    cached = { key, creds: { pageId, pageToken, instagramId } };
+    return cached.creds;
   } catch (error: any) {
-    console.warn('⚠️ No se pudo leer la página de Facebook con META_PAGE_TOKEN:', error.response?.data?.error?.message || error.message);
+    lastCredentialsError = metaError(error);
+    console.warn('⚠️ No se pudo leer la página de Facebook con META_PAGE_TOKEN:', lastCredentialsError);
     return null;
   }
-  cached = { key, creds: { pageId, pageToken, instagramId } };
-  return cached.creds;
 }
 
 async function requireCredentials(): Promise<PageCredentials> {
@@ -233,7 +243,7 @@ export async function socialStatus(): Promise<Record<string, string>> {
   if (!process.env.META_PAGE_ID || !process.env.META_PAGE_TOKEN) return { estado: 'sin configurar' };
   if (statusCache && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
   const creds = await pageCredentials();
-  let value: Record<string, string> = { estado: 'la clave no funciona' };
+  let value: Record<string, string> = { estado: 'la clave no funciona', motivo: lastCredentialsError };
   if (creds) {
     value = { estado: 'conectado', instagram: creds.instagramId ? 'conectado' : 'la página no tiene Instagram profesional conectado' };
     try {
@@ -248,7 +258,8 @@ export async function socialStatus(): Promise<Record<string, string>> {
       value.clave_vence = 'no se pudo revisar';
     }
   }
-  statusCache = { at: Date.now(), value };
+  // Un error se vuelve a revisar pronto: así se ve enseguida si ya se corrigió la clave.
+  statusCache = { at: creds ? Date.now() : Date.now() - 9 * 60 * 1000, value };
   return value;
 }
 
