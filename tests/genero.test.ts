@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 import { normalizeProfile, PROFILE_PRESETS, usesGenderTagging } from '../src/config/businessProfile';
 import { buildSystemPrompt, scopeCatalog } from '../src/services/openai';
+import { customerSex, mentionedGenderedCategory, categoryPhotos, neutralFirstMixed } from '../src/services/photoBackup';
 
 const conGenero = normalizeProfile({
   ...PROFILE_PRESETS.eventos.profile,
@@ -54,9 +55,10 @@ test('el catálogo que ve la IA incluye "niño" o "niña" en la línea del produ
   assert.ok(!prompt.includes('Osito neutro: $30.00 por docena · '));
 });
 
-test('con productos marcados, las instrucciones piden preguntar el sexo antes de mostrar fotos y no restringir', () => {
+test('con productos marcados, las fotos no esperan a saber el sexo y el género no restringe', () => {
   const prompt = buildSystemPrompt(catalogoBaby, undefined, conGenero);
-  assert.ok(/PREGÚNTASELO PRIMERO/.test(prompt));
+  assert.ok(/NO se lo preguntes antes de mostrar ni condiciones las fotos/.test(prompt));
+  assert.ok(!/PREGÚNTASELO PRIMERO/.test(prompt));
   assert.ok(prompt.includes('solo una guía de diseño'));
   assert.ok(/Nunca le digas que un \S+ "no se puede" por su g[eé]nero/.test(prompt));
 });
@@ -71,11 +73,46 @@ test('las instrucciones piden mencionar que hay del otro sexo y que se puede per
 test('un negocio sin productos marcados no recibe la regla de género, aunque tenga el ajuste activado', () => {
   const catalogoSinMarcar = [{ name: 'Vela', price: 30, category: 'EVENTOS', gender: null }];
   const prompt = buildSystemPrompt(catalogoSinMarcar, undefined, conGenero);
-  assert.ok(!/PREGÚNTASELO PRIMERO/.test(prompt));
+  assert.ok(!/NO se lo preguntes antes de mostrar/.test(prompt));
 });
 
 test('un negocio sin el ajuste no recibe la regla de género aunque el dato viniera en el producto', () => {
   const prompt = buildSystemPrompt(catalogoBaby, undefined, sinGenero);
-  assert.ok(!/PREGÚNTASELO PRIMERO/.test(prompt));
+  assert.ok(!/NO se lo preguntes antes de mostrar/.test(prompt));
   assert.ok(!prompt.includes('· niño'));
+});
+
+test('sabe si la clienta ya dijo el sexo; "aún no sabemos" o "niño o niña" no cuentan', () => {
+  assert.equal(customerSex('Es para niña'), 'niña');
+  assert.equal(customerSex('para mi varoncito'), 'niño');
+  assert.equal(customerSex('Para baby shower\nAún no sabemos pero queremos ver opciones'), '');
+  assert.equal(customerSex('no sé si niño o niña'), '');
+});
+
+const catalogoReal = [
+  { name: 'OSITO EN NUBE CON CORAZON', category: 'BABY SHOWER', gender: 'niño', image_url: 'x' },
+  { name: 'VELA DE JIRAFA', category: 'BABY SHOWER', gender: 'niña', image_url: 'x' },
+  { name: 'VELA DE POLLITO', category: 'BABY SHOWER', gender: null, image_url: 'x' },
+  { name: 'VELA DE LEONCITO', category: 'BABY SHOWER', gender: 'niño', image_url: 'x' },
+  { name: 'OSITO GRANDE CORAZON', category: 'BABY SHOWER', gender: 'niña', image_url: 'x' },
+  { name: 'VELA OSITO TARRO DE MIEL', category: 'BABY SHOWER', gender: null, image_url: 'x' },
+  { name: 'CRUZ CON FLORES DE BAUTIZO', category: 'BAUTIZO', gender: null, image_url: 'x' },
+  { name: 'VELA DE ANGEL EN BASE', category: 'BAUTIZO', gender: 'niño', image_url: 'x' }
+];
+
+test('caso real 23-sep: dijo "baby shower" y no sabe el sexo → se reconoce la categoría y van todas sus fotos', () => {
+  const dijo = 'Hola buenas tardes\nPara baby shower\nAún no sabes pero queremos ver opciones';
+  assert.equal(mentionedGenderedCategory(dijo, catalogoReal), 'BABY SHOWER');
+  assert.equal(mentionedGenderedCategory('para un babyshower', catalogoReal), 'BABY SHOWER');
+  assert.equal(mentionedGenderedCategory('bautizo, bueno no, mejor baby shower', catalogoReal), 'BABY SHOWER');
+  assert.equal(mentionedGenderedCategory('para una boda', catalogoReal), '');
+  assert.equal(categoryPhotos('BABY SHOWER', catalogoReal, ['VELA DE JIRAFA']).length, 5);
+});
+
+test('sin saber el sexo: primero los neutros y después niña y niño intercalados', () => {
+  const todos = categoryPhotos('BABY SHOWER', catalogoReal, []);
+  assert.deepEqual(neutralFirstMixed(todos, catalogoReal), [
+    'VELA DE POLLITO', 'VELA OSITO TARRO DE MIEL',
+    'VELA DE JIRAFA', 'OSITO EN NUBE CON CORAZON', 'OSITO GRANDE CORAZON', 'VELA DE LEONCITO'
+  ]);
 });

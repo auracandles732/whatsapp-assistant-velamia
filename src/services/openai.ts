@@ -4,6 +4,7 @@ import { recordAiUsage } from './supabase';
 import { ticsIn, stripFillerOpening, withoutBrokenChars } from './muletillas';
 import { addOpeningQuestionMarks, withoutQuotes } from './puntuacion';
 import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, getOpenAIVisionModel, usesProductUnits, usesGenderTagging, packagingChange, PackagingChange } from '../config/businessProfile';
+import { customerSex, mentionedGenderedCategory, categoryPhotos, neutralFirstMixed } from './photoBackup';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
 const openaiClients = new Map<string, OpenAI>();
@@ -460,7 +461,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     'FOTOS (campo show_products):',
     `- Incluye productos SOLO cuando el cliente pide ver ${models}, fotos u opciones, o pide "más ${models}".`,
     `- Incluye TODOS los productos del catálogo que correspondan a lo que pidió (por ejemplo, todos los de la categoría o todos los que coinciden con el ${model}), usando los nombres exactos.`,
-    hasGenderedProducts && `- Algunos ${models} del catálogo indican "niño" o "niña"; los que no lo indican sirven para ambos. Si el cliente pide ver ${models} de esa categoría y todavía no dijo si el bebé es niño o niña, PREGÚNTASELO PRIMERO y deja show_products vacío en ese mensaje; no envíes fotos todavía.`,
+    hasGenderedProducts && `- Algunos ${models} del catálogo indican "niño" o "niña"; los que no lo indican sirven para ambos. Si el cliente pide ver ${models} de esa categoría (o dice que es para ese evento) y todavía no dijo si el bebé es niño o niña, o aún no lo sabe, NO se lo preguntes antes de mostrar ni condiciones las fotos a esa respuesta: envíalas en ese mismo mensaje, PRIMERO los que sirven para ambos y después los de niña y de niño, y di en una frase que todos se pueden personalizar en los colores que quiera.`,
     hasGenderedProducts && `- Ya que sepas el sexo, en show_products pon PRIMERO los ${models} marcados para ese sexo y los que sirven para ambos (no indican género), y DESPUÉS los del sexo contrario de esa misma categoría. El sistema los envía en ese orden.`,
     hasGenderedProducts && `- En ese mismo mensaje (va antes de las fotos) di en una frase que primero van los de su bebé y los que sirven para ambos, y que después también le muestras los del otro sexo porque se pueden personalizar en los colores que quiera (por ejemplo, "te muestro los de niña y los que sirven para ambos, y también los de niño, que se pueden personalizar en rosado para que queden ideales"). Dilo solo la primera vez que muestras esa categoría en la conversación, no lo repitas en los envíos siguientes.`,
     hasGenderedProducts && `- El género del catálogo es solo una guía de diseño, no una restricción: el cliente puede pedir cualquier ${model} aunque sea del sexo contrario y personalizarlo a su gusto (por ejemplo, un ${model} "de niño" en colores de niña). Nunca le digas que un ${model} "no se puede" por su género.`,
@@ -574,6 +575,8 @@ export interface TurnPlan {
   order_total: number;
   /** Monto a transferir para iniciar (anticipo o total) o 0. */
   deposit: number;
+  /** Las fotos ya vienen ordenadas (sin saber el sexo: neutros y luego niña/niño intercalados): no se reordenan. */
+  keep_photo_order?: boolean;
 }
 
 const TURN_SCHEMA = {
@@ -1403,6 +1406,20 @@ export async function planTurn(params: {
     );
   }
 
+  // Baby shower o bautizo sin saber el sexo: las fotos nunca esperan esa respuesta (caso real del 23-sep: "aún no sabemos
+  // pero queremos ver opciones" y el asistente no mandó nada).
+  const gendered = usesGenderTagging(p) && catalog.some(c => c.gender === 'niño' || c.gender === 'niña');
+  const genderCategory = gendered && !customerSex(customerText) ? mentionedGenderedCategory(customerText, catalog) : '';
+  const categoryShown = !!genderCategory && sentProducts.some(n => catalog.find(c => productKey(c.name) === productKey(n))?.category === genderCategory);
+  const holdsPhotosForSex = () => !!genderCategory && !categoryShown && !sendsSomething() && /nino o nina|nina o nino|sexo del bebe|nene o nena/.test(normalizeWords(reply()));
+  if (holdsPhotosForSex()) {
+    console.warn('👶 La IA iba a esperar a saber si es niño o niña para mandar fotos: se corrige');
+    corrections.push(
+      `No condiciones las fotos a saber si es niño o niña: envíalas ya en show_products, PRIMERO los ${p.sales.productLabelPlural.toLowerCase()} de ${genderCategory.toLowerCase()} que sirven para ambos y después los de niña y de niño. ` +
+      'No le preguntes el sexo en este mensaje ni le digas que esperas su respuesta; di en una frase que todos se pueden personalizar en los colores que quiera.'
+    );
+  }
+
   if (corrections.length > 0) {
     parsed = await ask(`CORRECCIÓN (obligatoria):\n- ${corrections.join('\n- ')}\nRehaz la respuesta aplicando estas correcciones.`);
     if (repeatsSummary()) {
@@ -1426,6 +1443,36 @@ export async function planTurn(params: {
   if (asksToSend && !sendsSomething()) {
     parsed.show_products = varietyPicks(catalog, sentProducts, 4);
     console.warn(`📨 La IA insistió en no enviar nada: se envían modelos variados (${parsed.show_products.join(', ')})`);
+  }
+
+  if (holdsPhotosForSex()) {
+    parsed.show_products = categoryPhotos(genderCategory, catalog, sentProducts);
+    parsed.reply = `Te muestro los de *${genderCategory.toLowerCase()}*: primero los que sirven para niño o niña y luego opciones de niña y de niño, que se pueden personalizar en los colores que quieras ${p.style.decorativeEmojis[0] || '🤍'}`;
+    console.warn('👶 La IA insistió en esperar el sexo: se envían las fotos de la categoría igual');
+  }
+
+  // Sin saber el sexo, primero los que sirven para ambos y luego niña y niño intercalados: que vea de todo desde la primera tanda.
+  let keepPhotoOrder = false;
+  if (genderCategory && Array.isArray(parsed.show_products)) {
+    const requested = parsed.show_products
+      .map((n: unknown) => catalog.find(c => productKey(c.name) === productKey(n))?.name)
+      .filter((n: string | undefined): n is string => !!n);
+    const fromCategory = requested.filter((n: string) => catalog.find(c => c.name === n)?.category === genderCategory);
+    // Si muestra la categoría (no un modelo puntual), van todos sus modelos: la IA a veces se salta los neutros.
+    if (fromCategory.length >= 2) {
+      parsed.show_products = neutralFirstMixed([...new Set([...categoryPhotos(genderCategory, catalog, sentProducts), ...requested])], catalog);
+      keepPhotoOrder = true;
+      // El texto va antes de las fotos: preguntar ahí el sexo suma una pregunta más a la que el sistema hace después.
+      const withoutSexQuestion = reply().split('\n')
+        .filter(line => !(/\?\s*\S*\s*$/.test(line) && /nino o nina|nina o nino|sexo del bebe|nene o nena/.test(normalizeWords(line))))
+        .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      if (withoutSexQuestion && withoutSexQuestion !== reply().trim()) {
+        console.warn('👶 Se quita la pregunta del sexo: las fotos ya van y después se pregunta otra cosa');
+        parsed.reply = withoutSexQuestion;
+      }
+    } else if (fromCategory.length === 1) {
+      parsed.show_products = requested;
+    }
   }
 
   // Si aun corregida repite la pregunta, el bot está atascado: la dueña recibe el aviso para que intervenga.
@@ -1489,7 +1536,8 @@ export async function planTurn(params: {
     })),
     shipping_place: order.place,
     order_total: order.total,
-    deposit: order.total ? order.deposit : 0
+    deposit: order.total ? order.deposit : 0,
+    keep_photo_order: keepPhotoOrder
   };
 }
 

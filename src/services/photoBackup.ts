@@ -85,3 +85,46 @@ export function sameCategoryAsMost(selected: string[], catalog: GenderedProduct[
     return !p || !p.category || p.category === main || said.includes(productKey(p.category)) || said.includes(productKey(p.name));
   });
 }
+
+const plain = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+/** Sexo que dijo la clienta. Si no dijo ninguno, o nombró los dos ("no sé si niño o niña"), queda vacío. */
+export function customerSex(text: string): 'niña' | 'niño' | '' {
+  const t = plain(text);
+  const girl = /\b(nina|nena|ninita|princesa|princesita|mujercita)\b/.test(t);
+  const boy = /\b(nino|nene|ninito|varon|varoncito|principe|principito|hombrecito)\b/.test(t);
+  return girl && !boy ? 'niña' : boy && !girl ? 'niño' : '';
+}
+
+/** Categoría con modelos de niño o niña que nombró la clienta (la última, si nombró varias). */
+export function mentionedGenderedCategory(text: string, catalog: GenderedProduct[]): string {
+  const said = productKey(text).replace(/\s+/g, '');
+  const categories = [...new Set(catalog.filter(p => p.gender === 'niño' || p.gender === 'niña').map(p => p.category).filter(Boolean))] as string[];
+  let best = '';
+  let at = -1;
+  for (const category of categories) {
+    const found = said.lastIndexOf(productKey(category).replace(/\s+/g, ''));
+    if (found > at) { at = found; best = category; }
+  }
+  return best;
+}
+
+/** Todos los modelos con foto de una categoría que la clienta todavía no vio. */
+export function categoryPhotos(category: string, catalog: GenderedProduct[], alreadySent: string[]): string[] {
+  const seen = new Set(alreadySent.map(productKey));
+  return catalog.filter(p => p.category === category && p.image_url && !seen.has(productKey(p.name))).map(p => p.name);
+}
+
+/** Sin saber el sexo: primero los que sirven para ambos y después los de niña y de niño intercalados, para que vea de todo. */
+export function neutralFirstMixed(names: string[], catalog: GenderedProduct[]): string[] {
+  const chosen = names.map(n => catalog.find(p => p.name === n)).filter((p): p is GenderedProduct => !!p);
+  const girls = chosen.filter(p => p.gender === 'niña');
+  const boys = chosen.filter(p => p.gender === 'niño');
+  const mixed: GenderedProduct[] = [];
+  for (let i = 0; i < Math.max(girls.length, boys.length); i++) {
+    if (girls[i]) mixed.push(girls[i]);
+    if (boys[i]) mixed.push(boys[i]);
+  }
+  const unknown = names.filter(n => !catalog.some(p => p.name === n));
+  return [...chosen.filter(p => p.gender !== 'niña' && p.gender !== 'niño'), ...mixed].map(p => p.name).concat(unknown);
+}

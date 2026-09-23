@@ -977,7 +977,7 @@ async function respondToBatch(batch: PendingBatch) {
         console.log(`📸 Se quitan modelos de otra categoría que la clienta no pidió: ${plan.show_products.filter(n => !chosen.includes(n)).join(', ')}`);
       }
       const photos = continuesPending ? pendingProducts
-        : usesGenderTagging(batchProfile) && !photosFromBackup ? withOppositeGender(chosen, catalog, sentProducts) : chosen;
+        : usesGenderTagging(batchProfile) && !photosFromBackup && !plan.keep_photo_order ? withOppositeGender(chosen, catalog, sentProducts) : chosen;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile,
         afterPhotosQuestion({ quantityKnown, photos: photos.length }));
