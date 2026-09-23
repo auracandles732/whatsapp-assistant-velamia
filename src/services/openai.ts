@@ -514,6 +514,7 @@ interface CatalogProduct {
   pieces_per_unit?: number | null;
   /** "niño", "niña" o vacío (neutro, sirve para ambos). Solo se usa si el negocio marca género (baby shower). */
   gender?: string | null;
+  image_url?: string | null;
 }
 
 /**
@@ -756,6 +757,69 @@ export function sameQuestion(current: string, previous: string, productNames: st
   if (A.size === 0 || B.size === 0) return false;
   const shared = [...A].filter(x => B.has(x)).length;
   return shared / Math.min(A.size, B.size) >= 0.75 && shared >= 2;
+}
+
+// Mensajes del asistente que se revisan para no volver a hacer una pregunta que la clienta dejó sin contestar.
+const RECENT_QUESTION_WINDOW = 6;
+
+/** Qué dato pide una pregunta: dos preguntas por el mismo dato son la misma aunque cambien las palabras. */
+function questionTopic(question: string, p: BusinessProfile): string {
+  const unit = normalizeWords(p.sales.unitPlural || '').slice(0, 4);
+  if (new RegExp(`\\bcuant[oa]s\\b|\\bcantidad\\b|\\binvitad|\\bpersonas\\b${unit.length === 4 ? `|\\b${escapeRegex(unit)}` : ''}`).test(question)) return 'cantidad';
+  if (p.dates.enabled && /\bfecha\b|\bcuando\b|\bque dia\b/.test(question)) return 'fecha';
+  if (p.shipping.mode !== 'none' && /\bciudad\b|\bdonde\b|\benvio\b/.test(question)) return 'ciudad';
+  const event = normalizeWords(p.dates.eventLabel || '');
+  if (p.dates.enabled && event && new RegExp(`\\b${escapeRegex(event)}|\\bcelebraci|\\bocasion\\b|\\bque buscas\\b|\\bque producto`).test(question)) return 'evento';
+  return '';
+}
+
+/**
+ * Pregunta reciente del asistente que la respuesta nueva vuelve a hacer (vacía si no repite ninguna). Se revisan los
+ * últimos mensajes y no solo el anterior: con un seguimiento u otra pregunta en medio, la misma pregunta se colaba
+ * dos y tres veces. Una pregunta que ya propone opciones concretas ("¿Te cotizo 3 o prefieres otra cantidad?") no cuenta.
+ */
+export function repeatedQuestion(reply: string, previousTexts: string[], productNames: string[], p: BusinessProfile): string {
+  const current = lastQuestion(reply);
+  if (!current) return '';
+  const topic = questionTopic(current, p);
+  const offersChoice = /\d/.test(current) || /\s[ou]\s/.test(current);
+  for (const prev of previousTexts.slice(-RECENT_QUESTION_WINDOW).reverse()) {
+    const before = lastQuestion(prev);
+    if (!before) continue;
+    if (sameQuestion(reply, prev, productNames)) return before;
+    if (topic && !offersChoice && questionTopic(before, p) === topic) return before;
+  }
+  return '';
+}
+
+// La clienta pide que le envíen algo: "me podría enviar de nuevo", "mándame el catálogo", "quiero ver los modelos".
+const SEND_REQUEST = /\b(envi|mand|pas|compart|muestr|ensen)[a-z]*(me|nos)\b|\b(me|nos)\s+(puedes?\s+|pueden\s+|podrias?\s+|podrian\s+|podras?\s+)?(envi|mand|pas[ae]|compart|muestr|mostr|ensen)[a-z]*|\b(quiero|quisiera|puedo|podria|gustaria)\s+ver\b/;
+// Lo que pide sobre pagos, el total o datos lo resuelve la IA con sus propias reglas.
+const SEND_EXCLUDED = /\b(cuenta|datos|banc|transfer|total|cotiz|resumen|ubicacion|direccion|link|enlace|comprobante|pago|numero)[a-z]*/;
+
+export function asksToBeSent(text: string): boolean {
+  const t = normalizeWords(text);
+  return SEND_REQUEST.test(t) && !SEND_EXCLUDED.test(t);
+}
+
+/** Hasta `max` modelos con foto de categorías distintas, primero los neutros: para quien pide ver opciones sin decir qué busca. */
+export function varietyPicks(catalog: CatalogProduct[], alreadySent: string[], max: number): string[] {
+  const sent = new Set(alreadySent.map(productKey));
+  const byCategory = new Map<string, CatalogProduct[]>();
+  for (const product of catalog) {
+    if (!product.image_url || sent.has(productKey(product.name))) continue;
+    const list = byCategory.get(product.category || '') || [];
+    list.push(product);
+    byCategory.set(product.category || '', list);
+  }
+  const queues = [...byCategory.values()].map(list => [...list.filter(p => !p.gender), ...list.filter(p => p.gender)]);
+  const picks: string[] = [];
+  for (let round = 0; picks.length < max && queues.some(q => q.length > round); round++) {
+    for (const queue of queues) {
+      if (picks.length < max && queue[round]) picks.push(queue[round].name);
+    }
+  }
+  return picks;
 }
 
 // Palabras que aparecen en casi todos los nombres del catálogo: no sirven para reconocer un modelo.
@@ -1272,11 +1336,26 @@ export async function planTurn(params: {
     }
   }
 
-  // Nunca la misma pregunta dos veces seguidas: si el cliente no la respondió como se esperaba, se cambia de enfoque.
-  const lastBotText = [...history].reverse().find(m => m.role === 'assistant' && !m.content.startsWith('[Foto'))?.content || '';
-  const repeatsQuestion = () => sameQuestion(reply(), lastBotText, catalog.map(c => c.name));
-  if (repeatsQuestion()) {
-    corrections.push('Esa pregunta ya se la hiciste al cliente en tu mensaje anterior y no la respondió como esperabas: NO la repitas ni la reformules con otras palabras. Elige tú la opción que mejor encaje con lo que pidió, dile cuál elegiste y avanza con eso (cotiza), aclarando que puede cambiarla. Solo si es imposible avanzar, dile que lo consultas con el equipo y escríbelo en owner_question.');
+  // Nunca una pregunta que ya hizo hace poco y la clienta dejó sin contestar: se cambia de enfoque y se le da algo concreto.
+  const recentBotTexts = history
+    .filter(m => m.role === 'assistant' && !m.content.startsWith('[Foto') && !m.content.startsWith('🏦'))
+    .map(m => m.content);
+  const productNames = catalog.map(c => c.name);
+  const repeatsQuestion = () => !!repeatedQuestion(reply(), recentBotTexts, productNames, p);
+  const repeated = repeatedQuestion(reply(), recentBotTexts, productNames, p);
+  if (repeated) {
+    console.warn(`🔁 La IA iba a repetir una pregunta que ya hizo ("${repeated}"): se corrige`);
+    const modelsWord = p.sales.productLabelPlural.toLowerCase();
+    const categories = [...new Set(catalog.map(c => c.category).filter(Boolean))].slice(0, 6).map(c => c.toLowerCase());
+    corrections.push(
+      `Ya le hiciste esa pregunta antes en este chat ("${repeated}") y no la contestó: NO la vuelvas a hacer, ni igual ni con otras palabras. ` +
+      'Dale algo concreto que la acerque a comprar y termina con UNA pregunta distinta y fácil de responder, que le proponga opciones concretas: ' +
+      `si todavía no vio ${modelsWord}, envíale fotos (show_products)` +
+      (categories.length > 1 ? `; si no sabes qué busca, nómbrale lo que hay (${categories.join(', ')}) para que elija` : '') +
+      '; si le preguntabas cuál prefiere, elige tú el que mejor encaje, díselo y avanza (cotiza), aclarando que puede cambiarlo' +
+      `; si falta la cantidad, propónle una (por ejemplo "¿Te cotizo 3 ${p.sales.unitPlural} o prefieres otra cantidad?"). ` +
+      'Si dijo que lo va a pensar o solo agradeció, no insistas con lo mismo: responde con calidez y deja la puerta abierta.'
+    );
   }
 
   // Muletillas: nunca la misma exclamación de relleno ni las mismas fórmulas que ya usó en este chat.
@@ -1311,6 +1390,19 @@ export async function planTurn(params: {
     corrections.push('Esas fotos ya se le enviaron a la clienta en esta conversación: no las repitas. Deja show_products vacío y, sin decir que le vas a mostrar modelos, responde a lo que dijo y haz una sola pregunta para avanzar (por ejemplo cuál de los modelos que ya vio le gustó).');
   }
 
+  // "Envíame de nuevo" nunca se contesta con un "claro" sin enviar nada.
+  const asksToSend = history.some(m => m.role === 'assistant') && asksToBeSent(customerWords);
+  const sendsSomething = () => (Array.isArray(parsed.show_products) && parsed.show_products.length > 0) || /\$\s?\d/.test(reply());
+  if (asksToSend && !sendsSomething()) {
+    console.warn('📨 La clienta pidió que le envíen algo y la IA no envía nada: se corrige');
+    const modelsWord = p.sales.productLabelPlural.toLowerCase();
+    corrections.push(
+      `La clienta te pidió que le envíes algo ("${customerWords.trim().slice(0, 120)}") y tu respuesta no le envía nada. Nunca le digas que sí sin enviarlo. ` +
+      `Si pide fotos, ${modelsWord} o información, pon en show_products los ${modelsWord} que mejor encajen con lo que sabes de ella; si todavía no sabes qué busca, elige hasta 4 ${modelsWord} variados de distintas categorías. ` +
+      'En el texto dile en una frase qué le envías (sin listar nombres ni precios) y termina con una pregunta que la acerque a elegir. Si pide otra cosa que ya le diste antes, dásela de nuevo.'
+    );
+  }
+
   if (corrections.length > 0) {
     parsed = await ask(`CORRECCIÓN (obligatoria):\n- ${corrections.join('\n- ')}\nRehaz la respuesta aplicando estas correcciones.`);
     if (repeatsSummary()) {
@@ -1328,6 +1420,12 @@ export async function planTurn(params: {
   if (advice && !adviceTold(reply()) && !adviceTold(history.filter(m => m.role === 'assistant').map(m => m.content).join(' '))) {
     console.warn('ℹ️ La IA no explicó la nota del cambio de empaque: se agrega tal como la escribió el negocio');
     parsed.reply = `${reply().trim()}\n\n${advice.note}`.trim();
+  }
+
+  // Si aun corregida no envía nada de lo que pidió, se envían modelos variados: nunca queda un "claro" vacío.
+  if (asksToSend && !sendsSomething()) {
+    parsed.show_products = varietyPicks(catalog, sentProducts, 4);
+    console.warn(`📨 La IA insistió en no enviar nada: se envían modelos variados (${parsed.show_products.join(', ')})`);
   }
 
   // Si aun corregida repite la pregunta, el bot está atascado: la dueña recibe el aviso para que intervenga.

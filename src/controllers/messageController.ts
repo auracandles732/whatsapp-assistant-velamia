@@ -58,7 +58,7 @@ import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
-import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge } from '../services/photoBackup';
+import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge, sameCategoryAsMost } from '../services/photoBackup';
 import { textToVoice } from '../services/elevenlabs';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
@@ -236,11 +236,18 @@ export const quantityAfterPhotosQuestions = () => {
   }
   return withEmojis(['¿Qué cantidad de ' + s.unitPlural + ' necesitas?', '¿Qué cantidad tienes en mente?', '¿Para qué cantidad sería?']);
 };
-// Varias formas de preguntar para no repetir siempre la misma frase y los mismos emojis.
+// Quedan más fotos por mostrar: "¿Deseas ver más opciones?" solo se contesta con sí o no y no acerca a la venta,
+// así que primero se la invita a elegir entre las que ya vio.
 export const morePhotosQuestions = () => {
   const models = profile().sales.productLabelPlural.toLowerCase();
-  return withEmojis([`¿Te gustaría ver más ${models}?`, `¿Quieres que te muestre más ${models}?`, '¿Te enseño más opciones?', '¿Deseas ver más opciones?']);
+  return withEmojis([`¿Alguno de estos te gustó o te muestro más ${models}?`, '¿Te gustó alguno o prefieres ver más opciones?', `¿Alguno te convence o te enseño otros ${models}?`]);
 };
+// Si aún no dijo cuánto necesita, se pregunta eso (acerca a la cotización) y se le cuenta que hay más para ver.
+export const moreWithQuantityQuestions = () => {
+  const models = profile().sales.productLabelPlural.toLowerCase();
+  return quantityAfterPhotosQuestions().map(q => `Aún tengo más ${models} para mostrarte. ${q}`);
+};
+const offeredMorePhotos = (text: string) => [...morePhotosQuestions(), ...moreWithQuantityQuestions()].includes(text);
 
 // Emojis de las últimas respuestas del bot: la IA los evita para no repetir siempre los mismos.
 // Los emojis al inicio de cada línea de una lista (🕯️ Modelo, 💰 Total…) son etiquetas y no cuentan.
@@ -730,7 +737,7 @@ async function respondToBatch(batch: PendingBatch) {
 
     // Solo cuentan como pendientes si la última pregunta del bot fue "¿más modelos?".
     const lastBot = [...history].reverse().find((m: any) => m.sender === 'bot');
-    const offeredMore = lastBot?.type === 'text' && morePhotosQuestions().includes(String(lastBot.content || ''));
+    const offeredMore = lastBot?.type === 'text' && offeredMorePhotos(String(lastBot.content || ''));
     const pendingProducts = offeredMore
       ? (pendingPhotos.get(conversationId) || []).filter(n => !sentProducts.includes(n))
       : [];
@@ -932,8 +939,13 @@ async function respondToBatch(batch: PendingBatch) {
       const continuesPending = pendingProducts.length > 0
         && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
         && plan.show_products.every(n => pendingProducts.includes(n));
+      const saidByCustomer = [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), aiContent].join('\n');
+      const chosen = photosFromBackup ? plan.show_products : sameCategoryAsMost(plan.show_products, catalog, saidByCustomer);
+      if (chosen.length < plan.show_products.length) {
+        console.log(`📸 Se quitan modelos de otra categoría que la clienta no pidió: ${plan.show_products.filter(n => !chosen.includes(n)).join(', ')}`);
+      }
       const photos = continuesPending ? pendingProducts
-        : usesGenderTagging(batchProfile) && !photosFromBackup ? withOppositeGender(plan.show_products, catalog, sentProducts) : plan.show_products;
+        : usesGenderTagging(batchProfile) && !photosFromBackup ? withOppositeGender(chosen, catalog, sentProducts) : chosen;
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile,
         afterPhotosQuestion({ quantityKnown, photos: photos.length }));
@@ -980,7 +992,7 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
 
   if (rest.length > 0) {
     pendingPhotos.set(conversationId, rest);
-    await sendAndSaveText(conversationId, phoneNumber, pick(morePhotosQuestions()));
+    await sendAndSaveText(conversationId, phoneNumber, pick(kind === 'quantity' ? moreWithQuantityQuestions() : morePhotosQuestions()));
   } else {
     pendingPhotos.delete(conversationId);
     // Ya vio las fotos: recién ahora tiene sentido preguntarle cuál le gustó.
@@ -1156,7 +1168,7 @@ function quantityPattern(): RegExp {
 // ---------- Seguimiento rápido tras las fotos ----------
 
 const NUDGE_EVENT = 'photo_nudge';
-const photoQuestions = () => [...likedPhotoQuestions(), ...likedSinglePhotoQuestions(), ...quantityAfterPhotosQuestions(), ...morePhotosQuestions()];
+const photoQuestions = () => [...likedPhotoQuestions(), ...likedSinglePhotoQuestions(), ...quantityAfterPhotosQuestions(), ...morePhotosQuestions(), ...moreWithQuantityQuestions()];
 const asNudgeMessage = (m: any) => ({ sender: m.sender, type: m.type, content: m.content, at: parseDbTimestamp(m.timestamp).getTime() });
 
 /** Revisa los chats del negocio actual y le escribe una vez al día a quien vio fotos y no respondió (también de noche). */

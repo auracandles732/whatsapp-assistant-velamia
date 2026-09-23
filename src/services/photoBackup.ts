@@ -67,3 +67,21 @@ export function needsPhotoNudge(messages: { sender: string; type: string; conten
   const quiet = now - last.at;
   return endsWithPhotos && quiet >= PHOTO_NUDGE_AFTER_MS && quiet <= PHOTO_NUDGE_UNTIL_MS;
 }
+
+/**
+ * Si la IA mete en la tanda un modelo de otra categoría que la clienta no pidió (una virgencita de bautizo entre los de
+ * baby shower), se quita. Solo cuando casi todos son de una misma categoría: si pidió varias, se respetan.
+ */
+export function sameCategoryAsMost(selected: string[], catalog: GenderedProduct[], customerText: string): string[] {
+  const chosen = selected.map(n => catalog.find(p => p.name === n)).filter((p): p is GenderedProduct => !!p);
+  if (chosen.length < 3) return selected;
+  const counts = new Map<string, number>();
+  for (const p of chosen) if (p.category) counts.set(p.category, (counts.get(p.category) || 0) + 1);
+  const [main, count] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] || ['', 0];
+  if (!main || count * 2 <= chosen.length) return selected;
+  const said = productKey(customerText);
+  return selected.filter(name => {
+    const p = catalog.find(x => x.name === name);
+    return !p || !p.category || p.category === main || said.includes(productKey(p.category)) || said.includes(productKey(p.name));
+  });
+}
