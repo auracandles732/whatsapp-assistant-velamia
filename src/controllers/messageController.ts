@@ -501,6 +501,8 @@ async function sendAndSaveText(conversationId: string, phoneNumber: string, text
 
 /** Detecta si el último mensaje del bot incluía fotos (inicio de conversación de venta). */
 async function shouldSendAudio(conversationId: string, history: any[]): Promise<boolean> {
+  // La voz de ElevenLabs es la de VELAMIA: ninguna otra empresa puede hablar con ella.
+  if (currentTenant() || !process.env.ELEVENLABS_API_KEY) return false;
   if (history.length === 0) return false;
 
   const lastBotMessage = [...history].reverse().find((m: any) => m.sender === 'bot');
