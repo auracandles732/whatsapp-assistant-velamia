@@ -161,6 +161,16 @@ según los días sin respuesta desde el último mensaje de la clienta:
 - Los avisos a la dueña usan la plantilla `velamia_aviso_equipo`; si no está aprobada, texto libre.
 - Requiere la variable `WHATSAPP_BUSINESS_ACCOUNT_ID` (en `/health` aparece `followups: activo`).
 
+## Instagram y Messenger (`src/services/metaChannels.ts`, `src/controllers/socialController.ts`)
+
+- Llegan al mismo `/webhook` (objetos `page` e `instagram`). Los chats se guardan como los de WhatsApp, pero con `ig:<id>` o `fb:<id>` en lugar del número: el asistente, el CRM y los avisos los atienden igual.
+- Las fotos no llevan texto debajo: el nombre y el precio van en un mensaje aparte. Los textos largos se parten (Instagram acepta 1000 caracteres, Messenger 2000).
+- Comentarios nuevos en publicaciones: a quien pregunta o muestra interés se le escribe por privado (lo redacta la IA; Meta permite un solo mensaje hasta que conteste) y en el comentario se responde corto, sin precios. A quien elogia se le agradece. Un reclamo avisa a la dueña y pausa el bot en ese chat.
+- Lo que el equipo escriba desde la app de Instagram, Messenger o Business Suite llega como eco: se guarda como del equipo y pausa el bot.
+- No hay seguimientos con plantilla ni notas de voz en estos canales; el seguimiento tras las fotos sí (dentro de 24 horas).
+- `META_PAGE_TOKEN` puede ser de usuario del sistema: se cambia sola por la de la página y el Instagram se detecta solo. `POST /api/me/connect-social` suscribe la página a la App.
+- Por ahora solo VELAMIA: las demás empresas no tienen estos canales.
+
 ## Variables de entorno (Render → Environment)
 
 | Variable | Uso |
@@ -172,6 +182,7 @@ según los días sin respuesta desde el último mensaje de la clienta:
 | `OPENAI_API_KEY` | OpenAI |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Supabase (service key: solo servidor) |
 | `CRM_PASSWORD` | Contraseña del CRM |
+| `META_PAGE_ID`, `META_PAGE_TOKEN` | Página de Facebook (Messenger) y su Instagram conectado. Sin ellas, esos canales quedan apagados |
 
 El número que recibe avisos está en la tabla `business_config` (clave `owner_phone`).
 

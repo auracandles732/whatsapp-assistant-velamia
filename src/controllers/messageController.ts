@@ -60,6 +60,7 @@ import { notifyOwner } from '../services/notifications';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
 import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge, sameCategoryAsMost } from '../services/photoBackup';
 import { textToVoice } from '../services/elevenlabs';
+import { downloadSocialMedia, socialProfileName, wasSentByUs } from '../services/metaChannels';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -332,6 +333,36 @@ export function handleWebhookMessage(message: any, value: any): Promise<void> {
 }
 
 /**
+ * Mensaje de Instagram o Messenger ya traducido a la forma de WhatsApp ("from" = "ig:<id>" o "fb:<id>").
+ * Por ahora solo VELAMIA tiene estos canales, así que se atiende sin negocio.
+ */
+export function handleSocialMessage(message: any): Promise<void> {
+  const from = String(message?.from || '');
+  return enqueue(customerKey(from, undefined), async () => {
+    const known = await getConversation(from);
+    const name = known ? '' : await socialProfileName(from);
+    await ingestMessage(message, { contacts: [{ profile: { name: name || undefined } }] });
+  });
+}
+
+/**
+ * Mensaje que alguien del equipo escribió desde la app de Instagram, Messenger o Meta Business Suite (Meta lo avisa como
+ * "eco"): se guarda como del equipo y el bot se pausa en ese chat. Lo que envió el propio sistema no cuenta.
+ */
+export function handleSocialEcho(messageId: string, to: string, text: string): Promise<void> {
+  if (!messageId || !to || wasSentByUs(messageId)) return Promise.resolve();
+  return new Promise(resolve => setTimeout(resolve, 4000)).then(() => enqueue(customerKey(to, undefined), async () => {
+    if (wasSentByUs(messageId) || await isMessageAlreadyProcessed(messageId)) return;
+    const conversation = await getConversation(to);
+    if (!conversation || !text) return;
+    await saveMessage(conversation.id, 'human', 'text', text, messageId);
+    await touchConversation(conversation.id);
+    await pauseBot(conversation.id);
+    console.log(`📱 El equipo respondió desde la app a ${maskPhone(to)}: el bot se pausa en ese chat`);
+  })).catch(error => console.error('Error procesando eco de Instagram/Messenger:', error.message));
+}
+
+/**
  * Mensaje que alguien del equipo escribió desde la app de WhatsApp Business del celular (Meta lo avisa como "eco").
  * Se guarda como del equipo y el bot se pausa en ese chat, igual que cuando se escribe desde el CRM.
  */
@@ -370,7 +401,7 @@ function scheduleResponse(key: string, batch: PendingBatch) {
     if (lead > -TYPING_LEAD_MS) {
       batch.typingTimer = setTimeout(() => {
         const lastWaId = batch.items[batch.items.length - 1]?.waMessageId;
-        if (lastWaId) runWithTenant(batch.tenant, () => showTyping(lastWaId));
+        if (lastWaId) runWithTenant(batch.tenant, () => showTyping(lastWaId, batch.phoneNumber));
       }, Math.max(0, lead));
     }
   }
@@ -502,11 +533,12 @@ async function sendAndSaveAudio(conversationId: string, phoneNumber: string, tex
 }
 
 /** Descarga un archivo de WhatsApp y lo sube al almacenamiento; devuelve su URL pública. */
-async function storeIncomingMedia(mediaId: string) {
-  const media = await getMediaUrl(mediaId);
-  const buffer = await downloadMedia(media.url);
-  const publicUrl = await uploadBufferToStorage(buffer, media.mimeType);
-  return { publicUrl, buffer, mimeType: media.mimeType };
+async function storeIncomingMedia(media: { id?: string; link?: string }) {
+  const { buffer, mimeType } = media.link
+    ? await downloadSocialMedia(media.link)
+    : await getMediaUrl(String(media.id)).then(async info => ({ buffer: await downloadMedia(info.url), mimeType: info.mimeType }));
+  const publicUrl = await uploadBufferToStorage(buffer, mimeType);
+  return { publicUrl, buffer, mimeType };
 }
 
 /**
@@ -523,7 +555,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
         return { userContent: message.text.body, aiContent: message.text.body };
 
       case 'image': {
-        const { publicUrl } = await storeIncomingMedia(message.image.id);
+        const { publicUrl } = await storeIncomingMedia(message.image);
         const description = await describeImage(publicUrl, p);
         const caption = message.image.caption;
         return {
@@ -533,7 +565,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
       }
 
       case 'audio': {
-        const { publicUrl, buffer, mimeType } = await storeIncomingMedia(message.audio.id);
+        const { publicUrl, buffer, mimeType } = await storeIncomingMedia(message.audio);
         const transcript = await transcribeAudio(buffer, mimeType, p);
         return {
           userContent: `${publicUrl}\n🎤 "${transcript}"`,
@@ -543,7 +575,7 @@ async function readIncomingContent(message: any): Promise<{ userContent: string;
 
       case 'document': {
         // Suele ser un comprobante de pago en PDF: se guarda para verlo desde el CRM.
-        const { publicUrl } = await storeIncomingMedia(message.document.id);
+        const { publicUrl } = await storeIncomingMedia(message.document);
         const name = message.document.filename || 'documento';
         const caption = message.document.caption ? ` (con el mensaje: "${message.document.caption}")` : '';
         return {

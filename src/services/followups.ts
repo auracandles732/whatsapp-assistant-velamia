@@ -11,6 +11,7 @@ import {
 } from './supabase';
 import { currentTenant, runWithTenant } from './tenant';
 import { maskPhone } from './privacy';
+import { isSocialAddress } from './metaChannels';
 import { profile, hourLocal } from '../config/businessProfile';
 
 /** Inicio del texto guardado de cada seguimiento: el CRM y la IA lo reconocen por esto. */
@@ -163,7 +164,7 @@ async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skippe
 
   let sent = 0;
   for (const conv of conversations) {
-    if (!conv.last_message_time) continue;
+    if (!conv.last_message_time || isSocialAddress(conv.phone_number)) continue;
     if (conv.bot_paused_until && parseDbTimestamp(conv.bot_paused_until) > now) continue;
     if (activity.optedOut.has(conv.id) || activity.withOrder.has(conv.id)) continue;
 

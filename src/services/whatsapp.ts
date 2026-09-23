@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { currentTenant } from './tenant';
 import { maskPhone } from './privacy';
+import { isSocialAddress, sendSocialText, sendSocialImage, showSocialTyping } from './metaChannels';
 
 // Meta retira cada versión de la Graph API a los ~2 años; al pedir una vencida la sustituye
 // sin avisar. Revisar la cabecera "facebook-api-version" de las respuestas al actualizar.
@@ -61,7 +62,8 @@ async function postMessage(payload: Record<string, any>, label: string) {
  * Marca como leído el último mensaje de la clienta y muestra "escribiendo…" (dura unos 25 s o hasta
  * que se envía la respuesta). Es solo un detalle de naturalidad: nunca lanza error.
  */
-export async function showTyping(messageId: string) {
+export async function showTyping(messageId: string, to?: string) {
+  if (to && isSocialAddress(to)) return showSocialTyping(to);
   if (!messageId) return;
   try {
     await graph.post(
@@ -75,15 +77,18 @@ export async function showTyping(messageId: string) {
 }
 
 export function sendTextMessage(phoneNumber: string, text: string) {
+  if (isSocialAddress(phoneNumber)) return sendSocialText(phoneNumber, text);
   return postMessage({ to: normalizePhone(phoneNumber), type: 'text', text: { body: text } }, 'Mensaje');
 }
 
 /** Nota de voz: el audio debe ser OGG con códec Opus (ver toWhatsAppVoice). */
 export function sendAudioMessage(phoneNumber: string, audioUrl: string) {
+  if (isSocialAddress(phoneNumber)) return Promise.reject(new Error('Las notas de voz por ahora solo se envían por WhatsApp'));
   return postMessage({ to: normalizePhone(phoneNumber), type: 'audio', audio: { link: audioUrl } }, 'Nota de voz');
 }
 
 export function sendImageMessage(phoneNumber: string, imageUrl: string, caption?: string) {
+  if (isSocialAddress(phoneNumber)) return sendSocialImage(phoneNumber, imageUrl, caption);
   return postMessage({
     to: normalizePhone(phoneNumber),
     type: 'image',
@@ -96,6 +101,7 @@ export function sendImageMessage(phoneNumber: string, imageUrl: string, caption?
  * en las últimas 24 horas. bodyParams llena las variables {{1}}, {{2}}... del cuerpo.
  */
 export function sendTemplateMessage(phoneNumber: string, templateName: string, languageCode: string, bodyParams: string[] = []) {
+  if (isSocialAddress(phoneNumber)) return Promise.reject(new Error('Las plantillas solo existen en WhatsApp'));
   return postMessage({
     to: normalizePhone(phoneNumber),
     type: 'template',
@@ -127,6 +133,11 @@ export function describeWhatsAppError(error: any): string {
     return 'Pasaron más de 24 horas desde el último mensaje de la clienta y WhatsApp no permite escribirle libremente. El seguimiento automático la contactará con una plantilla aprobada.';
   }
   if (code === 131026) return 'WhatsApp no pudo entregar el mensaje: el número no está disponible en WhatsApp.';
+  // Instagram y Messenger: fuera de las 24 horas desde el último mensaje de la clienta no se le puede escribir.
+  if (code === 10 || error.response?.data?.error?.error_subcode === 2018278 || code === 551) {
+    return 'Pasaron más de 24 horas desde el último mensaje de la clienta y Meta no permite escribirle por Instagram o Messenger hasta que ella vuelva a escribir.';
+  }
+  if (error.message?.startsWith('Las notas de voz por ahora')) return error.message;
   return error.response?.data?.error?.message || error.message;
 }
 

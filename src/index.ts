@@ -58,6 +58,8 @@ import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret } from './services/tenant';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
+import { handleSocialWebhook } from './controllers/socialController';
+import { subscribePage, isSocialAddress } from './services/metaChannels';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -199,6 +201,12 @@ app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
   // así que se confirma primero y el procesamiento sigue en segundo plano.
   res.status(200).send('EVENT_RECEIVED');
 
+  // Instagram y la página de Facebook llegan por la misma dirección, con su propio formato.
+  if (data?.object === 'page' || data?.object === 'instagram') {
+    handleSocialWebhook(data).catch(error => console.error('Error procesando aviso de Instagram/Facebook:', error));
+    return;
+  }
+
   if (data?.object !== 'whatsapp_business_account') return;
 
   // Un mismo aviso de Meta puede traer varios mensajes: se procesan todos.
@@ -214,6 +222,16 @@ app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
         });
       }
     }
+  }
+});
+
+/** Conecta la página de Facebook (y su Instagram) para que Meta envíe mensajes y comentarios. Solo VELAMIA por ahora. */
+app.post('/api/me/connect-social', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
+  if (currentTenant()) return res.status(400).json({ error: 'Instagram y Facebook todavía no están disponibles para esta empresa' });
+  try {
+    res.json({ success: true, detail: await subscribePage() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.response?.data?.error?.message || error.message });
   }
 });
 
@@ -805,6 +823,7 @@ app.post('/api/send-audio', requireCrmSession, requireEditorRole, async (req: Re
     if (original.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'La nota de voz es demasiado larga' });
     const conv = await conversationForSending(req, res);
     if (!conv) return;
+    if (isSocialAddress(conv.phone_number)) return res.status(400).json({ error: 'Las notas de voz por ahora solo se envían por WhatsApp' });
     if (!isRecordedAudio(original)) return res.status(400).json({ error: 'El audio no tiene un formato válido, graba de nuevo' });
     const voice = await toWhatsAppVoice(original);
     const audioUrl = await uploadBufferToStorage(voice, 'audio/ogg');
