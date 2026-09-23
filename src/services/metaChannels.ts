@@ -77,23 +77,55 @@ export async function pageCredentials(): Promise<PageCredentials | null> {
   const key = `${pageId}:${token}`;
   if (cached?.key === key) return cached.creds;
 
-  let instagramId = (process.env.INSTAGRAM_ACCOUNT_ID || '').trim();
-  try {
-    // Solo una clave de usuario puede pedir la de la página; si ya es de la página, se usa tal cual.
-    const exchanged = await graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'access_token', access_token: token } })
-      .then(r => String(r.data?.access_token || ''))
-      .catch(() => '');
-    const pageToken = exchanged || token;
-    const { data } = await graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'id,name,instagram_business_account', access_token: pageToken } })
-      .catch(() => graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'id,name', access_token: pageToken } }));
-    if (!instagramId && data?.instagram_business_account?.id) instagramId = String(data.instagram_business_account.id);
-    lastCredentialsError = '';
-    cached = { key, creds: { pageId, pageToken, instagramId } };
-    return cached.creds;
-  } catch (error: any) {
-    lastCredentialsError = metaError(error);
-    console.warn('⚠️ No se pudo leer la página de Facebook con META_PAGE_TOKEN:', lastCredentialsError);
+  // Solo una clave de usuario puede pedir la de la página; si ya es de la página, se usa tal cual.
+  const exchanged = await graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'access_token', access_token: token } })
+    .then(r => String(r.data?.access_token || ''))
+    .catch(() => '');
+  const pageToken = exchanged || token;
+
+  const info = await tokenInfo(pageToken);
+  if (!info.valid) {
+    lastCredentialsError = info.error || 'Meta dice que la clave no es válida';
+    console.warn('⚠️ META_PAGE_TOKEN no es válida:', lastCredentialsError);
     return null;
+  }
+
+  // La cuenta de Instagram se lee de la página; si a la clave le falta ese permiso, sale de los permisos concedidos.
+  let instagramId = (process.env.INSTAGRAM_ACCOUNT_ID || '').trim();
+  if (!instagramId) {
+    instagramId = await graph.get(`${GRAPH_API}/${pageId}`, { params: { fields: 'instagram_business_account', access_token: pageToken } })
+      .then(r => String(r.data?.instagram_business_account?.id || ''))
+      .catch(error => {
+        lastCredentialsError = metaError(error);
+        return info.instagramIds[0] || '';
+      });
+  }
+  cached = { key, creds: { pageId, pageToken, instagramId } };
+  return cached.creds;
+}
+
+// Lo que el asistente necesita para mensajes y comentarios en los dos canales.
+export const REQUIRED_SCOPES = [
+  'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement', 'pages_manage_engagement',
+  'instagram_basic', 'instagram_manage_messages', 'instagram_manage_comments'
+];
+
+/** Qué dice Meta de una clave: si sirve, cuándo vence, qué permisos tiene y a qué Instagram le dan acceso. */
+async function tokenInfo(token: string) {
+  try {
+    const { data } = await graph.get(`${GRAPH_API}/debug_token`, { params: { input_token: token, access_token: token } });
+    const d = data?.data || {};
+    const granular: { scope: string; target_ids?: string[] }[] = d.granular_scopes || [];
+    return {
+      valid: d.is_valid !== false,
+      error: String(d.error?.message || ''),
+      expiresAt: Number(d.expires_at || 0),
+      dataAccessExpiresAt: Number(d.data_access_expires_at || 0),
+      scopes: (d.scopes || []) as string[],
+      instagramIds: granular.filter(g => g.scope.startsWith('instagram_')).flatMap(g => g.target_ids || [])
+    };
+  } catch (error: any) {
+    return { valid: false, error: metaError(error), expiresAt: 0, dataAccessExpiresAt: 0, scopes: [] as string[], instagramIds: [] as string[] };
   }
 }
 
@@ -244,22 +276,22 @@ export async function socialStatus(): Promise<Record<string, string>> {
   if (statusCache && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
   const creds = await pageCredentials();
   let value: Record<string, string> = { estado: 'la clave no funciona', motivo: lastCredentialsError };
+  let complete = false;
   if (creds) {
-    value = { estado: 'conectado', instagram: creds.instagramId ? 'conectado' : 'la página no tiene Instagram profesional conectado' };
-    try {
-      const { data } = await graph.get(`${GRAPH_API}/debug_token`, { params: { input_token: creds.pageToken, access_token: creds.pageToken } });
-      const info = data?.data || {};
-      const expires = Number(info.expires_at || 0);
-      const dataAccess = Number(info.data_access_expires_at || 0);
-      value.clave_vence = expires === 0 ? 'nunca' : new Date(expires * 1000).toISOString().slice(0, 10);
-      if (dataAccess) value.acceso_a_datos_vence = new Date(dataAccess * 1000).toISOString().slice(0, 10);
-      value.permisos = (info.scopes || []).filter((s: string) => /^(pages|instagram)_/.test(s)).join(', ');
-    } catch {
-      value.clave_vence = 'no se pudo revisar';
-    }
+    const info = await tokenInfo(creds.pageToken);
+    const missing = REQUIRED_SCOPES.filter(s => !info.scopes.includes(s));
+    complete = missing.length === 0 && !!creds.instagramId;
+    value = {
+      estado: missing.length ? 'conectado, pero faltan permisos' : 'conectado',
+      instagram: creds.instagramId ? `conectado (${creds.instagramId})` : 'sin Instagram: a la clave le falta permiso o la página no tiene Instagram profesional',
+      clave_vence: info.expiresAt === 0 ? 'nunca' : new Date(info.expiresAt * 1000).toISOString().slice(0, 10),
+      permisos: info.scopes.filter(s => /^(pages|instagram)_/.test(s)).join(', ')
+    };
+    if (info.dataAccessExpiresAt) value.acceso_a_datos_vence = new Date(info.dataAccessExpiresAt * 1000).toISOString().slice(0, 10);
+    if (missing.length) value.faltan = missing.join(', ');
   }
-  // Un error se vuelve a revisar pronto: así se ve enseguida si ya se corrigió la clave.
-  statusCache = { at: creds ? Date.now() : Date.now() - 9 * 60 * 1000, value };
+  // Mientras falte algo se vuelve a revisar pronto: así se ve enseguida cuando se corrige.
+  statusCache = { at: complete ? Date.now() : Date.now() - 9 * 60 * 1000, value };
   return value;
 }
 
