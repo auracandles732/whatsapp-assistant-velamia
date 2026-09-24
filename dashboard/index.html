@@ -1677,6 +1677,24 @@
         .nx-ready.warn .t { color: #7A5300; }
         .nx-ready .d { margin-top: 2px; font-size: 13px; color: #5C668F; line-height: 1.4; }
 
+        /* ---------- Conversaciones por red social, cada una con su color ---------- */
+        /* Las cuatro pestañas siempre a la vista: si la lista es angosta, bajan a una segunda fila. */
+        .nx-channels { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 20px 0; }
+        .nx-channel {
+            display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 12px; flex-shrink: 0;
+            border: 1.5px solid #E1E6F4; background: #fff; color: #3A4570; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+        }
+        .nx-channel:hover { border-color: var(--ch); }
+        .nx-channel.on { background: var(--ch); border-color: var(--ch); color: #fff; box-shadow: 0 4px 12px rgba(20, 30, 80, 0.15); }
+        .nx-channel .c { font-size: 12px; color: #7A84AE; }
+        .nx-channel.on .c { color: rgba(255, 255, 255, 0.9); }
+        .nx-channel .u { min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; background: #E5484D; color: #fff; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+        .nx-channel.on .u { background: #fff; color: var(--ch); }
+        .nx-item.ch-whatsapp { box-shadow: inset 4px 0 0 #17964A; }
+        .nx-item.ch-instagram { box-shadow: inset 4px 0 0 #D6249F; }
+        .nx-item.ch-messenger { box-shadow: inset 4px 0 0 #0866FF; }
+        .nx-ch-pill { display: inline-flex; align-items: center; gap: 5px; color: #fff; }
+
         /* ---------- Publicaciones en redes ---------- */
         .nx-posts { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; color: #1E2A4A; }
         .nx-posts .nx-set-head { position: static; background: none; padding: 0; }
@@ -1698,14 +1716,14 @@
         .nx-st.partial { background: #FFEFD9; color: #B36B00; }
         .nx-st.failed { background: #FDECEC; color: #B42318; }
         .nx-st.cancelled { background: #EEF0F5; color: #6B7599; }
-        .nx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-        .nx-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid #DCE2F5; background: #fff; font-size: 13px; color: #4A5582; cursor: pointer; }
-        .nx-chip.on { background: #E6EBFF; border-color: #6C7CF0; color: #2F4BD8; font-weight: 700; }
-        .nx-chip:disabled { cursor: default; }
+        .nx-pchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+        .nx-pchip { padding: 6px 12px; border-radius: 999px; border: 1px solid #DCE2F5; background: #fff; font-size: 13px; color: #4A5582; cursor: pointer; }
+        .nx-pchip.on { background: #E6EBFF; border-color: #6C7CF0; color: #2F4BD8; font-weight: 700; }
+        .nx-pchip:disabled { cursor: default; }
         .nx-post textarea, .nx-posts textarea { width: 100%; min-height: 150px; padding: 12px; border: 1px solid #DCE2F5; border-radius: 12px; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; color: #1E2A4A; background: #fff; }
         .nx-post textarea:read-only { background: #F7F8FC; }
-        .nx-count { font-size: 12px; color: #7A84AE; text-align: right; }
-        .nx-count.bad { color: #B42318; font-weight: 700; }
+        .nx-caption-count { font-size: 12px; color: #7A84AE; text-align: right; }
+        .nx-caption-count.bad { color: #B42318; font-weight: 700; }
         .nx-post-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
         .nx-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid #DCE2F5; background: #fff; color: #2A3766; font-size: 13px; font-weight: 600; cursor: pointer; }
         .nx-btn.primary { background: linear-gradient(90deg, #4F6BF5, #8B5CF6); color: #fff; border-color: transparent; }
@@ -1715,7 +1733,7 @@
         .nx-post-err { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #FDECEC; color: #B42318; font-size: 13px; line-height: 1.4; }
         .nx-post-links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
         .nx-post-links a { font-size: 13px; font-weight: 600; color: #2563EB; }
-        .nx-empty { text-align: center; color: #6B7599; padding: 22px 12px; font-size: 14px; }
+        .nx-posts-empty { text-align: center; color: #6B7599; padding: 22px 12px; font-size: 14px; }
         .nx-inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         .nx-inline input[type=datetime-local], .nx-inline input[type=time], .nx-inline input[type=search], .nx-inline select {
             padding: 10px 12px; border: 1px solid #DCE2F5; border-radius: 10px; font: inherit; font-size: 14px; background: #fff; color: #1E2A4A; min-width: 0;
@@ -2429,10 +2447,20 @@
         const socialChannel = phone => /^ig:/.test(phone || '') ? 'instagram' : /^fb:/.test(phone || '') ? 'messenger' : null;
         const contactLine = phone => socialChannel(phone) === 'instagram' ? 'Instagram' : socialChannel(phone) === 'messenger' ? 'Messenger' : '+' + phone;
         const contactName = conv => conv?.customer_name || (socialChannel(conv?.phone_number) ? 'Cliente de ' + contactLine(conv.phone_number) : conv?.phone_number);
-        function ChannelMark({ phone, size = 15 }) {
-            const channel = socialChannel(phone);
-            if (!channel) return null;
-            return <span title={contactLine(phone)} style={{ display: 'inline-flex', verticalAlign: 'middle', marginRight: '4px' }}><PlatIcon name={channel} size={size} color={channel === 'instagram' ? '#D6249F' : '#0A7CFF'} /></span>;
+        // Pestañas de Conversaciones: cada red social por separado y con su color (WhatsApp verde, Instagram fucsia, Facebook azul).
+        const CHANNELS = [
+            { id: 'all', label: 'Todas', icon: null, color: '#4F5BD5' },
+            { id: 'whatsapp', label: 'WhatsApp', icon: 'whatsapp', color: '#17964A' },
+            { id: 'instagram', label: 'Instagram', icon: 'instagram', color: '#D6249F' },
+            { id: 'messenger', label: 'Facebook', icon: 'messenger', color: '#0866FF' }
+        ];
+        const channelInfo = phone => CHANNELS.find(c => c.id === (socialChannel(phone) || 'whatsapp'));
+
+        // Con `all` también marca WhatsApp (en la lista, donde conviven las tres redes).
+        function ChannelMark({ phone, size = 15, all = false }) {
+            if (!all && !socialChannel(phone)) return null;
+            const ch = channelInfo(phone);
+            return <span title={socialChannel(phone) ? contactLine(phone) : ch.label} style={{ display: 'inline-flex', verticalAlign: 'middle', marginRight: '4px' }}><PlatIcon name={ch.icon} size={size} color={ch.color} /></span>;
         }
 
         function PlatIcon({ name, size = 18, color = 'currentColor' }) {
@@ -4453,6 +4481,17 @@
             const [summary, setSummary] = useState(null);
             const [search, setSearch] = useState('');
             const [listFilter, setListFilter] = useState('all');
+            const [channelFilter, setChannelFilter] = useState(() => {
+                try {
+                    return localStorage.getItem('crm_channel_filter') || 'all';
+                } catch {
+                    return 'all';
+                }
+            });
+            const chooseChannel = id => {
+                setChannelFilter(id);
+                try { localStorage.setItem('crm_channel_filter', id); } catch { /* sin almacenamiento: solo dura la sesión */ }
+            };
             const [noteMode, setNoteMode] = useState(false);
             const [photoPicker, setPhotoPicker] = useState(false);
             const [photoStatus, setPhotoStatus] = useState('');
@@ -4794,10 +4833,19 @@
             const unreadMap = listOverview.unread || {};
             const hasReadTracking = conversations.length > 0 && 'last_read_at' in conversations[0];
             const openConversations = conversations.filter(c => !isClosedConv(c));
-            const unreadCount = openConversations.filter(c => unreadMap[c.id]).length;
-            const needsCount = openConversations.filter(isBotPausedIn).length;
+            // Cada red por separado: los filtros de abajo (no leídas, te necesitan...) cuentan solo la red elegida.
+            const channelOf = c => socialChannel(c.phone_number) || 'whatsapp';
+            const inChannel = c => channelFilter === 'all' || channelOf(c) === channelFilter;
+            const channelStats = CHANNELS.map(ch => {
+                const open = openConversations.filter(c => ch.id === 'all' || channelOf(c) === ch.id);
+                return { ...ch, count: open.length, unread: open.filter(c => unreadMap[c.id]).length };
+            });
+            const showChannels = channelFilter !== 'all' || openConversations.some(c => channelOf(c) !== 'whatsapp');
+            const unreadCount = openConversations.filter(c => inChannel(c) && unreadMap[c.id]).length;
+            const needsCount = openConversations.filter(c => inChannel(c) && isBotPausedIn(c)).length;
             const searchText = search.trim().toLowerCase();
             const visibleConversations = conversations.filter(c => {
+                if (!inChannel(c)) return false;
                 if (searchText && !((c.customer_name || '').toLowerCase().includes(searchText) || (c.phone_number || '').includes(searchText))) return false;
                 if (listFilter === 'closed') return isClosedConv(c);
                 if (isClosedConv(c)) return false;
@@ -5141,6 +5189,18 @@
                                     <span className="ic"><PlatIcon name="search" size={18} color="#7A84AE" /></span>
                                     <input type="text" placeholder="Buscar por nombre o número..." value={search} onChange={e => setSearch(e.target.value)} />
                                 </div>
+                                {showChannels && (
+                                    <div className="nx-channels" role="tablist" aria-label="Red social">
+                                        {channelStats.map(ch => (
+                                            <button key={ch.id} type="button" role="tab" aria-selected={channelFilter === ch.id} className={'nx-channel' + (channelFilter === ch.id ? ' on' : '')} style={{ '--ch': ch.color }} onClick={() => chooseChannel(ch.id)}>
+                                                {ch.icon && <PlatIcon name={ch.icon} size={16} color={channelFilter === ch.id ? '#fff' : ch.color} />}
+                                                {ch.label}
+                                                <span className="c">{ch.count}</span>
+                                                {ch.unread > 0 && <span className="u" title="Sin leer">{ch.unread}</span>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="nx-chips">
                                     <button type="button" className={'nx-chip' + (listFilter === 'all' ? ' on' : '')} onClick={() => setListFilter('all')}>Todas</button>
                                     {hasReadTracking && <button type="button" className={'nx-chip' + (listFilter === 'unread' ? ' on' : '')} onClick={() => setListFilter('unread')}>No leídas{unreadCount > 0 && <span className="n">{unreadCount}</span>}</button>}
@@ -5155,11 +5215,11 @@
                                         const preview = listOverview.previews[conv.id];
                                         const label = contactName(conv);
                                         return (
-                                            <div key={conv.id} className={'nx-item' + (selectedConv?.id === conv.id ? ' active' : '') + (unreadMap[conv.id] ? ' unread' : '')} onClick={() => setSelectedConv(conv)}>
+                                            <div key={conv.id} className={'nx-item ch-' + channelOf(conv) + (selectedConv?.id === conv.id ? ' active' : '') + (unreadMap[conv.id] ? ' unread' : '')} onClick={() => setSelectedConv(conv)}>
                                                 <Avatar name={label} size={44} />
                                                 <div className="body">
                                                     <div className="row">
-                                                        <span className="name"><ChannelMark phone={conv.phone_number} />{label}</span>
+                                                        <span className="name"><ChannelMark phone={conv.phone_number} all />{label}</span>
                                                         <span className="time">{listTime(conv.last_message_time)}</span>
                                                     </div>
                                                     {preview && preview.text && <div className="prev">{preview.sender === 'customer' ? '' : 'Tú: '}{preview.text}</div>}
@@ -5183,6 +5243,7 @@
                                         <div className="who">
                                             <div className="nm">
                                                 {contactName(currentConv)}
+                                                <span className="nx-badge nx-ch-pill" style={{ background: channelInfo(currentConv.phone_number).color }}><PlatIcon name={channelInfo(currentConv.phone_number).icon} size={14} color="#fff" /> {channelInfo(currentConv.phone_number).label}</span>
                                                 {summary && summary.badges.map(b => <span key={b} className={'nx-badge ' + (b === 'Cliente' ? 'green' : b === 'Interesado' ? 'violet' : 'gray')}>{b}</span>)}
                                                 <span className={'nx-badge ' + (botPausedInChat ? 'red' : 'gray')}>{botPausedInChat ? 'Bot pausado: atiendes tú' : 'El bot atiende'}</span>
                                                 {isClosedConv(currentConv) && <span className="nx-badge gray">Cerrada</span>}
@@ -5700,16 +5761,16 @@
                             <span className={'nx-st ' + post.status}>{POST_STATUS[post.status] || post.status}</span>
                         </div>
 
-                        <div className="nx-chips">
+                        <div className="nx-pchips">
                             {Object.keys(POST_CHANNEL_NAMES).map(c => (
-                                <button key={c} type="button" className={'nx-chip' + (channels.includes(c) ? ' on' : '')} disabled={!editable} onClick={() => toggleChannel(c)}>
+                                <button key={c} type="button" className={'nx-pchip' + (channels.includes(c) ? ' on' : '')} disabled={!editable} onClick={() => toggleChannel(c)}>
                                     {channels.includes(c) ? '✓ ' : ''}{POST_CHANNEL_NAMES[c]}
                                 </button>
                             ))}
                         </div>
 
                         <textarea value={caption} readOnly={!editable} onChange={e => setCaption(e.target.value)} placeholder="Texto de la publicación" />
-                        <div className={'nx-count' + (caption.length > CAPTION_MAX ? ' bad' : '')}>{caption.length} / {CAPTION_MAX}</div>
+                        <div className={'nx-caption-count' + (caption.length > CAPTION_MAX ? ' bad' : '')}>{caption.length} / {CAPTION_MAX}</div>
 
                         {editable && (
                             <div className="nx-inline" style={{ marginTop: '6px' }}>
@@ -5780,7 +5841,7 @@
                         <span className="nx-post-theme">{chosen.length ? `${chosen.length} elegida(s)${chosen.length > 1 ? ' · carrusel' : ''}` : 'Una foto o varias (carrusel, hasta 10)'}</span>
                     </div>
                     <div className="nx-pick" style={{ marginTop: '10px' }}>
-                        {!catalog ? <div className="nx-empty">Cargando catálogo…</div> : shown.length === 0 ? <div className="nx-empty">Nada coincide con la búsqueda</div> : shown.map(p => (
+                        {!catalog ? <div className="nx-posts-empty">Cargando catálogo…</div> : shown.length === 0 ? <div className="nx-posts-empty">Nada coincide con la búsqueda</div> : shown.map(p => (
                             <button type="button" key={p.id || p.name} className={chosen.includes(p.name) ? 'on' : ''} onClick={() => toggle(p.name)}>
                                 <img src={p.image_url} alt="" loading="lazy" />
                                 <span>{chosen.includes(p.name) ? `✓ ${chosen.indexOf(p.name) + 1}. ` : ''}{p.name}</span>
@@ -5788,9 +5849,9 @@
                         ))}
                     </div>
                     <div className="nx-lbl">Dónde y cuándo</div>
-                    <div className="nx-chips">
+                    <div className="nx-pchips">
                         {Object.keys(POST_CHANNEL_NAMES).map(c => (
-                            <button key={c} type="button" className={'nx-chip' + (channels.includes(c) ? ' on' : '')} onClick={() => setChannels(channels.includes(c) ? channels.filter(x => x !== c) : [...channels, c])}>
+                            <button key={c} type="button" className={'nx-pchip' + (channels.includes(c) ? ' on' : '')} onClick={() => setChannels(channels.includes(c) ? channels.filter(x => x !== c) : [...channels, c])}>
                                 {channels.includes(c) ? '✓ ' : ''}{POST_CHANNEL_NAMES[c]}
                             </button>
                         ))}
@@ -5953,23 +6014,23 @@
 
                         <CfgCard id="proximas" icon="calendar" title="Próximas publicaciones" subtitle={`Hora de ${BUSINESS_TZ.split('/').pop().replace(/_/g, ' ')}`}>
                             {upcoming.length === 0
-                                ? <div className="nx-empty">No hay publicaciones programadas. Toca "✨ Preparar próximos 7 días" y el asistente las arma por ti.</div>
+                                ? <div className="nx-posts-empty">No hay publicaciones programadas. Toca "✨ Preparar próximos 7 días" y el asistente las arma por ti.</div>
                                 : upcoming.map(p => <PostCard key={p.id} post={p} canEdit={canEdit} onChanged={replacePost} />)}
                         </CfgCard>
 
                         <CfgCard id="ajustes-publicaciones" icon="gear" title="Cómo publicar" subtitle={data.settingsSaved ? 'Así prepara el asistente cada semana' : 'Guárdalo para que el asistente prepare la semana solo'}>
                             <div className="nx-lbl" style={{ marginTop: 0 }}>Días</div>
-                            <div className="nx-chips">
+                            <div className="nx-pchips">
                                 {WEEK_DAYS.map(([d, label]) => (
-                                    <button key={d} type="button" className={'nx-chip' + (s.days.includes(d) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ days: s.days.includes(d) ? s.days.filter(x => x !== d) : [...s.days, d] })}>{label}</button>
+                                    <button key={d} type="button" className={'nx-pchip' + (s.days.includes(d) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ days: s.days.includes(d) ? s.days.filter(x => x !== d) : [...s.days, d] })}>{label}</button>
                                 ))}
                             </div>
                             <div className="nx-lbl">Hora</div>
                             <div className="nx-inline"><input type="time" value={s.hour} disabled={!canConfigure} onChange={e => setS({ hour: e.target.value })} /></div>
                             <div className="nx-lbl">Dónde publicar</div>
-                            <div className="nx-chips">
+                            <div className="nx-pchips">
                                 {Object.keys(POST_CHANNEL_NAMES).map(c => (
-                                    <button key={c} type="button" className={'nx-chip' + (s.channels.includes(c) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ channels: s.channels.includes(c) ? s.channels.filter(x => x !== c) : [...s.channels, c] })}>
+                                    <button key={c} type="button" className={'nx-pchip' + (s.channels.includes(c) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ channels: s.channels.includes(c) ? s.channels.filter(x => x !== c) : [...s.channels, c] })}>
                                         {s.channels.includes(c) ? '✓ ' : ''}{POST_CHANNEL_NAMES[c]}
                                     </button>
                                 ))}
