@@ -24,6 +24,11 @@ import {
   deleteConversationCompletely,
   getAllQuotations,
   updateQuotationStatus,
+  getQuotationById,
+  updateQuotationCustomer,
+  createQuotation,
+  updateQuotationItems,
+  createOrder,
   getAllOrders,
   updateOrderStatus,
   ORDER_STATUSES,
@@ -64,6 +69,7 @@ import {
   DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus
 } from './services/socialPosts';
 import { claimAndPublish, startSocialPostsScheduler } from './services/socialPublisher';
+import { buildSale, quotationMessage } from './services/manualSales';
 import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
@@ -964,7 +970,7 @@ app.get('/api/quotations', requireCrmSession, async (_req: Request, res: Respons
 app.patch('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const { status } = req.body || {};
-    if (!['pending', 'accepted', 'expired'].includes(status)) {
+    if (!['pending', 'sent', 'accepted', 'expired'].includes(status)) {
       return res.status(400).json({ error: 'Estado inválido' });
     }
     const updated = await updateQuotationStatus(req.params.id, status);
@@ -975,7 +981,74 @@ app.patch('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEdi
   }
 });
 
+/** Cotización hecha a mano desde el CRM para un chat: se calcula igual que las del asistente. */
+app.post('/api/quotations', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const conv = await conversationForSending(req, res);
+    if (!conv) return;
+    const sale = buildSale(req.body || {}, await getAllProducts());
+    const quotation = await createQuotation(conv.id, conv.phone_number, sale.products, sale.total);
+    res.status(201).json({ ...quotation, packagingPending: sale.packagingPending });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/** Cambia productos, cantidades, ciudad o nombre de la clienta; el total se vuelve a calcular. */
+app.put('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const current = await getQuotationById(req.params.id);
+    if (!current) return res.status(404).json({ error: 'Cotización no encontrada' });
+    if (req.body?.items !== undefined) {
+      const sale = buildSale(req.body, await getAllProducts());
+      await updateQuotationItems(current.id, sale.products, sale.total);
+    }
+    if (typeof req.body?.customer_name === 'string') await updateQuotationCustomer(current.id, req.body.customer_name.trim().slice(0, 120));
+    res.json(await getQuotationById(current.id));
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/** Le envía la cotización a la clienta por su chat. Como todo mensaje escrito desde el CRM, pausa el bot en ese chat. */
+app.post('/api/quotations/:id/send', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const quotation = await getQuotationById(req.params.id);
+    if (!quotation) return res.status(404).json({ error: 'Cotización no encontrada' });
+    const conv = await getConversationById(quotation.conversation_id);
+    if (!conv) return res.status(404).json({ error: 'El chat de esta cotización ya no existe' });
+    let products: any[] = [];
+    try {
+      products = typeof quotation.products === 'string' ? JSON.parse(quotation.products) : (quotation.products || []);
+    } catch {
+      products = [];
+    }
+    const text = quotationMessage(products, Number(quotation.total_amount || 0));
+    await pauseBot(conv.id);
+    const sent = await sendTextMessage(conv.phone_number, text);
+    await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
+    if (quotation.status !== 'accepted') await updateQuotationStatus(quotation.id, 'sent');
+    res.json({ success: true, bot_paused: true, quotation: await getQuotationById(quotation.id) });
+  } catch (error: any) {
+    console.error('Error enviando cotización:', error.response?.data || error.message);
+    res.status(500).json({ error: describeWhatsAppError(error) });
+  }
+});
+
 // ---------- Pedidos ----------
+
+/** Pedido registrado a mano desde un chat (por ejemplo, la clienta confirmó con una persona del equipo). */
+app.post('/api/orders', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const conv = await conversationForSending(req, res);
+    if (!conv) return;
+    const sale = buildSale(req.body || {}, await getAllProducts());
+    const order = await createOrder(conv.id, conv.phone_number, conv.customer_name || '', sale.products, sale.total, sale.delivery || undefined, sale.place || undefined);
+    res.status(201).json(order);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
 app.get('/api/orders', requireCrmSession, async (_req: Request, res: Response) => {
   try {

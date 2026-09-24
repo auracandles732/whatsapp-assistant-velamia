@@ -341,7 +341,31 @@ export async function updateQuotationItems(quotationId: string, products: any[],
   return data;
 }
 
-export async function updateQuotationStatus(quotationId: string, status: 'pending' | 'accepted' | 'expired') {
+/** Una cotización de la empresa actual, con el nombre y número de su chat. */
+export async function getQuotationById(quotationId: string) {
+  const { data, error } = await supabase
+    .from('quotations')
+    .select('*, conversations(customer_name, phone_number)')
+    .eq('id', quotationId)
+    .filter('business_id', tenantOp(), tenantValue())
+    .maybeSingle();
+
+  if (error) throw new Error(`Error obteniendo cotización: ${error.message}`);
+  return data;
+}
+
+export async function updateQuotationCustomer(quotationId: string, customerName: string) {
+  const { error } = await supabase
+    .from('quotations')
+    .update({ customer_name: customerName })
+    .eq('id', quotationId)
+    .filter('business_id', tenantOp(), tenantValue());
+
+  if (error) throw new Error(`Error actualizando cotización: ${error.message}`);
+}
+
+// sent = la dueña se la envió a la clienta desde el CRM.
+export async function updateQuotationStatus(quotationId: string, status: 'pending' | 'sent' | 'accepted' | 'expired') {
   const { data, error } = await supabase
     .from('quotations')
     .update({ status })

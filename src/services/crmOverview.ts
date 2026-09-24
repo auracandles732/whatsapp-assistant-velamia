@@ -76,11 +76,14 @@ export async function getTodaySummary() {
       }
     }
 
+    // Qué parte de las respuestas del día las dio el bot (el resto las escribió una persona del equipo).
+    const replies = chronological.filter(m => m.sender === 'bot' || m.sender === 'human');
     return {
       conversations: chats.size,
       orders: orders.filter(o => inRange(o.created_at, from, to)).length,
       quotations: quotations.filter(q => inRange(q.created_at, from, to)).length,
-      responseSeconds: median(gaps)
+      responseSeconds: median(gaps),
+      botShare: replies.length ? Math.round(replies.filter(m => m.sender === 'bot').length / replies.length * 100) : null
     };
   };
 
