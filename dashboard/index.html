@@ -1677,6 +1677,64 @@
         .nx-ready.warn .t { color: #7A5300; }
         .nx-ready .d { margin-top: 2px; font-size: 13px; color: #5C668F; line-height: 1.4; }
 
+        /* ---------- Publicaciones en redes ---------- */
+        .nx-posts { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; color: #1E2A4A; }
+        .nx-posts .nx-set-head { position: static; background: none; padding: 0; }
+        .nx-posts-banner { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: #FFF3DC; color: #7A5300; font-size: 14px; font-weight: 600; }
+        .nx-post { border: 1px solid #E8ECF6; border-radius: 16px; padding: 16px; background: #fff; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 16px; }
+        .nx-post + .nx-post { margin-top: 12px; }
+        .nx-post.off { opacity: 0.65; }
+        .nx-post-photos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; align-content: start; }
+        .nx-post-photos img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #F1F4FC; display: block; }
+        .nx-post-photos img:only-child { grid-column: 1 / -1; }
+        .nx-post-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+        .nx-post-when { font-weight: 800; font-size: 15px; color: #141C3A; }
+        .nx-post-theme { font-size: 13px; color: #6B7599; margin-top: 2px; }
+        .nx-st { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+        .nx-st.draft { background: #FFEFD9; color: #B36B00; }
+        .nx-st.approved { background: #E3EEFF; color: #2A62D8; }
+        .nx-st.publishing { background: #EEE9FF; color: #5B45D6; }
+        .nx-st.published { background: #E6F6EC; color: #1E8A4A; }
+        .nx-st.partial { background: #FFEFD9; color: #B36B00; }
+        .nx-st.failed { background: #FDECEC; color: #B42318; }
+        .nx-st.cancelled { background: #EEF0F5; color: #6B7599; }
+        .nx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+        .nx-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid #DCE2F5; background: #fff; font-size: 13px; color: #4A5582; cursor: pointer; }
+        .nx-chip.on { background: #E6EBFF; border-color: #6C7CF0; color: #2F4BD8; font-weight: 700; }
+        .nx-chip:disabled { cursor: default; }
+        .nx-post textarea, .nx-posts textarea { width: 100%; min-height: 150px; padding: 12px; border: 1px solid #DCE2F5; border-radius: 12px; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; color: #1E2A4A; background: #fff; }
+        .nx-post textarea:read-only { background: #F7F8FC; }
+        .nx-count { font-size: 12px; color: #7A84AE; text-align: right; }
+        .nx-count.bad { color: #B42318; font-weight: 700; }
+        .nx-post-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+        .nx-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid #DCE2F5; background: #fff; color: #2A3766; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .nx-btn.primary { background: linear-gradient(90deg, #4F6BF5, #8B5CF6); color: #fff; border-color: transparent; }
+        .nx-btn.danger { color: #D03535; }
+        .nx-btn:disabled { opacity: 0.6; cursor: default; }
+        .nx-post-msg { font-size: 13px; color: #1E8A4A; font-weight: 600; }
+        .nx-post-err { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #FDECEC; color: #B42318; font-size: 13px; line-height: 1.4; }
+        .nx-post-links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+        .nx-post-links a { font-size: 13px; font-weight: 600; color: #2563EB; }
+        .nx-empty { text-align: center; color: #6B7599; padding: 22px 12px; font-size: 14px; }
+        .nx-inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        .nx-inline input[type=datetime-local], .nx-inline input[type=time], .nx-inline input[type=search], .nx-inline select {
+            padding: 10px 12px; border: 1px solid #DCE2F5; border-radius: 10px; font: inherit; font-size: 14px; background: #fff; color: #1E2A4A; min-width: 0;
+        }
+        .nx-lbl { font-size: 13px; font-weight: 700; color: #3A4570; margin: 14px 0 6px; }
+        .nx-pick { max-height: 300px; overflow: auto; border: 1px solid #E8ECF6; border-radius: 12px; padding: 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+        .nx-pick button { display: flex; flex-direction: column; gap: 4px; font-size: 12px; text-align: left; padding: 4px; border-radius: 10px; border: 2px solid transparent; background: #fff; cursor: pointer; color: #2A3766; }
+        .nx-pick button.on { border-color: #6C7CF0; background: #F2F4FF; }
+        .nx-pick img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+        .nx-conn { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+        .nx-conn .row { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid #EEF1F8; }
+        .nx-conn .row:last-child { border-bottom: none; }
+        .nx-offer ul { margin: 6px 0 0 18px; padding: 0; font-size: 14px; line-height: 1.7; color: #2A3766; }
+        @media (max-width: 700px) {
+            .nx-post { grid-template-columns: minmax(0, 1fr); }
+            .nx-post-photos { grid-template-columns: repeat(4, 1fr); }
+            .nx-post-photos img:only-child { grid-column: auto; }
+        }
+
         @media (max-width: 1299px) {
             .nx-set { grid-template-columns: minmax(0, 1fr) 320px; }
             .nx-set-nav { grid-column: 1 / -1; grid-row: 1; z-index: 5; background: #F3F6FD; margin: 0 -24px; padding: 20px 24px 8px; top: -20px; }
@@ -2497,6 +2555,21 @@
                 }
             }
 
+            // Servicio adicional que se vende aparte: al activarlo la empresa ve la pestaña Publicaciones.
+            async function togglePublishing() {
+                const on = !!business.addons?.publicaciones;
+                const message = on
+                    ? `¿Desactivar Publicaciones en redes para ${business.name}?\n\nSus publicaciones programadas dejan de salir. No se borra nada.`
+                    : `¿Activar Publicaciones en redes para ${business.name}?\n\nEs un servicio adicional: verá la pestaña Publicaciones y podrá conectar su Facebook e Instagram.`;
+                if (!confirm(message)) return;
+                try {
+                    await api(`/api/businesses/${business.id}`, { method: 'PATCH', body: JSON.stringify({ addons: { publicaciones: !on } }) });
+                    onChanged();
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            }
+
             async function deleteCompany() {
                 if (business.active) {
                     return alert(`Para eliminar ${business.name}, primero suspéndela.`);
@@ -2606,6 +2679,11 @@
                             </>
                         )}
                         <UsageRow usage={usage} />
+                        {!business.legacy && (
+                            <PlatRow icon="image" hint="Servicio adicional" action={business.addons?.publicaciones ? 'Desactivar' : 'Activar'} onClick={togglePublishing}>
+                                Publicaciones en redes: {business.addons?.publicaciones ? 'activo' : 'no contratado'}
+                            </PlatRow>
+                        )}
                         {!business.legacy && <div style={{ fontSize: '13px', fontWeight: 600, color: payLine.color, padding: '6px 2px' }}>{payLine.text}</div>}
                     </div>
 
@@ -5009,6 +5087,7 @@
                                 <div className={'nx-tab' + (activeTab === 'cotizaciones' ? ' active' : '')} onClick={() => setActiveTab('cotizaciones')}><PlatIcon name="doc" size={19} /><span className="lbl">Cotizaciones</span></div>
                                 <div className={'nx-tab' + (activeTab === 'pedidos' ? ' active' : '')} onClick={() => setActiveTab('pedidos')}><PlatIcon name="bag" size={19} /><span className="lbl">Pedidos</span></div>
                                 <div className={'nx-tab' + (activeTab === 'catalogo' ? ' active' : '')} onClick={() => setActiveTab('catalogo')}><PlatIcon name="box" size={19} /><span className="lbl">Catálogo</span></div>
+                                <div className={'nx-tab' + (activeTab === 'publicaciones' ? ' active' : '')} onClick={() => setActiveTab('publicaciones')}><PlatIcon name="image" size={19} /><span className="lbl">Publicaciones</span></div>
                                 <div className={'nx-tab' + (activeTab === 'configuracion' ? ' active' : '')} onClick={() => setActiveTab('configuracion')}><PlatIcon name="gear" size={19} /><span className="lbl">Configuración</span></div>
                                 <div className={'nx-tab' + (activeTab === 'consumo' ? ' active' : '')} onClick={() => setActiveTab('consumo')}><PlatIcon name="chart" size={19} /><span className="lbl">Consumo</span></div>
                             </div>
@@ -5252,6 +5331,7 @@
                         </div>
                         )}
                         {activeTab === 'catalogo' && <CatalogView products={products} biz={biz} legacy={!!session?.business?.legacy} reload={loadProducts} readOnly={!canEdit} />}
+                        {activeTab === 'publicaciones' && <PostsView canEdit={canEdit} canConfigure={canConfigure} isAdmin={isAdmin} />}
                         {activeTab === 'cotizaciones' && (() => {
                             const statusLabels = { pending: 'Pendiente', accepted: 'Aceptada', expired: 'Vencida' };
                             const visible = quoteFilter === 'all' ? quotations : quotations.filter(q => q.status === quoteFilter);
@@ -5506,6 +5586,421 @@
                         </button>
                     </div>
                 </>
+            );
+        }
+
+        // ---------- Publicaciones en redes (servicio adicional) ----------
+        const POST_CHANNEL_NAMES = { instagram_feed: 'Instagram', instagram_story: 'Historia de Instagram', facebook: 'Facebook' };
+        const POST_STATUS = {
+            draft: 'Por revisar', approved: 'Programada', publishing: 'Publicando…', published: 'Publicada',
+            partial: 'Publicada en parte', failed: 'No se publicó', cancelled: 'Descartada'
+        };
+        const WEEK_DAYS = [[1, 'Lun'], [2, 'Mar'], [3, 'Mié'], [4, 'Jue'], [5, 'Vie'], [6, 'Sáb'], [0, 'Dom']];
+        const CAPTION_MAX = 2200;
+
+        // Día y hora en la zona del negocio (no en la de la computadora): la hora que se ve es la hora a la que sale.
+        function tzParts(date) {
+            const parts = {};
+            new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+                .formatToParts(date).forEach(p => { parts[p.type] = p.value; });
+            return parts;
+        }
+        function toTzInput(iso) {
+            const p = tzParts(new Date(iso));
+            return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+        }
+        function fromTzInput(value) {
+            const [d, t] = String(value).split('T');
+            const [y, m, dd] = d.split('-').map(Number);
+            const [hh, mm] = (t || '00:00').split(':').map(Number);
+            const wanted = Date.UTC(y, m - 1, dd, hh, mm);
+            let guess = wanted;
+            for (let i = 0; i < 2; i++) {
+                const p = tzParts(new Date(guess));
+                guess += wanted - Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+            }
+            return new Date(guess).toISOString();
+        }
+        const postWhen = iso => {
+            const text = new Date(iso).toLocaleString('es-EC', { timeZone: BUSINESS_TZ, weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
+            return text.charAt(0).toUpperCase() + text.slice(1);
+        };
+
+        function PostCard({ post, canEdit, onChanged }) {
+            const [caption, setCaption] = useState(post.caption);
+            const [when, setWhen] = useState(toTzInput(post.scheduled_at));
+            const [channels, setChannels] = useState(post.channels);
+            const [busy, setBusy] = useState('');
+            const [msg, setMsg] = useState('');
+            const [error, setError] = useState('');
+
+            useEffect(() => {
+                setCaption(post.caption);
+                setWhen(toTzInput(post.scheduled_at));
+                setChannels(post.channels);
+            }, [post.id, post.caption, post.scheduled_at, post.channels.join(',')]);
+
+            const editable = canEdit && ['draft', 'approved', 'failed'].includes(post.status);
+            const dirty = caption !== post.caption || when !== toTzInput(post.scheduled_at) || channels.join(',') !== post.channels.join(',');
+            const toggleChannel = c => setChannels(channels.includes(c) ? channels.filter(x => x !== c) : [...channels, c]);
+
+            async function run(label, fn) {
+                setBusy(label);
+                setError('');
+                setMsg('');
+                try {
+                    await fn();
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+            const patch = extra => api(`/api/posts/${post.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ caption, scheduled_at: fromTzInput(when), channels, ...extra })
+            }).then(r => r.post);
+
+            const save = () => run('save', async () => { onChanged(await patch({})); setMsg('Cambios guardados'); });
+            const approve = () => run('approve', async () => { onChanged(await patch({ status: 'approved' })); setMsg('Programada: se publicará sola a esa hora'); });
+            const backToDraft = () => run('draft', async () => onChanged(await patch({ status: 'draft' })));
+            const discard = () => {
+                if (!confirm('¿Descartar esta publicación? Ese día no se volverá a preparar otra.')) return;
+                run('discard', async () => onChanged(await patch({ status: 'cancelled' })));
+            };
+            const rewrite = () => run('rewrite', async () => {
+                const r = await api(`/api/posts/${post.id}/rewrite`, { method: 'POST' });
+                setCaption(r.caption);
+                setMsg('Texto nuevo: guárdalo si te gusta');
+            });
+            const publishNow = () => {
+                const where = channels.map(c => POST_CHANNEL_NAMES[c]).join(', ');
+                if (!confirm(`¿Publicar ahora en ${where}? Se verá de inmediato en tus redes.`)) return;
+                run('publish', async () => {
+                    if (dirty) await patch({});
+                    const done = (await api(`/api/posts/${post.id}/publish`, { method: 'POST' })).post;
+                    onChanged(done);
+                    setMsg(done.status === 'published' ? '¡Publicada!' : '');
+                });
+            };
+
+            const links = Object.entries(post.results || {}).filter(([, r]) => r && r.permalink);
+            const photoCount = post.products.length;
+            return (
+                <div className={'nx-post' + (post.status === 'cancelled' ? ' off' : '')}>
+                    <div className="nx-post-photos">
+                        {post.products.slice(0, 4).map(p => <img key={p.name} src={p.image_url} alt={p.name} title={p.name} loading="lazy" />)}
+                    </div>
+                    <div>
+                        <div className="nx-post-top">
+                            <div>
+                                <div className="nx-post-when">{postWhen(post.scheduled_at)}</div>
+                                <div className="nx-post-theme">{post.theme}{photoCount > 1 ? ` · carrusel de ${photoCount} fotos` : ''} · {post.products.map(p => p.name).join(', ')}</div>
+                            </div>
+                            <span className={'nx-st ' + post.status}>{POST_STATUS[post.status] || post.status}</span>
+                        </div>
+
+                        <div className="nx-chips">
+                            {Object.keys(POST_CHANNEL_NAMES).map(c => (
+                                <button key={c} type="button" className={'nx-chip' + (channels.includes(c) ? ' on' : '')} disabled={!editable} onClick={() => toggleChannel(c)}>
+                                    {channels.includes(c) ? '✓ ' : ''}{POST_CHANNEL_NAMES[c]}
+                                </button>
+                            ))}
+                        </div>
+
+                        <textarea value={caption} readOnly={!editable} onChange={e => setCaption(e.target.value)} placeholder="Texto de la publicación" />
+                        <div className={'nx-count' + (caption.length > CAPTION_MAX ? ' bad' : '')}>{caption.length} / {CAPTION_MAX}</div>
+
+                        {editable && (
+                            <div className="nx-inline" style={{ marginTop: '6px' }}>
+                                <label className="nx-post-theme" htmlFor={'when-' + post.id}>Día y hora</label>
+                                <input id={'when-' + post.id} type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} />
+                            </div>
+                        )}
+
+                        {post.error && <div className="nx-post-err">{post.error}</div>}
+                        {links.length > 0 && (
+                            <div className="nx-post-links">
+                                {links.map(([c, r]) => <a key={c} href={r.permalink} target="_blank" rel="noopener noreferrer">Ver en {POST_CHANNEL_NAMES[c] || c} ↗</a>)}
+                            </div>
+                        )}
+                        {error && <div className="nx-post-err">{error}</div>}
+
+                        {editable && (
+                            <div className="nx-post-actions">
+                                {post.status !== 'approved' && <button type="button" className="nx-btn primary" disabled={!!busy || caption.length > CAPTION_MAX} onClick={approve}>{busy === 'approve' ? 'Aprobando…' : '✓ Aprobar'}</button>}
+                                {post.status === 'approved' && <button type="button" className="nx-btn" disabled={!!busy} onClick={backToDraft}>Volver a revisar</button>}
+                                {dirty && <button type="button" className="nx-btn" disabled={!!busy || caption.length > CAPTION_MAX} onClick={save}>{busy === 'save' ? 'Guardando…' : 'Guardar cambios'}</button>}
+                                <button type="button" className="nx-btn" disabled={!!busy} onClick={rewrite}>{busy === 'rewrite' ? 'Escribiendo…' : '✨ Otro texto'}</button>
+                                <button type="button" className="nx-btn" disabled={!!busy || caption.length > CAPTION_MAX} onClick={publishNow}>{busy === 'publish' ? 'Publicando…' : 'Publicar ahora'}</button>
+                                <button type="button" className="nx-btn danger" disabled={!!busy} onClick={discard}>Descartar</button>
+                                {msg && <span className="nx-post-msg">{msg}</span>}
+                            </div>
+                        )}
+                        {!editable && msg && <div className="nx-post-msg" style={{ marginTop: '8px' }}>{msg}</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        function NewPostForm({ settings, onCreated, onClose }) {
+            const [catalog, setCatalog] = useState(null);
+            const [search, setSearch] = useState('');
+            const [chosen, setChosen] = useState([]);
+            const tomorrow = new Date(Date.now() + 86400000);
+            const [when, setWhen] = useState(`${toTzInput(tomorrow.toISOString()).slice(0, 10)}T${settings.hour}`);
+            const [channels, setChannels] = useState(settings.channels);
+            const [caption, setCaption] = useState('');
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+
+            useEffect(() => { api('/api/products').then(list => setCatalog(list.filter(p => p.image_url))).catch(e => setError(e.message)); }, []);
+
+            const plain = t => String(t || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+            const shown = (catalog || []).filter(p => !search || plain(p.name + ' ' + p.category).includes(plain(search)));
+            const toggle = name => setChosen(chosen.includes(name) ? chosen.filter(n => n !== name) : chosen.length >= 10 ? chosen : [...chosen, name]);
+
+            async function create() {
+                setBusy(true);
+                setError('');
+                try {
+                    const theme = catalog.find(p => p.name === chosen[0])?.category || '';
+                    onCreated((await api('/api/posts', { method: 'POST', body: JSON.stringify({ products: chosen, scheduled_at: fromTzInput(when), channels, caption, theme }) })).post);
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            return (
+                <CfgCard id="nueva-publicacion" icon="plus" title="Nueva publicación" subtitle="Elige qué mostrar; si dejas el texto vacío, lo escribe el asistente">
+                    <div className="nx-inline">
+                        <input type="search" placeholder="Buscar en el catálogo…" value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+                        <span className="nx-post-theme">{chosen.length ? `${chosen.length} elegida(s)${chosen.length > 1 ? ' · carrusel' : ''}` : 'Una foto o varias (carrusel, hasta 10)'}</span>
+                    </div>
+                    <div className="nx-pick" style={{ marginTop: '10px' }}>
+                        {!catalog ? <div className="nx-empty">Cargando catálogo…</div> : shown.length === 0 ? <div className="nx-empty">Nada coincide con la búsqueda</div> : shown.map(p => (
+                            <button type="button" key={p.id || p.name} className={chosen.includes(p.name) ? 'on' : ''} onClick={() => toggle(p.name)}>
+                                <img src={p.image_url} alt="" loading="lazy" />
+                                <span>{chosen.includes(p.name) ? `✓ ${chosen.indexOf(p.name) + 1}. ` : ''}{p.name}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="nx-lbl">Dónde y cuándo</div>
+                    <div className="nx-chips">
+                        {Object.keys(POST_CHANNEL_NAMES).map(c => (
+                            <button key={c} type="button" className={'nx-chip' + (channels.includes(c) ? ' on' : '')} onClick={() => setChannels(channels.includes(c) ? channels.filter(x => x !== c) : [...channels, c])}>
+                                {channels.includes(c) ? '✓ ' : ''}{POST_CHANNEL_NAMES[c]}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="nx-inline"><input type="datetime-local" value={when} onChange={e => setWhen(e.target.value)} /></div>
+                    <div className="nx-lbl">Texto (opcional)</div>
+                    <textarea value={caption} onChange={e => setCaption(e.target.value)} placeholder="Déjalo vacío y el asistente lo escribe con el nombre y el precio de lo que elegiste" style={{ minHeight: '100px' }} />
+                    {error && <div className="nx-post-err">{error}</div>}
+                    <div className="nx-post-actions">
+                        <button type="button" className="nx-btn primary" disabled={busy || chosen.length === 0 || channels.length === 0} onClick={create}>{busy ? 'Preparando…' : 'Crear publicación'}</button>
+                        <button type="button" className="nx-btn" onClick={onClose}>Cancelar</button>
+                    </div>
+                </CfgCard>
+            );
+        }
+
+        function PostsView({ canEdit, canConfigure, isAdmin }) {
+            const [data, setData] = useState(null);
+            const [error, setError] = useState('');
+            const [settings, setSettings] = useState(null);
+            const [savedMsg, setSavedMsg] = useState('');
+            const [busy, setBusy] = useState('');
+            const [planMsg, setPlanMsg] = useState('');
+            const [showNew, setShowNew] = useState(false);
+
+            const load = () => api('/api/posts').then(d => {
+                setData(d);
+                if (d.settings) setSettings(s => s || d.settings);
+                return d;
+            }).catch(e => setError(e.message));
+            useEffect(() => { load(); }, []);
+
+            if (error && !data) return <div className="settings-container nx-cfg-page"><div className="nx-posts"><div className="nx-post-err">{error}</div></div></div>;
+            if (!data) return <NexlyLoading text="Cargando publicaciones…" />;
+
+            if (!data.enabled) {
+                return (
+                    <div className="settings-container nx-cfg-page">
+                        <div className="nx-posts">
+                            <CfgCard id="publicaciones" icon="sparkle" title="Publicaciones automáticas en Instagram y Facebook" subtitle="Servicio adicional">
+                                <div className="nx-offer">
+                                    <p className="hint">Tu asistente también puede mantener tus redes activas:</p>
+                                    <ul>
+                                        <li>Prepara cada semana tus publicaciones con las fotos y precios de tu catálogo.</li>
+                                        <li>Escribe los textos y hashtags con el tono de tu negocio.</li>
+                                        <li>Tú las revisas y apruebas aquí mismo, o las cambias.</li>
+                                        <li>Se publican solas en Instagram (publicación e historia) y en tu página de Facebook.</li>
+                                    </ul>
+                                    <p className="hint" style={{ marginTop: '12px' }}>{isAdmin ? 'Actívalo para esta empresa en la pantalla de Empresas.' : 'Pide que lo activen para tu empresa.'}</p>
+                                </div>
+                            </CfgCard>
+                        </div>
+                    </div>
+                );
+            }
+
+            const replacePost = updated => updated && setData(d => ({ ...d, posts: d.posts.map(p => p.id === updated.id ? updated : p) }));
+            const s = settings || data.settings;
+            const setS = changes => { setSettings({ ...s, ...changes }); setSavedMsg(''); };
+
+            async function saveSettings() {
+                setBusy('settings');
+                try {
+                    const r = await api('/api/posts/settings', { method: 'PUT', body: JSON.stringify(s) });
+                    setSettings(r.settings);
+                    setData(d => ({ ...d, settingsSaved: true }));
+                    setSavedMsg('✅ Guardado');
+                } catch (e) {
+                    alert('No se pudo guardar: ' + e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            async function plan() {
+                setBusy('plan');
+                setPlanMsg('');
+                try {
+                    const r = await api('/api/posts/plan', { method: 'POST' });
+                    setPlanMsg(r.created.length ? `Listo: se prepararon ${r.created.length} publicación(es) para que las revises.` : 'Los próximos 7 días ya tienen sus publicaciones (o no hay días de publicación elegidos).');
+                    await load();
+                } catch (e) {
+                    setPlanMsg('No se pudo preparar: ' + e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            async function connect() {
+                const win = window.open('about:blank', 'conectar-facebook', 'width=620,height=760');
+                setBusy('connect');
+                try {
+                    const { url } = await api('/api/meta/connect-url');
+                    if (!win) { window.location.href = url; return; }
+                    win.location.href = url;
+                    const before = JSON.stringify(data.status);
+                    const started = Date.now();
+                    const timer = setInterval(async () => {
+                        const now = await api('/api/posts').catch(() => null);
+                        if (now && (JSON.stringify(now.status) !== before || Date.now() - started > 5 * 60 * 1000)) {
+                            clearInterval(timer);
+                            setData(now);
+                            setBusy('');
+                        }
+                    }, 4000);
+                } catch (e) {
+                    if (win) win.close();
+                    alert(e.message);
+                    setBusy('');
+                }
+            }
+
+            const now = Date.now();
+            const upcoming = data.posts.filter(p => ['draft', 'approved', 'publishing'].includes(p.status) || (p.status === 'failed' && new Date(p.scheduled_at).getTime() > now - 86400000));
+            const history = data.posts.filter(p => !upcoming.includes(p)).sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at)).slice(0, 20);
+            const toReview = upcoming.filter(p => p.status === 'draft').length;
+            const st = data.status || {};
+
+            return (
+                <div className="settings-container nx-cfg-page">
+                    <div className="nx-posts">
+                        <div className="nx-set-head">
+                            <div>
+                                <h1>Publicaciones</h1>
+                                <p>El asistente prepara tus publicaciones con las fotos y precios del catálogo. Revísalas, apruébalas y se publican solas a su hora.</p>
+                            </div>
+                            {canEdit && (
+                                <div className="nx-post-actions" style={{ marginTop: 0 }}>
+                                    <button type="button" className="nx-btn" onClick={() => setShowNew(!showNew)}>➕ Nueva publicación</button>
+                                    <button type="button" className="nx-btn primary" disabled={busy === 'plan'} onClick={plan}>{busy === 'plan' ? 'Preparando…' : '✨ Preparar próximos 7 días'}</button>
+                                </div>
+                            )}
+                        </div>
+                        {planMsg && <div className="nx-posts-banner" style={{ background: '#E6F6EC', color: '#1E6B3A' }}>{planMsg}</div>}
+                        {toReview > 0 && <div className="nx-posts-banner">📝 Tienes {toReview} publicación(es) por revisar. Solo salen las que apruebes.</div>}
+
+                        <CfgCard id="conexion" icon="instagram" title="Dónde se publica" subtitle="Tu página de Facebook y la cuenta de Instagram conectada a ella">
+                            <div className="nx-conn">
+                                {!st.connected ? (
+                                    <div className="row"><PlatIcon name="warn" size={18} /> {st.error ? `La conexión no funciona: ${st.error}` : 'Todavía no conectaste Facebook e Instagram.'}</div>
+                                ) : (
+                                    <>
+                                        <div className="row"><PlatIcon name="check" size={18} /> Página de Facebook{st.pageName ? `: ${st.pageName}` : ''}</div>
+                                        <div className="row"><PlatIcon name={st.instagramAllowed ? 'check' : 'warn'} size={18} /> {st.instagram ? `Instagram${st.instagramUsername ? ` @${st.instagramUsername}` : ''}: ${st.instagramAllowed ? 'listo para publicar' : 'falta aceptar el permiso para publicar'}` : 'La página no tiene una cuenta de Instagram profesional conectada'}</div>
+                                        <div className="row"><PlatIcon name={st.facebookAllowed ? 'check' : 'warn'} size={18} /> Facebook: {st.facebookAllowed ? 'listo para publicar' : 'falta el permiso para publicar en la página (lo habilita soporte)'}</div>
+                                    </>
+                                )}
+                            </div>
+                            {canConfigure && (
+                                <div className="settings-actions">
+                                    <span className="save-status"></span>
+                                    <button type="button" className="btn-save-prompt" disabled={busy === 'connect'} onClick={connect}>
+                                        {busy === 'connect' ? 'Esperando a Facebook…' : st.connected ? 'Volver a conectar con Facebook' : 'Conectar con Facebook'}
+                                    </button>
+                                </div>
+                            )}
+                        </CfgCard>
+
+                        {showNew && <NewPostForm settings={s} onClose={() => setShowNew(false)} onCreated={post => { setShowNew(false); setData(d => ({ ...d, posts: [...d.posts, post] })); }} />}
+
+                        <CfgCard id="proximas" icon="calendar" title="Próximas publicaciones" subtitle={`Hora de ${BUSINESS_TZ.split('/').pop().replace(/_/g, ' ')}`}>
+                            {upcoming.length === 0
+                                ? <div className="nx-empty">No hay publicaciones programadas. Toca "✨ Preparar próximos 7 días" y el asistente las arma por ti.</div>
+                                : upcoming.map(p => <PostCard key={p.id} post={p} canEdit={canEdit} onChanged={replacePost} />)}
+                        </CfgCard>
+
+                        <CfgCard id="ajustes-publicaciones" icon="gear" title="Cómo publicar" subtitle={data.settingsSaved ? 'Así prepara el asistente cada semana' : 'Guárdalo para que el asistente prepare la semana solo'}>
+                            <div className="nx-lbl" style={{ marginTop: 0 }}>Días</div>
+                            <div className="nx-chips">
+                                {WEEK_DAYS.map(([d, label]) => (
+                                    <button key={d} type="button" className={'nx-chip' + (s.days.includes(d) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ days: s.days.includes(d) ? s.days.filter(x => x !== d) : [...s.days, d] })}>{label}</button>
+                                ))}
+                            </div>
+                            <div className="nx-lbl">Hora</div>
+                            <div className="nx-inline"><input type="time" value={s.hour} disabled={!canConfigure} onChange={e => setS({ hour: e.target.value })} /></div>
+                            <div className="nx-lbl">Dónde publicar</div>
+                            <div className="nx-chips">
+                                {Object.keys(POST_CHANNEL_NAMES).map(c => (
+                                    <button key={c} type="button" className={'nx-chip' + (s.channels.includes(c) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ channels: s.channels.includes(c) ? s.channels.filter(x => x !== c) : [...s.channels, c] })}>
+                                        {s.channels.includes(c) ? '✓ ' : ''}{POST_CHANNEL_NAMES[c]}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="nx-lbl">Fotos por publicación</div>
+                            <div className="nx-inline">
+                                <select value={s.photosPerPost} disabled={!canConfigure} onChange={e => setS({ photosPerPost: Number(e.target.value) })}>
+                                    <option value={1}>1 foto</option>
+                                    <option value={3}>Carrusel de 3 fotos</option>
+                                    <option value={5}>Carrusel de 5 fotos</option>
+                                </select>
+                            </div>
+                            <label className="check-row"><input type="checkbox" checked={s.autoPlan} disabled={!canConfigure} onChange={e => setS({ autoPlan: e.target.checked })} /> Preparar la semana sola (revisa cada hora que los próximos 7 días tengan publicación)</label>
+                            <label className="check-row"><input type="checkbox" checked={s.autoApprove} disabled={!canConfigure} onChange={e => setS({ autoApprove: e.target.checked })} /> Publicar sin mi aprobación {s.autoApprove && <b style={{ color: '#B36B00' }}>· saldrán sin que las revises</b>}</label>
+                            <div className="nx-lbl">Indicaciones para los textos</div>
+                            <textarea value={s.notes} disabled={!canConfigure} onChange={e => setS({ notes: e.target.value })} style={{ minHeight: '90px' }} placeholder="Ej: tono cálido y cercano; incluir siempre #hechoamano; destacar que personalizamos con nombres." />
+                            {canConfigure && (
+                                <div className="settings-actions">
+                                    <span className="save-status">{savedMsg}</span>
+                                    <button type="button" className="btn-save-prompt" disabled={busy === 'settings' || s.days.length === 0 || s.channels.length === 0} onClick={saveSettings}>{busy === 'settings' ? 'Guardando…' : '💾 Guardar'}</button>
+                                </div>
+                            )}
+                        </CfgCard>
+
+                        {history.length > 0 && (
+                            <CfgCard id="historial" icon="list" title="Historial" subtitle="Lo que ya salió, lo que falló y lo descartado">
+                                {history.map(p => <PostCard key={p.id} post={p} canEdit={canEdit} onChanged={replacePost} />)}
+                            </CfgCard>
+                        )}
+                    </div>
+                </div>
             );
         }
 

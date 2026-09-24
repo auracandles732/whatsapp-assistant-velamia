@@ -1613,6 +1613,58 @@ Responde solo JSON: {"items":[{"name":"...","quantity":1,"personalization":"..."
   }
 }
 
+export interface CaptionRequest {
+  theme: string;
+  products: { name: string; price: number }[];
+}
+
+/**
+ * Textos de las publicaciones de la semana en una sola llamada: así no se repiten entre sí.
+ * Los precios salen del catálogo y se copian tal cual; nunca inventa descuentos, fechas ni escasez.
+ */
+export async function writeSocialCaptions(posts: CaptionRequest[], notes: string, p: BusinessProfile = profile()): Promise<string[]> {
+  if (posts.length === 0) return [];
+  const b = p.business, s = p.sales;
+  const rules = [
+    `Eres quien maneja las redes sociales de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. Escribe el texto de cada publicación de Instagram y Facebook de la lista.`,
+    '- Español natural y cálido, como una persona de la marca. Entre 3 y 6 líneas cortas, con una línea en blanco antes de los hashtags.',
+    '- La primera línea engancha con el tema de la publicación (la ocasión o para qué sirve), sin empezar dos publicaciones igual.',
+    `- Nombra cada producto con su nombre exacto y su precio tal como viene (por ejemplo "$30.00 ${s.priceSuffix}"). Nunca cambies precios ni inventes productos.`,
+    s.personalization ? `- Cuenta que se pueden personalizar (${s.personalizationExamples || 'a su gusto'}).` : '',
+    p.shipping.mode !== 'none' && p.shipping.coverage ? `- Menciona que hay envíos a ${p.shipping.coverage}.` : '',
+    '- Termina invitando a escribir por WhatsApp o mensaje directo para pedir o cotizar.',
+    `- Al final, entre 5 y 8 hashtags en minúsculas y sin tildes, relacionados con el tema y la ciudad${b.city ? ` (${b.city})` : ''}.`,
+    '- Usa de 2 a 4 emojis. Sin markdown ni asteriscos.',
+    '- Nunca inventes descuentos, promociones, fechas límite, "últimas unidades" ni nada que no esté en los datos.',
+    notes.trim() ? `- Indicaciones de la empresa (síguelas): ${notes.trim()}` : ''
+  ].filter(Boolean).join('\n');
+  const list = posts.map((post, i) => `${i + 1}) Tema: ${post.theme}. Productos: ${post.products.map(x => `${x.name} ($${Number(x.price).toFixed(2)} ${s.priceSuffix})`).join('; ')}`).join('\n');
+
+  const model = getOpenAIModel(p);
+  const response = await getOpenAIClient(p).chat.completions.create({
+    model,
+    ...reasoningFor(model),
+    max_completion_tokens: 4000,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'publicaciones',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['captions'],
+          properties: { captions: { type: 'array', items: { type: 'string' } } }
+        }
+      }
+    },
+    messages: [{ role: 'system', content: rules }, { role: 'user', content: `Publicaciones (devuelve un texto por cada una, en el mismo orden):\n${list}` }]
+  } as any);
+  track('publicaciones', model, response);
+  const captions: unknown[] = JSON.parse(response.choices[0]?.message?.content || '{}').captions || [];
+  return posts.map((_, i) => withoutBrokenChars(String(captions[i] || '').trim()));
+}
+
 /**
  * Seguimiento rápido cuando la clienta vio fotos y no respondió: un mensaje corto que retoma lo que vio y
  * avanza la venta con una sola pregunta fácil.

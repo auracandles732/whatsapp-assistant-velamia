@@ -58,10 +58,16 @@ import { toWhatsAppVoice, isRecordedAudio } from './services/audio';
 import { maskPhone } from './services/privacy';
 import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/signupCodes';
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
-import { currentTenant, decryptSecret } from './services/tenant';
+import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
+import {
+  listPosts, getPost, insertPosts, updatePost, getSavedSettings, saveSettings, planUpcomingPosts, rewriteCaption,
+  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus
+} from './services/socialPosts';
+import { claimAndPublish, startSocialPostsScheduler } from './services/socialPublisher';
+import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
-import { subscribePage, isSocialAddress, socialStatus, connectUrl, createConnectState, verifyConnectState, completeConnection } from './services/metaChannels';
+import { subscribePage, isSocialAddress, socialStatus, connectUrl, createConnectState, readConnectState, completeConnection, publishingStatus } from './services/metaChannels';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -279,7 +285,8 @@ function metaResultPage(ok: boolean, lines: string[]) {
 }
 
 app.get('/api/meta/connect-url', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
-  if (currentTenant()) return res.status(400).json({ error: 'Instagram y Facebook todavía no están disponibles para esta empresa' });
+  // Las demás empresas conectan su página solo para publicar (servicio adicional); los mensajes siguen siendo de VELAMIA.
+  if (currentTenant() && !hasAddon('publicaciones')) return res.status(400).json({ error: 'Instagram y Facebook todavía no están disponibles para esta empresa' });
   try {
     res.json({ url: await connectUrl(metaRedirectUri(), createConnectState()) });
   } catch (error: any) {
@@ -292,14 +299,20 @@ app.get('/api/meta/callback', async (req: Request, res: Response) => {
   if (req.query.error) {
     return res.status(400).send(metaResultPage(false, ['Se canceló la conexión en Facebook. Vuelve a intentarlo desde el CRM y acepta todos los permisos.']));
   }
-  if (!verifyConnectState(req.query.state)) {
+  const businessId = readConnectState(req.query.state);
+  if (!businessId) {
     return res.status(400).send(metaResultPage(false, ['El enlace venció o ya se usó. Vuelve a presionar "Conectar con Facebook" en el CRM.']));
   }
   try {
-    const result = await completeConnection(String(req.query.code || ''), metaRedirectUri());
+    // El sello dice de qué empresa era: la conexión se guarda en esa empresa y en ninguna otra.
+    const tenant = businessId === VELAMIA_ID ? undefined : await loadTenant(businessId);
+    if (businessId !== VELAMIA_ID && !tenant) {
+      return res.status(404).send(metaResultPage(false, ['La empresa no existe o está suspendida.']));
+    }
+    const result = await runWithTenant(tenant || undefined, () => completeConnection(String(req.query.code || ''), metaRedirectUri()));
     const lines = [`Página de Facebook: ${result.pageName}`];
     lines.push(result.instagramUsername ? `Instagram: @${result.instagramUsername}` : 'Instagram: esta página no tiene una cuenta de Instagram profesional conectada.');
-    if (!result.subscribed) lines.push('Aviso: la página no quedó suscrita a la App; revisa el estado en el CRM.');
+    if (result.subscribed === false) lines.push('Aviso: la página no quedó suscrita a la App; revisa el estado en el CRM.');
     res.send(metaResultPage(true, lines));
   } catch (error: any) {
     console.error('❌ Error conectando con Facebook:', error.response?.data || error.message);
@@ -309,6 +322,161 @@ app.get('/api/meta/callback', async (req: Request, res: Response) => {
 
 app.get('/api/meta/status', requireCrmSession, async (_req: Request, res: Response) => {
   res.json(await socialStatus().catch(() => ({ estado: 'no se pudo revisar' })));
+});
+
+// ---------- Publicaciones en redes (servicio adicional) ----------
+
+const ADDONS = ['publicaciones'];
+const CAPTION_LIMIT = 2200; // Instagram no acepta textos más largos.
+
+function requirePublishing(_req: Request, res: Response, next: NextFunction) {
+  if (hasAddon('publicaciones')) return next();
+  res.status(403).json({ error: 'Publicaciones en redes es un servicio adicional: pide que lo activen para tu empresa.', code: 'ADDON_REQUIRED' });
+}
+
+function requirePostId(req: Request, res: Response, next: NextFunction) {
+  if (!UUID_PATTERN.test(req.params.postId || '')) return res.status(400).json({ error: 'Publicación inválida' });
+  next();
+}
+
+/** Productos del catálogo por nombre exacto: una publicación nunca muestra algo que no está en el catálogo. */
+async function catalogProducts(names: unknown) {
+  if (!Array.isArray(names) || names.length === 0) throw new Error('Elige al menos un producto');
+  const catalog = await getAllProducts();
+  const found = names.slice(0, 10).map(n => catalog.find((c: any) => c.name === String(n) && c.image_url));
+  if (found.some(f => !f)) throw new Error('Algún producto no está en el catálogo o no tiene foto');
+  return found.map(toPostProduct);
+}
+
+function cleanChannels(value: unknown) {
+  const channels = Array.isArray(value) ? POST_CHANNELS.filter(c => value.includes(c)) : [];
+  if (channels.length === 0) throw new Error('Elige al menos una red donde publicar');
+  return channels;
+}
+
+app.get('/api/posts', requireCrmSession, async (req: Request, res: Response) => {
+  // Sin el servicio se responde igual: el CRM muestra qué ofrece y cómo pedirlo.
+  if (!hasAddon('publicaciones')) return res.json({ enabled: false });
+  try {
+    const now = Date.now();
+    const from = new Date(Number.isFinite(Date.parse(String(req.query.from))) ? String(req.query.from) : now - 30 * 86_400_000).toISOString();
+    const to = new Date(Number.isFinite(Date.parse(String(req.query.to))) ? String(req.query.to) : now + 60 * 86_400_000).toISOString();
+    const [posts, saved, status] = await Promise.all([
+      listPosts(from, to),
+      getSavedSettings(),
+      publishingStatus().catch(error => ({ connected: false, error: error.message }))
+    ]);
+    res.json({ enabled: true, posts, settings: saved || DEFAULT_SETTINGS, settingsSaved: !!saved, status, timezone: profile().business.timezone });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/posts/settings', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
+  try {
+    res.json({ settings: await saveSettings(req.body) });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Prepara los próximos 7 días con la configuración guardada (o la de siempre si aún no se guardó). */
+app.post('/api/posts/plan', requireCrmSession, requireEditorRole, requirePublishing, async (_req: Request, res: Response) => {
+  try {
+    const created = await planUpcomingPosts(new Date(), 7, (await getSavedSettings()) || DEFAULT_SETTINGS);
+    res.json({ created });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/posts', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
+  try {
+    const when = new Date(String(req.body?.scheduled_at || ''));
+    if (!Number.isFinite(when.getTime())) return res.status(400).json({ error: 'Elige el día y la hora' });
+    let caption = String(req.body?.caption || '').trim();
+    if (caption.length > CAPTION_LIMIT) return res.status(400).json({ error: `El texto pasa de ${CAPTION_LIMIT} caracteres` });
+    const products = await catalogProducts(req.body?.products);
+    const channels = cleanChannels(req.body?.channels);
+    const theme = String(req.body?.theme || '').trim().slice(0, 80) || 'Nuestros productos';
+    // Sin texto, lo escribe la IA; si no responde, va el texto de respaldo (siempre se puede cambiar antes de aprobar).
+    if (!caption) {
+      const draft = { theme, products } as any;
+      caption = await rewriteCaption(draft, ((await getSavedSettings()) || DEFAULT_SETTINGS).notes).catch(() => fallbackCaption(draft));
+    }
+    const [post] = await insertPosts([{
+      scheduled_at: when.toISOString(), status: 'draft', channels, caption, products, theme, results: {}, error: null
+    }]);
+    // La publicación trae su propio campo "error" (motivo de un fallo): va envuelta para que el CRM no lo tome como error de la petición.
+    res.status(201).json({ post });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.patch('/api/posts/:postId', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
+  try {
+    const post = await getPost(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+    if (!EDITABLE_STATUSES.includes(post.status)) return res.status(400).json({ error: 'Esta publicación ya no se puede cambiar' });
+
+    const changes: Record<string, any> = {};
+    if (req.body?.caption !== undefined) {
+      changes.caption = String(req.body.caption).trim();
+      if (changes.caption.length > CAPTION_LIMIT) return res.status(400).json({ error: `El texto pasa de ${CAPTION_LIMIT} caracteres` });
+    }
+    if (req.body?.scheduled_at !== undefined) {
+      const when = new Date(String(req.body.scheduled_at));
+      if (!Number.isFinite(when.getTime())) return res.status(400).json({ error: 'Fecha inválida' });
+      changes.scheduled_at = when.toISOString();
+    }
+    if (req.body?.channels !== undefined) changes.channels = cleanChannels(req.body.channels);
+    if (req.body?.products !== undefined) changes.products = await catalogProducts(req.body.products);
+    if (req.body?.status !== undefined) {
+      const status = String(req.body.status) as PostStatus;
+      if (!['draft', 'approved', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Estado inválido' });
+      changes.status = status;
+    }
+
+    const final = { ...post, ...changes };
+    if (final.status === 'approved') {
+      if (!final.caption) return res.status(400).json({ error: 'Escribe el texto antes de aprobarla' });
+      // Aprobar algo con hora pasada lo publicaría de golpe: para eso está "Publicar ahora".
+      if (new Date(final.scheduled_at).getTime() < Date.now()) return res.status(400).json({ error: 'La hora ya pasó: elige otra o usa "Publicar ahora"' });
+      changes.error = null;
+    }
+    const updated = await updatePost(post.id, changes, EDITABLE_STATUSES);
+    if (!updated) return res.status(409).json({ error: 'La publicación cambió mientras la editabas; recarga' });
+    res.json({ post: updated });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/posts/:postId/publish', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
+  try {
+    const post = await getPost(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+    if (!post.caption.trim() && post.channels.some(c => c !== 'instagram_story')) return res.status(400).json({ error: 'Escribe el texto antes de publicar' });
+    const done = await claimAndPublish(post, EDITABLE_STATUSES);
+    if (!done) return res.status(409).json({ error: 'Esta publicación ya se está publicando o ya salió' });
+    res.json({ post: done });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Otro texto hecho por la IA; no se guarda hasta que la empresa lo acepte. */
+app.post('/api/posts/:postId/rewrite', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
+  try {
+    const post = await getPost(req.params.postId);
+    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+    const settings = (await getSavedSettings()) || DEFAULT_SETTINGS;
+    res.json({ caption: await rewriteCaption(post, settings.notes) });
+  } catch (error: any) {
+    const noCredits = /credit|quota/i.test(error.message);
+    res.status(500).json({ error: noCredits ? 'La IA no tiene créditos en OpenAI: escribe el texto a mano o recarga créditos.' : `No se pudo escribir otro texto: ${error.message}` });
+  }
 });
 
 // ---------- Salud ----------
@@ -1166,6 +1334,8 @@ function velamiaCompany() {
     meta_phone_number: '',
     active: true,
     legacy: true,
+    // VELAMIA es de la plataforma: tiene todos los servicios adicionales.
+    addons: { publicaciones: true },
     whatsapp_configured: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID),
     openai_configured: !!process.env.OPENAI_API_KEY
   };
@@ -1259,12 +1429,21 @@ app.post('/api/businesses', requireAdminSession, async (req: Request, res: Respo
 
 app.patch('/api/businesses/:businessId', requireAdminSession, requireUuidParams, async (req: Request, res: Response) => {
   try {
-    const updates: { name?: string; active?: boolean } = {};
+    const updates: { name?: string; active?: boolean; addons?: Record<string, boolean> } = {};
     if (req.body?.name !== undefined) {
       updates.name = String(req.body.name).trim().slice(0, 80);
       if (!updates.name) return res.status(400).json({ error: 'El nombre no puede quedar vacío' });
     }
     if (typeof req.body?.active === 'boolean') updates.active = req.body.active;
+    // Servicios adicionales que se venden aparte: solo la administradora de la plataforma los activa.
+    if (req.body?.addons && typeof req.body.addons === 'object') {
+      const row = await getBusinessRow(req.params.businessId);
+      if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
+      updates.addons = { ...(row.addons || {}) };
+      for (const name of ADDONS) {
+        if (typeof req.body.addons[name] === 'boolean') updates.addons[name] = req.body.addons[name];
+      }
+    }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nada para actualizar' });
 
     const updated = await updateBusinessInfo(req.params.businessId, updates);
@@ -1736,6 +1915,7 @@ async function start() {
 
   keepAwake();
   startFollowUpScheduler();
+  startSocialPostsScheduler();
   startPhotoNudgeScheduler();
   startHealthCheck();
   // Con la página de Facebook configurada, se suscribe sola a la App al arrancar (repetirlo no hace daño).

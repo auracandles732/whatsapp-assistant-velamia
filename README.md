@@ -171,6 +171,20 @@ según los días sin respuesta desde el último mensaje de la clienta:
 - `META_PAGE_TOKEN` puede ser de usuario del sistema: se cambia sola por la de la página y el Instagram se detecta solo. `POST /api/me/connect-social` suscribe la página a la App.
 - Por ahora solo VELAMIA: las demás empresas no tienen estos canales.
 
+## Publicaciones en redes (servicio adicional) (`src/services/socialPosts.ts`, `socialPublisher.ts`, `socialImages.ts`)
+
+- **Para cualquier empresa**: la administradora lo activa en Empresas → "Publicaciones en redes" (`businesses.addons.publicaciones`). VELAMIA lo tiene siempre. Sin el servicio, la pestaña Publicaciones muestra la oferta.
+- **Cómo funciona**: en CRM → Publicaciones se eligen días, hora, redes (Instagram, historia de Instagram, Facebook), fotos por publicación (1 o carrusel) e indicaciones para los textos. "Preparar próximos 7 días" (o solo, cada hora, si está activado) elige productos con foto del catálogo —primero lo que nunca salió o hace más tiempo, variando la categoría y dando prioridad a la temporada (Navidad en oct-dic, etc.)— y la IA escribe los textos en una sola llamada con precios exactos del catálogo. Si la IA falla, va un texto de respaldo.
+- **Nada sale sin aprobación** (salvo que la empresa active "Publicar sin mi aprobación"). Cada 5 minutos se publican las aprobadas cuya hora llegó; si se pasaron más de 6 h, quedan como "No se publicó" para que la empresa decida. También se puede "Publicar ahora", pedir "Otro texto", cambiar día, hora y redes, o descartar (ese día no se vuelve a llenar).
+- Cada red se publica por separado: si una falla, las demás salen y queda "Publicada en parte" con el motivo.
+- **Fotos**: Instagram solo acepta JPG entre 4:5 y 1.91:1. Las fotos PNG o más altas se convierten a JPG sobre blanco, con margen (nunca se recortan), y se guardan en `product-images` como `social-<hash>.jpg` en la carpeta de la empresa. Facebook usa la foto original.
+- **Conexión**: cada empresa conecta su propia página con el botón de la pestaña (el sello del enlace lleva el id de la empresa). Para las demás empresas la conexión sirve solo para publicar; los mensajes de Instagram y Messenger siguen siendo solo de VELAMIA.
+- **Para ponerlo en producción**:
+  1. Aplicar `migrations/024_publicaciones_en_redes.sql` en Supabase (sin ella el servidor avisa una vez y no publica).
+  2. Instagram: el permiso `instagram_content_publish` ya se pide al conectar.
+  3. Facebook: agregar `pages_manage_posts` a la App de Meta y luego poner `META_PUBLISH_FACEBOOK=true` en Render (antes no: un permiso que la App no tiene rompe la ventana de conexión). Después, volver a conectar con Facebook.
+  4. Publicar para otras empresas fuera de los roles de la App requiere App Review de esos permisos.
+
 ## Variables de entorno (Render → Environment)
 
 | Variable | Uso |
@@ -183,6 +197,7 @@ según los días sin respuesta desde el último mensaje de la clienta:
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Supabase (service key: solo servidor) |
 | `CRM_PASSWORD` | Contraseña del CRM |
 | `META_PAGE_ID`, `META_PAGE_TOKEN` | Página de Facebook (Messenger) y su Instagram conectado. Sin ellas, esos canales quedan apagados |
+| `META_PUBLISH_FACEBOOK` | `true` cuando la App de Meta ya tiene `pages_manage_posts`: se pide al conectar y permite publicar en la página |
 
 El número que recibe avisos está en la tabla `business_config` (clave `owner_phone`).
 

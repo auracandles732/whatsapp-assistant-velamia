@@ -24,9 +24,9 @@ export function parseDbTimestamp(value: string): Date {
 // y tocan sus filas; fuera de un negocio (VELAMIA) solo las que no tienen business_id.
 // Mensajes, seguimientos y avisos cuelgan de una conversación, así que quedan separados a través de ella.
 
-const tenantOp = () => (currentTenant() ? 'eq' : 'is');
-const tenantValue = () => currentTenant()?.businessId ?? null;
-const tenantColumns = () => {
+export const tenantOp = () => (currentTenant() ? 'eq' : 'is');
+export const tenantValue = () => currentTenant()?.businessId ?? null;
+export const tenantColumns = () => {
   const tenant = currentTenant();
   return tenant ? { business_id: tenant.businessId } : {};
 };
@@ -1033,6 +1033,8 @@ export interface BusinessRow {
   business_profile: Record<string, any>;
   active: boolean;
   owner_phone: string | null;
+  /** Servicios adicionales activados por la plataforma ({ publicaciones: true }). */
+  addons?: Record<string, boolean> | null;
   created_at: string;
   updated_at: string;
 }
@@ -1068,7 +1070,8 @@ function tenantFromRow(row: BusinessRow): TenantContext {
     whatsappPhoneId: row.meta_phone_number_id || '',
     whatsappToken: decryptSecret(row.meta_access_token),
     wabaId: row.meta_business_account_id || '',
-    openaiApiKey: decryptSecret(row.openai_api_key)
+    openaiApiKey: decryptSecret(row.openai_api_key),
+    addons: row.addons || {}
   };
 }
 
@@ -1129,6 +1132,26 @@ export async function getActiveTenants(): Promise<TenantContext[]> {
       tenants.push(tenantFromRow(row));
     } catch (err: any) {
       console.error(`❌ No se pudieron leer las claves del negocio ${row.name}:`, err.message);
+    }
+  }
+  return tenants;
+}
+
+/** Empresas activas con el servicio de publicaciones: cada una publica en su página aunque no tenga WhatsApp conectado. */
+export async function getPublishingTenants(): Promise<TenantContext[]> {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('active', true)
+    .contains('addons', { publicaciones: true });
+
+  if (error) throw new Error(`Error obteniendo empresas con publicaciones: ${error.message}`);
+  const tenants: TenantContext[] = [];
+  for (const row of data || []) {
+    try {
+      tenants.push(tenantFromRow(row));
+    } catch (err: any) {
+      console.error(`❌ No se pudieron leer los datos de ${row.name}:`, err.message);
     }
   }
   return tenants;
@@ -1202,7 +1225,7 @@ export async function updateBusinessCredentials(businessId: string, credentials:
   return data ? toPublicBusiness(data) : null;
 }
 
-export async function updateBusinessInfo(businessId: string, updates: { name?: string; active?: boolean }) {
+export async function updateBusinessInfo(businessId: string, updates: { name?: string; active?: boolean; addons?: Record<string, boolean> }) {
   const { data, error } = await supabase
     .from('businesses')
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -1261,7 +1284,7 @@ export async function deleteBusinessCompletely(businessId: string) {
   }
 
   // 2) Tablas con business_id propio.
-  for (const table of ['quotations', 'orders', 'conversations', 'products', 'business_access_tokens', 'business_users']) {
+  for (const table of ['quotations', 'orders', 'conversations', 'products', 'social_posts', 'business_access_tokens', 'business_users']) {
     const { data, error } = await supabase.from(table).delete().eq('business_id', businessId).select('id');
     if (error) throw new Error(`Error borrando ${table}: ${error.message}`);
     count(table, (data || []).length);

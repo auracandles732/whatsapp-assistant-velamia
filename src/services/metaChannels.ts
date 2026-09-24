@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
-import { currentTenant, encryptSecret, decryptSecret } from './tenant';
+import { currentTenant, encryptSecret, decryptSecret, VELAMIA_ID } from './tenant';
 import { maskPhone } from './privacy';
 import { getConfig, setConfig } from './supabase';
 
@@ -116,7 +116,7 @@ export const REQUIRED_SCOPES = [
 ];
 
 /** Qué dice Meta de una clave: si sirve, cuándo vence, qué permisos tiene y a qué Instagram le dan acceso. */
-async function tokenInfo(token: string) {
+export async function tokenInfo(token: string) {
   try {
     const { data } = await graph.get(`${GRAPH_API}/debug_token`, { params: { input_token: token, access_token: token } });
     const d = data?.data || {};
@@ -328,10 +328,15 @@ export async function subscribePage(): Promise<string> {
 
 // ---------- Conectar con Facebook desde el CRM ----------
 
+// Publicar en Instagram pide instagram_content_publish y en la página de Facebook, pages_manage_posts.
+export const PUBLISH_SCOPES = { instagram: 'instagram_content_publish', facebook: 'pages_manage_posts' };
+
 // Permisos que se piden al conectar. Solo los que la App tiene agregados: uno que no esté hace fallar la ventana de Facebook.
+// Por eso pages_manage_posts se pide recién cuando la App ya lo tiene (variable META_PUBLISH_FACEBOOK=true en Render).
 export const CONNECT_SCOPES = [
   'pages_show_list', 'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement',
-  'instagram_basic', 'instagram_manage_messages', 'instagram_manage_comments', 'instagram_content_publish', 'business_management'
+  'instagram_basic', 'instagram_manage_messages', 'instagram_manage_comments', PUBLISH_SCOPES.instagram, 'business_management',
+  ...(process.env.META_PUBLISH_FACEBOOK === 'true' ? [PUBLISH_SCOPES.facebook] : [])
 ];
 
 const STORED_KEY = 'meta_page_connection';
@@ -344,24 +349,31 @@ function stateSignature(body: string): string {
   return createHmac('sha256', secret).update(`conectar-meta:${body}`).digest('base64url');
 }
 
-/** Sello de un solo uso que viaja a Facebook y vuelve: prueba que la conexión la pidió alguien con sesión en el CRM. */
-export function createConnectState(now = Date.now()): string {
-  const body = `${now + CONNECT_STATE_MS}.${randomBytes(12).toString('base64url')}`;
+/**
+ * Sello de un solo uso que viaja a Facebook y vuelve: prueba que la conexión la pidió alguien con sesión en el CRM
+ * y dice de qué empresa era (Facebook devuelve a la misma dirección para todas).
+ */
+export function createConnectState(now = Date.now(), businessId: string = currentTenant()?.businessId || VELAMIA_ID): string {
+  const body = `${now + CONNECT_STATE_MS}.${randomBytes(12).toString('base64url')}.${businessId}`;
   return `${body}.${stateSignature(body)}`;
 }
 
-export function verifyConnectState(state: unknown, now = Date.now()): boolean {
+/** Empresa que pidió la conexión, o null si el sello es falso, venció o ya se usó. */
+export function readConnectState(state: unknown, now = Date.now()): string | null {
   const text = String(state || '');
   const cut = text.lastIndexOf('.');
-  if (cut < 0) return false;
+  if (cut < 0) return null;
   const body = text.slice(0, cut);
   const given = Buffer.from(text.slice(cut + 1));
   const expected = Buffer.from(stateSignature(body));
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return false;
-  if (Number(body.split('.')[0]) < now || usedStates.has(body)) return false;
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  const [expires, , businessId] = body.split('.');
+  if (Number(expires) < now || usedStates.has(body)) return null;
   usedStates.add(body);
-  return true;
+  return businessId || VELAMIA_ID;
 }
+
+export const verifyConnectState = (state: unknown, now = Date.now()): boolean => readConnectState(state, now) !== null;
 
 let cachedAppId = '';
 /** Id de la App de Meta: el de META_APP_ID o el de la clave de WhatsApp, que es de la misma App. */
@@ -407,7 +419,9 @@ export async function completeConnection(code: string, redirectUri: string) {
   });
   const pages: any[] = data?.data || [];
   if (pages.length === 0) throw new Error('No elegiste ninguna página de Facebook. Vuelve a conectar y marca tu página.');
-  const wanted = (process.env.META_PAGE_ID || '').trim();
+  // META_PAGE_ID es la página de VELAMIA: otra empresa se queda con la página que eligió.
+  const tenant = currentTenant();
+  const wanted = tenant ? '' : (process.env.META_PAGE_ID || '').trim();
   const page = pages.find(p => String(p.id) === wanted) || pages[0];
 
   const record = {
@@ -420,12 +434,71 @@ export async function completeConnection(code: string, redirectUri: string) {
   };
   await setConfig(STORED_KEY, encryptSecret(JSON.stringify(record)));
   resetPageCredentials();
-  const subscribed = await subscribePage().then(() => true).catch(error => {
+  // Las demás empresas conectan su página para publicar; los mensajes de Instagram y Messenger siguen siendo solo de VELAMIA.
+  const subscribed = tenant ? null : await subscribePage().then(() => true).catch(error => {
     console.error('❌ No se pudo suscribir la página a la App:', metaError(error));
     return false;
   });
-  console.log(`📘 Conectado desde el CRM: página ${record.pageName}${record.instagramUsername ? `, Instagram @${record.instagramUsername}` : ''}`);
+  console.log(`📘 Conectado desde el CRM${tenant ? ` (${tenant.name})` : ''}: página ${record.pageName}${record.instagramUsername ? `, Instagram @${record.instagramUsername}` : ''}`);
   return { pageName: record.pageName, instagramUsername: record.instagramUsername, subscribed, otherPages: pages.length - 1 };
+}
+
+// ---------- Publicar en la página y en Instagram (servicio de publicaciones, para todas las empresas) ----------
+
+export interface PublishingConnection {
+  pageId: string;
+  pageName: string;
+  pageToken: string;
+  instagramId: string;
+  instagramUsername: string;
+}
+
+const publishingCache = new Map<string, { at: number; value: PublishingConnection | null }>();
+
+/**
+ * Página y cuenta de Instagram donde publica la empresa actual. VELAMIA usa la misma conexión que sus mensajes
+ * (botón del CRM o variables de Render); cada empresa, la que conectó con el botón desde su CRM.
+ */
+export async function publishingConnection(): Promise<PublishingConnection | null> {
+  const tenant = currentTenant();
+  const key = tenant?.businessId || VELAMIA_ID;
+  const hit = publishingCache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.value;
+
+  let value: PublishingConnection | null = null;
+  try {
+    const raw = (await getConfig(STORED_KEY)) || '';
+    if (raw) {
+      const r = JSON.parse(decryptSecret(raw));
+      value = { pageId: String(r.pageId), pageName: String(r.pageName || ''), pageToken: String(r.pageToken), instagramId: String(r.instagramId || ''), instagramUsername: String(r.instagramUsername || '') };
+    } else if (!tenant) {
+      const creds = await pageCredentials();
+      if (creds) value = { ...creds, pageName: '', instagramUsername: '' };
+    }
+  } catch (error: any) {
+    console.error('❌ No se pudo leer la conexión de Facebook para publicar:', error.message);
+  }
+  publishingCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+/** Lo que el CRM muestra antes de publicar: dónde se publica y qué permiso falta en cada red. */
+export async function publishingStatus() {
+  const conn = await publishingConnection();
+  if (!conn) return { connected: false, pageName: '', instagramUsername: '', instagram: false, facebookAllowed: false, instagramAllowed: false, missing: [] as string[] };
+  const info = await tokenInfo(conn.pageToken);
+  const has = (scope: string) => info.scopes.includes(scope);
+  const missing = [PUBLISH_SCOPES.instagram, PUBLISH_SCOPES.facebook].filter(s => !has(s));
+  return {
+    connected: info.valid,
+    pageName: conn.pageName,
+    instagramUsername: conn.instagramUsername,
+    instagram: !!conn.instagramId,
+    instagramAllowed: has(PUBLISH_SCOPES.instagram) && !!conn.instagramId,
+    facebookAllowed: has(PUBLISH_SCOPES.facebook),
+    missing,
+    error: info.valid ? '' : info.error
+  };
 }
 
 let storedCache: { at: number; value: PageCredentials | null; raw: string } | null = null;
@@ -452,4 +525,5 @@ export function resetPageCredentials() {
   cached = null;
   storedCache = null;
   statusCache = null;
+  publishingCache.clear();
 }

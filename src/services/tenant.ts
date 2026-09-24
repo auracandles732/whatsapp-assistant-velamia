@@ -15,6 +15,13 @@ export interface TenantContext {
   whatsappToken: string;
   wabaId: string;
   openaiApiKey: string;
+  /** Servicios adicionales que la plataforma le activó ({ publicaciones: true }). */
+  addons: Record<string, boolean>;
+}
+
+/** ¿La empresa actual tiene este servicio adicional? VELAMIA (sin contexto) los tiene todos. */
+export function hasAddon(name: string, tenant: TenantContext | undefined = currentTenant()): boolean {
+  return !tenant || tenant.addons?.[name] === true;
 }
 
 /**
