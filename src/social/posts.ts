@@ -45,7 +45,10 @@ export interface PublishingSettings {
   autoPlan: boolean;
   /** Ya no se usa: todo lo programado se publica sin aprobación. Se conserva para leer configuraciones guardadas. */
   autoApprove: boolean;
-  /** Tono, hashtags fijos, lo que conviene destacar. */
+  /**
+   * Ya no se edita: el agente tiene un solo prompt (Cerebro IA, ai.ts). Se conserva solo para pasar ahí lo que se
+   * había escrito en el cuadro viejo "Indicaciones para Nexly".
+   */
   notes: string;
 }
 

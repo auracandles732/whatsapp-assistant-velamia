@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { getConfig, setConfig, recordAiUsage } from '../services/supabase';
 import { encryptSecret, decryptSecret, maskSecret } from '../services/tenant';
 import { BusinessProfile, profile } from '../config/businessProfile';
-import { getSavedSettings } from './posts';
+import { getSavedSettings, saveSettings } from './posts';
 
 /**
  * La IA propia del agente de redes: su clave de OpenAI y sus modelos, siempre aparte de la del asistente que responde
@@ -68,8 +68,21 @@ export async function getSocialAi(): Promise<SocialAiSettings> {
   }
 }
 
+/**
+ * Un solo prompt para el agente: el texto que había en el cuadro viejo "Indicaciones para Nexly" (Cómo publicar) pasa una
+ * vez a las instrucciones del agente y ese cuadro queda vacío. Así nunca hay dos lugares que digan cosas distintas.
+ */
+export async function migrateOldNotes() {
+  const saved = await getSavedSettings();
+  if (!saved?.notes) return;
+  const current = await getSocialAi();
+  if (!current.prompt) await setConfig(SETTINGS_KEY, JSON.stringify({ ...current, prompt: saved.notes.slice(0, PROMPT_MAX) }));
+  await saveSettings({ ...saved, notes: '' });
+}
+
 /** Lo que ve el CRM: nunca la clave, solo sus últimos 4 caracteres. */
 export async function publicSocialAi() {
+  await migrateOldNotes().catch(error => console.warn('⚠️ No se pudieron pasar las indicaciones viejas:', error.message));
   const s = await getSocialAi();
   let hint = '';
   try {
@@ -83,8 +96,7 @@ export async function publicSocialAi() {
     textModel: s.textModel,
     imageModel: s.imageModel,
     imageQuality: s.imageQuality,
-    // Si aún no escribió instrucciones aquí, se muestran las "Indicaciones" cortas que tenía en Cómo publicar.
-    prompt: s.prompt || (await getSavedSettings())?.notes || '',
+    prompt: s.prompt,
     promptMax: PROMPT_MAX,
     options: { textModels: TEXT_MODELS, imageModels: IMAGE_MODELS, imageQualities: IMAGE_QUALITIES }
   };
@@ -159,11 +171,12 @@ export interface CaptionRequest { theme: string; products: { name: string; price
  * Textos de las publicaciones en una sola llamada (así no se repiten entre sí), con el modelo del agente.
  * Los precios salen del catálogo y se copian tal cual; nunca inventa descuentos, fechas ni escasez.
  */
-export async function writeCaptions(posts: CaptionRequest[], notes: string, p: BusinessProfile = profile()): Promise<string[]> {
+export async function writeCaptions(posts: CaptionRequest[], p: BusinessProfile = profile()): Promise<string[]> {
   if (posts.length === 0) return [];
+  await migrateOldNotes().catch(() => {});
   const { client, textModel, prompt } = await socialAi();
-  // Las instrucciones del agente (Cerebro IA) mandan; las "Indicaciones" cortas de antes quedan como respaldo.
-  const instructions = (prompt || notes || '').trim();
+  // Un solo prompt: las instrucciones del agente (Cerebro IA).
+  const instructions = prompt.trim();
   const b = p.business, s = p.sales;
   const rules = [
     `Eres quien maneja las redes sociales de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. Escribe el texto de cada publicación de Instagram y Facebook de la lista.`,

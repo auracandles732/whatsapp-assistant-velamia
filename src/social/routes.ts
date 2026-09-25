@@ -140,7 +140,7 @@ export function socialRouter(): Router {
       // Sin texto, lo escribe la IA; si no responde, va el texto de respaldo (siempre se puede cambiar antes de que salga).
       if (!caption) {
         const draft = { theme, products } as any;
-        caption = await rewriteCaption(draft, ((await getSavedSettings()) || DEFAULT_SETTINGS).notes).catch(() => fallbackCaption(draft));
+        caption = await rewriteCaption(draft).catch(() => fallbackCaption(draft));
       }
       const [post] = await insertPosts([{
         // Queda programada: se publica sola a esa hora, sin pedir aprobación.
@@ -226,8 +226,7 @@ export function socialRouter(): Router {
     try {
       const post = await getPost(req.params.postId);
       if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
-      const settings = (await getSavedSettings()) || DEFAULT_SETTINGS;
-      res.json({ caption: await rewriteCaption(post, settings.notes) });
+      res.json({ caption: await rewriteCaption(post) });
     } catch (error: any) {
       const noCredits = /credit|quota/i.test(error.message);
       res.status(500).json({ error: noCredits ? 'La IA no tiene créditos en OpenAI: escribe el texto a mano o recarga créditos.' : `No se pudo escribir otro texto: ${error.message}` });

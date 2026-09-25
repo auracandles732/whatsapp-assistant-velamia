@@ -30,7 +30,7 @@ export async function planUpcomingPosts(now = new Date(), days = 7, settingsPara
 
   let captions: string[] = [];
   try {
-    captions = await brain.write(picks.map(x => ({ theme: x.theme, products: x.products.map(c => ({ name: c.name, price: Number(c.price) })) })), settings.notes, p);
+    captions = await brain.write(picks.map(x => ({ theme: x.theme, products: x.products.map(c => ({ name: c.name, price: Number(c.price) })) })), p);
   } catch (error: any) {
     console.warn('⚠️ La IA no escribió los textos de las publicaciones; se usa el texto de respaldo:', error.message);
   }
@@ -48,8 +48,8 @@ export async function planUpcomingPosts(now = new Date(), days = 7, settingsPara
 }
 
 /** Otro texto para una publicación (botón "Otro texto" del CRM). */
-export async function rewriteCaption(post: Pick<SocialPost, 'theme' | 'products'>, notes: string): Promise<string> {
-  const [caption] = await currentBrain().write([{ theme: post.theme || 'Nuestros productos', products: post.products.map(x => ({ name: x.name, price: x.price })) }], notes, profile());
+export async function rewriteCaption(post: Pick<SocialPost, 'theme' | 'products'>): Promise<string> {
+  const [caption] = await currentBrain().write([{ theme: post.theme || 'Nuestros productos', products: post.products.map(x => ({ name: x.name, price: x.price })) }], profile());
   if (!caption) throw new Error('La IA no devolvió un texto');
   return caption;
 }

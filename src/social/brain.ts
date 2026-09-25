@@ -27,7 +27,7 @@ export interface SocialBrain {
   /** Qué mostrar en cada día libre (puede devolver menos si no hay qué publicar). */
   plan(input: PlanInput): Promise<PlannedPost[]>;
   /** Un texto por publicación, en el mismo orden. */
-  write(posts: CaptionRequest[], notes: string, profile: BusinessProfile): Promise<string[]>;
+  write(posts: CaptionRequest[], profile: BusinessProfile): Promise<string[]>;
 }
 
 export const ruleBrain: SocialBrain = {
@@ -36,7 +36,7 @@ export const ruleBrain: SocialBrain = {
     return pickProducts(catalog, recent, slots.length, settings.photosPerPost, month);
   },
   // Los textos los escribe la IA propia del agente (su clave y su modelo, nunca los del asistente de mensajes).
-  write: (posts, notes, profile) => writeCaptions(posts, notes, profile)
+  write: (posts, profile) => writeCaptions(posts, profile)
 };
 
 let brain: SocialBrain = ruleBrain;

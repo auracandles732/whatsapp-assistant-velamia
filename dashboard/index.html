@@ -2232,7 +2232,7 @@
         .pb-mday .pics img.cancelled { opacity: 0.4; }
 
         /* Cómo publicar */
-        .pb-set { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+        .pb-set { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
         .pb-panel { border: 1px solid #E8ECF6; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
         .pb-panel-h { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 800; color: #141C3A; background: none; padding: 0; text-align: left; width: 100%; cursor: default; }
         .pb-panel-h .chev { margin-left: auto; display: none; transition: transform 0.2s; }
@@ -8681,14 +8681,6 @@
                                     <span><b>Modo automático con IA</b><small>{s.autoPlan ? 'Activado: la IA elige los productos, escribe los textos y publica sola en los días y la hora de arriba.' : 'Actívalo y la IA prepara y publica sola cada semana, con las fotos y precios de tu catálogo.'}</small></span>
                                 </label>
                                 <p className="pb-muted" style={{ margin: '4px 0 0' }}>Todo lo que programes (tú o la IA) se publica solo a su hora: no hace falta aprobarlo.</p>
-                            </>
-                        ))}
-                        {panel('notas', <PlatIcon name="doc" size={22} color="#4F5BD5" />, 'Instrucciones del agente', (
-                            <>
-                                <div className="pb-example">
-                                    <PlatIcon name="bulb" size={18} color="#5B45D6" />
-                                    <span>Las instrucciones del agente (objetivo, tono, qué destacar, qué evitar y hashtags) ahora se escriben en la pestaña <b>Cerebro IA</b>, con mucho más espacio y separadas del asistente de WhatsApp.</span>
-                                </div>
                             </>
                         ))}
                     </div>
