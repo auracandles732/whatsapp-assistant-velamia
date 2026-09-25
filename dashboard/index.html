@@ -1812,6 +1812,8 @@
         .mx .mx-emoji { width: 40px; height: 40px; padding: 0; font-size: 21px; background: none; border: none; flex-shrink: 0; }
         .mx .mx-send { width: 50px; height: 50px; padding: 0; border-radius: 50%; background: linear-gradient(135deg, #4F6BF5, #8B5CF6); border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 6px 16px rgba(110, 100, 240, 0.35); color: #fff; font-size: 20px; }
         .mx .mx-send:disabled { opacity: 0.6; }
+        .voice-chip { flex-shrink: 0; height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid #DCE2F5; background: #fff; color: #3A4570; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .voice-chip.on { background: #EEF0FF; border-color: #6C7CF0; color: #3A45B5; }
         .mx .mx-send.rec { background: #E5484D; border-radius: 25px; width: auto; padding: 0 14px; font-size: 14px; font-weight: 700; }
         .mx-emojis { position: absolute; bottom: calc(100% + 6px); right: 10px; background: #fff; border: 1px solid #E1E6F4; border-radius: 16px; box-shadow: 0 12px 30px rgba(20, 30, 80, 0.16); padding: 8px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; z-index: 5; }
         .mx .mx-emojis button { width: 40px; height: 40px; padding: 0; font-size: 22px; background: none; border: none; border-radius: 10px; }
@@ -6689,6 +6691,16 @@
             const [dragOver, setDragOver] = useState(false);
             const [recordingSeconds, setRecordingSeconds] = useState(null);
             const recorderRef = useRef(null);
+            // Voz de VELAMIA (ElevenLabs): las notas grabadas pueden salir con esa voz, y un texto puede enviarse como nota de voz.
+            const [brandVoice, setBrandVoice] = useState(null);
+            const [voiceMode, setVoiceModeState] = useState(() => { try { return localStorage.getItem('nx_voz') || 'marca'; } catch { return 'marca'; } });
+            const voiceModeRef = useRef(voiceMode);
+            voiceModeRef.current = voiceMode;
+            const setVoiceMode = mode => { setVoiceModeState(mode); try { localStorage.setItem('nx_voz', mode); } catch {} };
+            useEffect(() => {
+                api('/api/voice').then(v => setBrandVoice(v.available && v.configured && !v.problem ? { name: v.voiceName || 'VELAMIA' } : null)).catch(() => setBrandVoice(null));
+            }, []);
+            const useBrandVoice = !!brandVoice && voiceMode === 'marca';
             const [noteText, setNoteText] = useState('');
             const isAdmin = session?.role === 'admin';
             // Mientras carga la sesión se muestra todo; el servidor igual rechaza lo que el rol no permite.
@@ -7004,9 +7016,13 @@
                             reader.onerror = reject;
                             reader.readAsDataURL(blob);
                         });
-                        await api('/api/send-audio', { method: 'POST', body: JSON.stringify({ conversationId: conv.id, phoneNumber: conv.phone_number, audioBase64 }) });
+                        const elevenVoice = !!brandVoice && voiceModeRef.current === 'marca';
+                        if (elevenVoice) setPhotoStatus('Pasando la nota de voz a la voz de ' + brandVoice.name + '...');
+                        await api('/api/send-audio', { method: 'POST', body: JSON.stringify({ conversationId: conv.id, phoneNumber: conv.phone_number, audioBase64, elevenVoice }) });
                     } catch (err) {
                         alert('Error enviando la nota de voz: ' + err.message);
+                    } finally {
+                        setPhotoStatus('');
                     }
                     loadMessages(conv.id);
                     loadConversations();
@@ -7343,6 +7359,24 @@
                 } catch (err) {
                     alert('Error borrando la acción: ' + err.message);
                 }
+            }
+
+            // Lo escrito sale como nota de voz con la voz de VELAMIA (no como texto).
+            async function sendVoiceText() {
+                const text = inputText.trim();
+                if (!selectedConv || !text || !brandVoice) return;
+                const conv = selectedConv;
+                setPhotoStatus('Creando la nota de voz con la voz de ' + brandVoice.name + '...');
+                try {
+                    await api('/api/send-voice-text', { method: 'POST', body: JSON.stringify({ conversationId: conv.id, text }) });
+                    setInputText('');
+                } catch (err) {
+                    alert('Error enviando la nota de voz: ' + err.message);
+                } finally {
+                    setPhotoStatus('');
+                }
+                loadMessages(conv.id);
+                loadConversations();
             }
 
             async function sendMessage() {
@@ -7767,12 +7801,18 @@
                                                 ? <button type="button" className="mx-send" aria-label="Guardar nota" onClick={saveNote}><PlatIcon name="note" size={22} color="#fff" /></button>
                                                 : !inputText.trim() && !social
                                                     ? <button type="button" className="mx-send" aria-label="Grabar nota de voz" onClick={startVoice}><MxIcon name="mic" size={23} color="#fff" /></button>
-                                                    : <button type="button" className="mx-send" aria-label="Enviar" onClick={() => { setEmojiOpen(false); sendMessage(); }} disabled={sending}><PlatIcon name="send" size={22} color="#fff" /></button>}
+                                                    : <>
+                                                        {brandVoice && !social && <button type="button" className="mx-round" aria-label={'Enviar como nota de voz con la voz de ' + brandVoice.name} title={'Enviar como nota de voz con la voz de ' + brandVoice.name} onClick={() => { setEmojiOpen(false); sendVoiceText(); }} disabled={!!photoStatus}>🗣️</button>}
+                                                        <button type="button" className="mx-send" aria-label="Enviar" onClick={() => { setEmojiOpen(false); sendMessage(); }} disabled={sending}><PlatIcon name="send" size={22} color="#fff" /></button>
+                                                    </>}
                                         </>
                                     ) : (
                                         <>
                                             <button type="button" className="mx-round" aria-label="Cancelar grabación" onClick={() => stopVoice(true)}><PlatIcon name="trash" size={21} color="#D03535" /></button>
-                                            <div className="mx-field" style={{ alignItems: 'center', padding: '12px 16px', color: '#D03535', fontWeight: 700, fontSize: 15 }}>● Grabando {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}</div>
+                                            <div className="mx-field" style={{ alignItems: 'center', padding: '8px 12px', color: '#D03535', fontWeight: 700, fontSize: 15, gap: 8 }}>
+                                                ● {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}
+                                                {brandVoice && <button type="button" className={'voice-chip' + (useBrandVoice ? ' on' : '')} onClick={() => setVoiceMode(useBrandVoice ? 'mia' : 'marca')} title="Con qué voz sale la nota">{useBrandVoice ? '🎙️ Voz ' + brandVoice.name : '🙂 Mi voz'}</button>}
+                                            </div>
                                             <button type="button" className="mx-send rec" onClick={() => stopVoice(false)}>Enviar</button>
                                         </>
                                     )}
@@ -8128,12 +8168,16 @@
                                     {canEdit && <div className={'nx-input' + (noteMode ? ' note' : '')}>
                                         <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} disabled={!!photoStatus} title="Enviar foto (también puedes pegarla con Ctrl+V o arrastrarla al chat)"><PlatIcon name="camera" size={22} color="#4F5BD5" /></button>
                                         {socialChannel(currentConv.phone_number) ? null : recordingSeconds === null
-                                            ? <button type="button" className="nx-round" onClick={startVoice} title="Grabar nota de voz" style={{ fontSize: '20px' }}>🎤</button>
+                                            ? <React.Fragment>
+                                                <button type="button" className="nx-round" onClick={startVoice} title={brandVoice && useBrandVoice ? 'Grabar nota de voz (sale con la voz de ' + brandVoice.name + ')' : 'Grabar nota de voz'} style={{ fontSize: '20px' }}>🎤</button>
+                                                {brandVoice && inputText.trim() && !noteMode && <button type="button" className="nx-round" onClick={sendVoiceText} disabled={!!photoStatus} title={'Enviar lo escrito como nota de voz con la voz de ' + brandVoice.name} style={{ fontSize: '20px' }}>🗣️</button>}
+                                            </React.Fragment>
                                             : <React.Fragment>
                                                 <button type="button" className="nx-round" onClick={() => stopVoice(true)} title="Cancelar grabación" style={{ fontSize: '18px' }}>✖️</button>
+                                                {brandVoice && <button type="button" className={'voice-chip' + (useBrandVoice ? ' on' : '')} onClick={() => setVoiceMode(useBrandVoice ? 'mia' : 'marca')} title="Con qué voz sale la nota">{useBrandVoice ? '🎙️ Voz ' + brandVoice.name : '🙂 Mi voz'}</button>}
                                                 <button type="button" onClick={() => stopVoice(false)} title="Enviar nota de voz" style={{ height: '46px', padding: '0 16px', borderRadius: '12px', background: '#E5484D', color: '#fff', fontWeight: 700, fontSize: '14px', whiteSpace: 'nowrap', flexShrink: 0 }}>⏹ {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')} · Enviar</button>
                                             </React.Fragment>}
-                                        <textarea
+                                        {recordingSeconds === null && <textarea
                                             placeholder={noteMode ? 'Nota interna: el cliente no la ve...' : 'Escribe un mensaje...'}
                                             value={noteMode ? noteText : inputText}
                                             onChange={e => (noteMode ? setNoteText(e.target.value) : setInputText(e.target.value))}
@@ -8147,7 +8191,7 @@
                                                     if (noteMode) saveNote(); else sendMessage();
                                                 }
                                             }}
-                                        ></textarea>
+                                        ></textarea>}
                                         {summary && summary.phase2 && (
                                             <button type="button" className={'nx-note-btn' + (noteMode ? ' on' : '')} onClick={() => setNoteMode(!noteMode)} title="Nota interna (el cliente no la ve)">
                                                 <PlatIcon name="note" size={18} color={noteMode ? '#7A5F00' : '#4F5BD5'} /> <span className="lbl-hide">Nota</span>
@@ -8155,7 +8199,7 @@
                                         )}
                                         {noteMode
                                             ? <button type="button" className="nx-send" onClick={saveNote}><PlatIcon name="note" size={19} color="#fff" /> Guardar nota</button>
-                                            : <button type="button" className="nx-send" onClick={sendMessage} disabled={sending}><PlatIcon name="send" size={19} color="#fff" /> {sending ? 'Enviando...' : 'Enviar'}</button>}
+                                            : recordingSeconds === null && <button type="button" className="nx-send" onClick={sendMessage} disabled={sending}><PlatIcon name="send" size={19} color="#fff" /> {sending ? 'Enviando...' : 'Enviar'}</button>}
                                     </div>}
                                 </div>
                             ) : (

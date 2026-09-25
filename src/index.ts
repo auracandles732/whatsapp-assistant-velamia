@@ -66,7 +66,7 @@ import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } 
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
 import { socialRouter, startSocialAgent } from './social';
 import { currentAiProblem } from './services/aiStatus';
-import { voiceStatus, setVoiceNotesEnabled, textToMp3, describeVoiceError } from './services/elevenlabs';
+import { voiceStatus, setVoiceNotesEnabled, textToMp3, textToVoice, speechToVoice, describeVoiceError } from './services/elevenlabs';
 import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
@@ -1018,7 +1018,17 @@ app.post('/api/send-audio', requireCrmSession, requireEditorRole, async (req: Re
     if (!conv) return;
     if (isSocialAddress(conv.phone_number)) return res.status(400).json({ error: 'Las notas de voz por ahora solo se envían por WhatsApp' });
     if (!isRecordedAudio(original)) return res.status(400).json({ error: 'El audio no tiene un formato válido, graba de nuevo' });
-    const voice = await toWhatsAppVoice(original);
+    let voice = await toWhatsAppVoice(original);
+    // "Con la voz de VELAMIA": la grabación sale dicha por la voz de ElevenLabs (mismo tono y pausas). Solo VELAMIA.
+    if (req.body?.elevenVoice === true) {
+      if (currentTenant()) return res.status(400).json({ error: 'La voz de VELAMIA es solo para VELAMIA' });
+      try {
+        voice = await speechToVoice(voice);
+      } catch (error: any) {
+        console.error('Error cambiando la voz:', error.message);
+        return res.status(502).json({ error: `No se pudo pasar a la voz de VELAMIA (${describeVoiceError(error)}). Vuelve a intentar o envíala con tu voz.` });
+      }
+    }
     const audioUrl = await uploadBufferToStorage(voice, 'audio/ogg');
     await pauseBot(conv.id);
     const sent = await sendAudioMessage(conv.phone_number, audioUrl);
@@ -1026,6 +1036,35 @@ app.post('/api/send-audio', requireCrmSession, requireEditorRole, async (req: Re
     res.json({ success: true, bot_paused: true });
   } catch (error: any) {
     console.error('Error enviando nota de voz:', error.response?.data || error.message);
+    res.status(500).json({ error: describeWhatsAppError(error) });
+  }
+});
+
+/** Escribe el texto y sale como nota de voz con la voz de VELAMIA (ElevenLabs). Solo VELAMIA y solo por WhatsApp. */
+app.post('/api/send-voice-text', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
+  if (currentTenant()) return res.status(400).json({ error: 'La voz de VELAMIA es solo para VELAMIA' });
+  try {
+    const text = String(req.body?.text || '').replace(/\s+/g, ' ').trim();
+    if (!text) return res.status(400).json({ error: 'Escribe lo que dirá la nota de voz' });
+    // Unos 2 minutos de audio como mucho: más largo cansa y gasta caracteres de ElevenLabs.
+    if (text.length > 1200) return res.status(400).json({ error: 'Es muy largo para una nota de voz (máximo 1200 letras)' });
+    const conv = await conversationForSending(req, res);
+    if (!conv) return;
+    if (isSocialAddress(conv.phone_number)) return res.status(400).json({ error: 'Las notas de voz por ahora solo se envían por WhatsApp' });
+    let voice: Buffer;
+    try {
+      voice = await textToVoice(text);
+    } catch (error: any) {
+      console.error('Error creando la nota de voz:', error.message);
+      return res.status(502).json({ error: `No se pudo crear la nota de voz: ${describeVoiceError(error)}` });
+    }
+    const audioUrl = await uploadBufferToStorage(voice, 'audio/ogg');
+    await pauseBot(conv.id);
+    const sent = await sendAudioMessage(conv.phone_number, audioUrl);
+    await saveMessage(conv.id, 'human', 'audio', audioUrl, getSentMessageId(sent));
+    res.json({ success: true, bot_paused: true });
+  } catch (error: any) {
+    console.error('Error enviando nota de voz escrita:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
   }
 });

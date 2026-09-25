@@ -62,3 +62,28 @@ test('quien no ha comentado antes no está en espera', () => {
   assert.equal(commenterOnCooldown('persona-nueva'), false);
   assert.equal(commenterOnCooldown(''), false);
 });
+
+test('cambio de voz: manda la grabación a ElevenLabs con la voz de VELAMIA y explica los errores en español', async () => {
+  const { speechToMp3, describeVoiceError } = require('../src/services/elevenlabs') as typeof import('../src/services/elevenlabs');
+  const saved = { key: process.env.ELEVENLABS_API_KEY, voice: process.env.ELEVENLABS_VOICE_ID, fetch: globalThis.fetch };
+  process.env.ELEVENLABS_API_KEY = 'clave-de-prueba';
+  process.env.ELEVENLABS_VOICE_ID = 'voz123';
+  const calls: { url: string; form: FormData }[] = [];
+  try {
+    globalThis.fetch = (async (url: string, init: any) => {
+      calls.push({ url, form: init.body });
+      return new Response(Buffer.from('ID3mp3'), { status: 200 });
+    }) as any;
+    const mp3 = await speechToMp3(Buffer.from('OggS-grabacion'));
+    assert.equal(mp3.toString(), 'ID3mp3');
+    assert.match(calls[0].url, /\/speech-to-speech\/voz123\?output_format=mp3_44100_64$/);
+    assert.equal(calls[0].form.get('model_id'), 'eleven_multilingual_sts_v2');
+
+    globalThis.fetch = (async () => new Response('sin saldo', { status: 402 })) as any;
+    await assert.rejects(speechToMp3(Buffer.from('OggS')), (error: any) => /saldo/.test(describeVoiceError(error)));
+  } finally {
+    globalThis.fetch = saved.fetch;
+    if (saved.key === undefined) delete process.env.ELEVENLABS_API_KEY; else process.env.ELEVENLABS_API_KEY = saved.key;
+    if (saved.voice === undefined) delete process.env.ELEVENLABS_VOICE_ID; else process.env.ELEVENLABS_VOICE_ID = saved.voice;
+  }
+});

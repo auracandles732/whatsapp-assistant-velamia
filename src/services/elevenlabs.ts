@@ -42,6 +42,38 @@ export async function textToVoice(text: string): Promise<Buffer> {
   return mp3ToWhatsAppVoice(await textToMp3(text));
 }
 
+/**
+ * Cambio de voz: una grabación (la que hace la dueña en el CRM) dicha con la voz de VELAMIA, con el mismo tono, ritmo y
+ * pausas. Entra la nota de voz en OGG y sale MP3. ElevenLabs cobra según los segundos de audio.
+ */
+export async function speechToMp3(recording: Buffer): Promise<Buffer> {
+  const { apiKey, voiceId } = credentials();
+  if (!apiKey || !voiceId) throw new Error('Faltan ELEVENLABS_API_KEY o ELEVENLABS_VOICE_ID en Render');
+  const form = new FormData();
+  form.append('audio', new Blob([recording], { type: 'audio/ogg' }), 'grabacion.ogg');
+  form.append('model_id', process.env.ELEVENLABS_STS_MODEL || 'eleven_multilingual_sts_v2');
+  // Quita el ruido de fondo de la grabación (ventiladores, calle) antes de cambiar la voz.
+  form.append('remove_background_noise', 'true');
+  const response = await fetch(`${API}/speech-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_64`, {
+    method: 'POST',
+    headers: { 'xi-api-key': apiKey },
+    body: form,
+    signal: AbortSignal.timeout(90_000)
+  });
+  if (!response.ok) {
+    // Mismo formato que axios: así describeVoiceError explica el error en español.
+    const error: any = new Error(`ElevenLabs respondió ${response.status}`);
+    error.response = { status: response.status };
+    throw error;
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/** La grabación de la dueña como nota de voz de WhatsApp con la voz de VELAMIA. */
+export async function speechToVoice(recording: Buffer): Promise<Buffer> {
+  return mp3ToWhatsAppVoice(await speechToMp3(recording));
+}
+
 /** El interruptor del CRM (encendido salvo que la dueña lo apague). */
 export async function voiceNotesEnabled(): Promise<boolean> {
   return (await getConfig(ENABLED_KEY)) !== 'false';
