@@ -225,9 +225,21 @@ export async function listPosts(fromIso: string, toIso: string): Promise<SocialP
   const { data, error } = await supabase.from(POSTS).select('*')
     .filter('business_id', tenantOp(), tenantValue())
     .gte('scheduled_at', fromIso).lte('scheduled_at', toIso)
+    // Las eliminadas no se muestran y su día queda libre para programar otra.
+    .neq('status', 'cancelled')
     .order('scheduled_at', { ascending: true });
   if (error) throw new Error(`Error leyendo publicaciones: ${error.message}`);
   return (data || []) as SocialPost[];
+}
+
+/** Borra una publicación que todavía no salió (ni se está publicando). Devuelve false si ya no se podía. */
+export async function deletePost(id: string): Promise<boolean> {
+  const { data, error } = await supabase.from(POSTS).delete()
+    .eq('id', id).filter('business_id', tenantOp(), tenantValue())
+    .in('status', [...EDITABLE_STATUSES, 'cancelled'])
+    .select('id');
+  if (error) throw new Error(`Error eliminando la publicación: ${error.message}`);
+  return (data || []).length > 0;
 }
 
 export async function getPost(id: string): Promise<SocialPost | null> {
@@ -273,6 +285,11 @@ export async function scheduleDrafts(): Promise<void> {
     .filter('business_id', tenantOp(), tenantValue())
     .eq('status', 'draft');
   if (error) throw new Error(`Error programando publicaciones: ${error.message}`);
+  // Las "descartadas" de antes ya no sirven: se borran para que su día se pueda volver a llenar.
+  const { error: purgeError } = await supabase.from(POSTS).delete()
+    .filter('business_id', tenantOp(), tenantValue())
+    .eq('status', 'cancelled');
+  if (purgeError) throw new Error(`Error limpiando publicaciones: ${purgeError.message}`);
 }
 
 /** Publicaciones programadas cuya hora ya llegó. */
@@ -303,8 +320,8 @@ export async function stuckPosts(olderThan: Date): Promise<SocialPost[]> {
 export const toPostProduct = (c: CatalogItem): PostProduct => ({ name: c.name, image_url: String(c.image_url || ''), price: Number(c.price) });
 
 /**
- * Prepara y programa las publicaciones de los próximos días de publicación que todavía no tienen una. Un día que la
- * empresa descartó no se vuelve a llenar. Si la IA no responde, cada publicación lleva un texto de respaldo.
+ * Prepara y programa las publicaciones de los próximos días de publicación que todavía no tienen una (un día cuya
+ * publicación se eliminó vuelve a quedar libre). Si la IA no responde, cada publicación lleva un texto de respaldo.
  */
 export async function planUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<SocialPost[]> {
   const settings = settingsParam || (await getSavedSettings()) || DEFAULT_SETTINGS;

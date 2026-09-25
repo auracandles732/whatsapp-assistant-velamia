@@ -65,7 +65,7 @@ import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
 import {
-  listPosts, getPost, insertPosts, updatePost, getSavedSettings, saveSettings, planUpcomingPosts, rewriteCaption,
+  listPosts, getPost, insertPosts, updatePost, deletePost, getSavedSettings, saveSettings, planUpcomingPosts, rewriteCaption,
   DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus, PostChannel
 } from './services/socialPosts';
 import { claimAndPublish, startSocialPostsScheduler } from './services/socialPublisher';
@@ -477,6 +477,16 @@ app.post('/api/posts/:postId/publish', requireCrmSession, requireEditorRole, req
     const done = await claimAndPublish(post, EDITABLE_STATUSES);
     if (!done) return res.status(409).json({ error: 'Esta publicación ya se está publicando o ya salió' });
     res.json({ post: done });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Elimina una publicación que todavía no salió: desaparece del calendario y su día queda libre. */
+app.delete('/api/posts/:postId', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
+  try {
+    if (!(await deletePost(req.params.postId))) return res.status(409).json({ error: 'Esta publicación ya salió o se está publicando: no se puede eliminar' });
+    res.json({ deleted: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

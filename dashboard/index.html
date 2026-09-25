@@ -8353,7 +8353,7 @@
         }
 
         // Ver, editar o publicar una publicación (lo programado sale solo a su hora, sin aprobarlo).
-        function PbPostEditor({ post, canEdit, onChanged, onClose }) {
+        function PbPostEditor({ post, canEdit, onChanged, onDeleted, onClose }) {
             const [caption, setCaption] = useState(post.caption);
             const [when, setWhen] = useState(toTzInput(post.scheduled_at));
             const [channels, setChannels] = useState(post.channels);
@@ -8390,8 +8390,8 @@
 
             const save = () => run('save', async () => { onChanged(await patch({})); setMsg('Guardado: se publicará sola a esa hora'); });
             const discard = () => {
-                if (!confirm('¿Descartar esta publicación? Ese día no se volverá a preparar otra.')) return;
-                run('discard', async () => { onChanged(await patch({ status: 'cancelled' })); onClose(); });
+                if (!confirm('¿Eliminar esta publicación? Se borra del calendario y ese día queda libre.')) return;
+                run('discard', async () => { await api(`/api/posts/${post.id}`, { method: 'DELETE' }); onDeleted(post.id); onClose(); });
             };
             const rewrite = () => run('rewrite', async () => {
                 const r = await api(`/api/posts/${post.id}/rewrite`, { method: 'POST' });
@@ -8445,7 +8445,7 @@
                                     {(dirty || post.status === 'failed') && <button type="button" className="pb-btn main sm" disabled={!!busy || tooLong} onClick={save}>{busy === 'save' ? 'Guardando…' : post.status === 'failed' ? 'Programar de nuevo' : 'Guardar cambios'}</button>}
                                     <button type="button" className="pb-btn sm" disabled={!!busy} onClick={rewrite}>{busy === 'rewrite' ? 'Escribiendo…' : '✨ Otro texto'}</button>
                                     <button type="button" className="pb-btn sm" disabled={!!busy || tooLong || channels.length === 0} onClick={publishNow}>{busy === 'publish' ? 'Publicando…' : 'Publicar ahora'}</button>
-                                    <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={discard}>Descartar</button>
+                                    <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={discard}>{busy === 'discard' ? 'Eliminando…' : 'Eliminar'}</button>
                                     {msg && <span className="pb-msg">{msg}</span>}
                                 </div>
                             )}
@@ -8638,7 +8638,7 @@
                 const to = fromTzInput(`${addDays(gridStart, mode === 'month' ? 43 : 8)}T00:00`);
                 return api(`/api/posts?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).then(d => {
                     setData(d);
-                    setPosts(d.posts || []);
+                    setPosts((d.posts || []).filter(p => p.status !== 'cancelled'));
                     if (d.settings) setSettings(prev => prev || d.settings);
                     setError('');
                     return d;
@@ -8688,6 +8688,7 @@
 
             const s = settings || data.settings;
             const setS = changes => { setSettings({ ...s, ...changes }); setSavedMsg(''); };
+            const removePost = id => setPosts(list => list.filter(p => p.id !== id));
             const replacePost = updated => {
                 if (!updated) return;
                 setPosts(list => list.map(p => (p.id === updated.id ? updated : p)));
@@ -8775,8 +8776,10 @@
                 try {
                     const patch = body => api(`/api/posts/${post.id}`, { method: 'PATCH', body: JSON.stringify(body) }).then(r => r.post);
                     if (action === 'cancel') {
-                        if (!confirm('¿Descartar esta publicación? Ese día no se volverá a preparar otra.')) return;
-                        replacePost(await patch({ status: 'cancelled' }));
+                        if (!confirm('¿Eliminar esta publicación? Se borra del calendario y ese día queda libre.')) return;
+                        await api(`/api/posts/${post.id}`, { method: 'DELETE' });
+                        removePost(post.id);
+                        setNotice({ ok: true, text: s.autoPlan ? 'Publicación eliminada. En modo automático la IA puede preparar otra para ese día.' : 'Publicación eliminada.' });
                     }
                     if (action === 'publish') {
                         const where = post.channels.map(c => POST_CHANNEL_NAMES[c]).join(', ');
@@ -8796,7 +8799,7 @@
                 return [
                     { label: editable ? 'Editar' : 'Ver detalle', onClick: () => setEditing(post) },
                     editable && { label: 'Publicar ahora', onClick: () => quick(post, 'publish') },
-                    editable && { label: 'Descartar', danger: true, onClick: () => quick(post, 'cancel') }
+                    editable && { label: 'Eliminar', danger: true, onClick: () => quick(post, 'cancel') }
                 ];
             };
 
@@ -8883,7 +8886,7 @@
 
             const modals = (
                 <>
-                    {editing && <PbPostEditor post={editing} canEdit={canEdit} onChanged={replacePost} onClose={() => setEditing(null)} />}
+                    {editing && <PbPostEditor post={editing} canEdit={canEdit} onChanged={replacePost} onDeleted={removePost} onClose={() => setEditing(null)} />}
                     {creating && <PbNewPost settings={s} day={creating.day} onClose={() => setCreating(null)} onCreated={post => { setCreating(null); setPosts(list => [...list, post]); setNotice({ ok: true, text: 'Publicación programada: saldrá sola a su hora.' }); }} />}
                 </>
             );
