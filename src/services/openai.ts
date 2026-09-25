@@ -5,6 +5,7 @@ import { ticsIn, stripFillerOpening, withoutBrokenChars } from './muletillas';
 import { addOpeningQuestionMarks, withoutQuotes } from './puntuacion';
 import { BusinessProfile, profile, todayLocal, formatDate, findPackaging, getOpenAIKey, getOpenAIModel, getOpenAIVisionModel, usesProductUnits, usesGenderTagging, packagingChange, PackagingChange } from '../config/businessProfile';
 import { customerSex, mentionedGenderedCategory, categoryPhotos, neutralFirstMixed } from './photoBackup';
+import { reportAiSuccess } from './aiStatus';
 
 // Cache de clientes OpenAI por API key (uno por negocio)
 const openaiClients = new Map<string, OpenAI>();
@@ -31,6 +32,8 @@ const reasoningFor = (model: string) => (/^(gpt-5|o\d)/.test(model) ? { reasonin
 
 /** Anota lo que consumió la llamada para poder ver después cuánto gasta cada empresa. */
 function track(purpose: string, model: string, response: any) {
+  // La IA respondió: si el CRM mostraba que estaba fallando (por ejemplo, sin créditos), deja de mostrarlo.
+  reportAiSuccess();
   const u = response?.usage;
   if (!u) return;
   void recordAiUsage({

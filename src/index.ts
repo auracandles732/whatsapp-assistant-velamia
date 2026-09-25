@@ -69,6 +69,7 @@ import {
   DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus, PostChannel
 } from './services/socialPosts';
 import { claimAndPublish, startSocialPostsScheduler } from './services/socialPublisher';
+import { currentAiProblem } from './services/aiStatus';
 import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
@@ -807,7 +808,9 @@ app.get('/api/stats', requireCrmSession, async (_req: Request, res: Response) =>
       total: conversations.length,
       active: conversations.filter((c: any) => c.last_message_time && parseDbTimestamp(c.last_message_time).getTime() > dayAgo).length,
       orders: metrics.totalOrders,
-      revenue: metrics.totalRevenue
+      revenue: metrics.totalRevenue,
+      // El CRM lo consulta seguido: si la IA está fallando (sin créditos) lo muestra arriba bien visible.
+      aiProblem: currentAiProblem()
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1011,6 +1014,8 @@ app.put('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEdito
     if (req.body?.items !== undefined) {
       const sale = buildSale(req.body, await getAllProducts());
       await updateQuotationItems(current.id, sale.products, sale.total);
+      // Cambiarla le da 3 días más de validez: una vencida vuelve a quedar pendiente.
+      if (current.status === 'expired') await updateQuotationStatus(current.id, 'pending');
     }
     if (typeof req.body?.customer_name === 'string') await updateQuotationCustomer(current.id, req.body.customer_name.trim().slice(0, 120));
     res.json(await getQuotationById(current.id));

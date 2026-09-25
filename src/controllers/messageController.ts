@@ -57,6 +57,7 @@ import { profile, todayLocal, formatDate, quantityText, usesProductUnits, usesGe
 import { uploadBufferToStorage } from '../services/storage';
 import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
+import { reportAiFailure, isNoCredits } from '../services/aiStatus';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
 import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge, sameCategoryAsMost } from '../services/photoBackup';
 import { textToVoice } from '../services/elevenlabs';
@@ -786,8 +787,10 @@ async function respondToBatch(batch: PendingBatch) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
       // Una vez por hora por chat: si la IA está caída (por ejemplo sin crédito), cada mensaje generaría otro aviso.
       console.error('❌ La IA no respondió:', error.message);
+      reportAiFailure(error);
       if (!(await hasRecentNotification(conversationId, 'bot_error', 1))) {
-        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: customerDetail });
+        const reason = isNoCredits(error) ? '⚠️ OpenAI se quedó sin créditos: recárgalos y el bot vuelve a responder solo. Su mensaje: ' : '';
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'bot_error', detail: reason + customerDetail });
       }
       return;
     }

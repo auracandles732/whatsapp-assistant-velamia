@@ -27,7 +27,8 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 - **Servidor:** Node 22 + TypeScript + Express en Render (plan gratuito, auto-ping cada 10 min).
 - **Cerebro:** una sola llamada a la IA (`planTurn`) decide la respuesta, qué fotos del catálogo enviar,
   la intención (cotización / pedido) y si el caso requiere revisión manual.
-- **CRM:** `dashboard/index.html` (React sin compilación). Nunca habla directo con Supabase:
+- **CRM:** `dashboard/index.html` (React). El servidor lo traduce al arrancar (`src/services/crmBuild.ts`, esbuild) y lo
+  sirve como `/crm/app.js`, así la página funciona con protección estricta de scripts. Nunca habla directo con Supabase:
   todo pasa por `/api/*` con token de sesión.
 
 ## Estructura
@@ -43,6 +44,17 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 | `src/services/whatsapp.ts` | Envío de mensajes y descarga de archivos (Graph API v25.0) |
 | `src/services/storage.ts` | Subida y borrado de archivos en Supabase Storage |
 | `src/services/notifications.ts` | Avisos a la dueña por WhatsApp |
+| `src/services/tenant.ts` | Empresa en curso (cada empresa con su WhatsApp, su OpenAI y sus datos) y servicios adicionales |
+| `src/services/metaChannels.ts`, `src/controllers/socialController.ts` | Instagram y Messenger: conexión, mensajes y comentarios |
+| `src/services/socialPosts.ts`, `socialPublisher.ts`, `socialImages.ts` | Publicaciones en redes: calendario, publicación y fotos |
+| `src/services/manualSales.ts` | Cotizaciones y pedidos armados a mano en el CRM (mismo cálculo que el bot) |
+| `src/services/crmOverview.ts` | Resumen de hoy, lista de chats y resumen de cada cliente para el CRM |
+| `src/services/followups.ts` | Seguimientos automáticos con plantillas |
+| `src/services/health.ts` | Revisión diaria de las empresas (claves de Meta y OpenAI) |
+| `src/services/aiStatus.ts` | Anota si la IA está fallando (por ejemplo, sin créditos) para mostrarlo en el CRM |
+| `src/services/crmBuild.ts` | Traduce el CRM al arrancar el servidor |
+| `dashboard/index.html` | El CRM completo (computadora y celular) |
+| `tests/` | Pruebas (`npm test`): nunca escriben en la base real ni envían mensajes |
 | `migrations/` | Historial de VELAMIA. Ninguna borra tablas ni datos |
 | `migrations/NO_EJECUTAR/` | Migración antigua que **borra todas las tablas**: solo como referencia, nunca correrla |
 | `setup/base_nueva.sql` | Instalación completa de la base para un negocio nuevo |
@@ -93,6 +105,23 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
   colores, empaque, nombre, cantidad, ciudad y fecha. Con la cantidad ya dicha avisa a la dueña
   (`custom_design_request`, con "con foto de referencia" si la envió) y se pausa. El mismo diseño no se vuelve a
   avisar; si la dueña ya dio el precio en el chat, el bot puede repetirlo (y su anticipo) al cerrar la venta.
+
+## CRM
+
+- **Secciones:** Conversaciones (separadas por red: WhatsApp, Instagram y Facebook, cada una con su color), Cotizaciones,
+  Pedidos, Catálogo, Publicaciones, Configuración (perfil del negocio) y Consumo de IA.
+- **Celular:** diseño propio (se activa con pantallas de hasta 760 px): barra de abajo, chat a pantalla completa con
+  acciones rápidas, Resumen de hoy (Estadísticas), catálogo con alta en 3 pasos, cotizaciones con detalle, configuración
+  por secciones con vista previa y consumo con gráficos. La computadora mantiene su diseño.
+- **Dirección de cada pantalla:** la sección abierta queda en la dirección (`#/cotizaciones`, `#/conversaciones/<chat>`):
+  al recargar se vuelve ahí, y el botón "atrás" del celular o del navegador cierra el chat o vuelve a la sección anterior.
+- **Cotizaciones y pedidos a mano** (`POST /api/quotations`, `PUT /api/quotations/:id`, `POST /api/orders`): se calculan
+  igual que los del bot (precios del catálogo, empaques y tarifario de envíos). "Enviar" (`POST /api/quotations/:id/send`)
+  manda la cotización con las fotos de los productos por el canal de la clienta (WhatsApp, Instagram o Messenger) o por
+  otro chat elegido, y pausa el bot en ese chat como cualquier mensaje escrito desde el CRM. Estados: pendiente,
+  enviada, aprobada y vencida (las pendientes vencen a los 3 días; editarla le da 3 días más).
+- **IA fallando:** si OpenAI se queda sin créditos (o falla), el bot no responde; el CRM lo muestra arriba en rojo en todas
+  las pantallas y el aviso a la dueña dice el motivo. Desaparece solo con la primera respuesta que funcione.
 
 ## Pedidos (pestaña del CRM)
 
@@ -174,10 +203,11 @@ según los días sin respuesta desde el último mensaje de la clienta:
 ## Publicaciones en redes (servicio adicional) (`src/services/socialPosts.ts`, `socialPublisher.ts`, `socialImages.ts`)
 
 - **Para cualquier empresa**: la administradora lo activa en Empresas → "Publicaciones en redes" (`businesses.addons.publicaciones`). VELAMIA lo tiene siempre. Sin el servicio, la pestaña Publicaciones muestra la oferta.
-- **Cómo funciona**: en CRM → Publicaciones se eligen días, hora, redes (Instagram, historia de Instagram, Facebook), fotos por publicación (1 o carrusel) e indicaciones para los textos. "Preparar próximos 7 días" (o solo, cada hora, si está activado) elige productos con foto del catálogo —primero lo que nunca salió o hace más tiempo, variando la categoría y dando prioridad a la temporada (Navidad en oct-dic, etc.)— y la IA escribe los textos en una sola llamada con precios exactos del catálogo. Si la IA falla, va un texto de respaldo.
-- **Nada sale sin aprobación** (salvo que la empresa active "Publicar sin mi aprobación"). Cada 5 minutos se publican las aprobadas cuya hora llegó; si se pasaron más de 6 h, quedan como "No se publicó" para que la empresa decida. También se puede "Publicar ahora", pedir "Otro texto", cambiar día, hora y redes, o descartar (ese día no se vuelve a llenar).
+- **Cómo funciona**: en CRM → Publicaciones se eligen días, hora, redes (Instagram, historia de Instagram, Facebook), fotos por publicación (1 o carrusel) e indicaciones para los textos. "Preparar próximos 7 días" elige productos con foto del catálogo —primero lo que nunca salió o hace más tiempo, variando la categoría y dando prioridad a la temporada (Navidad en oct-dic, etc.)— y la IA escribe los textos en una sola llamada con precios exactos del catálogo. Si la IA falla, va un texto de respaldo.
+- **Lo programado sale solo, sin aprobación**: cada publicación (creada por la empresa o por la IA) queda "Programada" y se publica a su hora. Cada 5 minutos se publican las que llegaron a su hora; si se pasaron más de 6 h (servidor caído), quedan como "No se publicó" para que la empresa elija otra hora o "Programar de nuevo". También se puede "Publicar ahora", pedir "Otro texto", cambiar día, hora y redes, o descartar (ese día no se vuelve a llenar).
+- **Modo automático con IA** (interruptor en la pestaña): la IA prepara y programa los próximos 7 días al encenderlo y luego revisa cada hora que la semana siga completa. Apagado, solo sale lo que programe la empresa.
 - Cada red se publica por separado: si una falla, las demás salen y queda "Publicada en parte" con el motivo.
-- **Fotos**: Instagram solo acepta JPG entre 4:5 y 1.91:1. Las fotos PNG o más altas se convierten a JPG sobre blanco, con margen (nunca se recortan), y se guardan en `product-images` como `social-<hash>.jpg` en la carpeta de la empresa. Facebook usa la foto original.
+- **Fotos**: cada foto se arma para Instagram sin recortarla: publicación en 4:5 (1080×1350, con la foto dentro del ancho que muestra la cuadrícula del perfil) e historia en 9:16 (1080×1920), con la foto completa al centro y la misma foto difuminada de fondo. Se guardan en `product-images` como `social-<feed|story>-v2-<hash>.jpg` en la carpeta de la empresa (una sola vez por foto). Facebook usa la foto original.
 - **Conexión**: cada empresa conecta su propia página con el botón de la pestaña (el sello del enlace lleva el id de la empresa). Para las demás empresas la conexión sirve solo para publicar; los mensajes de Instagram y Messenger siguen siendo solo de VELAMIA.
 - **Para ponerlo en producción**:
   1. Aplicar `migrations/024_publicaciones_en_redes.sql` en Supabase (sin ella el servidor avisa una vez y no publica).
@@ -198,6 +228,12 @@ según los días sin respuesta desde el último mensaje de la clienta:
 | `CRM_PASSWORD` | Contraseña del CRM |
 | `META_PAGE_ID`, `META_PAGE_TOKEN` | Página de Facebook (Messenger) y su Instagram conectado. Sin ellas, esos canales quedan apagados |
 | `META_PUBLISH_FACEBOOK` | `true` cuando la App de Meta ya tiene `pages_manage_posts`: se pide al conectar y permite publicar en la página |
+| `META_APP_ID` | Id de la App de Meta (botón "Conectar con Facebook") |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | Cuenta de WhatsApp Business: plantillas de seguimiento y avisos |
+| `BUSINESS_SECRETS_KEY` | Cifra las claves de Meta y OpenAI que guarda cada empresa |
+| `PLATFORM_ALERT_PHONE` | A quién avisa la revisión diaria de empresas (si falta, al número de la dueña) |
+| `RENDER_EXTERNAL_URL` | Lo pone Render: auto-ping, enlaces del CRM en los avisos y conexión con Facebook |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Notas de voz (solo VELAMIA) |
 
 El número que recibe avisos está en la tabla `business_config` (clave `owner_phone`).
 
@@ -206,7 +242,10 @@ El número que recibe avisos está en la tabla `business_config` (clave `owner_p
 ```bash
 npm install
 npm run build
+npm test
 ```
 
-Para probar localmente, crear `.env` con las variables anteriores y ejecutar `npm run dev`.
-Cada push a `main` despliega en Render automáticamente.
+- Cada push a `main` despliega en Render automáticamente.
+- **Nunca correr el servidor local con el `.env` de producción**: escribe en la base real, envía WhatsApp de verdad y
+  corre los seguimientos en paralelo a Render. Para ver cambios del CRM se usa una base simulada (sin WhatsApp ni datos reales).
+- Las pruebas (`tests/`) simulan Meta, WhatsApp y la base: nunca publican ni envían nada.

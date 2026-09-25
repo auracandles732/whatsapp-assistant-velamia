@@ -2251,6 +2251,10 @@
         .pb-check { display: flex; align-items: center; gap: 10px; font-size: 14.5px; color: #1E2A4A; cursor: pointer; padding: 3px 0; }
         .pb-check input { width: 20px; height: 20px; accent-color: #5B5BF0; cursor: pointer; margin: 0; flex-shrink: 0; }
         .pb-toggle { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; padding: 4px 0; }
+        .nx-ai-alert { display: flex; gap: 10px; align-items: flex-start; flex-shrink: 0; margin: 10px 16px 0; padding: 12px 14px; border-radius: 14px; background: #FDECEC; color: #8A1C1C; border: 1px solid #F5C2C2; }
+        .nx-ai-alert b { display: block; font-size: 14px; }
+        .nx-ai-alert span { display: block; font-size: 13px; line-height: 1.4; margin-top: 2px; }
+        .mx .nx-ai-alert { margin: 10px 14px 0; }
         .pb-auto { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; background: #fff; border: 1px solid #E1E6F4; box-shadow: 0 4px 16px rgba(50, 70, 160, 0.06); }
         .pb-auto.on { background: linear-gradient(135deg, #EEF0FF, #F5EEFF); border-color: #C9CFF7; }
         .pb-auto .ic { width: 44px; height: 44px; border-radius: 14px; background: #EEF0FF; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -6420,6 +6424,21 @@
             );
         }
 
+        // Aviso bien visible cuando el bot no puede responder porque la IA falla (lo más común: OpenAI sin créditos).
+        function AiProblemBanner({ problem }) {
+            if (!problem) return null;
+            const credits = problem.reason === 'credits';
+            return (
+                <div className="nx-ai-alert" role="alert">
+                    <PlatIcon name="warn" size={22} />
+                    <div>
+                        <b>{credits ? 'El asistente no está respondiendo: OpenAI se quedó sin créditos' : 'El asistente no pudo responder un mensaje'}</b>
+                        <span>{credits ? 'Recarga créditos en platform.openai.com (Billing) y el bot vuelve a responder solo. Mientras tanto, responde tú desde los chats.' : 'La IA falló. Revisa los chats y responde tú; si se repite, revisa la clave de OpenAI.'}</span>
+                    </div>
+                </div>
+            );
+        }
+
         // La sección abierta queda en la dirección (#/cotizaciones, #/conversaciones/<chat>…): al recargar se vuelve ahí.
         const APP_TABS = ['conversaciones', 'estadisticas', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'configuracion', 'consumo', 'claves'];
         function readRoute() {
@@ -6512,12 +6531,35 @@
             const [mxQuoteId, setMxQuoteId] = useState(() => (readRoute().tab === 'cotizaciones' ? readRoute().id || null : null));
             const [showKpis, setShowKpis] = useState(false);
             const [mxToast, setMxToast] = useState('');
+            // La IA está fallando (por ejemplo, OpenAI sin créditos): se muestra arriba en todas las pantallas.
+            const [aiProblem, setAiProblem] = useState(null);
             useEffect(() => { if (MX_SECTIONS[activeTab]) setLastOther(activeTab); }, [activeTab]);
+            // Cada sección, chat o cotización abierta es un paso del historial: el botón "atrás" del celular (o del
+            // navegador) cierra el chat o vuelve a la sección anterior en lugar de salir del CRM.
+            const lastHash = useRef(null);
+            const conversationsRef = useRef([]);
+            conversationsRef.current = conversations;
             useEffect(() => {
                 const id = activeTab === 'conversaciones' ? selectedConv?.id : activeTab === 'cotizaciones' && mobile ? mxQuoteId : '';
                 const hash = '#/' + activeTab + (id ? '/' + id : '');
-                if (window.location.hash !== hash) window.history.replaceState(null, '', hash);
+                const first = lastHash.current === null;
+                lastHash.current = hash;
+                if (window.location.hash === hash) return;
+                if (first) window.history.replaceState({ parent: null }, '', hash);
+                else if ((window.history.state || {}).parent === hash) window.history.back();
+                else window.history.pushState({ parent: window.location.hash }, '', hash);
             }, [activeTab, selectedConv?.id, mxQuoteId, mobile]);
+            useEffect(() => {
+                const onPop = () => {
+                    const route = readRoute();
+                    lastHash.current = window.location.hash;
+                    setActiveTab(route.tab);
+                    if (route.tab === 'conversaciones') setSelectedConv(route.id ? conversationsRef.current.find(c => c.id === route.id) || null : null);
+                    if (route.tab === 'cotizaciones') setMxQuoteId(route.id || null);
+                };
+                window.addEventListener('popstate', onPop);
+                return () => window.removeEventListener('popstate', onPop);
+            }, []);
             useEffect(() => {
                 if (!routeConv.current || conversations.length === 0) return;
                 const conv = conversations.find(c => c.id === routeConv.current);
@@ -7017,7 +7059,9 @@
 
             async function loadStats() {
                 try {
-                    setStats(await api('/api/stats'));
+                    const data = await api('/api/stats');
+                    setStats(data);
+                    setAiProblem(data.aiProblem || null);
                 } catch (err) {
                     console.error('Error cargando stats:', err);
                 }
@@ -7637,6 +7681,7 @@
                     <div className="container nx-page mx">
                         <div className="main">
                             <MxTop branding={branding} session={session} botEnabled={botEnabled} canConfigure={canConfigure} onToggleBot={toggleBotStatus} alert={allNeeds > 0} onBell={() => goList('needs')} />
+                            <AiProblemBanner problem={aiProblem} />
                             {activeTab === 'claves' && session?.business && !session.business.legacy && (
                                 <div className="settings-container nx-keys-page">
                                     <OwnerKeysPanel business={session.business} onChanged={loadSession} />
@@ -7717,6 +7762,7 @@
                             </div>
                         </div>
 
+                            <AiProblemBanner problem={aiProblem} />
                             {statsExpanded && (
                             <div className="stats">
                                 <div className="stat-card">
