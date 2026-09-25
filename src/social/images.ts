@@ -2,8 +2,8 @@ import axios from 'axios';
 import { createHash } from 'crypto';
 import { PNG } from 'pngjs';
 import jpeg from 'jpeg-js';
-import { supabase } from './supabase';
-import { currentTenant } from './tenant';
+import { supabase } from '../services/supabase';
+import { currentTenant } from '../services/tenant';
 
 /**
  * Instagram solo publica fotos JPG con proporción entre 4:5 (vertical) y 1.91:1 (horizontal), la cuadrícula del perfil

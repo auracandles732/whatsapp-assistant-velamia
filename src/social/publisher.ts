@@ -1,9 +1,10 @@
 import axios from 'axios';
-import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from './metaChannels';
-import { instagramReadyUrl, ImageKind } from './socialImages';
-import { SocialPost, PostChannel, PostStatus, duePosts, stuckPosts, updatePost, getSavedSettings, planUpcomingPosts, scheduleDrafts } from './socialPosts';
-import { getPublishingTenants } from './supabase';
-import { runWithTenant } from './tenant';
+import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from '../services/metaChannels';
+import { instagramReadyUrl, ImageKind } from './images';
+import { SocialPost, PostChannel, PostStatus, PostMedia, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts } from './posts';
+import { planUpcomingPosts } from './planner';
+import { getPublishingTenants } from '../services/supabase';
+import { runWithTenant } from '../services/tenant';
 
 /**
  * Publica en Instagram (publicación o historia) y en la página de Facebook. Cada red se intenta por separado:
@@ -14,25 +15,33 @@ const GRAPH_API = 'https://graph.facebook.com/v25.0';
 const graph = axios.create({ timeout: 60_000 });
 const metaError = (error: any) => String(error?.response?.data?.error?.message || error?.message || error);
 
-// Instagram procesa la foto antes de dejar publicarla: se consulta hasta que esté lista.
+// Instagram procesa la foto o el video antes de dejar publicarlo: se consulta hasta que esté listo.
 const READY_CHECKS = 10;
+// Un video tarda más: hasta ~3 minutos con la espera normal de 3 s.
+const VIDEO_CHECKS = 60;
 const READY_WAIT_MS = 3000;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export type ChannelResult = { id?: string; permalink?: string; error?: string };
 
-async function waitUntilReady(containerId: string, token: string, waitMs: number) {
-  for (let i = 0; i < READY_CHECKS; i++) {
-    const { data } = await graph.get(`${GRAPH_API}/${containerId}`, { params: { fields: 'status_code', access_token: token } });
-    if (data?.status_code === 'FINISHED') return;
-    if (data?.status_code === 'ERROR' || data?.status_code === 'EXPIRED') throw new Error('Instagram no pudo procesar la foto');
-    await wait(waitMs);
-  }
-  throw new Error('Instagram tardó demasiado en procesar la foto');
+/** Lo que se publica: las fotos y videos de la biblioteca elegidos o, si no hay, las fotos de los productos. */
+export function mediaOf(post: SocialPost): PostMedia[] {
+  if (post.media && post.media.length > 0) return post.media.slice(0, 10);
+  return post.products.slice(0, 10).map(p => ({ type: 'image' as const, url: p.image_url }));
 }
 
-async function publishContainer(conn: PublishingConnection, containerId: string, waitMs: number): Promise<ChannelResult> {
-  await waitUntilReady(containerId, conn.pageToken, waitMs);
+async function waitUntilReady(containerId: string, token: string, waitMs: number, checks = READY_CHECKS) {
+  for (let i = 0; i < checks; i++) {
+    const { data } = await graph.get(`${GRAPH_API}/${containerId}`, { params: { fields: 'status_code', access_token: token } });
+    if (data?.status_code === 'FINISHED') return;
+    if (data?.status_code === 'ERROR' || data?.status_code === 'EXPIRED') throw new Error('Instagram no pudo procesar el archivo (revisa que el video sea MP4 o MOV)');
+    await wait(waitMs);
+  }
+  throw new Error('Instagram tardó demasiado en procesar el archivo');
+}
+
+async function publishContainer(conn: PublishingConnection, containerId: string, waitMs: number, checks = READY_CHECKS): Promise<ChannelResult> {
+  await waitUntilReady(containerId, conn.pageToken, waitMs, checks);
   const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media_publish`, { creation_id: containerId }, { params: { access_token: conn.pageToken } });
   const id = String(data?.id || '');
   const permalink = await graph.get(`${GRAPH_API}/${id}`, { params: { fields: 'permalink', access_token: conn.pageToken } })
@@ -46,36 +55,59 @@ interface PublishOptions {
   prepareImage: (url: string, kind: ImageKind) => Promise<string>;
 }
 
+/** Publicación de Instagram: una foto, un video (va como reel) o un carrusel que puede mezclar fotos y videos. */
 async function instagramFeed(conn: PublishingConnection, post: SocialPost, { waitMs, prepareImage }: PublishOptions): Promise<ChannelResult> {
-  const images = await Promise.all(post.products.slice(0, 10).map(p => prepareImage(p.image_url, 'feed')));
+  const items = mediaOf(post);
   const create = (body: Record<string, unknown>) => graph.post(`${GRAPH_API}/${conn.instagramId}/media`, body, { params: { access_token: conn.pageToken } }).then(r => String(r.data.id));
-  if (images.length === 1) {
-    return publishContainer(conn, await create({ image_url: images[0], caption: post.caption }), waitMs);
+  if (items.length === 1) {
+    const [item] = items;
+    if (item.type === 'video') {
+      return publishContainer(conn, await create({ media_type: 'REELS', video_url: item.url, caption: post.caption, share_to_feed: true }), waitMs, VIDEO_CHECKS);
+    }
+    return publishContainer(conn, await create({ image_url: await prepareImage(item.url, 'feed'), caption: post.caption }), waitMs);
   }
-  const children: string[] = [];
-  for (const image of images) children.push(await create({ image_url: image, is_carousel_item: true }));
-  for (const child of children) await waitUntilReady(child, conn.pageToken, waitMs);
-  return publishContainer(conn, await create({ media_type: 'CAROUSEL', children: children.join(','), caption: post.caption }), waitMs);
+  const children: { id: string; video: boolean }[] = [];
+  for (const item of items) {
+    const video = item.type === 'video';
+    const id = video
+      ? await create({ media_type: 'VIDEO', video_url: item.url, is_carousel_item: true })
+      : await create({ image_url: await prepareImage(item.url, 'feed'), is_carousel_item: true });
+    children.push({ id, video });
+  }
+  for (const child of children) await waitUntilReady(child.id, conn.pageToken, waitMs, child.video ? VIDEO_CHECKS : READY_CHECKS);
+  return publishContainer(conn, await create({ media_type: 'CAROUSEL', children: children.map(c => c.id).join(','), caption: post.caption }), waitMs);
 }
 
+/** Historia de Instagram: la primera foto (armada en 9:16) o el primer video. */
 async function instagramStory(conn: PublishingConnection, post: SocialPost, { waitMs, prepareImage }: PublishOptions): Promise<ChannelResult> {
-  const image = await prepareImage(post.products[0].image_url, 'story');
-  const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media`, { image_url: image, media_type: 'STORIES' }, { params: { access_token: conn.pageToken } });
-  return publishContainer(conn, String(data.id), waitMs);
+  const [item] = mediaOf(post);
+  const body = item.type === 'video'
+    ? { media_type: 'STORIES', video_url: item.url }
+    : { media_type: 'STORIES', image_url: await prepareImage(item.url, 'story') };
+  const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media`, body, { params: { access_token: conn.pageToken } });
+  return publishContainer(conn, String(data.id), waitMs, item.type === 'video' ? VIDEO_CHECKS : READY_CHECKS);
 }
 
+/** Página de Facebook: un video (si la publicación lleva uno) o una o varias fotos originales. */
 async function facebookPage(conn: PublishingConnection, post: SocialPost): Promise<ChannelResult> {
   const params = { access_token: conn.pageToken };
   const link = (id: string) => `https://www.facebook.com/${id}`;
-  // Facebook acepta PNG: se usa la foto original del catálogo.
-  if (post.products.length === 1) {
-    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: post.products[0].image_url, caption: post.caption, published: true }, { params });
+  const items = mediaOf(post);
+  const video = items.find(item => item.type === 'video');
+  if (video) {
+    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/videos`, { file_url: video.url, description: post.caption, published: true }, { params });
+    const id = String(data.id);
+    return { id, permalink: link(id) };
+  }
+  // Facebook acepta PNG: se usa la foto original.
+  if (items.length === 1) {
+    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: items[0].url, caption: post.caption, published: true }, { params });
     const id = String(data.post_id || data.id);
     return { id, permalink: link(id) };
   }
   const media: string[] = [];
-  for (const product of post.products.slice(0, 10)) {
-    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: product.image_url, published: false }, { params });
+  for (const item of items) {
+    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: item.url, published: false }, { params });
     media.push(String(data.id));
   }
   const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/feed`, { message: post.caption, attached_media: media.map(id => ({ media_fbid: id })) }, { params });
@@ -88,7 +120,7 @@ type PublishOutcome = { status: PostStatus; results: Record<string, ChannelResul
 /** Publica en cada red elegida con esa conexión y esos permisos. Resultado: todo bien = publicada; algo falló = parcial; nada = fallida. */
 export async function publishToChannels(conn: PublishingConnection, scopes: string[], post: SocialPost, options: PublishOptions): Promise<PublishOutcome> {
   const results: Record<string, ChannelResult> = {};
-  if (post.products.length === 0) return { status: 'failed', results, error: 'La publicación no tiene fotos.' };
+  if (mediaOf(post).length === 0) return { status: 'failed', results, error: 'La publicación no tiene fotos ni videos.' };
   if (!post.channels.length) return { status: 'failed', results, error: 'Elige al menos una red donde publicar.' };
 
   for (const channel of post.channels) {

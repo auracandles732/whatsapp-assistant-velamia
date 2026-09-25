@@ -26,15 +26,16 @@ const fakeGraph = {
     if (url.endsWith('/media_publish')) return { data: { id: 'ig_publicado' } };
     if (url.endsWith('/photos')) return { data: body.published === false ? { id: `foto${++counter}` } : { id: 'foto', post_id: 'pagina_1' } };
     if (url.endsWith('/feed')) return { data: { id: 'pagina_2' } };
+    if (url.endsWith('/videos')) return { data: { id: 'video_1' } };
     return { data: {} };
   }
 };
 mock.method(axios, 'create', () => fakeGraph);
 
-const socialPosts = require('../src/services/socialPosts') as typeof import('../src/services/socialPosts');
-const socialImages = require('../src/services/socialImages') as typeof import('../src/services/socialImages');
+const socialPosts = require('../src/social/posts') as typeof import('../src/social/posts');
+const socialImages = require('../src/social/images') as typeof import('../src/social/images');
 const metaChannels = require('../src/services/metaChannels') as typeof import('../src/services/metaChannels');
-const publisher = require('../src/services/socialPublisher') as typeof import('../src/services/socialPublisher');
+const publisher = require('../src/social/publisher') as typeof import('../src/social/publisher');
 const { normalizeProfile, VELAMIA_PROFILE } = require('../src/config/businessProfile') as typeof import('../src/config/businessProfile');
 
 const TZ = 'America/Guayaquil';
@@ -206,4 +207,16 @@ test('sin conexión no publica y lo dice claro', async () => {
   assert.equal(r.status, 'failed');
   assert.match(r.error!, /no están conectados/);
   assert.equal(calls.length, 0);
+});
+
+test('un video de la biblioteca sale como reel en Instagram, como video en Facebook y en la historia', async () => {
+  const conVideo = { ...post(1, ['instagram_feed', 'instagram_story', 'facebook']), media: [{ type: 'video', url: 'https://x/video.mp4', asset_id: 'a1' }] };
+  const r = await publicar(['instagram_content_publish', 'pages_manage_posts'], conVideo);
+  assert.equal(r.status, 'published');
+  const media = calls.filter(c => c.url.endsWith('/ig/media'));
+  assert.equal(media.find(c => c.body.media_type === 'REELS')!.body.video_url, 'https://x/video.mp4');
+  assert.equal(media.find(c => c.body.media_type === 'STORIES')!.body.video_url, 'https://x/video.mp4');
+  const fb = calls.find(c => c.url.endsWith('/pagina/videos'))!;
+  assert.equal(fb.body.file_url, 'https://x/video.mp4');
+  assert.ok(!calls.some(c => c.url.endsWith('/pagina/photos')), 'no publica las fotos de los productos si lleva video');
 });

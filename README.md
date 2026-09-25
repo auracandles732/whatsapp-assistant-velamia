@@ -46,7 +46,7 @@ Cliente WhatsApp ──► Meta (WhatsApp Cloud API) ──► POST /webhook (Re
 | `src/services/notifications.ts` | Avisos a la dueña por WhatsApp |
 | `src/services/tenant.ts` | Empresa en curso (cada empresa con su WhatsApp, su OpenAI y sus datos) y servicios adicionales |
 | `src/services/metaChannels.ts`, `src/controllers/socialController.ts` | Instagram y Messenger: conexión, mensajes y comentarios |
-| `src/services/socialPosts.ts`, `socialPublisher.ts`, `socialImages.ts` | Publicaciones en redes: calendario, publicación y fotos |
+| `src/social/` | **Agente de redes** (módulo aparte del bot de mensajes): calendario, publicación, fotos, biblioteca, proveedores, resultados y su cerebro |
 | `src/services/manualSales.ts` | Cotizaciones y pedidos armados a mano en el CRM (mismo cálculo que el bot) |
 | `src/services/crmOverview.ts` | Resumen de hoy, lista de chats y resumen de cada cliente para el CRM |
 | `src/services/followups.ts` | Seguimientos automáticos con plantillas |
@@ -200,7 +200,29 @@ según los días sin respuesta desde el último mensaje de la clienta:
 - `META_PAGE_TOKEN` puede ser de usuario del sistema: se cambia sola por la de la página y el Instagram se detecta solo. `POST /api/me/connect-social` suscribe la página a la App.
 - Por ahora solo VELAMIA: las demás empresas no tienen estos canales.
 
-## Publicaciones en redes (servicio adicional) (`src/services/socialPosts.ts`, `socialPublisher.ts`, `socialImages.ts`)
+## Agente de redes (servicio adicional) (`src/social/`)
+
+Módulo independiente del asistente que responde mensajes: tiene sus rutas (`routes.ts`), sus revisiones automáticas
+(`startSocialAgent`) y su propio **cerebro** (`brain.ts`: decide qué publicar y escribe los textos). Hoy el cerebro
+usa reglas y la IA solo escribe los textos; el definitivo se enchufa con `useBrain` sin tocar lo demás.
+
+- **Biblioteca** (`library.ts`): la empresa sube fotos (JPG/PNG, 10 MB) y videos (MP4/MOV, 50 MB). El archivo va directo
+  del navegador al almacenamiento con un permiso de subida de un solo uso y después se registra. Los videos se publican
+  como reel (Instagram), historia o video de la página (Facebook). El agente no arma videos por su cuenta.
+- **Proveedores** (`suppliers.ts`): se sube el PDF del proveedor y **el CRM lo lee en el navegador** (pdf.js, servido en
+  `/crm/pdfjs/`): en las páginas con precios toma cada foto (sin la marca de agua), el nombre y el precio que están debajo
+  y la nota de tamaño si la trae; las páginas repetidas no duplican modelos. El servidor guarda los modelos y, en
+  automático, los pasa al **Catálogo** con la categoría del PDF y el precio de la **regla por tamaño** de la empresa
+  (VELAMIA: pequeña 0, mediana 5, grande 0 la docena). Tamaño por peso en cera (≥70 g grande, ≥38 g mediana) o por
+  medida; si el PDF no lo dice se usa el tamaño de siempre y queda marcado "estimado". Cambiar el tamaño en la pestaña
+  actualiza el precio en el Catálogo. Los nombres nunca se repiten ("VELA GHOSTFACE 2").
+- **Resultados** (`insights.ts`): cada hora, durante 14 días, me gusta, comentarios, visualizaciones, alcance, guardados y
+  compartidos por red. Las historias solo dan datos mientras están activas (24 h). Requiere los permisos de Meta
+  `instagram_manage_insights` y `read_insights`; si faltan, la pestaña lo avisa.
+- **Base de datos:** `migrations/025_agente_de_redes.sql` (biblioteca, proveedores, resultados y videos en publicaciones).
+  Sin ella el calendario sigue funcionando y las pestañas nuevas explican que falta aplicarla.
+
+### Calendario de publicaciones (`posts.ts`, `planner.ts`, `publisher.ts`, `images.ts`)
 
 - **Para cualquier empresa**: la administradora lo activa en Empresas → "Publicaciones en redes" (`businesses.addons.publicaciones`). VELAMIA lo tiene siempre. Sin el servicio, la pestaña Publicaciones muestra la oferta.
 - **Cómo funciona**: en CRM → Publicaciones se eligen días, hora, redes (Instagram, historia de Instagram, Facebook), fotos por publicación (1 o carrusel) e indicaciones para los textos. "Preparar próximos 7 días" elige productos con foto del catálogo —primero lo que nunca salió o hace más tiempo, variando la categoría y dando prioridad a la temporada (Navidad en oct-dic, etc.)— y la IA escribe los textos en una sola llamada con precios exactos del catálogo. Si la IA falla, va un texto de respaldo.

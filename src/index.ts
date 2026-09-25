@@ -64,11 +64,7 @@ import { maskPhone } from './services/privacy';
 import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/signupCodes';
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
-import {
-  listPosts, getPost, insertPosts, updatePost, deletePost, getSavedSettings, saveSettings, planUpcomingPosts, rewriteCaption,
-  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus, PostChannel
-} from './services/socialPosts';
-import { claimAndPublish, startSocialPostsScheduler } from './services/socialPublisher';
+import { socialRouter, startSocialAgent } from './social';
 import { currentAiProblem } from './services/aiStatus';
 import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
@@ -168,7 +164,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 const keepRawBody = (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; };
 const bigJson = express.json({ limit: '15mb', verify: keepRawBody });
 const smallJson = express.json({ limit: '1mb', verify: keepRawBody });
-const BIG_BODY_PATHS = new Set(['/api/upload-image', '/api/send-image', '/api/send-audio']);
+const BIG_BODY_PATHS = new Set(['/api/upload-image', '/api/send-image', '/api/send-audio', '/api/social/suppliers']);
 app.use((req: Request, res: Response, next: NextFunction) => (BIG_BODY_PATHS.has(req.path) ? bigJson : smallJson)(req, res, next));
 
 // La app instalable es de la plataforma (Nexly), igual para todas las empresas: la marca de cada empresa
@@ -331,179 +327,12 @@ app.get('/api/meta/status', requireCrmSession, async (_req: Request, res: Respon
   res.json(await socialStatus().catch(() => ({ estado: 'no se pudo revisar' })));
 });
 
-// ---------- Publicaciones en redes (servicio adicional) ----------
+// ---------- Agente de redes (servicio adicional): publicaciones, biblioteca, proveedores y resultados ----------
 
+// Servicios adicionales que la plataforma activa por empresa.
 const ADDONS = ['publicaciones'];
-const CAPTION_LIMIT = 2200; // Instagram no acepta textos más largos.
 
-function requirePublishing(_req: Request, res: Response, next: NextFunction) {
-  if (hasAddon('publicaciones')) return next();
-  res.status(403).json({ error: 'Publicaciones en redes es un servicio adicional: pide que lo activen para tu empresa.', code: 'ADDON_REQUIRED' });
-}
-
-function requirePostId(req: Request, res: Response, next: NextFunction) {
-  if (!UUID_PATTERN.test(req.params.postId || '')) return res.status(400).json({ error: 'Publicación inválida' });
-  next();
-}
-
-/** Productos del catálogo por nombre exacto: una publicación nunca muestra algo que no está en el catálogo. */
-async function catalogProducts(names: unknown) {
-  if (!Array.isArray(names) || names.length === 0) throw new Error('Elige al menos un producto');
-  const catalog = await getAllProducts();
-  const found = names.slice(0, 10).map(n => catalog.find((c: any) => c.name === String(n) && c.image_url));
-  if (found.some(f => !f)) throw new Error('Algún producto no está en el catálogo o no tiene foto');
-  return found.map(toPostProduct);
-}
-
-function cleanChannels(value: unknown) {
-  const channels = Array.isArray(value) ? POST_CHANNELS.filter(c => value.includes(c)) : [];
-  if (channels.length === 0) throw new Error('Elige al menos una red donde publicar');
-  return channels;
-}
-
-app.get('/api/posts', requireCrmSession, async (req: Request, res: Response) => {
-  // Sin el servicio se responde igual: el CRM muestra qué ofrece y cómo pedirlo.
-  if (!hasAddon('publicaciones')) return res.json({ enabled: false });
-  try {
-    const now = Date.now();
-    const from = new Date(Number.isFinite(Date.parse(String(req.query.from))) ? String(req.query.from) : now - 30 * 86_400_000).toISOString();
-    const to = new Date(Number.isFinite(Date.parse(String(req.query.to))) ? String(req.query.to) : now + 60 * 86_400_000).toISOString();
-    const [posts, saved, status] = await Promise.all([
-      listPosts(from, to),
-      getSavedSettings(),
-      publishingStatus().catch(error => ({ connected: false, error: error.message }))
-    ]);
-    res.json({ enabled: true, posts, settings: saved || DEFAULT_SETTINGS, settingsSaved: !!saved, status, timezone: profile().business.timezone });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.put('/api/posts/settings', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
-  try {
-    const settings = await saveSettings(req.body);
-    // Al encender el modo automático la IA programa de una vez los próximos 7 días (no espera a la revisión de cada hora).
-    const created = settings.autoPlan ? await planUpcomingPosts(new Date(), 7, settings) : [];
-    res.json({ settings, created: created.length });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/** Prepara los próximos 7 días con la configuración guardada (o la de siempre si aún no se guardó). */
-app.post('/api/posts/plan', requireCrmSession, requireEditorRole, requirePublishing, async (_req: Request, res: Response) => {
-  try {
-    const created = await planUpcomingPosts(new Date(), 7, (await getSavedSettings()) || DEFAULT_SETTINGS);
-    res.json({ created });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/posts', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
-  try {
-    const when = new Date(String(req.body?.scheduled_at || ''));
-    if (!Number.isFinite(when.getTime())) return res.status(400).json({ error: 'Elige el día y la hora' });
-    if (when.getTime() < Date.now() - 2 * 60 * 1000) return res.status(400).json({ error: 'Esa hora ya pasó: elige otra (o créala y usa "Publicar ahora")' });
-    let caption = String(req.body?.caption || '').trim();
-    if (caption.length > CAPTION_LIMIT) return res.status(400).json({ error: `El texto pasa de ${CAPTION_LIMIT} caracteres` });
-    const products = await catalogProducts(req.body?.products);
-    const channels = cleanChannels(req.body?.channels);
-    const theme = String(req.body?.theme || '').trim().slice(0, 80) || 'Nuestros productos';
-    // Sin texto, lo escribe la IA; si no responde, va el texto de respaldo (siempre se puede cambiar antes de que salga).
-    if (!caption) {
-      const draft = { theme, products } as any;
-      caption = await rewriteCaption(draft, ((await getSavedSettings()) || DEFAULT_SETTINGS).notes).catch(() => fallbackCaption(draft));
-    }
-    const [post] = await insertPosts([{
-      // Queda programada: se publica sola a esa hora, sin pedir aprobación.
-      scheduled_at: when.toISOString(), status: 'approved', channels, caption, products, theme, results: {}, error: null
-    }]);
-    // La publicación trae su propio campo "error" (motivo de un fallo): va envuelta para que el CRM no lo tome como error de la petición.
-    res.status(201).json({ post });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.patch('/api/posts/:postId', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
-  try {
-    const post = await getPost(req.params.postId);
-    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
-    if (!EDITABLE_STATUSES.includes(post.status)) return res.status(400).json({ error: 'Esta publicación ya no se puede cambiar' });
-
-    const changes: Record<string, any> = {};
-    if (req.body?.caption !== undefined) {
-      changes.caption = String(req.body.caption).trim();
-      if (changes.caption.length > CAPTION_LIMIT) return res.status(400).json({ error: `El texto pasa de ${CAPTION_LIMIT} caracteres` });
-    }
-    if (req.body?.scheduled_at !== undefined) {
-      const when = new Date(String(req.body.scheduled_at));
-      if (!Number.isFinite(when.getTime())) return res.status(400).json({ error: 'Fecha inválida' });
-      changes.scheduled_at = when.toISOString();
-    }
-    if (req.body?.channels !== undefined) changes.channels = cleanChannels(req.body.channels);
-    if (req.body?.products !== undefined) changes.products = await catalogProducts(req.body.products);
-    if (req.body?.status !== undefined) {
-      const status = String(req.body.status) as PostStatus;
-      if (!['draft', 'approved', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Estado inválido' });
-      changes.status = status;
-    }
-
-    // Cambiar una publicación la deja programada otra vez (también a una que falló) si su hora es futura.
-    if (changes.status === undefined && post.status !== 'approved' && new Date(changes.scheduled_at || post.scheduled_at).getTime() > Date.now()) {
-      changes.status = 'approved';
-    }
-    const final = { ...post, ...changes };
-    if (final.status === 'approved') {
-      if (!final.caption && final.channels.some((c: PostChannel) => c !== 'instagram_story')) return res.status(400).json({ error: 'Escribe el texto de la publicación' });
-      // Programar algo con hora pasada lo publicaría de golpe: para eso está "Publicar ahora".
-      if (new Date(final.scheduled_at).getTime() < Date.now()) return res.status(400).json({ error: 'La hora ya pasó: elige otra o usa "Publicar ahora"' });
-      changes.error = null;
-    }
-    const updated = await updatePost(post.id, changes, EDITABLE_STATUSES);
-    if (!updated) return res.status(409).json({ error: 'La publicación cambió mientras la editabas; recarga' });
-    res.json({ post: updated });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post('/api/posts/:postId/publish', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
-  try {
-    const post = await getPost(req.params.postId);
-    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
-    if (!post.caption.trim() && post.channels.some(c => c !== 'instagram_story')) return res.status(400).json({ error: 'Escribe el texto antes de publicar' });
-    const done = await claimAndPublish(post, EDITABLE_STATUSES);
-    if (!done) return res.status(409).json({ error: 'Esta publicación ya se está publicando o ya salió' });
-    res.json({ post: done });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/** Elimina una publicación que todavía no salió: desaparece del calendario y su día queda libre. */
-app.delete('/api/posts/:postId', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
-  try {
-    if (!(await deletePost(req.params.postId))) return res.status(409).json({ error: 'Esta publicación ya salió o se está publicando: no se puede eliminar' });
-    res.json({ deleted: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/** Otro texto hecho por la IA; no se guarda hasta que la empresa lo acepte. */
-app.post('/api/posts/:postId/rewrite', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
-  try {
-    const post = await getPost(req.params.postId);
-    if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
-    const settings = (await getSavedSettings()) || DEFAULT_SETTINGS;
-    res.json({ caption: await rewriteCaption(post, settings.notes) });
-  } catch (error: any) {
-    const noCredits = /credit|quota/i.test(error.message);
-    res.status(500).json({ error: noCredits ? 'La IA no tiene créditos en OpenAI: escribe el texto a mano o recarga créditos.' : `No se pudo escribir otro texto: ${error.message}` });
-  }
-});
+app.use(socialRouter());
 
 // ---------- Salud ----------
 
@@ -2032,7 +1861,7 @@ async function start() {
 
   keepAwake();
   startFollowUpScheduler();
-  startSocialPostsScheduler();
+  startSocialAgent();
   startPhotoNudgeScheduler();
   startHealthCheck();
   // Con la página de Facebook configurada, se suscribe sola a la App al arrancar (repetirlo no hace daño).

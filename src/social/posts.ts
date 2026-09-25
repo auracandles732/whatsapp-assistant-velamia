@@ -1,5 +1,5 @@
-import { supabase, getConfig, setConfig, getAllProducts, tenantOp, tenantValue, tenantColumns } from './supabase';
-import { writeSocialCaptions, productKey } from './openai';
+import { supabase, getConfig, setConfig, tenantOp, tenantValue, tenantColumns } from '../services/supabase';
+import { productKey } from '../services/openai';
 import { BusinessProfile, profile } from '../config/businessProfile';
 
 /**
@@ -16,6 +16,9 @@ export const EDITABLE_STATUSES: PostStatus[] = ['draft', 'approved', 'failed'];
 
 export interface PostProduct { name: string; image_url: string; price: number }
 
+/** Foto o video de la biblioteca que lleva la publicación (si no, van las fotos de los productos). */
+export interface PostMedia { type: 'image' | 'video'; url: string; asset_id?: string }
+
 export interface SocialPost {
   id: string;
   scheduled_at: string;
@@ -23,6 +26,7 @@ export interface SocialPost {
   channels: PostChannel[];
   caption: string;
   products: PostProduct[];
+  media?: PostMedia[];
   theme: string;
   results: Record<string, { id?: string; permalink?: string; error?: string }>;
   error: string | null;
@@ -94,7 +98,7 @@ export async function saveSettings(raw: unknown): Promise<PublishingSettings> {
 // ---------- Calendario ----------
 
 /** Fecha y hora local de un instante en la zona del negocio. */
-function localParts(date: Date, timeZone: string) {
+export function localParts(date: Date, timeZone: string) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
     timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short', hourCycle: 'h23'
   }).formatToParts(date).map(p => [p.type, p.value]));
@@ -141,7 +145,7 @@ export function publishingSlots(settings: PublishingSettings, from: Date, days: 
 
 // ---------- Qué productos mostrar ----------
 
-interface CatalogItem { name: string; category?: string | null; image_url?: string | null; price: number }
+export interface CatalogItem { name: string; category?: string | null; image_url?: string | null; price: number }
 
 // Temporadas: sus categorías salen primero cuando se acerca la fecha. Palabras sin tildes, en minúsculas.
 const SEASONS: { months: number[]; words: string[] }[] = [
@@ -249,7 +253,7 @@ export async function getPost(id: string): Promise<SocialPost | null> {
 }
 
 /** Productos publicados (o por publicar) últimamente, del más nuevo al más viejo: para no repetirlos. */
-async function recentProductNames(): Promise<string[]> {
+export async function recentProductNames(): Promise<string[]> {
   const { data, error } = await supabase.from(POSTS).select('products, scheduled_at')
     .filter('business_id', tenantOp(), tenantValue())
     .neq('status', 'cancelled')
@@ -318,49 +322,3 @@ export async function stuckPosts(olderThan: Date): Promise<SocialPost[]> {
 // ---------- Preparar la semana ----------
 
 export const toPostProduct = (c: CatalogItem): PostProduct => ({ name: c.name, image_url: String(c.image_url || ''), price: Number(c.price) });
-
-/**
- * Prepara y programa las publicaciones de los próximos días de publicación que todavía no tienen una (un día cuya
- * publicación se eliminó vuelve a quedar libre). Si la IA no responde, cada publicación lleva un texto de respaldo.
- */
-export async function planUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<SocialPost[]> {
-  const settings = settingsParam || (await getSavedSettings()) || DEFAULT_SETTINGS;
-  const p = profile();
-  const tz = p.business.timezone;
-  const slots = publishingSlots(settings, now, days, tz);
-  if (slots.length === 0) return [];
-
-  const existing = await listPosts(new Date(slots[0].getTime() - 86_400_000).toISOString(), new Date(slots[slots.length - 1].getTime() + 86_400_000).toISOString());
-  const taken = new Set(existing.map(post => localDay(post.scheduled_at, tz)));
-  const free = slots.filter(slot => !taken.has(localDay(slot, tz)));
-  if (free.length === 0) return [];
-
-  const [catalog, recent] = await Promise.all([getAllProducts(), recentProductNames()]);
-  const picks = pickProducts(catalog, recent, free.length, settings.photosPerPost, localParts(now, tz).month);
-  if (picks.length === 0) return [];
-
-  let captions: string[] = [];
-  try {
-    captions = await writeSocialCaptions(picks.map(x => ({ theme: x.theme, products: x.products.map(c => ({ name: c.name, price: Number(c.price) })) })), settings.notes, p);
-  } catch (error: any) {
-    console.warn('⚠️ La IA no escribió los textos de las publicaciones; se usa el texto de respaldo:', error.message);
-  }
-
-  return insertPosts(picks.map((pick, i) => ({
-    scheduled_at: free[i].toISOString(),
-    status: 'approved',
-    channels: settings.channels,
-    caption: captions[i] || fallbackCaption(pick, p),
-    products: pick.products.map(toPostProduct),
-    theme: pick.theme,
-    results: {},
-    error: null
-  })));
-}
-
-/** Otro texto para una publicación (botón "Otro texto" del CRM). */
-export async function rewriteCaption(post: SocialPost, notes: string): Promise<string> {
-  const [caption] = await writeSocialCaptions([{ theme: post.theme || 'Nuestros productos', products: post.products.map(x => ({ name: x.name, price: x.price })) }], notes);
-  if (!caption) throw new Error('La IA no devolvió un texto');
-  return caption;
-}

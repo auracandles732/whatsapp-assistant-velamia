@@ -2255,6 +2255,67 @@
         .nx-ai-alert b { display: block; font-size: 14px; }
         .nx-ai-alert span { display: block; font-size: 13px; line-height: 1.4; margin-top: 2px; }
         .mx .nx-ai-alert { margin: 10px 14px 0; }
+        .pb-areas { display: flex; gap: 8px; flex-wrap: wrap; }
+        .pb .pb-areas button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 14px; border: 1px solid #DCE2F5; background: #fff; color: #2A3766; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .pb .pb-areas button.on { background: #4F5BD5; border-color: #4F5BD5; color: #fff; }
+        .pb .pb-backlink { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: #2F4BD8; font-size: 15px; font-weight: 700; padding: 4px 0; cursor: pointer; }
+        .pb-chips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .pb .pb-pchip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid #DCE2F5; background: #fff; color: #2A3766; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .pb .pb-pchip.on { background: #4F5BD5; border-color: #4F5BD5; color: #fff; }
+        .pb label.pb-btn, .pb-modal label.pb-btn { flex: 0 0 auto; align-self: center; flex-direction: row; }
+        .sp-box > .pb-btn { align-self: flex-start; }
+        .sl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+        .pb .sl-item { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 14px; border: 1px solid #E8ECF6; background: #fff; text-align: left; cursor: pointer; white-space: normal; }
+        .sl-item img, .sl-item video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #F1F4FC; display: block; }
+        .sl-badge { position: absolute; top: 12px; left: 12px; background: rgba(20, 28, 58, 0.75); color: #fff; font-size: 11px; font-weight: 700; border-radius: 8px; padding: 2px 7px; }
+        .sl-title { font-size: 13px; font-weight: 700; color: #141C3A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sl-used { font-size: 11.5px; color: #6B7599; }
+        .pb-pick video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+        .pb-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pb-mday .pics video { width: 26px; height: 26px; border-radius: 6px; object-fit: cover; }
+        .sp-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; }
+        .sp-box { display: flex; flex-direction: column; gap: 8px; border: 1px solid #E8ECF6; border-radius: 16px; padding: 14px; background: #FAFBFF; }
+        .sp-box > b { font-size: 15px; color: #141C3A; }
+        .sp-box > small { font-size: 13px; color: #5C668F; line-height: 1.4; }
+        .sp-prices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+        .sp-prices label, .sp-row2 label, .sp-name { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 600; color: #3A4570; }
+        .sp-money { display: flex; align-items: center; gap: 4px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; padding: 0 10px; font-weight: 700; color: #3A4570; }
+        .sp-money input { border: none; outline: none; background: none; width: 100%; min-width: 0; padding: 9px 0; font: inherit; font-size: 15px; color: #141C3A; }
+        .sp-row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+        .sp-row2 select, .sp-row2 input, .sp-name input { padding: 9px 10px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; font: inherit; font-size: 14px; color: #141C3A; min-width: 0; }
+        .pb .sp-drop { display: flex; align-items: center; gap: 10px; padding: 14px; border: 1.5px dashed #AEB8F0; border-radius: 14px; background: #fff; cursor: pointer; font-weight: 700; color: #2A3766; font-size: 14px; }
+        .sp-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+        .sp-model { display: flex; flex-direction: column; gap: 6px; border: 1px solid #E8ECF6; border-radius: 14px; padding: 8px; background: #fff; }
+        .sp-model.est { border-color: #F3D9A4; background: #FFFCF4; }
+        .sp-model img, .sp-model .noimg { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #F1F4FC; display: flex; align-items: center; justify-content: center; }
+        .sp-model b { font-size: 13.5px; color: #141C3A; line-height: 1.25; }
+        .sp-model small { font-size: 12px; color: #6B7599; }
+        .sp-size { display: flex; align-items: center; gap: 8px; }
+        .sp-size select { flex: 1; min-width: 0; padding: 7px 8px; border: 1px solid #DCE2F5; border-radius: 10px; font: inherit; font-size: 13px; background: #fff; }
+        .sp-size .price { font-weight: 800; color: #141C3A; font-size: 15px; }
+        .sp-tag { align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+        .sp-tag.ok { background: #E3F6EA; color: #1E8A4A; }
+        .sp-tag.warn { background: #FFF1DA; color: #B36B00; }
+        .sr-days { padding: 8px 10px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; font: inherit; font-size: 13.5px; }
+        .sr-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .sr-totals div { background: #F4F6FF; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+        .sr-totals span { font-size: 12.5px; color: #5C668F; }
+        .sr-totals b { font-size: 22px; color: #141C3A; }
+        .sr-list { display: flex; flex-direction: column; gap: 10px; }
+        .sr-post { display: flex; gap: 12px; align-items: flex-start; border: 1px solid #E8ECF6; border-radius: 14px; padding: 10px; }
+        .sr-post .th { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; flex-shrink: 0; background: #F1F4FC; }
+        .sr-post .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .sr-post small { color: #6B7599; font-size: 12.5px; }
+        .sr-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13.5px; color: #1E2A4A; }
+        .sr-row .net { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; min-width: 150px; }
+        .sr-row a { color: #2F4BD8; font-weight: 700; text-decoration: none; }
+        @media (max-width: 760px) {
+            .sp-grid { grid-template-columns: minmax(0, 1fr); }
+            .sr-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .sp-models { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .sl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .sr-row .net { min-width: 0; width: 100%; }
+        }
         .pb-auto { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; background: #fff; border: 1px solid #E1E6F4; box-shadow: 0 4px 16px rgba(50, 70, 160, 0.06); }
         .pb-auto.on { background: linear-gradient(135deg, #EEF0FF, #F5EEFF); border-color: #C9CFF7; }
         .pb-auto .ic { width: 44px; height: 44px; border-radius: 14px; background: #EEF0FF; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -8414,10 +8475,10 @@
                 <PbModal title={postWhen(post.scheduled_at)} onClose={onClose} extra={<span className={'pb-st inline ' + post.status}>{POST_STATUS[post.status] || post.status}</span>}>
                     <div className="pb-modal-b">
                         <div className="pb-gallery">
-                            {post.products.map(p => <img key={p.name} src={p.image_url} alt={p.name} title={p.name} />)}
+                            {postItems(post).map((item, i) => (item.type === 'video' ? <video key={i} src={item.url} controls playsInline style={{ width: '100%', borderRadius: 12 }} /> : <img key={i} src={item.url} alt={item.name} title={item.name} />))}
                         </div>
                         <div>
-                            <div className="pb-post-theme" style={{ marginBottom: '14px' }}>{post.theme}{post.products.length > 1 ? ` · carrusel de ${post.products.length} fotos` : ''} · {post.products.map(p => niceName(p.name)).join(', ')}</div>
+                            <div className="pb-post-theme" style={{ marginBottom: '14px' }}>{post.theme}{postItems(post).length > 1 ? ` · carrusel de ${postItems(post).length}` : postItems(post)[0]?.type === 'video' ? ' · video (reel)' : ''}{post.products.length ? ' · ' + post.products.map(p => niceName(p.name)).join(', ') : ''}</div>
                             <div className="pb-field">
                                 <span className="pb-label">Dónde se publica</span>
                                 <PbNetChips channels={channels} setChannels={setChannels} disabled={!editable} />
@@ -8458,6 +8519,10 @@
 
         function PbNewPost({ settings, day, onCreated, onClose }) {
             const [catalog, setCatalog] = useState(null);
+            // Qué se publica: productos del Catálogo o fotos y videos de la biblioteca.
+            const [source, setSource] = useState('catalogo');
+            const [library, setLibrary] = useState(null);
+            const [chosenMedia, setChosenMedia] = useState([]);
             const [search, setSearch] = useState('');
             const [chosen, setChosen] = useState([]);
             const [when, setWhen] = useState(`${day || addDays(pbToday(), 1)}T${settings.hour}`);
@@ -8467,6 +8532,11 @@
             const [error, setError] = useState('');
 
             useEffect(() => { api('/api/products').then(list => setCatalog(list.filter(p => p.image_url))).catch(e => setError(e.message)); }, []);
+            useEffect(() => {
+                if (source === 'biblioteca' && !library) api('/api/social/assets').then(r => setLibrary(r.assets)).catch(e => setError(e.message));
+            }, [source]);
+            const toggleMedia = id => setChosenMedia(chosenMedia.includes(id) ? chosenMedia.filter(x => x !== id) : chosenMedia.length >= 10 ? chosenMedia : [...chosenMedia, id]);
+            const count = source === 'catalogo' ? chosen.length : chosenMedia.length;
 
             const plain = t => String(t || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
             const shown = (catalog || []).filter(p => !search || plain(p.name + ' ' + p.category).includes(plain(search)));
@@ -8476,8 +8546,10 @@
                 setBusy(true);
                 setError('');
                 try {
-                    const theme = niceName(catalog.find(p => p.name === chosen[0])?.category || '');
-                    onCreated((await api('/api/posts', { method: 'POST', body: JSON.stringify({ products: chosen, scheduled_at: fromTzInput(when), channels, caption, theme }) })).post);
+                    const fromLibrary = source === 'biblioteca';
+                    // El nombre del archivo ("IMG_2031") no sirve de tema para el texto: se usa el producto que muestra, si lo tiene.
+                    const theme = fromLibrary ? (library.find(a => a.id === chosenMedia[0])?.product_name || 'Nuestros productos') : niceName(catalog.find(p => p.name === chosen[0])?.category || '');
+                    onCreated((await api('/api/posts', { method: 'POST', body: JSON.stringify({ products: fromLibrary ? [] : chosen, media: fromLibrary ? chosenMedia : [], scheduled_at: fromTzInput(when), channels, caption, theme }) })).post);
                 } catch (e) {
                     setError(e.message);
                 } finally {
@@ -8490,17 +8562,32 @@
                     <div className="pb-modal-b single">
                         <div>
                             <div className="pb-field">
-                                <span className="pb-label">Qué mostrar <span className="pb-muted">· {chosen.length ? `${chosen.length} elegida(s)${chosen.length > 1 ? ', va como carrusel' : ''}` : 'una foto o varias (carrusel, hasta 10)'}</span></span>
-                                <input type="search" placeholder="Buscar en el catálogo…" value={search} onChange={e => setSearch(e.target.value)} />
+                                <span className="pb-label">Qué mostrar <span className="pb-muted">· {count ? `${count} elegido(s)${count > 1 ? ', va como carrusel' : ''}` : 'una foto o video, o varios (carrusel, hasta 10)'}</span></span>
+                                <div className="pb-chips-row" style={{ margin: '4px 0 6px' }}>
+                                    <button type="button" className={'pb-pchip' + (source === 'catalogo' ? ' on' : '')} onClick={() => setSource('catalogo')}>Catálogo</button>
+                                    <button type="button" className={'pb-pchip' + (source === 'biblioteca' ? ' on' : '')} onClick={() => setSource('biblioteca')}>Biblioteca (fotos y videos)</button>
+                                </div>
+                                {source === 'catalogo' && <input type="search" placeholder="Buscar en el catálogo…" value={search} onChange={e => setSearch(e.target.value)} />}
                             </div>
-                            <div className="pb-pick">
-                                {!catalog ? <div className="pb-muted">Cargando catálogo…</div> : shown.length === 0 ? <div className="pb-muted">Nada coincide con la búsqueda</div> : shown.map(p => (
-                                    <button type="button" key={p.id || p.name} className={chosen.includes(p.name) ? 'on' : ''} onClick={() => toggle(p.name)}>
-                                        <img src={p.image_url} alt="" loading="lazy" />
-                                        <span>{chosen.includes(p.name) ? `✓ ${chosen.indexOf(p.name) + 1}. ` : ''}{p.name}</span>
-                                    </button>
-                                ))}
-                            </div>
+                            {source === 'catalogo' ? (
+                                <div className="pb-pick">
+                                    {!catalog ? <div className="pb-muted">Cargando catálogo…</div> : shown.length === 0 ? <div className="pb-muted">Nada coincide con la búsqueda</div> : shown.map(p => (
+                                        <button type="button" key={p.id || p.name} className={chosen.includes(p.name) ? 'on' : ''} onClick={() => toggle(p.name)}>
+                                            <img src={p.image_url} alt="" loading="lazy" />
+                                            <span>{chosen.includes(p.name) ? `✓ ${chosen.indexOf(p.name) + 1}. ` : ''}{p.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="pb-pick">
+                                    {!library ? <div className="pb-muted">Cargando biblioteca…</div> : library.length === 0 ? <div className="pb-muted">La biblioteca está vacía: sube tus videos y fotos en Publicaciones → Biblioteca.</div> : library.map(a => (
+                                        <button type="button" key={a.id} className={chosenMedia.includes(a.id) ? 'on' : ''} onClick={() => toggleMedia(a.id)}>
+                                            <PbMediaThumb item={{ type: a.kind, url: a.url }} />
+                                            <span>{chosenMedia.includes(a.id) ? `✓ ${chosenMedia.indexOf(a.id) + 1}. ` : ''}{a.kind === 'video' ? '▶ ' : ''}{a.title || (a.kind === 'video' ? 'Video' : 'Foto')}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                             <div className="pb-field" style={{ marginTop: '14px' }}>
                                 <span className="pb-label">Dónde se publica</span>
                                 <PbNetChips channels={channels} setChannels={setChannels} />
@@ -8515,7 +8602,7 @@
                             </div>
                             {error && <div className="pb-err" style={{ marginBottom: '12px' }}>{error}</div>}
                             <div className="pb-actions">
-                                <button type="button" className="pb-btn main sm" disabled={busy || chosen.length === 0 || channels.length === 0} onClick={create}>{busy ? 'Programando…' : 'Programar publicación'}</button>
+                                <button type="button" className="pb-btn main sm" disabled={busy || count === 0 || channels.length === 0} onClick={create}>{busy ? 'Programando…' : 'Programar publicación'}</button>
                                 <button type="button" className="pb-btn sm" onClick={onClose}>Cancelar</button>
                             </div>
                         </div>
@@ -8615,6 +8702,521 @@
             );
         }
 
+        // ---------- Agente de redes: biblioteca, proveedores y resultados ----------
+
+        // Lo que muestra una publicación: sus fotos o videos de la biblioteca o, si no tiene, las fotos de los productos.
+        function postItems(post) {
+            if (post.media && post.media.length) return post.media.map(m => ({ type: m.type, url: m.url, name: m.type === 'video' ? 'Video' : 'Foto' }));
+            return (post.products || []).map(p => ({ type: 'image', url: p.image_url, name: p.name }));
+        }
+
+        function PbMediaThumb({ item, className }) {
+            if (!item) return null;
+            return item.type === 'video'
+                ? <video className={className} src={item.url + '#t=0.5'} muted playsInline preload="metadata" />
+                : <img className={className} src={item.url} alt="" loading="lazy" />;
+        }
+
+        const PB_AREAS = [['calendario', 'calendar', 'Calendario'], ['biblioteca', 'image', 'Biblioteca'], ['proveedores', 'box', 'Proveedores'], ['resultados', 'chart', 'Resultados']];
+
+        function PbAreaTabs({ area, setArea }) {
+            return (
+                <div className="pb-areas" role="tablist" aria-label="Agente de redes">
+                    {PB_AREAS.map(([id, icon, label]) => (
+                        <button key={id} type="button" role="tab" aria-selected={area === id} className={area === id ? 'on' : ''} onClick={() => setArea(id)}>
+                            <PlatIcon name={icon} size={18} color={area === id ? '#fff' : '#4F5BD5'} /> {label}
+                        </button>
+                    ))}
+                </div>
+            );
+        }
+
+        // Ancho, alto y duración del archivo (se guardan para que el agente elija bien dónde usarlo).
+        function mediaInfo(file) {
+            return new Promise(resolve => {
+                const url = URL.createObjectURL(file);
+                const done = info => { URL.revokeObjectURL(url); resolve(info); };
+                if (file.type.startsWith('video/')) {
+                    const v = document.createElement('video');
+                    v.preload = 'metadata';
+                    v.onloadedmetadata = () => done({ width: v.videoWidth, height: v.videoHeight, duration_seconds: Math.round(v.duration * 10) / 10 });
+                    v.onerror = () => done({});
+                    v.src = url;
+                } else {
+                    const img = new Image();
+                    img.onload = () => done({ width: img.naturalWidth, height: img.naturalHeight });
+                    img.onerror = () => done({});
+                    img.src = url;
+                }
+            });
+        }
+
+        // Sube el archivo directo al almacenamiento (sin pasar por el servidor) y lo registra en la biblioteca.
+        async function uploadToLibrary(file) {
+            const meta = await mediaInfo(file);
+            const up = await api('/api/social/assets/upload', { method: 'POST', body: JSON.stringify({ contentType: file.type, size: file.size }) });
+            const form = new FormData();
+            form.append('cacheControl', '3600');
+            form.append('', file);
+            const put = await fetch(up.uploadUrl, { method: 'PUT', headers: { 'x-upsert': 'false' }, body: form });
+            if (!put.ok) throw new Error('No se pudo subir el archivo (' + put.status + ')');
+            return (await api('/api/social/assets', { method: 'POST', body: JSON.stringify({ path: up.path, title: file.name.replace(/\.[^.]+$/, ''), size_bytes: file.size, ...meta }) })).asset;
+        }
+
+        function SocialLibrary({ canEdit }) {
+            const [assets, setAssets] = useState(null);
+            const [error, setError] = useState('');
+            const [progress, setProgress] = useState('');
+            const [filter, setFilter] = useState('all');
+            const [open, setOpen] = useState(null);
+            const load = () => api('/api/social/assets').then(r => { setAssets(r.assets); setError(''); }).catch(e => setError(e.message));
+            useEffect(() => { load(); }, []);
+
+            async function upload(list) {
+                const files = Array.from(list || []);
+                const problems = [];
+                for (let i = 0; i < files.length; i++) {
+                    setProgress(`Subiendo ${i + 1} de ${files.length}: ${files[i].name}`);
+                    try {
+                        await uploadToLibrary(files[i]);
+                    } catch (e) {
+                        problems.push(files[i].name + ': ' + e.message);
+                    }
+                }
+                setProgress('');
+                setError(problems.join(' · '));
+                load();
+            }
+
+            async function remove(asset) {
+                if (!confirm('¿Borrar "' + (asset.title || 'este archivo') + '" de la biblioteca? Lo ya publicado no se borra de tus redes.')) return;
+                try {
+                    await api('/api/social/assets/' + asset.id, { method: 'DELETE' });
+                    setOpen(null);
+                    load();
+                } catch (e) {
+                    setError(e.message);
+                }
+            }
+
+            const shown = (assets || []).filter(a => filter === 'all' || a.kind === filter);
+            const videos = (assets || []).filter(a => a.kind === 'video').length;
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="image" size={22} color="#4F5BD5" /></div>
+                        <div className="grow"><h2>Biblioteca</h2><p>Tus fotos y videos para redes. Los videos salen como reel o historia; las fotos del Catálogo el agente ya las tiene.</p></div>
+                        {canEdit && (
+                            <label className="pb-btn main" style={{ cursor: 'pointer' }}>
+                                <PlatIcon name="plus" size={18} color="#fff" /> Subir fotos o videos
+                                <input type="file" accept="image/jpeg,image/png,video/mp4,video/quicktime" multiple style={{ display: 'none' }} onChange={e => { upload(e.target.files); e.target.value = ''; }} />
+                            </label>
+                        )}
+                    </div>
+                    {progress && <div className="pb-notice ok">⏫ {progress}… no cierres esta pantalla.</div>}
+                    {error && <div className="pb-err" style={{ marginBottom: 12 }}>{error}</div>}
+                    <div className="pb-chips-row">
+                        {[['all', 'Todo', (assets || []).length], ['video', 'Videos', videos], ['image', 'Fotos', (assets || []).length - videos]].map(([id, label, n]) => (
+                            <button key={id} type="button" className={'pb-pchip' + (filter === id ? ' on' : '')} onClick={() => setFilter(id)}>{label} <b>{n}</b></button>
+                        ))}
+                    </div>
+                    {!assets ? <div className="pb-muted">Cargando…</div> : shown.length === 0 ? (
+                        <div className="pb-posts-empty">{assets.length ? 'Nada en este filtro.' : 'Todavía no subes fotos ni videos. Videos MP4 o MOV de hasta 50 MB; fotos JPG o PNG.'}</div>
+                    ) : (
+                        <div className="sl-grid">
+                            {shown.map(a => (
+                                <button key={a.id} type="button" className="sl-item" onClick={() => setOpen(a)}>
+                                    <PbMediaThumb item={{ type: a.kind, url: a.url }} />
+                                    {a.kind === 'video' && <span className="sl-badge">▶ {a.duration_seconds ? Math.round(a.duration_seconds) + ' s' : 'Video'}</span>}
+                                    <span className="sl-title">{a.title || (a.kind === 'video' ? 'Video' : 'Foto')}</span>
+                                    {a.used_count > 0 && <span className="sl-used">Usado {a.used_count}×</span>}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {open && (
+                        <PbModal title={open.title || (open.kind === 'video' ? 'Video' : 'Foto')} onClose={() => setOpen(null)}>
+                            <div className="pb-modal-b single">
+                                <div>
+                                    {open.kind === 'video'
+                                        ? <video src={open.url} controls playsInline style={{ width: '100%', maxHeight: '60vh', borderRadius: 14, background: '#000' }} />
+                                        : <img src={open.url} alt="" style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 14 }} />}
+                                    <p className="pb-muted" style={{ margin: '10px 0' }}>
+                                        {[open.width && open.height ? open.width + '×' + open.height : '', open.duration_seconds ? Math.round(open.duration_seconds) + ' s' : '', open.size_bytes ? (open.size_bytes / 1048576).toFixed(1) + ' MB' : '', 'Usado ' + (open.used_count || 0) + ' vez/veces'].filter(Boolean).join(' · ')}
+                                    </p>
+                                    {canEdit && <div className="pb-actions"><button type="button" className="pb-btn sm danger" onClick={() => remove(open)}>Borrar de la biblioteca</button></div>}
+                                </div>
+                            </div>
+                        </PbModal>
+                    )}
+                </section>
+            );
+        }
+
+        // ---------- Lectura del PDF del proveedor (en el navegador) ----------
+
+        // Nombre del catálogo desde el archivo: "Catalogo Halloween_20260916_204344_0000.pdf" → "HALLOWEEN".
+        function catalogNameFromFile(name) {
+            return String(name || '').replace(/\.pdf$/i, '').replace(/[_-]\d{6,}.*$/, '').replace(/cat[aá]logo(s)?/ig, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+        }
+
+        /**
+         * Lee el PDF con pdf.js: en cada página busca las fotos de los modelos (las que tienen nombre y precio debajo) y las
+         * saca limpias, sin la marca de agua que el PDF dibuja encima. Las páginas sin precios (portada, políticas) se saltan.
+         */
+        async function extractSupplierPdf(file, onProgress) {
+            const pdfjs = await import(/* webpackIgnore: true */ '/crm/pdfjs/pdf.min.mjs');
+            pdfjs.GlobalWorkerOptions.workerSrc = '/crm/pdfjs/pdf.worker.min.mjs';
+            const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+            const mul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+            const isPrice = s => /^\s*\$\s*\d/.test(s);
+            const isNote = s => /medida|peso|cera|\bcm\b|\d\s*g\b/i.test(s);
+            const products = [];
+            for (let n = 1; n <= doc.numPages; n++) {
+                onProgress && onProgress(`Leyendo página ${n} de ${doc.numPages}`);
+                const page = await doc.getPage(n);
+                const vp = page.getViewport({ scale: 1 });
+                const texts = (await page.getTextContent()).items.filter(t => t.str && t.str.trim())
+                    .map(t => ({ s: t.str.trim(), x: t.transform[4], w: t.width || 0, y: vp.height - t.transform[5] }));
+                if (!texts.some(t => isPrice(t.s))) continue;
+                const ops = await page.getOperatorList();
+                let ctm = [1, 0, 0, 1, 0, 0];
+                const stack = [], draws = [];
+                for (let i = 0; i < ops.fnArray.length; i++) {
+                    const fn = ops.fnArray[i], args = ops.argsArray[i];
+                    if (fn === pdfjs.OPS.save) stack.push(ctm);
+                    else if (fn === pdfjs.OPS.restore) ctm = stack.pop() || ctm;
+                    else if (fn === pdfjs.OPS.transform) ctm = mul(ctm, args);
+                    else if (fn === pdfjs.OPS.paintImageXObject) draws.push({ id: args[0], x: ctm[4], y: vp.height - ctm[5] - ctm[3], w: ctm[0], h: ctm[3] });
+                }
+                // El logo o la marca de agua se dibujan varias veces o casi a toda la página: no son modelos.
+                const count = {};
+                draws.forEach(d => { count[d.id] = (count[d.id] || 0) + 1; });
+                const boxes = draws.filter(d => count[d.id] === 1 && d.w >= 60 && d.h >= 60 && d.w <= vp.width * 0.8);
+                for (const box of boxes) {
+                    const cx = box.x + box.w / 2, bottom = box.y + box.h;
+                    const near = t => Math.abs(t.x + t.w / 2 - cx) < box.w / 2 + 30 && t.y > bottom - 5 && t.y < bottom + 170;
+                    const below = texts.filter(near).sort((a, b) => a.y - b.y);
+                    const price = below.find(t => isPrice(t.s));
+                    const nameLines = below.filter(t => !isPrice(t.s) && !isNote(t.s) && (!price || t.y < price.y));
+                    if (!price || nameLines.length === 0) continue;
+                    const firstY = nameLines[0].y;
+                    const name = nameLines.filter(t => Math.abs(t.y - firstY) < 6).sort((a, b) => a.x - b.x).map(t => t.s).join(' ').replace(/\s+/g, ' ').replace(/\b(\w) (\w)\b/g, '$1$2').trim();
+                    const note = below.filter(t => isNote(t.s) && t.y < price.y + 40).map(t => t.s).join(' · ');
+                    const obj = await new Promise(resolve => page.objs.get(box.id, resolve));
+                    // La foto se saca tal cual (sin la marca de agua) y, si es muy grande, se reduce a 1200 px.
+                    const raw = document.createElement('canvas');
+                    raw.width = obj.width;
+                    raw.height = obj.height;
+                    const rctx = raw.getContext('2d');
+                    rctx.fillStyle = '#fff';
+                    rctx.fillRect(0, 0, raw.width, raw.height);
+                    if (obj.bitmap) rctx.drawImage(obj.bitmap, 0, 0);
+                    else if (obj.data) {
+                        const img = rctx.createImageData(obj.width, obj.height);
+                        if (obj.data.length === obj.width * obj.height * 4) img.data.set(obj.data);
+                        else for (let p = 0, q = 0; p < obj.width * obj.height; p++) { img.data[q++] = obj.data[p * 3]; img.data[q++] = obj.data[p * 3 + 1]; img.data[q++] = obj.data[p * 3 + 2]; img.data[q++] = 255; }
+                        rctx.putImageData(img, 0, 0);
+                    }
+                    const scale = Math.min(1, 1200 / Math.max(raw.width, raw.height));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.round(raw.width * scale);
+                    canvas.height = Math.round(raw.height * scale);
+                    canvas.getContext('2d').drawImage(raw, 0, 0, canvas.width, canvas.height);
+                    const imageBase64 = canvas.toDataURL('image/jpeg', 0.88);
+                    // Una página repetida en el PDF no duplica los modelos.
+                    if (products.some(p => p.name === name && p.imageBase64 === imageBase64)) continue;
+                    products.push({ page: n, name, supplierPrice: Number(price.s.replace(/[^\d.,]/g, '').replace(',', '.')) || null, sizeNote: note, imageBase64 });
+                }
+            }
+            return { pages: doc.numPages, products };
+        }
+
+        const SIZE_LABELS = { pequena: 'Pequeña', mediana: 'Mediana', grande: 'Grande' };
+
+        function SupplierCatalogs({ canEdit, canConfigure }) {
+            const [data, setData] = useState(null);
+            const [settings, setSettings] = useState(null);
+            const [packagingTypes, setPackagingTypes] = useState([]);
+            const [unit, setUnit] = useState('');
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            const [busy, setBusy] = useState('');
+            const [pdf, setPdf] = useState(null);
+            const [pdfName, setPdfName] = useState('');
+            const [openCatalog, setOpenCatalog] = useState(null);
+
+            const load = () => api('/api/social/suppliers').then(r => {
+                setData(r);
+                setSettings(prev => prev || r.settings);
+                setOpenCatalog(prev => prev || r.catalogs[0]?.id || null);
+                setError('');
+            }).catch(e => setError(e.message));
+            useEffect(() => {
+                load();
+                api('/api/business-profile').then(p => {
+                    setPackagingTypes(p.packaging?.enabled ? (p.packaging.types || []) : []);
+                    setUnit(p.sales?.unitSingular || '');
+                }).catch(() => {});
+            }, []);
+
+            const s = settings || data?.settings;
+            const pricesReady = s && ['pequena', 'mediana', 'grande'].every(k => Number(s.sizePrices[k]) > 0);
+            const setPrice = (size, value) => setSettings({ ...s, sizePrices: { ...s.sizePrices, [size]: value } });
+
+            async function saveSettings() {
+                setBusy('settings');
+                try {
+                    setSettings((await api('/api/social/suppliers/settings', { method: 'PUT', body: JSON.stringify(s) })).settings);
+                    setNotice('✅ Regla de precios guardada');
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            async function importPdf() {
+                if (!pdf) return;
+                setBusy('import');
+                setError('');
+                setNotice('');
+                try {
+                    const read = await extractSupplierPdf(pdf, text => setNotice('📖 ' + text + '…'));
+                    if (!read.products.length) throw new Error('No encontré modelos con foto, nombre y precio en este PDF');
+                    // Por partes de 12: un catálogo grande no choca con el límite de tamaño de cada envío.
+                    const r = { total: 0, added: 0, estimated: 0, withoutPrice: 0, catalog: null };
+                    for (let i = 0; i < read.products.length; i += 12) {
+                        setNotice(`💾 Guardando modelos ${i + 1}-${Math.min(i + 12, read.products.length)} de ${read.products.length}${s.autoAddToCatalog ? ' y agregándolos al Catálogo' : ''}…`);
+                        const part = await api('/api/social/suppliers', { method: 'POST', body: JSON.stringify({ catalogId: r.catalog?.id, name: pdfName, fileName: pdf.name, pages: read.pages, products: read.products.slice(i, i + 12) }) });
+                        r.catalog = part.catalog;
+                        ['total', 'added', 'estimated', 'withoutPrice'].forEach(k => { r[k] += part[k]; });
+                    }
+                    setNotice(`✅ ${r.total} modelos leídos del PDF${r.added ? ` · ${r.added} agregados al Catálogo en ${r.catalog.name}` : ''}${r.estimated ? ` · ${r.estimated} con tamaño estimado (${SIZE_LABELS[s.defaultSize]}): revísalos abajo` : ''}${r.withoutPrice ? ` · ${r.withoutPrice} sin precio (completa la regla de precios)` : ''}.`);
+                    setPdf(null);
+                    setPdfName('');
+                    setOpenCatalog(r.catalog.id);
+                    load();
+                } catch (e) {
+                    setNotice('');
+                    setError('No se pudo leer el PDF: ' + e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            async function patchProduct(product, changes) {
+                try {
+                    const updated = (await api('/api/social/suppliers/products/' + product.id, { method: 'PATCH', body: JSON.stringify(changes) })).product;
+                    setData(d => ({ ...d, products: d.products.map(p => (p.id === updated.id ? updated : p)) }));
+                } catch (e) {
+                    setError(e.message);
+                }
+            }
+
+            async function addToCatalog(ids) {
+                setBusy('catalog');
+                try {
+                    const r = await api('/api/social/suppliers/to-catalog', { method: 'POST', body: JSON.stringify({ ids }) });
+                    setNotice(`✅ ${r.added} agregado(s) al Catálogo${r.withoutPrice ? ` · ${r.withoutPrice} sin precio` : ''}${r.alreadyThere ? ` · ${r.alreadyThere} ya existían` : ''}.`);
+                    load();
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            async function removeCatalog(catalog) {
+                if (!confirm(`¿Borrar el catálogo ${catalog.name} de esta lista? Lo que ya pasó al Catálogo se queda ahí.`)) return;
+                try {
+                    await api('/api/social/suppliers/' + catalog.id, { method: 'DELETE' });
+                    setOpenCatalog(null);
+                    load();
+                } catch (e) {
+                    setError(e.message);
+                }
+            }
+
+            if (!data) return <section className="pb-card">{error ? <div className="pb-err">{error}</div> : <div className="pb-muted">Cargando…</div>}</section>;
+            const priceOf = p => Number(s.sizePrices[p.size]) || 0;
+            return (
+                <>
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="box" size={22} color="#4F5BD5" /></div>
+                            <div className="grow"><h2>Catálogos de proveedores</h2><p>Sube el PDF de tu proveedor: el sistema saca cada modelo con su foto, le pone tu precio según el tamaño y lo agrega al Catálogo (el bot de WhatsApp y el agente de redes lo usan de inmediato).</p></div>
+                        </div>
+                        {notice && <div className="pb-notice ok">{notice}</div>}
+                        {error && <div className="pb-err" style={{ marginBottom: 12 }}>{error}</div>}
+                        <div className="sp-grid">
+                            <div className="sp-box">
+                                <b>1. Tu regla de precios</b>
+                                <small>Precio de venta {unit ? 'por ' + unit : ''} según el tamaño de la vela.</small>
+                                <div className="sp-prices">
+                                    {['pequena', 'mediana', 'grande'].map(size => (
+                                        <label key={size}>
+                                            <span>{SIZE_LABELS[size]}</span>
+                                            <div className="sp-money">$<input type="number" min="0" step="0.5" inputMode="decimal" value={s.sizePrices[size] || ''} disabled={!canConfigure} onChange={e => setPrice(size, e.target.value)} /></div>
+                                        </label>
+                                    ))}
+                                </div>
+                                <div className="sp-row2">
+                                    <label><span>Si el PDF no dice el tamaño</span>
+                                        <select value={s.defaultSize} disabled={!canConfigure} onChange={e => setSettings({ ...s, defaultSize: e.target.value })}>
+                                            {Object.entries(SIZE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                        </select>
+                                    </label>
+                                    <label><span>Palabra antes del nombre</span>
+                                        <input type="text" maxLength={20} placeholder="Ej: VELA" value={s.namePrefix} disabled={!canConfigure} onChange={e => setSettings({ ...s, namePrefix: e.target.value })} />
+                                    </label>
+                                    {packagingTypes.length > 0 && (
+                                        <label><span>Empaque incluido</span>
+                                            <select value={s.packaging} disabled={!canConfigure} onChange={e => setSettings({ ...s, packaging: e.target.value })}>
+                                                <option value="">Sin definir</option>
+                                                {packagingTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                                            </select>
+                                        </label>
+                                    )}
+                                </div>
+                                <label className="pb-toggle" style={{ marginTop: 8 }}>
+                                    <input type="checkbox" checked={s.autoAddToCatalog} disabled={!canConfigure} onChange={e => setSettings({ ...s, autoAddToCatalog: e.target.checked })} />
+                                    <span><b>Agregar al Catálogo automáticamente</b><small>Cada modelo del PDF entra al Catálogo apenas lo subes.</small></span>
+                                </label>
+                                {canConfigure && <button type="button" className="pb-btn main sm" style={{ marginTop: 10 }} disabled={busy === 'settings'} onClick={saveSettings}><PlatIcon name="save" size={16} color="#fff" /> {busy === 'settings' ? 'Guardando…' : 'Guardar regla'}</button>}
+                            </div>
+                            <div className="sp-box">
+                                <b>2. Sube el PDF</b>
+                                <small>Se leen solas las páginas con modelos (nombre, precio y foto); portada y políticas se saltan.</small>
+                                {canEdit && (
+                                    <>
+                                        <label className="sp-drop">
+                                            <PlatIcon name="doc" size={28} color="#4F5BD5" />
+                                            <span>{pdf ? pdf.name : 'Elegir PDF del proveedor'}</span>
+                                            <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files[0]; e.target.value = ''; if (f) { setPdf(f); setPdfName(catalogNameFromFile(f.name)); } }} />
+                                        </label>
+                                        {pdf && (
+                                            <label className="sp-name"><span>Categoría en el Catálogo</span>
+                                                <input type="text" maxLength={60} value={pdfName} onChange={e => setPdfName(e.target.value.toUpperCase())} />
+                                            </label>
+                                        )}
+                                        {pdf && !pricesReady && s.autoAddToCatalog && <div className="pb-muted" style={{ color: '#B36B00' }}>Primero guarda los 3 precios de la regla: sin precio los modelos no pueden entrar al Catálogo.</div>}
+                                        <button type="button" className="pb-btn main" disabled={!pdf || !pdfName.trim() || !!busy} onClick={importPdf}>
+                                            ✨ {busy === 'import' ? 'Leyendo…' : s.autoAddToCatalog ? 'Leer y agregar al Catálogo' : 'Leer PDF'}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+                    {data.catalogs.map(catalog => {
+                        const models = data.products.filter(p => p.catalog_id === catalog.id);
+                        const pending = models.filter(p => p.status !== 'en_catalogo');
+                        const estimated = models.filter(p => p.size_estimated).length;
+                        const isOpen = openCatalog === catalog.id;
+                        return (
+                            <section key={catalog.id} className="pb-card">
+                                <div className="pb-card-h" style={{ cursor: 'pointer' }} onClick={() => setOpenCatalog(isOpen ? null : catalog.id)}>
+                                    <div className="pb-tile"><PlatIcon name="layers" size={22} color="#4F5BD5" /></div>
+                                    <div className="grow"><h2>{catalog.name}</h2><p>{models.length} modelos · {models.length - pending.length} en el Catálogo{estimated ? ` · ${estimated} con tamaño estimado` : ''} · {catalog.file_name}</p></div>
+                                    <PbIcon name={isOpen ? 'back' : 'next'} size={20} color="#3A4570" />
+                                </div>
+                                {isOpen && (
+                                    <>
+                                        <div className="pb-actions" style={{ marginBottom: 12 }}>
+                                            {canEdit && pending.length > 0 && <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => addToCatalog(pending.map(p => p.id))}>Agregar los {pending.length} que faltan al Catálogo</button>}
+                                            {canEdit && <button type="button" className="pb-btn sm danger" onClick={() => removeCatalog(catalog)}>Borrar de esta lista</button>}
+                                        </div>
+                                        <div className="sp-models">
+                                            {models.map(p => (
+                                                <div key={p.id} className={'sp-model' + (p.size_estimated ? ' est' : '')}>
+                                                    {p.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : <div className="noimg"><PlatIcon name="image" size={26} color="#9AA3C7" /></div>}
+                                                    <b title={p.supplier_name}>{p.name}</b>
+                                                    <small>{p.supplier_name}{p.supplier_price ? ` · proveedor $${Number(p.supplier_price).toFixed(2).replace(/\.00$/, '')}` : ''} · pág. {p.page}</small>
+                                                    <div className="sp-size">
+                                                        <select value={p.size} disabled={!canEdit} onChange={e => patchProduct(p, { size: e.target.value })} aria-label="Tamaño">
+                                                            {Object.entries(SIZE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                                        </select>
+                                                        <span className="price">{priceOf(p) ? '$' + priceOf(p).toFixed(2).replace(/\.00$/, '') : 'Sin precio'}</span>
+                                                    </div>
+                                                    {p.size_estimated && <span className="sp-tag warn" title={p.size_note || 'El PDF no dice el tamaño'}>Tamaño estimado</span>}
+                                                    {p.status === 'en_catalogo'
+                                                        ? <span className="sp-tag ok">En el Catálogo</span>
+                                                        : canEdit && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => addToCatalog([p.id])}>Agregar al Catálogo</button>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </section>
+                        );
+                    })}
+                </>
+            );
+        }
+
+        const METRIC_LABELS = [['likes', '❤', 'Me gusta'], ['comments', '💬', 'Comentarios'], ['views', '👁', 'Visualizaciones'], ['reach', '📣', 'Alcance']];
+
+        function SocialResults() {
+            const [data, setData] = useState(null);
+            const [days, setDays] = useState(30);
+            const [error, setError] = useState('');
+            useEffect(() => {
+                setData(null);
+                api('/api/social/results?days=' + days).then(setData).catch(e => setError(e.message));
+            }, [days]);
+            const total = key => (data?.posts || []).reduce((sum, p) => sum + p.metrics.reduce((s, m) => s + (Number(m[key]) || 0), 0), 0);
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="chart" size={22} color="#4F5BD5" /></div>
+                        <div className="grow"><h2>Resultados</h2><p>Me gusta, comentarios, visualizaciones y alcance de publicaciones e historias (se actualiza cada hora).</p></div>
+                        <select className="sr-days" value={days} onChange={e => setDays(Number(e.target.value))} aria-label="Período">
+                            <option value={7}>Últimos 7 días</option>
+                            <option value={30}>Últimos 30 días</option>
+                            <option value={90}>Últimos 90 días</option>
+                        </select>
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {data?.problem && <div className="pb-notice" style={{ background: '#FFF3DC', color: '#7A5300' }}>⚠️ {data.problem}</div>}
+                    {!data ? !error && <div className="pb-muted">Cargando…</div> : (
+                        <>
+                            <div className="sr-totals">
+                                {METRIC_LABELS.map(([key, icon, label]) => <div key={key}><span>{icon} {label}</span><b>{total(key).toLocaleString('es-EC')}</b></div>)}
+                            </div>
+                            {data.posts.length === 0 ? <div className="pb-posts-empty">Todavía no hay publicaciones en este período.</div> : (
+                                <div className="sr-list">
+                                    {data.posts.map(post => {
+                                        const first = postItems(post)[0];
+                                        return (
+                                            <div key={post.id} className="sr-post">
+                                                <PbMediaThumb item={first} className="th" />
+                                                <div className="mid">
+                                                    <b>{post.theme || 'Publicación'}</b>
+                                                    <small>{postWhen(post.published_at || post.scheduled_at)}</small>
+                                                    {Object.keys(post.results || {}).filter(c => post.results[c] && !post.results[c].error).map(channel => {
+                                                        const m = post.metrics.find(x => x.channel === channel);
+                                                        return (
+                                                            <div key={channel} className="sr-row">
+                                                                <span className="net"><PbNetLogo net={channel === 'facebook' ? 'facebook' : 'instagram'} size={16} /> {POST_CHANNEL_NAMES[channel] || channel}</span>
+                                                                {m ? METRIC_LABELS.map(([key, icon, label]) => <span key={key} title={label}>{icon} {m[key] === null || m[key] === undefined ? '—' : Number(m[key]).toLocaleString('es-EC')}</span>) : <span className="pb-muted">Aún sin datos</span>}
+                                                                {post.results[channel].permalink && <a href={post.results[channel].permalink} target="_blank" rel="noopener noreferrer">Ver ↗</a>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </section>
+            );
+        }
+
         function PostsView({ canEdit, canConfigure, isAdmin }) {
             const mobile = useMobile();
             const [view, setView] = useState('home');
@@ -8630,6 +9232,8 @@
             const [editing, setEditing] = useState(null);
             const [creating, setCreating] = useState(null);
             const [selDay, setSelDay] = useState(pbToday());
+            // Área del agente de redes: calendario, biblioteca, proveedores o resultados.
+            const [area, setArea] = useState('calendario');
             const cardRefs = useRef({});
 
             const gridStart = mode === 'month' ? monthGridStart(anchor) : anchor;
@@ -8868,12 +9472,13 @@
             );
 
             const thumb = post => {
-                const first = post.products[0];
+                const items = postItems(post);
                 return (
-                    <button type="button" className="pb-thumb" onClick={() => setEditing(post)} aria-label={'Ver ' + (first ? first.name : 'publicación')}>
-                        {first && <img src={first.image_url} alt="" loading="lazy" />}
+                    <button type="button" className="pb-thumb" onClick={() => setEditing(post)} aria-label={'Ver ' + (items[0] ? items[0].name : 'publicación')}>
+                        <PbMediaThumb item={items[0]} />
                         <span className={'pb-st ' + post.status}>{POST_STATUS[post.status]}</span>
-                        {post.products.length > 1 && <span className="more">+{post.products.length - 1}</span>}
+                        {items[0]?.type === 'video' && <span className="more" style={{ left: 6, right: 'auto' }}>▶ Video</span>}
+                        {items.length > 1 && <span className="more">+{items.length - 1}</span>}
                     </button>
                 );
             };
@@ -8881,7 +9486,7 @@
                 const n = postNets(post);
                 return <div className="pb-nets">{n.ig && <PbNetLogo net="instagram" size={20} />}{n.fb && <PbNetLogo net="facebook" size={20} />}</div>;
             };
-            const nameOf = post => (post.products[0] ? niceName(post.products[0].name) : 'Sin foto');
+            const nameOf = post => (post.products[0] ? niceName(post.products[0].name) : post.media && post.media.length ? post.theme || 'Biblioteca' : 'Sin foto');
             const canAddOn = day => canEdit && day >= today;
 
             const modals = (
@@ -8890,6 +9495,20 @@
                     {creating && <PbNewPost settings={s} day={creating.day} onClose={() => setCreating(null)} onCreated={post => { setCreating(null); setPosts(list => [...list, post]); setNotice({ ok: true, text: 'Publicación programada: saldrá sola a su hora.' }); }} />}
                 </>
             );
+
+            // Biblioteca, proveedores y resultados: las otras áreas del agente de redes.
+            if (area !== 'calendario') {
+                const areaView = area === 'biblioteca' ? <SocialLibrary canEdit={canEdit} /> : area === 'proveedores' ? <SupplierCatalogs canEdit={canEdit} canConfigure={canConfigure} /> : <SocialResults />;
+                return (
+                    <div className="pb">
+                        {mobile
+                            ? <button type="button" className="pb-backlink" onClick={() => { setArea('calendario'); window.scrollTo(0, 0); }}><PbIcon name="back" size={18} /> Publicaciones</button>
+                            : <>{hero(true)}<PbAreaTabs area={area} setArea={setArea} /></>}
+                        {areaView}
+                        {modals}
+                    </div>
+                );
+            }
 
             // ---------- Celular ----------
             if (mobile) {
@@ -8979,6 +9598,13 @@
                             <div className="tt"><b>Cómo publicar</b><span>Días, hora, redes y textos</span></div>
                             <PbIcon name="next" size={20} color="#3A4570" />
                         </button>
+                        {[['biblioteca', 'image', 'Biblioteca', 'Tus fotos y videos para redes'], ['proveedores', 'box', 'Proveedores', 'Sube un PDF y pasa sus modelos al Catálogo'], ['resultados', 'chart', 'Resultados', 'Me gusta, comentarios, visualizaciones y alcance']].map(([id, icon, title, sub]) => (
+                            <button key={id} type="button" className="pb-navcard" onClick={() => { setArea(id); window.scrollTo(0, 0); }}>
+                                <div className="pb-tile"><PlatIcon name={icon} size={22} color="#4F5BD5" /></div>
+                                <div className="tt"><b>{title}</b><span>{sub}</span></div>
+                                <PbIcon name="next" size={20} color="#3A4570" />
+                            </button>
+                        ))}
                         {modals}
                     </div>
                 );
@@ -8996,6 +9622,7 @@
             return (
                 <div className="pb">
                     {hero(true)}
+                    <PbAreaTabs area={area} setArea={setArea} />
                     {notices}
                     {channelsCard}
 
@@ -9046,7 +9673,7 @@
                                         onClick={() => { setMode('week'); setAnchor(mondayOf(day)); setSelDay(day); }}>
                                         <span className="n">{dayParts(day).d}</span>
                                         <span className="pics">
-                                            {(byDay[day] || []).slice(0, 4).map(p => p.products[0] && <img key={p.id} src={p.products[0].image_url} alt="" className={p.status} title={`${timeOf(p.scheduled_at)} · ${POST_STATUS[p.status]}`} />)}
+                                            {(byDay[day] || []).slice(0, 4).map(p => { const first = postItems(p)[0]; return first && (first.type === 'video' ? <video key={p.id} src={first.url + '#t=0.5'} muted preload="metadata" className={p.status} title={`${timeOf(p.scheduled_at)} · ${POST_STATUS[p.status]}`} /> : <img key={p.id} src={first.url} alt="" className={p.status} title={`${timeOf(p.scheduled_at)} · ${POST_STATUS[p.status]}`} />); })}
                                         </span>
                                     </button>
                                 ))}
