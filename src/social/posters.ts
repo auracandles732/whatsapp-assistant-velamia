@@ -283,7 +283,8 @@ async function findExisting(model: SupplierProduct, candidates: any[]): Promise<
   const options = [...new Set(picked.map(Number))].filter(i => Number.isInteger(i) && i >= 1 && i <= candidates.length).slice(0, 2).map(i => candidates[i - 1]);
   if (options.length === 0) console.log(`🔁 ${model.name}: nada parecido en el Catálogo (${candidates.length} revisados)`);
   for (const found of options) {
-    const same = await sameMold(model.image_url, found.image_url);
+    // Dos confirmaciones seguidas: descartar de más es peor (quita un producto nuevo del Catálogo) y la IA a veces duda.
+    const same = await sameMold(model.image_url, found.image_url) && await sameMold(model.image_url, found.image_url);
     console.log(`🔁 ${model.name}: ¿es ${found.name}? ${same ? "sí, ya lo tiene" : "no"}`);
     if (same) return { id: found.id, name: found.name, image_url: found.image_url };
   }
@@ -291,15 +292,21 @@ async function findExisting(model: SupplierProduct, candidates: any[]): Promise<
 }
 
 /**
- * Segundo paso: ¿estas dos fotos muestran el mismo molde? La IA describe cada vela por separado (gorro, cara, brazos,
- * piernas, adornos) y recién después compara: así no confunde dos Papá Noel distintos (probado 24 de 24 con 4 pares
- * iguales y 4 distintos de MOLDES NAVIDAD).
+ * Modelo para confirmar si dos velas son el mismo molde. Con el catálogo real MOLDES NAVIDAD (92 modelos), luna confundió
+ * 5 de 14: otros hombres de jengibre, otro árbol, otro Papá Noel; terra acertó 34 de 34 en esos casos difíciles. Cuesta
+ * cerca de un centavo por comparación (dos si parece repetido); lo demás del agente sigue con el modelo de Cerebro IA.
  */
-async function sameMold(modelUrl: string, productUrl: string): Promise<boolean> {
+export const COMPARE_MODEL = 'gpt-5.6-terra';
+
+/**
+ * Segundo paso: ¿estas dos fotos muestran el mismo molde? La IA describe cada vela por separado (gorro, cara, brazos,
+ * piernas, adornos) y recién después compara: así no confunde dos Papá Noel distintos.
+ */
+export async function sameMold(modelUrl: string, productUrl: string): Promise<boolean> {
   const ai = await socialAi();
   const confirm = await ai.client.chat.completions.create({
-    model: ai.textModel,
-    ...reasoning(ai.textModel),
+    model: COMPARE_MODEL,
+    ...reasoning(COMPARE_MODEL),
     max_completion_tokens: 2000,
     response_format: jsonSchema('confirmacion', { proveedor: { type: 'string' }, afiche: { type: 'string' }, mismoMolde: { type: 'boolean' } }),
     messages: [{
@@ -313,7 +320,7 @@ Después decide: "mismoMolde" = true solo si es la misma figura y coinciden la f
       ]
     }]
   } as any);
-  track(ai.textModel, confirm.usage);
+  track(COMPARE_MODEL, confirm.usage);
   return JSON.parse(confirm.choices[0]?.message?.content || '{}').mismoMolde === true;
 }
 
