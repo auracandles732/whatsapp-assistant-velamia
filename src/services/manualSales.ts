@@ -1,4 +1,4 @@
-import { computeOrderTotal } from './openai';
+import { computeOrderTotal, productKey } from './openai';
 import { BusinessProfile, profile, quantityText, formatDate } from '../config/businessProfile';
 
 /**
@@ -56,4 +56,36 @@ export function quotationMessage(products: any[], total: number, p: BusinessProf
   }
   lines.push('', pay.transferEnabled && pay.cardEnabled ? '¿Prefieres pagar por transferencia o con tarjeta?' : '¿Confirmamos tu pedido?');
   return lines.join('\n');
+}
+
+/** WhatsApp permite hasta 1024 caracteres debajo de una foto. */
+export const PHOTO_CAPTION_LIMIT = 1024;
+
+export interface QuotationDelivery {
+  photos: { url: string; caption: string }[];
+  /** Texto que va después de las fotos (null si la cotización completa ya va debajo de la única foto). */
+  text: string | null;
+  /** La cotización completa, por si las fotos no se pueden enviar. */
+  fullText: string;
+}
+
+/**
+ * La cotización va con las fotos de los productos: con un solo producto, su foto con toda la cotización debajo (un solo
+ * mensaje); con varios, cada foto con su nombre y cantidad y al final el texto con el total y la forma de pago.
+ */
+export function quotationDelivery(products: any[], total: number, catalog: any[], p: BusinessProfile = profile()): QuotationDelivery {
+  const fullText = quotationMessage(products, total, p);
+  const items = products.filter(i => i && !i.type);
+  const photos = items
+    .map(item => ({ item, url: String(catalog.find(c => productKey(c.name) === productKey(item.name))?.image_url || '') }))
+    .filter(x => x.url)
+    .slice(0, 6);
+  if (photos.length === 1 && items.length === 1 && fullText.length <= PHOTO_CAPTION_LIMIT) {
+    return { photos: [{ url: photos[0].url, caption: fullText }], text: null, fullText };
+  }
+  return {
+    photos: photos.map(x => ({ url: x.url, caption: `${p.business.productEmoji} *${x.item.name}* · ${quantityText(Number(x.item.quantity), p)}` })),
+    text: fullText,
+    fullText
+  };
 }

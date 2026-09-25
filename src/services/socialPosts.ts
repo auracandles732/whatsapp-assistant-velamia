@@ -3,8 +3,8 @@ import { writeSocialCaptions, productKey } from './openai';
 import { BusinessProfile, profile } from '../config/businessProfile';
 
 /**
- * Publicaciones en redes (servicio adicional): cada semana se preparan publicaciones con las fotos del catálogo,
- * la empresa las revisa en el CRM y se publican solas a la hora elegida (socialPublisher).
+ * Publicaciones en redes (servicio adicional): la empresa programa publicaciones con las fotos del catálogo (o, en modo
+ * automático, la IA las prepara cada semana) y se publican solas a la hora elegida (socialPublisher), sin aprobaciones.
  */
 
 export type PostChannel = 'instagram_feed' | 'instagram_story' | 'facebook';
@@ -37,9 +37,9 @@ export interface PublishingSettings {
   channels: PostChannel[];
   /** 1 = una foto; de 2 a 10 = carrusel (en historias va solo la primera). */
   photosPerPost: number;
-  /** Preparar sola la semana siguiente. */
+  /** Modo automático: la IA elige los productos, escribe el texto y programa cada semana sola. */
   autoPlan: boolean;
-  /** Publicar sin que la empresa las apruebe. */
+  /** Ya no se usa: todo lo programado se publica sin aprobación. Se conserva para leer configuraciones guardadas. */
   autoApprove: boolean;
   /** Tono, hashtags fijos, lo que conviene destacar. */
   notes: string;
@@ -50,8 +50,8 @@ export const DEFAULT_SETTINGS: PublishingSettings = {
   hour: '19:00',
   channels: ['instagram_feed', 'facebook'],
   photosPerPost: 1,
-  autoPlan: true,
-  autoApprove: false,
+  autoPlan: false,
+  autoApprove: true,
   notes: ''
 };
 
@@ -69,7 +69,7 @@ export function normalizeSettings(raw: any): PublishingSettings {
     channels: channels.length ? channels : DEFAULT_SETTINGS.channels,
     photosPerPost: Number.isFinite(photos) ? Math.min(10, Math.max(1, photos)) : DEFAULT_SETTINGS.photosPerPost,
     autoPlan: typeof r.autoPlan === 'boolean' ? r.autoPlan : DEFAULT_SETTINGS.autoPlan,
-    autoApprove: typeof r.autoApprove === 'boolean' ? r.autoApprove : DEFAULT_SETTINGS.autoApprove,
+    autoApprove: true,
     notes: typeof r.notes === 'string' ? r.notes.trim().slice(0, 1000) : ''
   };
 }
@@ -267,7 +267,15 @@ export async function updatePost(id: string, changes: Partial<SocialPost>, onlyI
   return data as SocialPost | null;
 }
 
-/** Publicaciones aprobadas cuya hora ya llegó. */
+/** Lo que quedó "por revisar" (antes había que aprobar cada publicación) pasa a programado. */
+export async function scheduleDrafts(): Promise<void> {
+  const { error } = await supabase.from(POSTS).update({ status: 'approved', updated_at: new Date().toISOString() })
+    .filter('business_id', tenantOp(), tenantValue())
+    .eq('status', 'draft');
+  if (error) throw new Error(`Error programando publicaciones: ${error.message}`);
+}
+
+/** Publicaciones programadas cuya hora ya llegó. */
 export async function duePosts(now: Date): Promise<SocialPost[]> {
   const { data, error } = await supabase.from(POSTS).select('*')
     .filter('business_id', tenantOp(), tenantValue())
@@ -295,8 +303,8 @@ export async function stuckPosts(olderThan: Date): Promise<SocialPost[]> {
 export const toPostProduct = (c: CatalogItem): PostProduct => ({ name: c.name, image_url: String(c.image_url || ''), price: Number(c.price) });
 
 /**
- * Prepara las publicaciones de los próximos días de publicación que todavía no tienen una. Un día que la empresa
- * descartó no se vuelve a llenar. Si la IA no responde, cada publicación lleva un texto de respaldo.
+ * Prepara y programa las publicaciones de los próximos días de publicación que todavía no tienen una. Un día que la
+ * empresa descartó no se vuelve a llenar. Si la IA no responde, cada publicación lleva un texto de respaldo.
  */
 export async function planUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<SocialPost[]> {
   const settings = settingsParam || (await getSavedSettings()) || DEFAULT_SETTINGS;
@@ -323,7 +331,7 @@ export async function planUpcomingPosts(now = new Date(), days = 7, settingsPara
 
   return insertPosts(picks.map((pick, i) => ({
     scheduled_at: free[i].toISOString(),
-    status: settings.autoApprove ? 'approved' : 'draft',
+    status: 'approved',
     channels: settings.channels,
     caption: captions[i] || fallbackCaption(pick, p),
     products: pick.products.map(toPostProduct),

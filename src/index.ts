@@ -66,10 +66,10 @@ import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } 
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
 import {
   listPosts, getPost, insertPosts, updatePost, getSavedSettings, saveSettings, planUpcomingPosts, rewriteCaption,
-  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus
+  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus, PostChannel
 } from './services/socialPosts';
 import { claimAndPublish, startSocialPostsScheduler } from './services/socialPublisher';
-import { buildSale, quotationMessage } from './services/manualSales';
+import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
@@ -380,7 +380,10 @@ app.get('/api/posts', requireCrmSession, async (req: Request, res: Response) => 
 
 app.put('/api/posts/settings', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
   try {
-    res.json({ settings: await saveSettings(req.body) });
+    const settings = await saveSettings(req.body);
+    // Al encender el modo automático la IA programa de una vez los próximos 7 días (no espera a la revisión de cada hora).
+    const created = settings.autoPlan ? await planUpcomingPosts(new Date(), 7, settings) : [];
+    res.json({ settings, created: created.length });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -400,18 +403,20 @@ app.post('/api/posts', requireCrmSession, requireEditorRole, requirePublishing, 
   try {
     const when = new Date(String(req.body?.scheduled_at || ''));
     if (!Number.isFinite(when.getTime())) return res.status(400).json({ error: 'Elige el día y la hora' });
+    if (when.getTime() < Date.now() - 2 * 60 * 1000) return res.status(400).json({ error: 'Esa hora ya pasó: elige otra (o créala y usa "Publicar ahora")' });
     let caption = String(req.body?.caption || '').trim();
     if (caption.length > CAPTION_LIMIT) return res.status(400).json({ error: `El texto pasa de ${CAPTION_LIMIT} caracteres` });
     const products = await catalogProducts(req.body?.products);
     const channels = cleanChannels(req.body?.channels);
     const theme = String(req.body?.theme || '').trim().slice(0, 80) || 'Nuestros productos';
-    // Sin texto, lo escribe la IA; si no responde, va el texto de respaldo (siempre se puede cambiar antes de aprobar).
+    // Sin texto, lo escribe la IA; si no responde, va el texto de respaldo (siempre se puede cambiar antes de que salga).
     if (!caption) {
       const draft = { theme, products } as any;
       caption = await rewriteCaption(draft, ((await getSavedSettings()) || DEFAULT_SETTINGS).notes).catch(() => fallbackCaption(draft));
     }
     const [post] = await insertPosts([{
-      scheduled_at: when.toISOString(), status: 'draft', channels, caption, products, theme, results: {}, error: null
+      // Queda programada: se publica sola a esa hora, sin pedir aprobación.
+      scheduled_at: when.toISOString(), status: 'approved', channels, caption, products, theme, results: {}, error: null
     }]);
     // La publicación trae su propio campo "error" (motivo de un fallo): va envuelta para que el CRM no lo tome como error de la petición.
     res.status(201).json({ post });
@@ -444,10 +449,14 @@ app.patch('/api/posts/:postId', requireCrmSession, requireEditorRole, requirePub
       changes.status = status;
     }
 
+    // Cambiar una publicación la deja programada otra vez (también a una que falló) si su hora es futura.
+    if (changes.status === undefined && post.status !== 'approved' && new Date(changes.scheduled_at || post.scheduled_at).getTime() > Date.now()) {
+      changes.status = 'approved';
+    }
     const final = { ...post, ...changes };
     if (final.status === 'approved') {
-      if (!final.caption) return res.status(400).json({ error: 'Escribe el texto antes de aprobarla' });
-      // Aprobar algo con hora pasada lo publicaría de golpe: para eso está "Publicar ahora".
+      if (!final.caption && final.channels.some((c: PostChannel) => c !== 'instagram_story')) return res.status(400).json({ error: 'Escribe el texto de la publicación' });
+      // Programar algo con hora pasada lo publicaría de golpe: para eso está "Publicar ahora".
       if (new Date(final.scheduled_at).getTime() < Date.now()) return res.status(400).json({ error: 'La hora ya pasó: elige otra o usa "Publicar ahora"' });
       changes.error = null;
     }
@@ -1010,12 +1019,17 @@ app.put('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEdito
   }
 });
 
-/** Le envía la cotización a la clienta por su chat. Como todo mensaje escrito desde el CRM, pausa el bot en ese chat. */
+/**
+ * Le envía la cotización a la clienta con las fotos de los productos, por su chat (WhatsApp, Instagram o Messenger) o por
+ * otro chat que se elija. Como todo mensaje escrito desde el CRM, pausa el bot en ese chat.
+ */
 app.post('/api/quotations/:id/send', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
   try {
     const quotation = await getQuotationById(req.params.id);
     if (!quotation) return res.status(404).json({ error: 'Cotización no encontrada' });
-    const conv = await getConversationById(quotation.conversation_id);
+    const targetId = String(req.body?.conversationId || quotation.conversation_id);
+    if (!UUID_PATTERN.test(targetId)) return res.status(400).json({ error: 'Conversación inválida' });
+    const conv = await getConversationById(targetId);
     if (!conv) return res.status(404).json({ error: 'El chat de esta cotización ya no existe' });
     let products: any[] = [];
     try {
@@ -1023,10 +1037,25 @@ app.post('/api/quotations/:id/send', requireCrmSession, requireUuidParam, requir
     } catch {
       products = [];
     }
-    const text = quotationMessage(products, Number(quotation.total_amount || 0));
+    const delivery = quotationDelivery(products, Number(quotation.total_amount || 0), await getAllProducts());
     await pauseBot(conv.id);
-    const sent = await sendTextMessage(conv.phone_number, text);
-    await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
+    // Una foto que no se pueda enviar no frena la cotización: el texto con el total siempre sale.
+    let photosSent = 0;
+    for (const photo of delivery.photos) {
+      try {
+        const sent = await sendImageMessage(conv.phone_number, photo.url, photo.caption);
+        await saveMessage(conv.id, 'human', 'image', `${photo.url}
+${photo.caption}`, getSentMessageId(sent));
+        photosSent++;
+      } catch (error: any) {
+        console.warn('Foto de la cotización no enviada:', error.response?.data?.error?.message || error.message);
+      }
+    }
+    const text = delivery.text ?? (photosSent === 0 ? delivery.fullText : null);
+    if (text) {
+      const sent = await sendTextMessage(conv.phone_number, text);
+      await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
+    }
     if (quotation.status !== 'accepted') await updateQuotationStatus(quotation.id, 'sent');
     res.json({ success: true, bot_paused: true, quotation: await getQuotationById(quotation.id) });
   } catch (error: any) {

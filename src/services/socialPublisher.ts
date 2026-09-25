@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from './metaChannels';
-import { instagramReadyUrl } from './socialImages';
-import { SocialPost, PostChannel, PostStatus, duePosts, stuckPosts, updatePost, getSavedSettings, planUpcomingPosts } from './socialPosts';
+import { instagramReadyUrl, ImageKind } from './socialImages';
+import { SocialPost, PostChannel, PostStatus, duePosts, stuckPosts, updatePost, getSavedSettings, planUpcomingPosts, scheduleDrafts } from './socialPosts';
 import { getPublishingTenants } from './supabase';
 import { runWithTenant } from './tenant';
 
@@ -42,12 +42,12 @@ async function publishContainer(conn: PublishingConnection, containerId: string,
 
 interface PublishOptions {
   waitMs: number;
-  /** Deja cada foto lista para Instagram (JPG con proporción válida) y devuelve su dirección. */
-  prepareImage: (url: string) => Promise<string>;
+  /** Arma cada foto para Instagram (publicación 4:5 o historia 9:16, sin recortarla) y devuelve su dirección. */
+  prepareImage: (url: string, kind: ImageKind) => Promise<string>;
 }
 
 async function instagramFeed(conn: PublishingConnection, post: SocialPost, { waitMs, prepareImage }: PublishOptions): Promise<ChannelResult> {
-  const images = await Promise.all(post.products.slice(0, 10).map(p => prepareImage(p.image_url)));
+  const images = await Promise.all(post.products.slice(0, 10).map(p => prepareImage(p.image_url, 'feed')));
   const create = (body: Record<string, unknown>) => graph.post(`${GRAPH_API}/${conn.instagramId}/media`, body, { params: { access_token: conn.pageToken } }).then(r => String(r.data.id));
   if (images.length === 1) {
     return publishContainer(conn, await create({ image_url: images[0], caption: post.caption }), waitMs);
@@ -59,7 +59,7 @@ async function instagramFeed(conn: PublishingConnection, post: SocialPost, { wai
 }
 
 async function instagramStory(conn: PublishingConnection, post: SocialPost, { waitMs, prepareImage }: PublishOptions): Promise<ChannelResult> {
-  const image = await prepareImage(post.products[0].image_url);
+  const image = await prepareImage(post.products[0].image_url, 'story');
   const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media`, { image_url: image, media_type: 'STORIES' }, { params: { access_token: conn.pageToken } });
   return publishContainer(conn, String(data.id), waitMs);
 }
@@ -142,6 +142,8 @@ const PLAN_EVERY_MS = 60 * 60 * 1000;
 
 async function runForCurrent(now: Date, plan: boolean) {
   let published = 0;
+  // Lo que quedó "por revisar" de antes: ahora todo lo programado sale solo.
+  await scheduleDrafts();
   for (const post of await stuckPosts(new Date(now.getTime() - 30 * 60 * 1000))) {
     await updatePost(post.id, { status: 'failed', error: 'Se interrumpió mientras se publicaba. Revisa en tus redes si salió y vuelve a intentarlo si hace falta.' }, ['publishing']);
   }
@@ -160,7 +162,7 @@ async function runForCurrent(now: Date, plan: boolean) {
     const settings = await getSavedSettings();
     if (settings?.autoPlan) {
       const created = await planUpcomingPosts(now, 7, settings);
-      if (created.length) console.log(`📣 ${created.length} publicación(es) preparadas para revisar`);
+      if (created.length) console.log(`📣 ${created.length} publicación(es) programadas por la IA`);
     }
   }
   return published;

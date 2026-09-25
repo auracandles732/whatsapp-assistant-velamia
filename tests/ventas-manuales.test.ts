@@ -6,7 +6,7 @@ import './entorno';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSale, quotationMessage } from '../src/services/manualSales';
+import { buildSale, quotationMessage, quotationDelivery } from '../src/services/manualSales';
 import { normalizeProfile, VELAMIA_PROFILE } from '../src/config/businessProfile';
 
 const perfil = normalizeProfile(VELAMIA_PROFILE, VELAMIA_PROFILE);
@@ -46,4 +46,23 @@ test('el mensaje a la clienta da un solo valor con el envío incluido, el antici
   assert.match(texto, /Anticipo por transferencia \(50%\)/);
   assert.match(texto, /transferencia o con tarjeta\?/);
   assert.ok(!texto.includes('$30'), 'no lista el precio por docena');
+});
+
+test('la cotización va con las fotos: un producto = su foto con toda la cotización debajo', () => {
+  const conFoto = catalogo.map(c => ({ ...c, image_url: `https://x/${c.name}.png` }));
+  const venta = buildSale({ items: [{ name: 'OSITO EN NUBE', quantity: 5 }] }, catalogo, perfil);
+  const envio = quotationDelivery(venta.products, venta.total, conFoto, perfil);
+  assert.equal(envio.photos.length, 1);
+  assert.equal(envio.photos[0].url, 'https://x/OSITO EN NUBE.png');
+  assert.equal(envio.photos[0].caption, quotationMessage(venta.products, venta.total, perfil));
+  assert.equal(envio.text, null);
+});
+
+test('con varios productos va cada foto con su nombre y cantidad, y al final el total (sin foto no se inventa)', () => {
+  const soloUno = catalogo.map(c => ({ ...c, image_url: c.name === 'VELA ANGELITO' ? '' : `https://x/${c.name}.png` }));
+  const venta = buildSale({ items: [{ name: 'OSITO EN NUBE', quantity: 5 }, { name: 'VELA ANGELITO', quantity: 2 }] }, catalogo, perfil);
+  const envio = quotationDelivery(venta.products, venta.total, soloUno, perfil);
+  assert.equal(envio.photos.length, 1);
+  assert.match(envio.photos[0].caption, /\*OSITO EN NUBE\* · 5 docenas/);
+  assert.match(envio.text!, /Total: \$/);
 });

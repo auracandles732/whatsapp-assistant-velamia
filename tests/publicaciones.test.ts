@@ -46,7 +46,8 @@ test('la configuración se limpia: días, hora, redes y fotos por publicación v
   assert.deepEqual(s.channels, ['facebook']);
   assert.equal(s.photosPerPost, 10);
   assert.equal(s.notes, 'tono cálido');
-  assert.equal(s.autoApprove, false, 'por defecto todo pasa por aprobación');
+  assert.equal(s.autoApprove, true, 'lo programado sale sin aprobación');
+  assert.equal(s.autoPlan, false, 'el modo automático con IA se enciende a propósito');
 });
 
 test('el calendario usa la hora del negocio y deja margen para revisar', () => {
@@ -109,14 +110,26 @@ function pngDe(width: number, height: number, rgba: [number, number, number, num
   return PNG.sync.write(png);
 }
 
-test('una foto PNG muy vertical se pasa a JPG 4:5 con margen blanco y la transparencia en blanco', () => {
-  const jpg = socialImages.toInstagramJpeg(pngDe(300, 400, [255, 0, 0, 0]));
-  const img = jpeg.decode(jpg, { useTArray: true });
-  assert.equal(img.height, 400);
-  assert.equal(img.width, 320, '300x400 (0.75) pasa a 320x400 (4:5)');
-  assert.ok(img.data[0] > 240 && img.data[1] > 240 && img.data[2] > 240, 'lo transparente queda blanco');
-  assert.deepEqual(socialImages.targetSize(1254, 1254), { canvasW: 1254, canvasH: 1254, scale: 1 });
-  assert.equal(socialImages.targetSize(2000, 2000).canvasW, 1440);
+const color = (img: any, x: number, y: number) => Array.from(img.data.slice((y * img.width + x) * 4, (y * img.width + x) * 4 + 3)) as number[];
+
+test('la publicación va en 4:5 con la foto completa dentro de lo que muestra la cuadrícula del perfil', () => {
+  const img = jpeg.decode(socialImages.toInstagramJpeg(pngDe(300, 300, [255, 0, 0, 255])), { useTArray: true });
+  assert.equal(img.width, 1080);
+  assert.equal(img.height, 1350);
+  assert.ok(color(img, 540, 675)[1] < 40, 'al centro va la foto');
+  assert.ok(color(img, 45, 675)[1] < 40, 'la foto llega hasta el borde de lo visible en la cuadrícula (3:4)');
+  assert.ok(color(img, 20, 675)[1] > 50, 'afuera va el fondo difuminado y aclarado, no la foto recortada');
+  assert.ok(color(img, 540, 60)[1] > 50, 'arriba y abajo también es fondo');
+});
+
+test('la historia va en 9:16 con la foto completa al centro (Instagram ya no la acerca ni la recorta)', () => {
+  const img = jpeg.decode(socialImages.toInstagramJpeg(pngDe(400, 500, [0, 0, 255, 255]), 'story'), { useTArray: true });
+  assert.equal(img.width, 1080);
+  assert.equal(img.height, 1920);
+  assert.ok(color(img, 540, 960)[0] < 40, 'al centro va la foto');
+  assert.ok(color(img, 540, 120)[0] > 50, 'arriba queda libre para el nombre de la cuenta');
+  const clear = jpeg.decode(socialImages.toInstagramJpeg(pngDe(200, 200, [255, 0, 0, 0]), 'story'), { useTArray: true });
+  assert.ok(color(clear, 540, 960).every(v => v > 240), 'lo transparente queda blanco');
 });
 
 test('solo se descargan fotos del almacenamiento propio', () => {
@@ -168,12 +181,16 @@ test('varias fotos: carrusel en Instagram y publicación con varias fotos en Fac
   assert.equal(feed.body.attached_media.length, 3);
 });
 
-test('la historia de Instagram va con la primera foto', async () => {
-  const r = await publicar(['instagram_content_publish'], post(2, ['instagram_story']));
+test('la historia de Instagram va con la primera foto, armada en formato de historia', async () => {
+  const kinds: string[] = [];
+  calls.length = 0;
+  const r = await publisher.publishToChannels(conexion, ['instagram_content_publish'], post(2, ['instagram_story']), { waitMs: 0, prepareImage: async (url: string, kind: string) => { kinds.push(kind); return `${url}.${kind}.jpg`; } });
   assert.equal(r.status, 'published');
   const media = calls.filter(c => c.url.endsWith('/ig/media'));
   assert.equal(media.length, 1);
   assert.equal(media[0].body.media_type, 'STORIES');
+  assert.deepEqual(kinds, ['story']);
+  assert.equal(media[0].body.image_url, 'https://x/1.png.story.jpg');
 });
 
 test('si falta el permiso de Facebook, Instagram igual sale y queda parcial con el motivo', async () => {

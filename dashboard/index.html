@@ -2251,6 +2251,14 @@
         .pb-check { display: flex; align-items: center; gap: 10px; font-size: 14.5px; color: #1E2A4A; cursor: pointer; padding: 3px 0; }
         .pb-check input { width: 20px; height: 20px; accent-color: #5B5BF0; cursor: pointer; margin: 0; flex-shrink: 0; }
         .pb-toggle { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; padding: 4px 0; }
+        .pb-auto { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; background: #fff; border: 1px solid #E1E6F4; box-shadow: 0 4px 16px rgba(50, 70, 160, 0.06); }
+        .pb-auto.on { background: linear-gradient(135deg, #EEF0FF, #F5EEFF); border-color: #C9CFF7; }
+        .pb-auto .ic { width: 44px; height: 44px; border-radius: 14px; background: #EEF0FF; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .pb-auto.on .ic { background: linear-gradient(135deg, #4F6BF5, #8B5CF6); }
+        .pb-auto .tt { flex: 1; min-width: 0; }
+        .pb-auto b { display: block; font-size: 15px; color: #141C3A; }
+        .pb-auto small { display: block; font-size: 13px; color: #5C668F; line-height: 1.4; margin-top: 2px; }
+        .pb-auto .pb-toggle { padding: 0; flex-shrink: 0; }
         .pb-toggle input { appearance: none; -webkit-appearance: none; flex-shrink: 0; position: relative; width: 44px; height: 26px; border-radius: 999px; background: #C9CFE6; cursor: pointer; margin: 0; transition: background 0.2s; }
         .pb-toggle input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
         .pb-toggle input:checked { background: linear-gradient(90deg, #4F6BF5, #8B5CF6); }
@@ -5803,7 +5811,7 @@
             );
         }
 
-        function QuotesMobile({ quotations, products, biz, canEdit, filter, setFilter, openId, setOpenId, reload, openChat, onCompose }) {
+        function QuotesMobile({ quotations, products, conversations, biz, canEdit, filter, setFilter, openId, setOpenId, reload, openChat, onCompose }) {
             const unit = biz?.sales?.unitSingular || 'unidad';
             const unitPlural = biz?.sales?.unitPlural || 'unidades';
             const [search, setSearch] = useState('');
@@ -5813,8 +5821,9 @@
             const [how, setHow] = useState(false);
             const [busy, setBusy] = useState(false);
             const [notice, setNotice] = useState(null);
+            const [pickChat, setPickChat] = useState(false);
 
-            useEffect(() => { setNotice(null); }, [openId, example]);
+            useEffect(() => { setNotice(null); setPickChat(false); }, [openId, example]);
 
             const pendingCount = quotations.filter(q => q.status === 'pending').length;
             const acceptedCount = quotations.filter(q => q.status === 'accepted').length;
@@ -5870,12 +5879,16 @@
                 }
             }
 
-            async function send() {
-                if (!confirm('Se enviará esta cotización a ' + mxQuoteName(q) + ' por su chat, con el total y la forma de pago. El bot se pausará en ese chat para que tú sigas la conversación.\n\n¿Enviar?')) return;
+            async function send(target) {
+                const phone = target ? target.phone_number : (q.conversations?.phone_number || q.customer_phone);
+                const net = channelInfo(phone).label;
+                const who = target ? contactName(target) : mxQuoteName(q);
+                if (!confirm('Se enviará esta cotización a ' + who + ' por ' + net + ', con las fotos de los productos, el total y la forma de pago. El bot se pausará en ese chat para que tú sigas la conversación.\n\n¿Enviar?')) return;
+                setPickChat(false);
                 setBusy(true);
                 try {
-                    await api('/api/quotations/' + q.id + '/send', { method: 'POST', body: JSON.stringify({}) });
-                    setNotice({ text: '✅ Cotización enviada por WhatsApp. El bot quedó pausado en ese chat.' });
+                    await api('/api/quotations/' + q.id + '/send', { method: 'POST', body: JSON.stringify(target ? { conversationId: target.id } : {}) });
+                    setNotice({ text: '✅ Cotización enviada por ' + net + ' con sus fotos. El bot quedó pausado en ese chat.' });
                     reload();
                 } catch (err) {
                     setNotice({ text: 'No se pudo enviar: ' + err.message, err: true });
@@ -5926,6 +5939,7 @@
                             <h2>Cotización</h2>
                             {!example && <PbMenu items={[
                                 { label: 'Ver chat', onClick: () => openChat(q.conversation_id) },
+                                canEdit && { label: 'Enviar a otro chat (WhatsApp, Instagram o Facebook)', onClick: () => setPickChat(true) },
                                 canEdit && q.status !== 'pending' && { label: 'Volver a pendiente', onClick: () => setStatus('pending') },
                                 canEdit && q.status !== 'sent' && { label: 'Marcar como enviada', onClick: () => setStatus('sent') },
                                 canEdit && q.status !== 'expired' && { label: 'Marcar como vencida', danger: true, onClick: () => setStatus('expired') }
@@ -5975,8 +5989,17 @@
                             <div className="tot"><span>Total</span><span>{mxMoney(total)}</span></div>
                         </div>
                         <div style={{ height: 70 }}></div>
+                        {pickChat && (
+                            <MxSheet title="Enviar la cotización a otro chat" onClose={() => setPickChat(false)}>
+                                <p className="mx-hint">Elige el chat de WhatsApp, Instagram o Facebook donde quieres enviarla (con las fotos de los productos).</p>
+                                <MxPickConv conversations={conversations} onPick={c => send(c)} actionLabel="Enviar" />
+                            </MxSheet>
+                        )}
                         <div className="mx-bottom">
-                            <button type="button" className="mx-cta green" onClick={send} disabled={busy || locked}><PlatIcon name="whatsapp" size={22} color="#fff" /> {busy ? 'Un momento...' : 'Enviar por WhatsApp'}</button>
+                            <div className="mx-two" style={{ gridTemplateColumns: 'minmax(0, 1fr) auto' }}>
+                                <button type="button" className="mx-cta green" style={{ background: channelInfo(phone).color }} onClick={() => send()} disabled={busy || locked}><PlatIcon name={channelInfo(phone).icon} size={22} color="#fff" /> {busy ? 'Un momento...' : 'Enviar por ' + channelInfo(phone).label}</button>
+                                <button type="button" className="mx-cta ghost" style={{ width: 'auto', padding: '14px 16px' }} onClick={() => setPickChat(true)} disabled={busy || locked} aria-label="Enviar a otro chat" title="Enviar a otro chat"><MxIcon name="share" size={20} color="#2F3A8F" /></button>
+                            </div>
                             <div className="mx-two">
                                 <button type="button" className="mx-cta ghost" onClick={() => onCompose({ mode: 'edit', quotation: q })} disabled={busy || locked}><PlatIcon name="edit" size={19} color="#2F3A8F" /> Editar</button>
                                 <button type="button" className="mx-cta" onClick={() => setStatus('accepted')} disabled={busy || locked || q.status === 'accepted'}>✓ {q.status === 'accepted' ? 'Aprobada' : 'Marcar como aprobada'}</button>
@@ -6182,7 +6205,7 @@
                     <div style={{ height: mode === 'quote' ? 130 : 70 }}></div>
                     <div className="mx-bottom">
                         {items.length > 0 && <div className="mx-estimate"><span>{items.reduce((n, i) => n + i.quantity, 0)} {items.reduce((n, i) => n + i.quantity, 0) === 1 ? unit : unitPlural}</span><b>{mxMoney(estimate)}</b><small>{shippingOn && place.trim() ? '+ envío' : 'sin envío'}</small></div>}
-                        {mode === 'quote' && <button type="button" className="mx-cta green" onClick={() => submit(true)} disabled={busy}><PlatIcon name="whatsapp" size={21} color="#fff" /> {busy ? 'Un momento...' : 'Guardar y enviar por WhatsApp'}</button>}
+                        {mode === 'quote' && <button type="button" className="mx-cta green" style={pickedConv ? { background: channelInfo(pickedConv.phone_number).color } : undefined} onClick={() => submit(true)} disabled={busy}><PlatIcon name={pickedConv ? channelInfo(pickedConv.phone_number).icon : 'send'} size={21} color="#fff" /> {busy ? 'Un momento...' : 'Guardar y enviar' + (pickedConv ? ' por ' + channelInfo(pickedConv.phone_number).label : '')}</button>}
                         <button type="button" className={'mx-cta' + (mode === 'quote' ? ' ghost' : '')} onClick={() => submit(false)} disabled={busy}>
                             {mode === 'order' ? <><PlatIcon name="bag" size={20} color="#fff" /> {busy ? 'Creando...' : 'Crear pedido'}</> : mode === 'edit' ? <><PlatIcon name="save" size={20} color="#fff" /> {busy ? 'Guardando...' : 'Guardar cambios'}</> : <><PlatIcon name="save" size={20} color="#2F3A8F" /> Solo guardar</>}
                         </button>
@@ -7281,7 +7304,7 @@
                         if (!fromChat) goTab('pedidos');
                         return;
                     }
-                    setMxToast(result.sendError ? 'La cotización se guardó, pero no se pudo enviar: ' + result.sendError : result.sent ? 'Cotización enviada por WhatsApp. El bot quedó pausado en ese chat.' : result.edited ? 'Cotización actualizada: el total se volvió a calcular.' : 'Cotización guardada');
+                    setMxToast(result.sendError ? 'La cotización se guardó, pero no se pudo enviar: ' + result.sendError : result.sent ? 'Cotización enviada por ' + channelInfo(result.conv.phone_number).label + ' con sus fotos. El bot quedó pausado en ese chat.' : result.edited ? 'Cotización actualizada: el total se volvió a calcular.' : 'Cotización guardada');
                     if (!fromChat && !result.edited) {
                         setMxQuoteId(result.quotation.id);
                         goTab('cotizaciones');
@@ -7598,7 +7621,7 @@
                             {activeTab === 'estadisticas' && statsView()}
                             {activeTab === 'catalogo' && <CatalogMobile products={products} biz={biz} legacy={!!session?.business?.legacy} reload={loadProducts} readOnly={!canEdit} conversations={conversations} focus={catalogFocus} onFocusDone={() => goTab('conversaciones')} />}
                             {activeTab === 'publicaciones' && <PostsView canEdit={canEdit} canConfigure={canConfigure} isAdmin={isAdmin} />}
-                            {activeTab === 'cotizaciones' && <QuotesMobile quotations={quotations} products={products} biz={biz} canEdit={canEdit} filter={quoteFilter} setFilter={setQuoteFilter} openId={mxQuoteId} setOpenId={setMxQuoteId} reload={loadQuotations} openChat={id => { setMxQuoteId(null); openChatFromQuotation(id); }} onCompose={setComposer} />}
+                            {activeTab === 'cotizaciones' && <QuotesMobile quotations={quotations} products={products} conversations={conversations} biz={biz} canEdit={canEdit} filter={quoteFilter} setFilter={setQuoteFilter} openId={mxQuoteId} setOpenId={setMxQuoteId} reload={loadQuotations} openChat={id => { setMxQuoteId(null); openChatFromQuotation(id); }} onCompose={setComposer} />}
                             {activeTab === 'pedidos' && (
                                 <div className="mx-page">
                                     <div className="mx-head">
@@ -8036,7 +8059,7 @@
         // ---------- Publicaciones en redes (servicio adicional) ----------
         const POST_CHANNEL_NAMES = { instagram_feed: 'Instagram', instagram_story: 'Historia de Instagram', facebook: 'Facebook' };
         const POST_STATUS = {
-            draft: 'Por revisar', approved: 'Programada', publishing: 'Publicando…', published: 'Publicada',
+            draft: 'Programada', approved: 'Programada', publishing: 'Publicando…', published: 'Publicada',
             partial: 'Publicada en parte', failed: 'No se publicó', cancelled: 'Descartada'
         };
         const EDITABLE_POST = ['draft', 'approved', 'failed'];
@@ -8258,7 +8281,7 @@
             );
         }
 
-        // Ver, editar, aprobar o publicar una publicación.
+        // Ver, editar o publicar una publicación (lo programado sale solo a su hora, sin aprobarlo).
         function PbPostEditor({ post, canEdit, onChanged, onClose }) {
             const [caption, setCaption] = useState(post.caption);
             const [when, setWhen] = useState(toTzInput(post.scheduled_at));
@@ -8294,9 +8317,7 @@
                 body: JSON.stringify({ caption, scheduled_at: fromTzInput(when), channels, ...extra })
             }).then(r => r.post);
 
-            const save = () => run('save', async () => { onChanged(await patch({})); setMsg('Cambios guardados'); });
-            const approve = () => run('approve', async () => { onChanged(await patch({ status: 'approved' })); setMsg('Programada: se publicará sola a esa hora'); });
-            const backToDraft = () => run('draft', async () => onChanged(await patch({ status: 'draft' })));
+            const save = () => run('save', async () => { onChanged(await patch({})); setMsg('Guardado: se publicará sola a esa hora'); });
             const discard = () => {
                 if (!confirm('¿Descartar esta publicación? Ese día no se volverá a preparar otra.')) return;
                 run('discard', async () => { onChanged(await patch({ status: 'cancelled' })); onClose(); });
@@ -8350,9 +8371,7 @@
                             {error && <div className="pb-err" style={{ marginBottom: '12px' }}>{error}</div>}
                             {editable && (
                                 <div className="pb-actions">
-                                    {post.status !== 'approved' && <button type="button" className="pb-btn main sm" disabled={!!busy || tooLong} onClick={approve}>{busy === 'approve' ? 'Aprobando…' : '✓ Aprobar'}</button>}
-                                    {post.status === 'approved' && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={backToDraft}>Volver a revisar</button>}
-                                    {dirty && <button type="button" className="pb-btn sm" disabled={!!busy || tooLong} onClick={save}>{busy === 'save' ? 'Guardando…' : 'Guardar cambios'}</button>}
+                                    {(dirty || post.status === 'failed') && <button type="button" className="pb-btn main sm" disabled={!!busy || tooLong} onClick={save}>{busy === 'save' ? 'Guardando…' : post.status === 'failed' ? 'Programar de nuevo' : 'Guardar cambios'}</button>}
                                     <button type="button" className="pb-btn sm" disabled={!!busy} onClick={rewrite}>{busy === 'rewrite' ? 'Escribiendo…' : '✨ Otro texto'}</button>
                                     <button type="button" className="pb-btn sm" disabled={!!busy || tooLong || channels.length === 0} onClick={publishNow}>{busy === 'publish' ? 'Publicando…' : 'Publicar ahora'}</button>
                                     <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={discard}>Descartar</button>
@@ -8425,7 +8444,7 @@
                             </div>
                             {error && <div className="pb-err" style={{ marginBottom: '12px' }}>{error}</div>}
                             <div className="pb-actions">
-                                <button type="button" className="pb-btn main sm" disabled={busy || chosen.length === 0 || channels.length === 0} onClick={create}>{busy ? 'Preparando…' : 'Crear publicación'}</button>
+                                <button type="button" className="pb-btn main sm" disabled={busy || chosen.length === 0 || channels.length === 0} onClick={create}>{busy ? 'Programando…' : 'Programar publicación'}</button>
                                 <button type="button" className="pb-btn sm" onClick={onClose}>Cancelar</button>
                             </div>
                         </div>
@@ -8435,7 +8454,7 @@
         }
 
         // Días, hora, redes, automatización e indicaciones: cuatro paneles (en el celular, uno debajo del otro y plegables).
-        function PbSettings({ s, setS, canConfigure, mobile, onSave, saving, savedMsg }) {
+        function PbSettings({ s, setS, canConfigure, mobile, onSave, onAuto, saving, savedMsg }) {
             const [open, setOpen] = useState({ prog: true, redes: true, auto: true, notas: true });
             const panel = (id, icon, title, body) => {
                 const shown = !mobile || open[id];
@@ -8493,16 +8512,10 @@
                         {panel('auto', <PbIcon name="bolt" size={22} color="#4F5BD5" />, 'Automatización', (
                             <>
                                 <label className="pb-toggle">
-                                    <input type="checkbox" checked={s.autoPlan} disabled={!canConfigure} onChange={e => setS({ autoPlan: e.target.checked })} />
-                                    <span><b>Preparar la semana sola</b><small>Nexly revisará cada hora que los próximos 7 días tengan publicaciones.</small></span>
+                                    <input type="checkbox" checked={s.autoPlan} disabled={!canConfigure || saving} onChange={e => onAuto(e.target.checked)} />
+                                    <span><b>Modo automático con IA</b><small>{s.autoPlan ? 'Activado: la IA elige los productos, escribe los textos y publica sola en los días y la hora de arriba.' : 'Actívalo y la IA prepara y publica sola cada semana, con las fotos y precios de tu catálogo.'}</small></span>
                                 </label>
-                                <label className="pb-toggle">
-                                    <input type="checkbox" checked={s.autoApprove} disabled={!canConfigure} onChange={e => setS({ autoApprove: e.target.checked })} />
-                                    <span>
-                                        <b>Publicar sin mi aprobación</b>
-                                        <small>{s.autoApprove ? <span className="warn">Saldrán sin que las revises.</span> : 'Las publicaciones se publicarán automáticamente sin que las revises.'}</small>
-                                    </span>
-                                </label>
+                                <p className="pb-muted" style={{ margin: '4px 0 0' }}>Todo lo que programes (tú o la IA) se publica solo a su hora: no hace falta aprobarlo.</p>
                             </>
                         ))}
                         {panel('notas', <PlatIcon name="doc" size={22} color="#4F5BD5" />, 'Indicaciones para Nexly', (
@@ -8569,7 +8582,7 @@
                     <div className="pb-hero-ic"><PlatIcon name="calendar" size={30} color="#fff" /></div>
                     <div className="pb-hero-tt">
                         <h1>Publicaciones</h1>
-                        <p>Planifica, revisa y publica contenido en Instagram y Facebook. Nexly puede preparar tu semana automáticamente con las fotos y precios de tu catálogo.</p>
+                        <p>Programa y publica contenido en Instagram y Facebook. En modo automático la IA prepara y publica tu semana con las fotos y precios de tu catálogo.</p>
                     </div>
                     {withActions && canEdit && (
                         <div className="pb-hero-actions">
@@ -8593,7 +8606,7 @@
                             <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14.5px', lineHeight: 1.8, color: '#2A3766' }}>
                                 <li>Prepara cada semana tus publicaciones con las fotos y precios de tu catálogo.</li>
                                 <li>Escribe los textos y hashtags con el tono de tu negocio.</li>
-                                <li>Tú las revisas y apruebas aquí mismo, o las cambias.</li>
+                                <li>Tú las programas (o la IA en modo automático) y puedes cambiarlas antes de que salgan.</li>
                                 <li>Se publican solas en Instagram (publicación e historia) y en tu página de Facebook.</li>
                             </ul>
                             <p className="pb-muted" style={{ marginTop: '14px' }}>{isAdmin ? 'Actívalo para esta empresa en la pantalla de Empresas.' : 'Pide que lo activen para tu empresa.'}</p>
@@ -8614,21 +8627,32 @@
             [...posts].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)).forEach(p => { (byDay[dayOf(p.scheduled_at)] = byDay[dayOf(p.scheduled_at)] || []).push(p); });
             const weekDays = Array.from({ length: 7 }, (_, i) => addDays(anchor, i));
             const now = Date.now();
-            const toReview = posts.filter(p => p.status === 'draft' && new Date(p.scheduled_at).getTime() > now).length;
             const st = data.status || {};
 
-            async function saveSettings() {
+            async function saveSettings(next = s) {
                 setBusy('settings');
                 try {
-                    const r = await api('/api/posts/settings', { method: 'PUT', body: JSON.stringify(s) });
+                    const r = await api('/api/posts/settings', { method: 'PUT', body: JSON.stringify(next) });
                     setSettings(r.settings);
                     setData(d => ({ ...d, settingsSaved: true }));
                     setSavedMsg('✅ Guardado');
+                    if (r.created) {
+                        setNotice({ ok: true, text: `🤖 La IA programó ${r.created} publicación(es) para los próximos 7 días. Saldrán solas a su hora.` });
+                        await load();
+                    }
                 } catch (e) {
                     alert('No se pudo guardar: ' + e.message);
                 } finally {
                     setBusy('');
                 }
+            }
+
+            // El modo automático se guarda al tocarlo: al encenderlo la IA programa de una vez la semana.
+            function setAuto(on) {
+                const next = { ...s, autoPlan: on };
+                if (on && !next.days.length) return alert('Elige al menos un día de publicación');
+                setSettings(next);
+                saveSettings(next).then(() => { if (!on) setNotice({ ok: true, text: 'Modo automático apagado: solo sale lo que programes tú.' }); });
             }
 
             async function plan() {
@@ -8637,7 +8661,7 @@
                 try {
                     const r = await api('/api/posts/plan', { method: 'POST' });
                     setNotice(r.created.length
-                        ? { ok: true, text: `Listo: se prepararon ${r.created.length} publicación(es) para que las revises.` }
+                        ? { ok: true, text: `Listo: se programaron ${r.created.length} publicación(es). Saldrán solas a su hora (puedes cambiarlas antes).` }
                         : { ok: true, text: 'Los próximos 7 días ya tienen sus publicaciones (o no hay días de publicación elegidos).' });
                     if (mode !== 'week' || anchor !== mondayOf(pbToday())) {
                         setMode('week');
@@ -8679,8 +8703,6 @@
             async function quick(post, action) {
                 try {
                     const patch = body => api(`/api/posts/${post.id}`, { method: 'PATCH', body: JSON.stringify(body) }).then(r => r.post);
-                    if (action === 'approve') { replacePost(await patch({ status: 'approved' })); setNotice({ ok: true, text: 'Programada: se publicará sola a su hora.' }); }
-                    if (action === 'draft') replacePost(await patch({ status: 'draft' }));
                     if (action === 'cancel') {
                         if (!confirm('¿Descartar esta publicación? Ese día no se volverá a preparar otra.')) return;
                         replacePost(await patch({ status: 'cancelled' }));
@@ -8702,8 +8724,6 @@
                 const editable = canEdit && EDITABLE_POST.includes(post.status);
                 return [
                     { label: editable ? 'Editar' : 'Ver detalle', onClick: () => setEditing(post) },
-                    editable && post.status !== 'approved' && { label: 'Aprobar', onClick: () => quick(post, 'approve') },
-                    editable && post.status === 'approved' && { label: 'Volver a revisar', onClick: () => quick(post, 'draft') },
                     editable && { label: 'Publicar ahora', onClick: () => quick(post, 'publish') },
                     editable && { label: 'Descartar', danger: true, onClick: () => quick(post, 'cancel') }
                 ];
@@ -8760,7 +8780,16 @@
             const notices = (
                 <>
                     {notice && <div className={'pb-notice' + (notice.ok ? ' ok' : '')} style={notice.ok ? undefined : { background: '#FDECEC', color: '#B42318' }}>{notice.text}</div>}
-                    {toReview > 0 && <div className="pb-notice">📝 Tienes {toReview} publicación(es) por revisar. Solo salen las que apruebes.</div>}
+                    {canEdit && (
+                        <div className={'pb-auto' + (s.autoPlan ? ' on' : '')}>
+                            <span className="ic"><PlatIcon name="robot" size={24} color={s.autoPlan ? '#fff' : '#4F5BD5'} /></span>
+                            <div className="tt">
+                                <b>{s.autoPlan ? 'Modo automático activado' : 'Modo automático con IA'}</b>
+                                <small>{s.autoPlan ? 'La IA elige los productos, escribe los textos y publica sola en tus días y horas.' : canConfigure ? 'Actívalo y la IA prepara y publica sola tus publicaciones cada semana.' : 'Solo el dueño puede activarlo.'}</small>
+                            </div>
+                            {canConfigure && <label className="pb-toggle" aria-label="Modo automático con IA"><input type="checkbox" checked={!!s.autoPlan} disabled={busy === 'settings'} onChange={e => setAuto(e.target.checked)} /></label>}
+                        </div>
+                    )}
                 </>
             );
 
@@ -8784,7 +8813,7 @@
             const modals = (
                 <>
                     {editing && <PbPostEditor post={editing} canEdit={canEdit} onChanged={replacePost} onClose={() => setEditing(null)} />}
-                    {creating && <PbNewPost settings={s} day={creating.day} onClose={() => setCreating(null)} onCreated={post => { setCreating(null); setPosts(list => [...list, post]); setNotice({ ok: true, text: 'Publicación creada: revísala y apruébala.' }); }} />}
+                    {creating && <PbNewPost settings={s} day={creating.day} onClose={() => setCreating(null)} onCreated={post => { setCreating(null); setPosts(list => [...list, post]); setNotice({ ok: true, text: 'Publicación programada: saldrá sola a su hora.' }); }} />}
                 </>
             );
 
@@ -8856,7 +8885,7 @@
                                 <div className="pb-tile"><PlatIcon name="gear" size={22} color="#4F5BD5" /></div>
                                 <div><h2>Cómo publicar</h2><p>Configura la programación y preferencias del asistente.</p></div>
                             </div>
-                            <PbSettings s={s} setS={setS} canConfigure={canConfigure} mobile onSave={saveSettings} saving={busy === 'settings'} savedMsg={savedMsg} />
+                            <PbSettings s={s} setS={setS} canConfigure={canConfigure} mobile onSave={() => saveSettings()} onAuto={setAuto} saving={busy === 'settings'} savedMsg={savedMsg} />
                         </div>
                     );
                 }
@@ -8868,7 +8897,7 @@
                         {channelsCard}
                         <button type="button" className="pb-navcard" onClick={() => goTo('posts')}>
                             <div className="pb-tile"><PlatIcon name="calendar" size={22} color="#4F5BD5" /></div>
-                            <div className="tt"><b>Próximas publicaciones</b><span>{weekCount} esta semana{toReview ? ` · ${toReview} por revisar` : ''}</span></div>
+                            <div className="tt"><b>Próximas publicaciones</b><span>{weekCount} esta semana{s.autoPlan ? ' · modo automático' : ''}</span></div>
                             <PbIcon name="next" size={20} color="#3A4570" />
                         </button>
                         <button type="button" className="pb-navcard" onClick={() => goTo('settings')}>
@@ -8956,7 +8985,7 @@
                             <div className="pb-tile"><PlatIcon name="gear" size={22} color="#4F5BD5" /></div>
                             <div className="grow"><h2>Cómo publicar</h2><p>{data.settingsSaved ? 'Configura la programación y preferencias del asistente.' : 'Guárdalo para que el asistente prepare la semana solo.'}</p></div>
                         </div>
-                        <PbSettings s={s} setS={setS} canConfigure={canConfigure} onSave={saveSettings} saving={busy === 'settings'} savedMsg={savedMsg} />
+                        <PbSettings s={s} setS={setS} canConfigure={canConfigure} onSave={() => saveSettings()} onAuto={setAuto} saving={busy === 'settings'} savedMsg={savedMsg} />
                     </section>
                     {modals}
                 </div>
