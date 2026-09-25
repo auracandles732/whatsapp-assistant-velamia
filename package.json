@@ -15,6 +15,7 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@supabase/supabase-js": "^2.38.0",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",

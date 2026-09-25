@@ -3,6 +3,8 @@ import { getAllProducts, getConfig, setConfig, updateProduct, supabase, tenantOp
 import { uploadBufferToStorage } from '../services/storage';
 import { profile } from '../config/businessProfile';
 import { socialAi, track, isStopError } from './ai';
+import { renderPoster } from './template';
+import { productKey } from '../services/openai';
 import { toJpeg, toJpegMax, isOwnStorageUrl } from './images';
 import { getSupplierSettings, getSupplierProduct, SupplierProduct, SupplierSettings, addSupplierProductsToCatalog, discardAsDuplicate } from './suppliers';
 
@@ -578,6 +580,38 @@ async function makeOne(catalogId: string, job: Job, refs: References) {
   }
 }
 
+/**
+ * Foto con la plantilla fija (sin IA): el diseño siempre igual y el nombre y el precio exactos, así que no hace falta
+ * revisarla. Si mientras tanto cambió el modelo, se vuelve a hacer con los datos nuevos.
+ */
+async function makeFromTemplate(catalogId: string, job: Job, category: string) {
+  const { model, texts } = job;
+  try {
+    const poster = renderPoster({ product: await download(model.image_url), texts, category });
+    const current = await getSupplierProduct(model.id);
+    if (!current) {
+      await setState(catalogId, model.id, { status: 'error', detail: 'El modelo ya no existe' });
+      return;
+    }
+    if (posterIsStale(job, current, await getSupplierSettings())) {
+      await setState(catalogId, model.id, { status: 'cola', detail: '' });
+      return;
+    }
+    const url = await uploadBufferToStorage(poster, 'image/jpeg', 'product-images');
+    await putInCatalog(current, url);
+    await setState(catalogId, model.id, { status: 'lista', url, detail: '' });
+  } catch (error: any) {
+    await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
+    if (isStopError(error)) throw error;
+  }
+}
+
+/** Sin IA (tope del día, sin clave o sin crédito), lo repetido se reconoce por el nombre. */
+export function sameNameInCatalog(model: { name: string }, catalog: any[], exclude: Set<string>) {
+  const key = productKey(model.name);
+  return catalog.find(p => !exclude.has(p.id) && productKey(p.name) === key) || null;
+}
+
 /** El modelo con su foto con el diseño: entra al Catálogo con ella o, si ya estaba, se le cambia la foto. */
 async function putInCatalog(model: SupplierProduct, posterUrl: string) {
   if (model.status === 'en_catalogo' && model.catalog_product_id) {
@@ -598,7 +632,8 @@ const BUSY: PosterStatus[] = ['cola', 'revisando', 'creando'];
  */
 export async function startPosters(catalogId: string, options: { ids?: string[]; posters?: boolean } = {}): Promise<{ queued: number }> {
   const posters = options.posters !== false;
-  await socialAi(); // sin clave del agente, error claro antes de empezar
+  // Con la IA, sin clave (o pasado el tope) error claro antes de empezar; la plantilla no la necesita.
+  if ((await getSupplierSettings()).posterMode === 'ia') await socialAi();
   const { data: rows, error } = await supabase.from('supplier_products').select('*').eq('catalog_id', catalogId).filter('business_id', tenantOp(), tenantValue()).order('page');
   if (error) throw new Error(`Error leyendo los modelos: ${error.message}`);
   const models = (rows || []) as SupplierProduct[];
@@ -623,6 +658,7 @@ async function runQueue(catalogId: string) {
     if (!catalog) return;
     const category = String(catalog.name || '');
     const settings = await getSupplierSettings();
+    const templateMode = settings.posterMode !== 'ia';
     // Con qué comparar: el Catálogo al empezar, sin lo que vino de este PDF; y las fotos de referencia, solo si hacen falta.
     const { data: own } = await supabase.from('supplier_products').select('catalog_product_id').eq('catalog_id', catalogId).filter('business_id', tenantOp(), tenantValue());
     const fromThisPdf = new Set(((own || []) as any[]).map(r => r.catalog_product_id).filter(Boolean));
@@ -668,7 +704,14 @@ async function runQueue(catalogId: string) {
         const { state } = job;
         try {
           if (!state.checked && !state.keep) {
-            const match = await findExisting(model, duplicateCandidates(model, category, catalogAtStart, fromThisPdf));
+            let match: { id: string; name: string; image_url: string } | null;
+            try {
+              match = await findExisting(model, duplicateCandidates(model, category, catalogAtStart, fromThisPdf));
+            } catch (error: any) {
+              // Con la plantilla la IA solo sirve para ver repetidos: si no está, se compara por el nombre y se sigue.
+              if (!templateMode) throw error;
+              match = sameNameInCatalog(model, catalogAtStart, fromThisPdf);
+            }
             if (match) {
               await discardAsDuplicate(model);
               await setState(catalogId, model.id, { status: 'repetido', checked: true, match, detail: '' });
@@ -687,8 +730,12 @@ async function runQueue(catalogId: string) {
           if (!state.poster) { await setState(catalogId, model.id, { status: 'nuevo' }); continue; }
           const price = settings.sizePrices[model.size];
           if (!(price > 0)) { await setState(catalogId, model.id, { status: 'error', detail: 'Falta el precio de su tamaño en la regla' }); continue; }
-          const ref = await references();
           const unitPrice = settings.unitPrices?.[model.size] || 0;
+          if (templateMode) {
+            await makeFromTemplate(catalogId, { model, texts: posterTexts(model.name, price, category, undefined, {}, unitPrice), occasion: occasionOf(category), price, unitPrice }, category);
+            continue;
+          }
+          const ref = await references();
           const texts = posterTexts(model.name, price, category, undefined, ref.texts, unitPrice);
           // Las instrucciones se leen en cada foto: si la empresa las cambia a mitad de la tanda, las siguientes ya las usan.
           const instructions = (await getSupplierSettings()).posterInstructions;
@@ -745,7 +792,7 @@ export async function resumeStuck(catalogId: string) {
   const stuck = Object.entries(states).filter(([, s]) => BUSY.includes(s.status));
   if (stuck.length === 0) return;
   try {
-    await socialAi();
+    if ((await getSupplierSettings()).posterMode === 'ia') await socialAi();
   } catch (error: any) {
     console.warn('⚠️ No se pudo retomar la revisión de modelos:', error.message);
     return;

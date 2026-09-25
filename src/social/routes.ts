@@ -374,7 +374,7 @@ export function socialRouter(): Router {
       }
       // Con qué empaque entran si la regla no elige uno (el más usado en su Catálogo).
       const categories = [...new Set((catalog as any[]).map(p => String(p.category || '').trim()).filter(Boolean))].sort();
-      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: POSTER_COST, categories });
+      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: settings.posterMode === 'ia' ? POSTER_COST : 0, categories });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
@@ -393,10 +393,11 @@ export function socialRouter(): Router {
     try {
       // Con la IA del agente, los modelos no entran directo: primero se revisa cuáles ya tiene la empresa (en segundo
       // plano, en el servidor: no depende de que la pantalla siga abierta) y, si la regla lo pide, se hacen sus fotos.
-      const review = await hasSocialAi();
+      // Con la plantilla fija no hace falta la IA: los modelos esperan su foto y entran con ella.
+      const settings = await getSupplierSettings();
+      const review = settings.posterMode !== 'ia' || await hasSocialAi();
       const result = await importSupplierCatalog(req.body || {}, review);
       if (review && result.ids.length) {
-        const settings = await getSupplierSettings();
         await startPosters(result.catalog.id, { ids: result.ids, posters: settings.autoPosters });
       }
       res.status(201).json(result);

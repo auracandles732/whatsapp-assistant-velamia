@@ -38,6 +38,11 @@ export interface SupplierSettings {
   designProductIds: string[];
   /** Cómo quiere la empresa sus fotos, con sus palabras: la IA lo sigue al hacerlas y la revisión comprueba que se cumpla. */
   posterInstructions: string;
+  /**
+   * Cómo se hacen las fotos: 'plantilla' = diseño fijo dibujado con código (siempre igual, sin IA, gratis);
+   * 'ia' = la IA dibuja copiando las fotos de la empresa (puede variar y cuesta).
+   */
+  posterMode: 'plantilla' | 'ia';
 }
 
 export const DEFAULT_SUPPLIER_SETTINGS: SupplierSettings = {
@@ -49,7 +54,8 @@ export const DEFAULT_SUPPLIER_SETTINGS: SupplierSettings = {
   autoAddToCatalog: true,
   autoPosters: true,
   designProductIds: [],
-  posterInstructions: ''
+  posterInstructions: '',
+  posterMode: 'plantilla'
 };
 
 const SETTINGS_KEY = 'supplier_settings';
@@ -70,7 +76,8 @@ export function normalizeSupplierSettings(raw: any): SupplierSettings {
     autoPosters: typeof r.autoPosters === 'boolean' ? r.autoPosters : true,
     designProductIds: (Array.isArray(r.designProductIds) ? r.designProductIds : []).map(String)
       .filter((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)).slice(0, 2),
-    posterInstructions: String(r.posterInstructions ?? '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, POSTER_INSTRUCTIONS_MAX)
+    posterInstructions: String(r.posterInstructions ?? '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, POSTER_INSTRUCTIONS_MAX),
+    posterMode: r.posterMode === 'ia' ? 'ia' : 'plantilla'
   };
 }
 
