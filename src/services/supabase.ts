@@ -958,7 +958,7 @@ export async function getFollowUpActivity(days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const [followUps, optOuts, orders, quotations] = await Promise.all([
-    supabase.from('followups').select('conversation_id, created_at').eq('type', 'auto_followup').gte('created_at', since),
+    supabase.from('followups').select('conversation_id, created_at, message').eq('type', 'auto_followup').gte('created_at', since),
     supabase.from('followups').select('conversation_id').eq('type', 'opt_out'),
     supabase.from('orders').select('conversation_id').neq('status', 'cancelled').gte('created_at', since),
     supabase.from('quotations').select('conversation_id').gte('created_at', since)
@@ -968,10 +968,11 @@ export async function getFollowUpActivity(days: number) {
     if (result.error) throw new Error(`Error leyendo actividad de seguimientos: ${result.error.message}`);
   }
 
-  const sentByConversation = new Map<string, Date[]>();
+  // Con el nombre de la plantilla: así se sabe qué paso ya salió aunque alguno se haya saltado.
+  const sentByConversation = new Map<string, { at: Date; template: string }[]>();
   for (const row of followUps.data || []) {
     const list = sentByConversation.get(row.conversation_id) || [];
-    list.push(parseDbTimestamp(row.created_at));
+    list.push({ at: parseDbTimestamp(row.created_at), template: String(row.message || '') });
     sentByConversation.set(row.conversation_id, list);
   }
 

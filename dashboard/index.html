@@ -4098,8 +4098,11 @@
         const HANDOFF_TEXT = {
             card_payment: 'el cliente eligió pagar con tarjeta',
             payment_proof: 'el cliente envió un comprobante de pago',
-            complaint: 'el cliente tiene un reclamo'
+            complaint: 'el cliente tiene un reclamo',
+            not_customer: 'quien escribe no es cliente (proveedor, courier u otro)'
         };
+        // Con tarjeta el asistente sigue atendiendo; solo reclamos y quien no es cliente lo pausan.
+        const HANDOFF_PAUSES = ['complaint', 'not_customer'];
 
         function AssistantPreview({ form }) {
             const [message, setMessage] = useState('Hola');
@@ -4128,7 +4131,7 @@
             if (result) {
                 if (result.photos && result.photos.length) extras.push({ text: 'Enviaría fotos de: ' + result.photos.join(', ') });
                 if (result.sendBankDetails) extras.push({ text: 'Enviaría tus datos de transferencia.' });
-                if (result.handoff && result.handoff !== 'none') extras.push({ text: 'Se pausaría y te avisaría: ' + (HANDOFF_TEXT[result.handoff] || result.handoff) + '.', warn: true });
+                if (result.handoff && result.handoff !== 'none') extras.push({ text: (HANDOFF_PAUSES.includes(result.handoff) ? 'Se pausaría y te avisaría: ' : 'Te avisaría: ') + (HANDOFF_TEXT[result.handoff] || result.handoff) + '.', warn: true });
                 if (result.ownerQuestion) extras.push({ text: 'Te avisaría esta duda: ' + result.ownerQuestion, warn: true });
             }
 
@@ -4918,7 +4921,8 @@
             );
         }
 
-        const TAG_SUGGESTIONS = ['VIP', 'Mayorista', 'Seguimiento', 'Urgente', 'Pago pendiente'];
+        // "No es cliente" también la pone el asistente: esos chats nunca reciben seguimientos de venta.
+        const TAG_SUGGESTIONS = ['VIP', 'Mayorista', 'Seguimiento', 'Urgente', 'Pago pendiente', 'No es cliente'];
 
         function TagBar({ tags, onChange, readOnly = false }) {
             const [adding, setAdding] = useState(false);

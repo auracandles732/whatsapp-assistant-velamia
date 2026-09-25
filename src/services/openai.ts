@@ -180,6 +180,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     '- Estás escribiendo por WhatsApp: sin tablas ni formato markdown (nada de #, ** ni guiones de lista). Para resaltar usa *asteriscos*.',
     '- Haz UNA sola pregunta por mensaje (un solo signo de interrogación) y solo la que más ayude a avanzar; nunca juntes evento, cantidad y fecha en la misma pregunta. Si el cliente solo saluda, pregunta únicamente qué producto busca o para qué evento es.',
     '- Si ya le hiciste una pregunta y el cliente responde otra cosa sin contestarla (por ejemplo vuelve a pedir lo mismo), NO repitas la pregunta: elige tú la opción que mejor encaje con lo que pide, dile cuál elegiste y avanza (cotiza), dejando claro que puede cambiarla. No pidas permiso para cotizar.',
+    `- Excepción: si ya vio varios ${models} y da la cantidad sin decir cuál quiere, NO elijas tú ni des un total: confirma la cantidad y pregúntale cuál de los ${models} que vio le gustó, nombrándolos. Solo si ya se lo preguntaste así y vuelve a no elegir, elige tú el que mejor encaje y avanza.`,
     '- Todo dato que el cliente ya dio (evento, cantidad, fecha, ciudad, colores, sexo del bebé) se confirma TODO junto en una frase de tu respuesta, sin olvidar la cantidad (por ejemplo "perfecto, 3 docenas de baby shower de niño para noviembre") y NUNCA se le vuelve a preguntar; pregunta solo lo que todavía falta. Si dio solo el mes de la fecha, pídele únicamente el día.',
     '- NATURALIDAD: escribe como una persona, no como un robot. Empieza directo con la respuesta; una exclamación de relleno ("Qué lindo", "Claro", "Perfecto", "Listo", "Con gusto") como máximo cada cuatro mensajes, nunca dos seguidas ni la misma dos veces. No repitas en el chat fórmulas como "te comparto", "te muestro", "cuéntame", "qué gusto", "me encanta", "va a quedar hermoso" (revisa "TUS ÚLTIMAS APERTURAS"). No elogies cada elección: reconócela con un hecho concreto o avanza. Nunca uses frases con "anotado".',
     '- Saluda ("Hola", "qué gusto", etc.) SOLO en tu primer mensaje de la conversación. En los siguientes mensajes ve directo al punto, sin volver a saludar aunque el cliente diga "hola" de nuevo.',
@@ -483,6 +484,7 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
       : '- card_payment: no se usa, este negocio no acepta tarjeta por este chat.',
     '- payment_proof: el cliente envía o dice que envió un comprobante, transferencia o depósito. Reply: agradece, dile que lo verificas y, si falta algún detalle del pedido, sigue atendiéndolo con normalidad.',
     '- complaint: queja o problema con un pedido ya entregado o en curso (llegó roto, atraso, error). Reply: lamenta lo ocurrido y dile que lo revisas y le escribes en unos minutos. No hagas preguntas.',
+    '- not_customer: quien escribe NO viene a comprar: un courier o empresa de envíos que coordina una recolección o entrega (guías, Fedex, Servientrega), un proveedor, un banco o empresa que ofrece servicios o trámites al negocio (cobros, débito automático, publicidad), o alguien que ofrece sus productos o busca trabajo. Si pregunta por SU pedido, por el envío de SU compra, por precios o modelos, SÍ es cliente (usa none). Reply: breve y neutro, en primera persona: agradece y dile que lo revisas y le respondes pronto. No ofrezcas productos, no preguntes por eventos y no hagas preguntas. owner_question vacío.',
     `- none: cualquier otro caso${s.personalization ? ', incluidas todas las personalizaciones' : ''}.`,
     '- Reply siempre en primera persona.',
     ''
@@ -556,7 +558,7 @@ export function unitOf(product: { sale_unit?: string | null } | undefined, p: Bu
   return product?.sale_unit?.trim() || p.sales.unitSingular;
 }
 
-export type HandoffReason = 'none' | 'card_payment' | 'payment_proof' | 'complaint';
+export type HandoffReason = 'none' | 'card_payment' | 'payment_proof' | 'complaint' | 'not_customer';
 
 export interface TurnPlan {
   reply: string;
@@ -590,7 +592,7 @@ const TURN_SCHEMA = {
     reply: { type: 'string' },
     intent: { type: 'string', enum: ['greeting', 'product_inquiry', 'quotation', 'order', 'delivery_status', 'other'] },
     show_products: { type: 'array', items: { type: 'string' } },
-    handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint'] },
+    handoff: { type: 'string', enum: ['none', 'card_payment', 'payment_proof', 'complaint', 'not_customer'] },
     send_bank_details: { type: 'boolean' },
     owner_question: { type: 'string' },
     custom_design_requested: { type: 'boolean' },
@@ -653,6 +655,58 @@ export function namedByCustomer(productName: string, customerText: string): bool
   if (words.length === 0) return false;
   const said = words.filter(w => customerText.includes(w)).length;
   return said >= Math.min(2, words.length);
+}
+
+// Palabras de un nombre que no identifican un modelo: el sexo o la ocasión los dice la clienta sin estar eligiendo.
+const NOT_A_CHOICE = new Set(['nino', 'nina', 'ninos', 'ninas', 'nene', 'nena', 'bebe', 'baby', 'shower', 'docena', 'docenas']);
+
+/** ¿La clienta nombró este modelo, aunque sea a medias ("el de la virgen" → VIRGENCITA)? */
+function mentionsModel(productName: string, said: string, categoryWords: Set<string>): boolean {
+  const words = normalizeWords(productName).split(/[^a-zñ0-9]+/)
+    .filter(w => w.length >= 4 && !NAME_FILLER.has(w) && !NOT_A_CHOICE.has(w) && !categoryWords.has(w));
+  return words.some(w => new RegExp(`(^|[^a-zñ])${escapeRegex(w.slice(0, 5))}`).test(said));
+}
+
+/**
+ * La clienta vio varios modelos y dio la cantidad sin decir cuál quiere, pero la IA armó el pedido con uno (caso real
+ * del 25-sep: "Deseo 5 docenas" después de 4 fotos y el asistente "tomó como base" la primera). Devuelve los modelos
+ * que vio (los últimos 4) para preguntarle cuál le gustó, o vacío si ya eligió, si vio uno solo, si el asistente ya le
+ * había propuesto ese modelo o si ya se le preguntó nombrándolos (entonces sí se elige por ella para no dar vueltas).
+ */
+export function modelsToAskAbout(params: {
+  items: { name: string; quantity: number }[];
+  customerText: string;
+  history: { role: string; content: string }[];
+  catalog: { name: string; category?: string | null }[];
+}): string[] {
+  const { items, customerText, history, catalog } = params;
+  const ordered = items.filter(i => Number(i.quantity) > 0);
+  if (ordered.length === 0) return [];
+
+  const names = new Map(catalog.map(c => [productKey(c.name), c.name]));
+  const shown: string[] = [];
+  for (const m of history) {
+    if (m.role !== 'assistant') continue;
+    const content = String(m.content || '');
+    const found = content.match(/^\[Foto enviada del producto: (.+)\]$/)?.[1]
+      || (content.startsWith(TEAM_MARK) ? content.match(/\*([^*]+)\*/)?.[1] : undefined);
+    const name = found ? names.get(productKey(found)) : undefined;
+    if (name && !shown.includes(name)) shown.push(name);
+  }
+  if (shown.length < 2) return [];
+
+  // El texto del asistente (sin fotos): si ya propuso ese modelo por su nombre, la clienta siguió con él.
+  const isPhoto = (content: string) => content.startsWith('[Foto') || content.startsWith(`${TEAM_MARK}[Archivo]`);
+  const botTexts = history
+    .filter(m => m.role === 'assistant' && !isPhoto(String(m.content || '')))
+    .map(m => normalizeWords(String(m.content || '')));
+  if (botTexts.some(t => t.includes('?') && shown.filter(n => t.includes(normalizeWords(n))).length >= 2)) return [];
+
+  const categoryWords = new Set(catalog.flatMap(c => normalizeWords(c.category || '').split(/[^a-zñ0-9]+/)).filter(Boolean));
+  const said = normalizeWords(customerText);
+  const chosen = (name: string) => mentionsModel(name, said, categoryWords) || botTexts.some(t => t.includes(normalizeWords(name)));
+  if (ordered.every(i => chosen(i.name))) return [];
+  return shown.slice(-4);
 }
 
 /** Quita las líneas del resumen ("🕯️ *Modelo:* …") y la frase de reserva de la fecha, dejando el resto del mensaje. */
@@ -755,7 +809,9 @@ export function sameQuestion(current: string, previous: string, productNames: st
   // cuenta como la misma: si el cliente no eligió, preguntarlo otra vez con otras palabras es dar vueltas.
   const mentioned = (q: string) => productNames.map(normalizeWords).filter(n => q.includes(n)).length;
   const asksWhichModel = (q: string) => mentioned(q) >= 2
-    || /\b(cual|cuales|que)\b[^?]*\b(modelo|modelos|velita|velitas|vela|velas|opcion|opciones|dos)\b/.test(q)
+    || /\b(cual|cuales)\b[^?]*\b(modelo|modelos|velita|velitas|vela|velas|opcion|opciones|dos)\b/.test(q)
+    // "¿Qué modelo…?" sí; "¿Para qué evento buscas las velitas?" no pide elegir modelo.
+    || /\bque (modelo|modelos|opcion|opciones|diseno|disenos|velita|velitas|vela|velas)\b/.test(q)
     || /\bprefieres (la|el|los|las|cual)\b/.test(q);
   if (asksWhichModel(a) && asksWhichModel(b)) return true;
   const stems = (q: string) => new Set(q.split(/[^a-zñ0-9]+/).filter(w => w.length >= 4).map(w => w.slice(0, 4)));
@@ -1151,7 +1207,9 @@ export async function planTurn(params: {
       role: 'system' as const,
       content: buildTurnContext(sentProducts, bankDetailsSent, pendingProducts, recentEmojis, p, previousReplies)
         + `\nPREGUNTAS YA ENVIADAS A LA DUEÑA: ${pendingOwnerQuestions.length ? pendingOwnerQuestions.join(' | ') : 'ninguna'}`
-        + (cardChosen && usesDeposit ? '\nFORMA DE PAGO ELEGIDA: tarjeta. Se paga el 100% del total: no menciones anticipo; la fecha se reserva "al recibir el pago".' : '')
+        + (cardChosen
+          ? `\nFORMA DE PAGO ELEGIDA: tarjeta.${usesDeposit ? ' Se paga el 100% del total: no menciones anticipo; la fecha se reserva "al recibir el pago".' : ''} El link de pago le llega por este chat: no le preguntes si lo quiere ni se lo vuelvas a ofrecer; si pregunta por él, dile en primera persona que en un momento se lo envías, sin prometer una hora. Sigue respondiendo con normalidad cualquier otra pregunta que haga.`
+          : '')
         + `\nDISEÑOS FUERA DEL CATÁLOGO YA ENVIADOS A LA DUEÑA: ${pendingCustomDesigns.length ? pendingCustomDesigns.join(' | ') : 'ninguno'}`
         + `\nÚLTIMO PEDIDO DE ESTE CLIENTE: ${lastOrder || 'no tiene pedidos registrados'}`
         + (history.some(m => m.role === 'assistant' && m.content.startsWith(TEAM_MARK))
@@ -1257,6 +1315,16 @@ export async function planTurn(params: {
     );
   }
 
+  // La ciudad ya la dijo: preguntarla otra vez parece que no la escuchamos (caso real del 25-sep tras elegir tarjeta).
+  const citySaid = hasShipping ? String(parsed.shipping_place || '').split(',')[0].trim() : '';
+  const customerSaidCity = !!citySaid && citySaid.length >= 3
+    && normalizeWords([...history.filter(m => m.role === 'user').map(m => m.content), userMessage].join('\n')).includes(normalizeWords(citySaid));
+  const asksCityAgain = () => customerSaidCity && questionTopic(lastQuestion(reply()), p) === 'ciudad';
+  if (asksCityAgain()) {
+    console.warn(`📍 La IA iba a preguntar otra vez la ciudad (${citySaid}): se corrige`);
+    corrections.push(`El cliente ya dijo que el envío es a ${citySaid}: no le vuelvas a preguntar la ciudad ni a dónde se envía. Si no falta ningún otro dato, no hagas pregunta.`);
+  }
+
   if (BANNED_PHRASES.test(reply())) {
     corrections.push('No uses "te lo dejo anotado" ni ninguna frase con "anotado"; exprésalo de otra forma.');
   }
@@ -1265,6 +1333,21 @@ export async function planTurn(params: {
   const quotedDeposit = usesDeposit ? Number(parsed.quoted_deposit) || 0 : 0;
   const customerText = [...history.filter(m => m.role === 'user').map(m => m.content), userMessage].join('\n');
   const firstOrder = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p);
+
+  // Dio la cantidad pero no dijo cuál de los modelos que vio quiere: se le pregunta, la IA no elige por ella.
+  const modelsWord = p.sales.productLabelPlural.toLowerCase();
+  const unchosen = () => modelsToAskAbout({
+    items: computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p).items,
+    customerText, history, catalog
+  });
+  const askModels = unchosen();
+  if (askModels.length > 0) {
+    console.warn(`🕯️ La clienta no eligió modelo y la IA tomó uno por su cuenta: se le pregunta cuál (${askModels.join(', ')})`);
+    corrections.push(
+      `La clienta todavía no eligió cuál de los ${modelsWord} quiere: vio ${askModels.join(', ')}. NO elijas tú ninguno, no armes el pedido ni escribas montos: order_items vacío, quoted_total 0 y quoted_deposit 0. ` +
+      `Confirma la cantidad que dio (si la dio) y pregúntale cuál de esos ${modelsWord} le gustó más, nombrándolos en líneas separadas con *asteriscos*. Una sola pregunta.`
+    );
+  }
   // Montos que aparecen escritos en la respuesta ("$30", "$127.00", "$63,50").
   const amountsInReply = (reply().match(/\$\s?\d+(?:[.,]\d{1,2})?/g) || [])
     .map(a => Number(a.replace(/[$\s]/g, '').replace(',', '.')));
@@ -1302,7 +1385,7 @@ export async function planTurn(params: {
     Math.abs(v - value) < 0.009 || (usesDeposit && Math.abs(round2(v * pay.depositPercent / 100) - value) < 0.009));
   const repeatsKnownPrice = firstOrder.missing === 'items' && amountsInReply.length > 0 && amountsInReply.every(saidBefore);
 
-  if ((quotedTotal > 0 || quotedDeposit > 0) && !repeatsKnownPrice) {
+  if (askModels.length === 0 && (quotedTotal > 0 || quotedDeposit > 0) && !repeatsKnownPrice) {
     if (firstOrder.missing === 'items') {
       corrections.push(`${noAmountsYet} Aún no está claro qué ${p.sales.productLabelPlural.toLowerCase()} y cuántas ${p.sales.unitPlural} quiere; pregúntale.`);
     } else if (firstOrder.missing === 'place') {
@@ -1316,7 +1399,7 @@ export async function planTurn(params: {
 
   // Si ya se conoce todo lo necesario, cualquier monto escrito debe cuadrar con el cálculo del sistema,
   // aunque la IA no lo haya declarado en quoted_total (por ejemplo "$123.00" en lugar de "$124.00").
-  if (!firstOrder.missing && amountsInReply.length > 0) {
+  if (askModels.length === 0 && !firstOrder.missing && amountsInReply.length > 0) {
     const showSeparately = hasShipping && p.shipping.showSeparately;
     const allowed = [firstOrder.total, firstOrder.deposit, ...(showSeparately ? [firstOrder.subtotal, firstOrder.shipping?.cost || 0] : [])];
     // El costo de cambiar de empaque se puede mencionar cuando la clienta lo pregunta.
@@ -1348,7 +1431,7 @@ export async function planTurn(params: {
     .map(m => m.content);
   const productNames = catalog.map(c => c.name);
   const repeatsQuestion = () => !!repeatedQuestion(reply(), recentBotTexts, productNames, p);
-  const repeated = repeatedQuestion(reply(), recentBotTexts, productNames, p);
+  const repeated = askModels.length > 0 ? '' : repeatedQuestion(reply(), recentBotTexts, productNames, p);
   if (repeated) {
     console.warn(`🔁 La IA iba a repetir una pregunta que ya hizo ("${repeated}"): se corrige`);
     const modelsWord = p.sales.productLabelPlural.toLowerCase();
@@ -1437,6 +1520,16 @@ export async function planTurn(params: {
     }
   }
 
+  if (askModels.length > 0 && unchosen().length > 0) {
+    const [item] = computeOrderTotal(normalizeQuantities(parsed.order_items, customerText, p, catalog), parsed.shipping_place, catalog, p).items;
+    const qty = item?.quantity ? `las *${item.quantity} ${item.quantity === 1 ? p.sales.unitSingular : p.sales.unitPlural}*` : 'tu pedido';
+    console.warn('🕯️ La IA insistió en elegir un modelo por la clienta: se le pregunta cuál con un texto fijo');
+    parsed.reply = `Para ${qty}, ¿cuál de estos ${modelsWord} te gustó más? ${p.style.decorativeEmojis[0] || '🤍'}\n\n${askModels.map(n => `${p.business.productEmoji} *${n}*`).join('\n')}`;
+    parsed.order_items = [];
+    parsed.quoted_total = 0;
+    parsed.quoted_deposit = 0;
+  }
+
   if (advice && !adviceTold(reply()) && !adviceTold(history.filter(m => m.role === 'assistant').map(m => m.content).join(' '))) {
     console.warn('ℹ️ La IA no explicó la nota del cambio de empaque: se agrega tal como la escribió el negocio');
     parsed.reply = `${reply().trim()}\n\n${advice.note}`.trim();
@@ -1479,13 +1572,33 @@ export async function planTurn(params: {
   }
 
   // Si aun corregida repite la pregunta, el bot está atascado: la dueña recibe el aviso para que intervenga.
-  const stuck = repeatsQuestion();
+  const stuck = askModels.length === 0 && repeatsQuestion();
   if (stuck) console.warn('🔁 El asistente insiste en repetir la misma pregunta: se avisa a la dueña');
 
   // Última defensa: si aun corregida abre con la misma exclamación de relleno, se quita y empieza directo.
   if (ticsIn(reply(), previousReplies).opening) {
     console.warn('🗣️ Muletilla repetida al abrir: se quita de la respuesta');
     parsed.reply = stripFillerOpening(reply());
+  }
+
+  // Si aun corregida vuelve a preguntar la ciudad, se quita esa pregunta.
+  if (asksCityAgain()) {
+    const lines = reply().split('\n');
+    const kept = lines.filter(line => !(line.includes('?') && questionTopic(lastQuestion(line), p) === 'ciudad'));
+    if (kept.join('').trim()) {
+      console.warn('📍 La IA insistió en preguntar la ciudad: se quita la pregunta');
+      parsed.reply = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+  }
+
+  // Ya eligió tarjeta y el link se lo envía la dueña: volver a ofrecérselo confunde. Se quita, salvo que ella pregunte por él.
+  if (cardChosen && parsed.handoff !== 'card_payment' && !/link|enlace|pago|tarjeta/i.test(customerWords)) {
+    const lines = reply().split('\n');
+    const kept = lines.filter(line => !/\b(link|enlace)\b/i.test(line));
+    if (kept.length < lines.length && kept.join('').trim()) {
+      console.warn('💳 La IA volvió a ofrecer el link de pago sin que la clienta lo pidiera: se quita esa línea');
+      parsed.reply = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
   }
 
   parsed.reply = addOpeningQuestionMarks(withoutQuotes(reply().split(TEAM_MARK.trim()).join('').trim()));

@@ -23,11 +23,11 @@ type GenderedProduct = { name: string; category?: string | null; gender?: string
  * sexo de la misma categoría que falten, porque se pueden personalizar en sus colores.
  * Con un solo modelo elegido no se agrega nada: la clienta pidió ese.
  */
-export function withOppositeGender(selected: string[], catalog: GenderedProduct[], alreadySent: string[]): string[] {
+export function withOppositeGender(selected: string[], catalog: GenderedProduct[], alreadySent: string[], sex: 'niña' | 'niño' | '' = ''): string[] {
   if (selected.length < 2) return selected;
   const chosen = selected.map(n => catalog.find(p => p.name === n)).filter((p): p is GenderedProduct => !!p);
-  // El sexo pedido es el del primer modelo con género: la IA pone primero los de ese sexo.
-  const wanted = chosen.find(p => p.gender === 'niño' || p.gender === 'niña')?.gender;
+  // Manda el sexo que dijo la clienta; si no lo dijo, el del primer modelo con género (la IA pone primero los de ese sexo).
+  const wanted = sex || chosen.find(p => p.gender === 'niño' || p.gender === 'niña')?.gender;
   if (!wanted) return selected;
   const other = wanted === 'niña' ? 'niño' : 'niña';
   const categories = new Set(chosen.map(p => p.category).filter(Boolean));
@@ -91,8 +91,9 @@ const plain = (text: string) => text.normalize('NFD').replace(/\p{Diacritic}/gu,
 /** Sexo que dijo la clienta. Si no dijo ninguno, o nombró los dos ("no sé si niño o niña"), queda vacío. */
 export function customerSex(text: string): 'niña' | 'niño' | '' {
   const t = plain(text);
-  const girl = /\b(nina|nena|ninita|princesa|princesita|mujercita)\b/.test(t);
-  const boy = /\b(nino|nene|ninito|varon|varoncito|principe|principito|hombrecito)\b/.test(t);
+  // "Bautizo para hombre" (caso real del 25-sep) también dice el sexo.
+  const girl = /\b(nina|nena|ninita|princesa|princesita|mujer|mujercita|femenino|hija|hijita|sobrina|nieta|ahijada)\b/.test(t);
+  const boy = /\b(nino|nene|ninito|varon|varoncito|principe|principito|hombre|hombrecito|masculino|hijo|hijito|sobrino|nieto|ahijado)\b/.test(t);
   return girl && !boy ? 'niña' : boy && !girl ? 'niño' : '';
 }
 
@@ -113,6 +114,24 @@ export function mentionedGenderedCategory(text: string, catalog: GenderedProduct
 export function categoryPhotos(category: string, catalog: GenderedProduct[], alreadySent: string[]): string[] {
   const seen = new Set(alreadySent.map(productKey));
   return catalog.filter(p => p.category === category && p.image_url && !seen.has(productKey(p.name))).map(p => p.name);
+}
+
+/**
+ * La tanda trae modelos del otro sexo y el texto (que va antes de las fotos) no lo explica: se aclara que se pueden
+ * personalizar, para que no parezca un error (caso real del 25-sep: "opciones para niño" y llegó una cruz con niña).
+ */
+export function noteOppositeGender(reply: string, batch: string[], catalog: GenderedProduct[], sex: 'niña' | 'niño' | ''): string {
+  if (!sex || !reply.trim()) return reply;
+  const other = sex === 'niña' ? 'niño' : 'niña';
+  if (!batch.some(n => catalog.find(p => p.name === n)?.gender === other)) return reply;
+  const t = plain(reply);
+  if (/personaliz|colores|ambos|los dos/.test(t) || new RegExp(`\\b${plain(other)}s?\\b`).test(t)) return reply;
+  const note = `También van algunos de ${other} porque se pueden personalizar en los colores que quieras.`;
+  const lines = reply.trim().split('\n');
+  const last = lines.length - 1;
+  // Si termina en pregunta, el aviso va antes: la pregunta sigue siendo lo último que lee.
+  if (last > 0 && /\?\s*\S*\s*$/.test(lines[last])) return [...lines.slice(0, last), note, '', lines[last]].join('\n').replace(/\n{3,}/g, '\n\n');
+  return `${reply.trim()}\n\n${note}`;
 }
 
 /** Sin saber el sexo: primero los que sirven para ambos y después los de niña y de niño intercalados, para que vea de todo. */

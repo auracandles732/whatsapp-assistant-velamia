@@ -29,11 +29,12 @@ import {
   getActiveTenants,
   getConversationById,
   hasOptedOut,
-  parseDbTimestamp
+  parseDbTimestamp,
+  setConversationTags
 } from '../db';
 import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
 import { maskPhone } from '../services/privacy';
-import { isFollowUpMessage, followUpText } from '../services/followups';
+import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG } from '../services/followups';
 import {
   sendTextMessage,
   sendImageMessage,
@@ -59,7 +60,7 @@ import { shippingCost } from '../services/shippingRates';
 import { notifyOwner } from '../services/notifications';
 import { reportAiFailure, isNoCredits } from '../services/aiStatus';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
-import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge, sameCategoryAsMost } from '../services/photoBackup';
+import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge, sameCategoryAsMost, customerSex, noteOppositeGender } from '../services/photoBackup';
 import { textToVoice, voiceNotesEnabled } from '../services/elevenlabs';
 import { downloadSocialMedia, socialProfileName, wasSentByUs, isSocialAddress } from '../services/metaChannels';
 import { voiceNoteFits } from '../services/voiceNotes';
@@ -71,7 +72,8 @@ const HISTORY_LIMIT = 30;
 const MEDIA_TYPES = new Set(['image', 'audio', 'document']);
 
 // Casos en que el bot se aparta hasta que la dueña lo reactive. El comprobante de pago solo avisa.
-const PAUSING_HANDOFFS = new Set(['card_payment', 'complaint']);
+// Con tarjeta el asistente sigue atendiendo (la dueña envía el link): pausarlo dejaba sin respuesta sus otras preguntas.
+const PAUSING_HANDOFFS = new Set(['complaint', 'not_customer']);
 
 // Inicio del mensaje con los datos bancarios: permite saber si ya se enviaron en el chat.
 const BANK_DETAILS_MARKER = '🏦 Datos para transferencia';
@@ -796,10 +798,20 @@ async function respondToBatch(batch: PendingBatch) {
     }
     console.log(`🎯 ${items.length} mensaje(s) | intención: ${plan.intent} | fotos: ${plan.show_products.length} | revisión manual: ${plan.handoff} | datos bancarios: ${plan.send_bank_details}`);
 
-    // Ya eligió tarjeta y se avisó: un "gracias" posterior no debe volver a pausar el bot ni repetir el aviso.
+    // Ya eligió tarjeta y se avisó: un "gracias" posterior no debe repetir el aviso.
     if (plan.handoff === 'card_payment' && cardChosen && !/tarjeta|link|enlace|visa|mastercard/i.test(aiContent)) {
-      console.log('💳 Pago con tarjeta ya avisado en este chat: no se repite el aviso ni la pausa');
+      console.log('💳 Pago con tarjeta ya avisado en este chat: no se repite el aviso');
       plan = { ...plan, handoff: 'none' };
+    }
+
+    // "No es cliente" solo si nunca compró ni vio modelos, y una sola vez: si la dueña reactivó el asistente, ella decidió que responda.
+    if (plan.handoff === 'not_customer') {
+      if (orders.length > 0 || sentProducts.length > 0 || await hasRecentNotification(conversationId, 'not_customer', 24 * 30)) {
+        console.log('📦 La IA marcó "no es cliente", pero el chat tiene compras, fotos o ya se avisó: se atiende normal');
+        plan = { ...plan, handoff: 'none' };
+      } else {
+        plan = { ...plan, owner_question: '' };
+      }
     }
 
     // Respuesta vacía y nada más que enviar: la clienta quedaría sin contestar.
@@ -893,6 +905,32 @@ async function respondToBatch(batch: PendingBatch) {
       }
     }
 
+    // Qué fotos van, en qué orden. Se decide antes de enviar el texto para que el texto no diga "para niño" y lleguen de niña.
+    let photos: string[] = [];
+    let sex: 'niña' | 'niño' | '' = '';
+    if (plan.show_products.length > 0) {
+      // Si la IA eligió una tanda de las pendientes, se toman todas: las que no entren quedan para la
+      // siguiente pregunta en vez de perderse. Si pidió uno o dos modelos concretos, se envían solo esos.
+      const continuesPending = pendingProducts.length > 0
+        && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
+        && plan.show_products.every(n => pendingProducts.includes(n));
+      const saidByCustomer = [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), aiContent].join('\n');
+      const chosen = photosFromBackup ? plan.show_products : sameCategoryAsMost(plan.show_products, catalog, saidByCustomer);
+      if (chosen.length < plan.show_products.length) {
+        console.log(`📸 Se quitan modelos de otra categoría que la clienta no pidió: ${plan.show_products.filter(n => !chosen.includes(n)).join(', ')}`);
+      }
+      const gendered = usesGenderTagging(batchProfile);
+      sex = gendered ? customerSex(saidByCustomer) : '';
+      photos = continuesPending ? pendingProducts
+        : gendered && !photosFromBackup && !plan.keep_photo_order ? withOppositeGender(chosen, catalog, sentProducts, sex) : chosen;
+      const firstBatch = photos.filter(n => catalog.some((p: any) => p.name === n && p.image_url)).slice(0, PHOTO_BATCH_SIZE);
+      const noted = noteOppositeGender(plan.reply, firstBatch, catalog, sex);
+      if (noted !== plan.reply) {
+        console.log('📸 La tanda trae modelos del otro sexo: se aclara en el texto que se pueden personalizar');
+        plan = { ...plan, reply: noted };
+      }
+    }
+
     if (plan.reply) {
       // La dueña puede apagar las notas de voz desde el CRM (Configuración → Notas de voz).
       const voiceSent = wantsVoiceNote(history, phoneNumber, plan.reply)
@@ -940,7 +978,7 @@ async function respondToBatch(batch: PendingBatch) {
       else if (await getRecentPendingQuotation(conversationId)) saleIntent = 'quotation';
     }
 
-    // Se registra antes de la revisión manual: si confirma y elige tarjeta en el mismo mensaje,
+    // Se registra antes de la revisión manual: si confirma y en el mismo mensaje hay un reclamo,
     // el bot se pausa y el pedido igual debe quedar anotado.
     if (saleIntent === 'quotation' || saleIntent === 'order') {
       const transcript = [
@@ -958,7 +996,16 @@ async function respondToBatch(batch: PendingBatch) {
 
     if (plan.handoff !== 'none') {
       await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: plan.handoff, detail: customerDetail });
-      // Tarjeta y reclamos: el bot queda pausado hasta que lo reactiven desde el CRM.
+      // Quien no es cliente queda etiquetado: nunca recibe seguimientos de venta.
+      if (plan.handoff === 'not_customer') {
+        const conv = await getConversationById(conversationId).catch(() => null);
+        const tags: string[] = Array.isArray(conv?.tags) ? conv.tags : [];
+        if (!tags.some(t => t.toLowerCase() === NOT_CUSTOMER_TAG.toLowerCase())) {
+          await setConversationTags(conversationId, [...tags, NOT_CUSTOMER_TAG].slice(-8))
+            .catch((error: any) => console.error('❌ No se pudo etiquetar el chat:', error.message));
+        }
+      }
+      // Reclamos y quien no es cliente: el bot queda pausado hasta que lo reactiven desde el CRM.
       if (PAUSING_HANDOFFS.has(plan.handoff)) {
         await pauseBot(conversationId);
         return;
@@ -969,19 +1016,7 @@ async function respondToBatch(batch: PendingBatch) {
       || [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), aiContent]
         .some(t => quantityPattern().test(t) || /\d+\s*(invitad|persona)/i.test(t));
 
-    if (plan.show_products.length > 0) {
-      // Si la IA eligió una tanda de las pendientes, se toman todas: las que no entren quedan para la
-      // siguiente pregunta en vez de perderse. Si pidió uno o dos modelos concretos, se envían solo esos.
-      const continuesPending = pendingProducts.length > 0
-        && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
-        && plan.show_products.every(n => pendingProducts.includes(n));
-      const saidByCustomer = [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), aiContent].join('\n');
-      const chosen = photosFromBackup ? plan.show_products : sameCategoryAsMost(plan.show_products, catalog, saidByCustomer);
-      if (chosen.length < plan.show_products.length) {
-        console.log(`📸 Se quitan modelos de otra categoría que la clienta no pidió: ${plan.show_products.filter(n => !chosen.includes(n)).join(', ')}`);
-      }
-      const photos = continuesPending ? pendingProducts
-        : usesGenderTagging(batchProfile) && !photosFromBackup && !plan.keep_photo_order ? withOppositeGender(chosen, catalog, sentProducts) : chosen;
+    if (photos.length > 0) {
       // Si la IA ya preguntó algo en su mensaje, el sistema no agrega otra pregunta.
       await sendProductPhotos(conversationId, phoneNumber, photos, catalog, !plan.reply.includes('?'), batchProfile,
         afterPhotosQuestion({ quantityKnown, photos: photos.length }));
