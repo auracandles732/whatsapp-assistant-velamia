@@ -8664,6 +8664,12 @@
                 });
             };
 
+            const retry = () => run('retry', async () => {
+                const done = (await api(`/api/posts/${post.id}/retry`, { method: 'POST' })).post;
+                onChanged(done);
+                setMsg(done.status === 'published' ? '¡Listo! Ya salió en todas las redes' : '');
+            });
+
             const links = Object.entries(post.results || {}).filter(([, r]) => r && r.permalink);
             return (
                 <PbModal title={postWhen(post.scheduled_at)} onClose={onClose} extra={<span className={'pb-st inline ' + post.status}>{POST_STATUS[post.status] || post.status}</span>}>
@@ -8676,6 +8682,7 @@
                             <div className="pb-field">
                                 <span className="pb-label">Dónde se publica</span>
                                 <PbNetChips channels={channels} setChannels={setChannels} disabled={!editable} />
+                                {channelNotes(postItems(post), channels).map(n => <div key={n} className="pb-muted" style={{ marginTop: 6 }}>{n}</div>)}
                             </div>
                             {editable && (
                                 <div className="pb-field">
@@ -8702,6 +8709,12 @@
                                     <button type="button" className="pb-btn sm" disabled={!!busy || tooLong || channels.length === 0} onClick={publishNow}>{busy === 'publish' ? 'Publicando…' : 'Publicar ahora'}</button>
                                     <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={discard}>{busy === 'discard' ? 'Eliminando…' : 'Eliminar'}</button>
                                     {msg && <span className="pb-msg">{msg}</span>}
+                                </div>
+                            )}
+                            {canEdit && post.status === 'partial' && (
+                                <div className="pb-actions">
+                                    <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={retry}>{busy === 'retry' ? 'Publicando…' : 'Reintentar lo que faltó'}</button>
+                                    <span className="pb-muted">Solo en las redes que fallaron; lo que ya salió no se repite.</span>
                                 </div>
                             )}
                             {!editable && msg && <div className="pb-msg">{msg}</div>}
@@ -8799,7 +8812,7 @@
                             <div className="pb-field" style={{ marginTop: '14px' }}>
                                 <span className="pb-label">Dónde se publica</span>
                                 <PbNetChips channels={channels} setChannels={setChannels} />
-                                {videos > 0 && count > 1 && channels.includes('facebook') && <div className="pb-muted" style={{ marginTop: 6 }}>Facebook no deja mezclar fotos y videos en una publicación: ahí sale el video; en Instagram, el carrusel completo.</div>}
+                                {channelNotes(picked, channels).map(n => <div key={n} className="pb-muted" style={{ marginTop: 6 }}>{n}</div>)}
                             </div>
                             <div className="pb-field">
                                 <label className="pb-label" htmlFor="pb-new-when">Día y hora</label>
@@ -8914,6 +8927,17 @@
 
         // ---------- Agente de redes: biblioteca, proveedores y resultados ----------
 
+        // Qué sale en cada red cuando no es todo lo elegido (igual que en el servidor, publisher.ts).
+        function channelNotes(items, channels) {
+            const notes = [];
+            const videos = items.filter(i => i.type === 'video').length;
+            const photos = items.length - videos;
+            if (channels.includes('facebook') && videos && photos) notes.push(`Facebook no deja mezclar fotos y videos: ahí salen solo ${photos === 1 ? 'la foto' : `las ${photos} fotos`}; en Instagram, todo.`);
+            else if (channels.includes('facebook') && videos > 1) notes.push('En Facebook sale solo el primer video (no acepta varios en una publicación).');
+            if (channels.includes('instagram_story') && items.length > 1) notes.push('En la historia de Instagram sale solo el primero.');
+            return notes;
+        }
+
         // Lo que muestra una publicación: sus fotos o videos de la biblioteca o, si no tiene, las fotos de los productos.
         function postItems(post) {
             if (post.media && post.media.length) return post.media.map(m => ({ type: m.type, url: m.url, name: m.type === 'video' ? 'Video' : 'Foto' }));
@@ -8956,6 +8980,7 @@
                             </div>
                             <b>{post.theme}{post.products.length ? ' · ' + post.products.slice(0, 3).map(p => niceName(p.name)).join(', ') + (post.products.length > 3 ? ` y ${post.products.length - 3} más` : '') : ''}</b>
                             {post.reason && <small>{post.reason}</small>}
+                            {channelNotes(items, post.channels).map(n => <small key={n}>ℹ️ {n}</small>)}
                         </div>
                         {onRemove && <button type="button" className="pl-x" title="Quitar de la propuesta" aria-label="Quitar de la propuesta" onClick={onRemove}>×</button>}
                     </div>
@@ -9145,7 +9170,7 @@
                     ) : (
                         <div className="sl-grid">
                             {shown.map(a => (
-                                <button key={a.id} type="button" className="sl-item" onClick={() => setOpen(a)}>
+                                <button key={a.id} type="button" className="sl-item" onClick={() => { setError(''); setOpen(a); }}>
                                     <PbMediaThumb item={{ type: a.kind, url: a.url }} />
                                     {a.kind === 'video' && <span className="sl-badge">▶ {a.duration_seconds ? Math.round(a.duration_seconds) + ' s' : 'Video'}</span>}
                                     <span className="sl-title">{a.title || (a.kind === 'video' ? 'Video' : 'Foto')}</span>
@@ -9178,6 +9203,7 @@
                                         </select>
                                         <span className="pb-muted" style={{ fontSize: 12.5 }}>Con esto, cuando la IA publique ese producto, suma este {open.kind === 'video' ? 'video' : 'archivo'} al carrusel.</span>
                                     </div>
+                                    {error && <div className="pb-err" style={{ marginTop: 10 }}>{error}</div>}
                                     {canEdit && <div className="pb-actions"><button type="button" className="pb-btn sm danger" onClick={() => remove(open)}>Borrar de la biblioteca</button></div>}
                                 </div>
                             </div>
@@ -10152,7 +10178,7 @@
                     const r = await api('/api/posts/plan/confirm', { method: 'POST', body: JSON.stringify({ drafts: proposal.drafts, summary: proposal.summary, tasks: proposal.tasks }) });
                     setProposal(null);
                     setPlanRequest('');
-                    setNotice({ ok: true, text: `Listo: se programaron ${r.created} publicación(es). Saldrán solas a su hora (puedes cambiarlas antes).` });
+                    setNotice({ ok: true, text: `Listo: se programaron ${r.created} publicación(es)${r.skipped ? ` (${r.skipped} ya estaban programadas y no se repitieron)` : ''}. Saldrán solas a su hora (puedes cambiarlas antes).` });
                     if (mode !== 'week' || anchor !== mondayOf(pbToday())) {
                         setMode('week');
                         setAnchor(mondayOf(pbToday()));
@@ -10207,6 +10233,12 @@
                         replacePost(done);
                         setNotice(done.status === 'published' ? { ok: true, text: '¡Publicada!' } : { ok: false, text: done.error || 'No se publicó' });
                     }
+                    if (action === 'retry') {
+                        setNotice({ ok: true, text: 'Publicando en las redes que faltaban…' });
+                        const done = (await api(`/api/posts/${post.id}/retry`, { method: 'POST' })).post;
+                        replacePost(done);
+                        setNotice(done.status === 'published' ? { ok: true, text: '¡Listo! Ya salió en todas las redes' } : { ok: false, text: done.error || 'No se publicó' });
+                    }
                 } catch (e) {
                     setNotice({ ok: false, text: e.message });
                 }
@@ -10217,6 +10249,7 @@
                 return [
                     { label: editable ? 'Editar' : 'Ver detalle', onClick: () => setEditing(post) },
                     editable && { label: 'Publicar ahora', onClick: () => quick(post, 'publish') },
+                    canEdit && post.status === 'partial' && { label: 'Reintentar lo que faltó', onClick: () => quick(post, 'retry') },
                     editable && { label: 'Eliminar', danger: true, onClick: () => quick(post, 'cancel') }
                 ];
             };

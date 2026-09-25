@@ -40,3 +40,21 @@ test('sin empaque en la regla, los modelos entran con el empaque más usado del 
   assert.equal(mostUsedPackaging(catalogo, VELAMIA_PROFILE), 'Tul');
   assert.equal(mostUsedPackaging([{ description: '' }], VELAMIA_PROFILE), '', 'si nadie tiene empaque no se inventa uno');
 });
+
+test('cambiar de categoría no se come las "s" (error real: "velas personalizadas" quedaba "VELA PER ONALIZADA")', async () => {
+  const { categoryName } = await import('../src/social/suppliers');
+  assert.equal(categoryName('velas personalizadas'), 'VELAS PERSONALIZADAS');
+  assert.equal(categoryName('  baby   shower '), 'BABY SHOWER');
+});
+
+test('una foto con el diseño hecha con datos que cambiaron mientras tanto no se guarda', async () => {
+  const { posterIsStale } = await import('../src/social/posters');
+  const model: any = { name: 'VELA OSITO', size: 'mediana' };
+  const reglas: any = { sizePrices: { pequena: 30, mediana: 35, grande: 42 }, unitPrices: {} };
+  const job = { model, price: 35, unitPrice: 0 };
+  assert.equal(posterIsStale(job, { name: 'VELA OSITO', size: 'mediana' } as any, reglas), false);
+  assert.equal(posterIsStale(job, { name: 'VELA OSITO', size: 'grande' } as any, reglas), true, 'cambió el tamaño (otro precio)');
+  assert.equal(posterIsStale(job, { name: 'VELA OSITO LUNA', size: 'mediana' } as any, reglas), true, 'cambió el nombre');
+  assert.equal(posterIsStale(job, { name: 'VELA OSITO', size: 'mediana' } as any, { ...reglas, sizePrices: { ...reglas.sizePrices, mediana: 38 } }), true, 'cambió el precio de la regla');
+  assert.equal(posterIsStale(job, null, reglas), true, 'el modelo ya no existe');
+});

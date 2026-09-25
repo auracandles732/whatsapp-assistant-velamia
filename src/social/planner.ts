@@ -4,7 +4,7 @@ import { currentBrain, PostFormat, PlannedPost } from './brain';
 import {
   SocialPost, PublishingSettings, PostChannel, PostProduct, PostMedia, DEFAULT_SETTINGS, getSavedSettings, publishingSlots,
   publishingDays, listPosts, localDay, localParts, recentActivity, insertPosts, fallbackCaption, toPostProduct, withLibraryMedia,
-  LibraryItem
+  LibraryItem, postsBetween, postFingerprint
 } from './posts';
 import { listAssets, markAssetsUsed } from './library';
 
@@ -120,7 +120,20 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
 }
 
 /** Guarda publicaciones ya armadas como programadas (salen solas a su hora) y anota la estrategia de la semana. */
-export async function schedulePlan(drafts: Omit<PlanDraft, 'items' | 'format' | 'reason'>[], summary: string, tasks: string[] = []): Promise<SocialPost[]> {
+export async function schedulePlan(all: Omit<PlanDraft, 'items' | 'format' | 'reason'>[], summary: string, tasks: string[] = []): Promise<SocialPost[]> {
+  if (all.length === 0) return [];
+  // Confirmar dos veces la misma propuesta (se cortó la respuesta y se volvió a tocar) no la duplica: lo que ya está
+  // programado igual (misma hora, redes, texto y fotos) se salta.
+  const times = all.map(d => new Date(d.scheduled_at).getTime());
+  const already = await postsBetween(new Date(Math.min(...times)).toISOString(), new Date(Math.max(...times)).toISOString());
+  const seen = new Set(already.map(postFingerprint));
+  const drafts = all.filter(d => {
+    const key = postFingerprint(d);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (drafts.length < all.length) console.log(`📣 ${all.length - drafts.length} publicación(es) ya estaban programadas: no se duplican`);
   if (drafts.length === 0) return [];
   // Todas las filas llevan las mismas columnas (media no acepta vacío): "media" va en todas o en ninguna.
   const withMedia = drafts.some(d => d.media.length > 0);

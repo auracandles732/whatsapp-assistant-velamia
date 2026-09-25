@@ -301,3 +301,53 @@ test('un video de la biblioteca sale como reel en Instagram, como video en Faceb
   assert.equal(fb.body.file_url, 'https://x/video.mp4');
   assert.ok(!calls.some(c => c.url.endsWith('/pagina/photos')), 'no publica las fotos de los productos si lleva video');
 });
+
+// ---------- Revisión 25-sep: Facebook con fotos y videos, y reintentar lo que faltó ----------
+
+test('Facebook no mezcla fotos y videos: con fotos salen todas las fotos; solo videos, el primero', () => {
+  const foto = (n: number) => ({ type: 'image' as const, url: `https://x/${n}.jpg` });
+  const video = (n: number) => ({ type: 'video' as const, url: `https://x/${n}.mp4` });
+  assert.deepEqual(publisher.facebookItems([video(1), foto(2), foto(3)]).map(i => i.url), ['https://x/2.jpg', 'https://x/3.jpg']);
+  assert.deepEqual(publisher.facebookItems([video(1), video(2)]).map(i => i.url), ['https://x/1.mp4']);
+  assert.deepEqual(publisher.facebookItems([foto(1)]).map(i => i.url), ['https://x/1.jpg']);
+});
+
+test('carrusel mezclado: Instagram lleva todo y Facebook las fotos (antes mandaba solo el video)', async () => {
+  const mezcla = { ...post(0, ['instagram_feed', 'facebook']), media: [
+    { type: 'video', url: 'https://x/v.mp4', asset_id: 'a1' }, { type: 'image', url: 'https://x/f1.png', asset_id: 'a2' }, { type: 'image', url: 'https://x/f2.png', asset_id: 'a3' }
+  ] };
+  const r = await publicar(['instagram_content_publish', 'pages_manage_posts'], mezcla);
+  assert.equal(r.status, 'published');
+  assert.equal(calls.filter(c => c.url.endsWith('/ig/media') && c.body.is_carousel_item).length, 3);
+  assert.ok(!calls.some(c => c.url.endsWith('/pagina/videos')));
+  assert.equal(calls.find(c => c.url.endsWith('/pagina/feed'))!.body.attached_media.length, 2);
+});
+
+test('reintentar una publicación en parte: solo va a la red que falló y conserva la que ya salió', async () => {
+  const enParte = { ...post(1, ['instagram_feed', 'facebook']), status: 'partial', results: { instagram_feed: { id: 'ig_ya', permalink: 'https://www.instagram.com/p/ya/' }, facebook: { error: 'Falta permiso' } } };
+  const r = await publicar(['instagram_content_publish', 'pages_manage_posts'], enParte);
+  assert.equal(r.status, 'published');
+  assert.equal(r.results.instagram_feed.id, 'ig_ya');
+  assert.ok(!calls.some(c => c.url.includes('/ig/')), 'no vuelve a publicar en Instagram');
+  assert.equal(r.results.facebook.id, 'pagina_1');
+});
+
+test('la misma publicación confirmada dos veces tiene la misma huella; otra hora, texto o foto no', () => {
+  const base = { scheduled_at: '2026-09-26T00:00:00.000Z', channels: ['facebook', 'instagram_feed'], caption: 'Hola ', products: [{ image_url: 'https://x/1.png' }] };
+  assert.equal(socialPosts.postFingerprint(base), socialPosts.postFingerprint({ ...base, scheduled_at: '2026-09-26T00:00:00+00:00', channels: ['instagram_feed', 'facebook'], caption: 'Hola' }));
+  assert.notEqual(socialPosts.postFingerprint(base), socialPosts.postFingerprint({ ...base, scheduled_at: '2026-09-26T03:00:00.000Z' }));
+  assert.notEqual(socialPosts.postFingerprint(base), socialPosts.postFingerprint({ ...base, caption: 'Otro' }));
+  assert.notEqual(socialPosts.postFingerprint(base), socialPosts.postFingerprint({ ...base, products: [{ image_url: 'https://x/2.png' }] }));
+  assert.notEqual(socialPosts.postFingerprint({ ...base, channels: ['instagram_story'], caption: '' }), socialPosts.postFingerprint({ ...base, channels: ['instagram_story'], caption: '', media: [{ url: 'https://x/v.mp4' }] }));
+});
+
+test('reintentar sin conexión no borra lo que ya salió (si no, se publicaría dos veces)', async () => {
+  const enParte: any = { ...post(1, ['instagram_feed', 'facebook']), status: 'partial', results: { instagram_feed: { id: 'ig_ya' }, facebook: { error: 'Falta permiso' } } };
+  const r = publisher.withEarlierResults(enParte, await publisher.publishNow(enParte));
+  assert.equal(r.status, 'partial');
+  assert.equal(r.results.instagram_feed.id, 'ig_ya');
+  assert.match(r.error!, /no están conectados/);
+  const nueva: any = post(1, ['instagram_feed']);
+  const fallida = await publisher.publishNow(nueva);
+  assert.deepEqual(publisher.withEarlierResults(nueva, fallida), fallida, 'sin nada publicado antes, no cambia');
+});

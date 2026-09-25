@@ -347,6 +347,22 @@ export async function scheduleDrafts(): Promise<void> {
   if (purgeError) throw new Error(`Error limpiando publicaciones: ${purgeError.message}`);
 }
 
+/** Publicaciones (no eliminadas) entre dos horas: para no guardar dos veces la misma. */
+export async function postsBetween(fromIso: string, toIso: string): Promise<SocialPost[]> {
+  const { data, error } = await supabase.from(POSTS).select('*')
+    .filter('business_id', tenantOp(), tenantValue())
+    .gte('scheduled_at', fromIso).lte('scheduled_at', toIso)
+    .neq('status', 'cancelled');
+  if (error) throw new Error(`Error leyendo publicaciones: ${error.message}`);
+  return (data || []) as SocialPost[];
+}
+
+/** Huella de una publicación: misma hora, redes, texto y fotos = la misma. */
+export function postFingerprint(post: { scheduled_at: string; channels: string[]; caption: string; products?: { image_url: string }[]; media?: { url: string }[] }): string {
+  const items = (post.media && post.media.length ? post.media.map(m => m.url) : (post.products || []).map(p => p.image_url)).join(',');
+  return [new Date(post.scheduled_at).toISOString(), [...post.channels].sort().join(','), post.caption.trim(), items].join('|');
+}
+
 /** Publicaciones programadas cuya hora ya llegó. */
 export async function duePosts(now: Date): Promise<SocialPost[]> {
   const { data, error } = await supabase.from(POSTS).select('*')

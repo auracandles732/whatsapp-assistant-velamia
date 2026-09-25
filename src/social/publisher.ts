@@ -88,12 +88,21 @@ async function instagramStory(conn: PublishingConnection, post: SocialPost, { wa
   return publishContainer(conn, String(data.id), waitMs, item.type === 'video' ? VIDEO_CHECKS : READY_CHECKS);
 }
 
-/** Página de Facebook: un video (si la publicación lleva uno) o una o varias fotos originales. */
+/**
+ * Lo que sale en Facebook: no deja mezclar fotos y videos en una publicación, así que si hay fotos salen todas las fotos
+ * y, si solo hay videos, el primero. El CRM muestra lo mismo antes de programar.
+ */
+export function facebookItems(items: PostMedia[]): PostMedia[] {
+  const photos = items.filter(item => item.type !== 'video');
+  return photos.length ? photos : items.slice(0, 1);
+}
+
+/** Página de Facebook: una o varias fotos originales o, si solo lleva videos, un video. */
 async function facebookPage(conn: PublishingConnection, post: SocialPost): Promise<ChannelResult> {
   const params = { access_token: conn.pageToken };
   const link = (id: string) => `https://www.facebook.com/${id}`;
-  const items = mediaOf(post);
-  const video = items.find(item => item.type === 'video');
+  const items = facebookItems(mediaOf(post));
+  const video = items[0]?.type === 'video' ? items[0] : null;
   if (video) {
     const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/videos`, { file_url: video.url, description: post.caption, published: true }, { params });
     const id = String(data.id);
@@ -124,6 +133,12 @@ export async function publishToChannels(conn: PublishingConnection, scopes: stri
   if (!post.channels.length) return { status: 'failed', results, error: 'Elige al menos una red donde publicar.' };
 
   for (const channel of post.channels) {
+    // Lo que ya salió en un intento anterior (publicación "en parte") no se vuelve a publicar.
+    const before = post.results?.[channel];
+    if (before?.id && !before.error) {
+      results[channel] = before;
+      continue;
+    }
     try {
       if (channel !== 'facebook' && !conn.instagramId) throw new Error('La página no tiene una cuenta de Instagram profesional conectada.');
       const needed = channel === 'facebook' ? PUBLISH_SCOPES.facebook : PUBLISH_SCOPES.instagram;
@@ -142,6 +157,19 @@ export async function publishToChannels(conn: PublishingConnection, scopes: stri
   return { status, results, error: failed.length ? failed.join(' · ') : null };
 }
 
+/**
+ * Lo que ya había salido en un intento anterior se conserva aunque ahora no se pueda publicar nada (por ejemplo, sin
+ * conexión): si se perdiera, un nuevo intento lo publicaría dos veces.
+ */
+export function withEarlierResults(post: Pick<SocialPost, 'channels' | 'results'>, outcome: PublishOutcome): PublishOutcome {
+  const earlier = Object.entries(post.results || {}).filter(([channel, r]) => r?.id && !r.error && !outcome.results[channel]?.id);
+  if (earlier.length === 0) return outcome;
+  const results = { ...outcome.results, ...Object.fromEntries(earlier) };
+  const ok = post.channels.filter(c => results[c]?.id && !results[c]?.error);
+  const status: PostStatus = ok.length === post.channels.length ? 'published' : ok.length > 0 ? 'partial' : 'failed';
+  return { status, results, error: outcome.error };
+}
+
 /** Publica con la conexión de la empresa actual. */
 export async function publishNow(post: SocialPost): Promise<PublishOutcome> {
   const conn = await publishingConnection();
@@ -156,12 +184,12 @@ export const CHANNEL_NAMES: Record<PostChannel, string> = { instagram_feed: 'Ins
 export async function claimAndPublish(post: SocialPost, from: PostStatus[] = ['approved']): Promise<SocialPost | null> {
   const claimed = await updatePost(post.id, { status: 'publishing' }, from);
   if (!claimed) return null;
-  const outcome = await publishNow(claimed);
+  const outcome = withEarlierResults(claimed, await publishNow(claimed));
   return updatePost(post.id, {
     status: outcome.status,
     results: outcome.results,
     error: outcome.error,
-    published_at: outcome.status === 'failed' ? null : new Date().toISOString()
+    published_at: outcome.status === 'failed' ? null : claimed.published_at || new Date().toISOString()
   });
 }
 

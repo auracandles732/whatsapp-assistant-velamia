@@ -187,6 +187,11 @@ async function toCatalog(product: { name: string; size: CandleSize; image_url: s
   return String(created?.id || '');
 }
 
+/** Nombre de categoría: en mayúsculas y sin espacios de más ("velas  personalizadas" → "VELAS PERSONALIZADAS"). */
+export function categoryName(name: unknown): string {
+  return String(name || '').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
+}
+
 /** El catálogo de proveedor al que se le siguen agregando modelos (el CRM los manda por partes). */
 async function existingCatalog(id: unknown) {
   const { data, error } = await supabase.from(CATALOGS).select('*').eq('id', String(id)).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
@@ -203,7 +208,7 @@ async function existingCatalog(id: unknown) {
  */
 export async function importSupplierCatalog(input: { catalogId?: unknown; name?: unknown; supplier?: unknown; fileName?: unknown; pages?: unknown; products?: unknown }, review = false) {
   const settings = await getSupplierSettings();
-  const category = String(input.name || '').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
+  const category = categoryName(input.name);
   if (!category) throw new Error('Escribe el nombre del catálogo (será la categoría en el Catálogo)');
   const items = (Array.isArray(input.products) ? input.products : []).slice(0, MAX_PRODUCTS) as ImportedProduct[];
   const valid = items.filter(p => String(p?.name || '').trim());
@@ -284,7 +289,7 @@ export async function listSupplierCatalogs() {
   return { catalogs: catalogs.data || [], products: (products.data || []) as SupplierProduct[] };
 }
 
-async function getSupplierProduct(id: string): Promise<SupplierProduct | null> {
+export async function getSupplierProduct(id: string): Promise<SupplierProduct | null> {
   const { data, error } = await supabase.from(PRODUCTS).select('*').eq('id', id).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
   if (error) throw new Error(`Error leyendo el modelo: ${error.message}`);
   return data as SupplierProduct | null;
@@ -338,9 +343,14 @@ export async function addSupplierProductsToCatalog(ids: string[], includeDiscard
     const catalog: any = byId.get(product.catalog_id);
     const productId = await toCatalog(product, String(catalog?.name || 'PROVEEDOR'), settings, packaging, images[product.id] || product.image_url);
     if (!productId) { withoutPrice++; continue; }
-    existing.add(productKey(product.name));
-    await supabase.from(PRODUCTS).update({ status: 'en_catalogo', catalog_product_id: productId, updated_at: new Date().toISOString() })
+    const { error: linkError } = await supabase.from(PRODUCTS).update({ status: 'en_catalogo', catalog_product_id: productId, updated_at: new Date().toISOString() })
       .eq('id', product.id).filter('business_id', tenantOp(), tenantValue());
+    if (linkError) {
+      // Sin el vínculo, borrar el catálogo del proveedor no quitaría este producto: se deshace para no dejarlo suelto.
+      await deleteProduct(productId).catch(() => {});
+      throw new Error(`No se pudo agregar ${product.name} al Catálogo (${linkError.message}). Vuelve a intentarlo.`);
+    }
+    existing.add(productKey(product.name));
     added++;
   }
   return { added, withoutPrice, alreadyThere };
@@ -356,7 +366,7 @@ export async function discardAsDuplicate(model: SupplierProduct) {
 
 /** Lleva un catálogo de proveedor (y sus productos del Catálogo) a otra categoría, nueva o de las que ya existen. */
 export async function moveSupplierCatalog(id: string, name: unknown) {
-  const category = String(name || '').replace(/s+/g, ' ').trim().toUpperCase().slice(0, 60);
+  const category = categoryName(name);
   if (!category) throw new Error('Escribe la categoría');
   const catalog = await existingCatalog(id);
   const { error } = await supabase.from(CATALOGS).update({ name: category }).eq('id', catalog.id).filter('business_id', tenantOp(), tenantValue());

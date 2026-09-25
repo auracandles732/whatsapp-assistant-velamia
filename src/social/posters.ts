@@ -4,7 +4,7 @@ import { uploadBufferToStorage } from '../services/storage';
 import { profile } from '../config/businessProfile';
 import { socialAi, track } from './ai';
 import { toJpeg, toJpegMax, isOwnStorageUrl } from './images';
-import { getSupplierSettings, SupplierProduct, addSupplierProductsToCatalog, discardAsDuplicate } from './suppliers';
+import { getSupplierSettings, getSupplierProduct, SupplierProduct, SupplierSettings, addSupplierProductsToCatalog, discardAsDuplicate } from './suppliers';
 
 /**
  * Lo que pasa con cada modelo de un PDF de proveedor, en segundo plano:
@@ -503,7 +503,18 @@ Después decide: "mismoMolde" = true solo si es la misma figura y coinciden la f
 
 // ---------- Trabajo en segundo plano ----------
 
-interface Job { model: SupplierProduct; texts: PosterTexts; occasion: string }
+interface Job { model: SupplierProduct; texts: PosterTexts; occasion: string; price: number; unitPrice: number }
+
+/**
+ * ¿Cambió el modelo mientras se hacía su foto (tamaño, nombre o el precio de la regla)? Entonces la foto dice datos viejos
+ * y no se guarda. Sin efectos, para poder probarla.
+ */
+export function posterIsStale(job: Pick<Job, 'model' | 'price' | 'unitPrice'>, now: Pick<SupplierProduct, 'name' | 'size'> | null, settings: Pick<SupplierSettings, 'sizePrices' | 'unitPrices'>): boolean {
+  if (!now) return true;
+  return now.name !== job.model.name || now.size !== job.model.size
+    || (settings.sizePrices[now.size] || 0) !== job.price
+    || (settings.unitPrices?.[now.size] || 0) !== job.unitPrice;
+}
 interface References { buffers: Buffer[]; urls: string[]; design?: string }
 
 /**
@@ -525,6 +536,18 @@ async function makeOne(catalogId: string, job: Job, refs: References) {
       console.warn(`⚠️ Afiche de ${texts.title} (intento ${attempt}): ${problem}`);
     }
     if (!last) return;
+    // Si mientras tanto le cambiaron el tamaño, el nombre o el precio, esta foto ya no sirve: vuelve a la fila y se hace
+    // otra con los datos nuevos (nunca queda en el Catálogo una foto con el precio anterior).
+    const current = await getSupplierProduct(model.id);
+    if (!current) {
+      await setState(catalogId, model.id, { status: 'error', detail: 'El modelo ya no existe' });
+      return;
+    }
+    if (posterIsStale(job, current, await getSupplierSettings())) {
+      console.log(`🔁 ${model.name} cambió mientras se hacía su foto: se vuelve a hacer con los datos nuevos`);
+      await setState(catalogId, model.id, { status: 'cola', detail: '' });
+      return;
+    }
     if (last.problem) {
       await setState(catalogId, model.id, { status: 'revisar', url: last.url, detail: last.problem });
       return;
@@ -643,8 +666,9 @@ async function runQueue(catalogId: string) {
           const price = settings.sizePrices[model.size];
           if (!(price > 0)) { await setState(catalogId, model.id, { status: 'error', detail: 'Falta el precio de su tamaño en la regla' }); continue; }
           const ref = await references();
-          const texts = posterTexts(model.name, price, category, undefined, ref.texts, settings.unitPrices?.[model.size] || 0);
-          await makeOne(catalogId, { model, texts, occasion: occasionOf(category) }, ref);
+          const unitPrice = settings.unitPrices?.[model.size] || 0;
+          const texts = posterTexts(model.name, price, category, undefined, ref.texts, unitPrice);
+          await makeOne(catalogId, { model, texts, occasion: occasionOf(category), price, unitPrice }, ref);
         } catch (error: any) {
           await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
         }

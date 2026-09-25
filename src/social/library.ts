@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import axios from 'axios';
 import { supabase, tenantOp, tenantValue, tenantColumns } from '../services/supabase';
 import { currentTenant } from '../services/tenant';
+import { profile } from '../config/businessProfile';
 
 /**
  * Biblioteca del agente de redes: fotos y videos que sube la empresa (y, más adelante, las fotos que genere la IA).
@@ -116,8 +117,36 @@ export async function updateAsset(id: string, changes: { title?: unknown; produc
   return data as SocialAsset | null;
 }
 
-/** Borra el registro y el archivo. Las publicaciones que ya salieron no se ven afectadas (Meta guarda su copia). */
+// Publicaciones que todavía pueden salir (o reintentarse): necesitan sus archivos.
+const PENDING_POST_STATUSES = ['draft', 'approved', 'publishing', 'failed', 'partial'];
+
+/** Publicaciones pendientes que usan este archivo. */
+export async function pendingPostsUsing(asset: { id: string; url: string }): Promise<{ theme: string; scheduled_at: string }[]> {
+  const { data, error } = await supabase.from('social_posts').select('theme, scheduled_at, media')
+    .filter('business_id', tenantOp(), tenantValue())
+    .in('status', PENDING_POST_STATUSES);
+  if (error) throw new Error(`Error revisando las publicaciones: ${error.message}`);
+  return ((data || []) as any[])
+    .filter(p => (Array.isArray(p.media) ? p.media : []).some((m: any) => m?.asset_id === asset.id || m?.url === asset.url))
+    .map(p => ({ theme: String(p.theme || 'Publicación'), scheduled_at: String(p.scheduled_at) }));
+}
+
+/** Error que el CRM muestra tal cual (no es una falla del servidor). */
+export class AssetInUseError extends Error {}
+
+/**
+ * Borra el registro y el archivo. Las publicaciones que ya salieron no se ven afectadas (Meta guarda su copia), pero si
+ * una que todavía no sale lo usa, no se borra: esa publicación fallaría a su hora.
+ */
 export async function deleteAsset(id: string): Promise<boolean> {
+  const [asset] = await getAssets([id]);
+  if (!asset) return false;
+  const using = await pendingPostsUsing(asset);
+  if (using.length) {
+    const when = (iso: string) => new Date(iso).toLocaleDateString('es-EC', { timeZone: profile().business.timezone, day: 'numeric', month: 'short' });
+    const list = using.slice(0, 3).map(p => `"${p.theme}" del ${when(p.scheduled_at)}`).join(', ') + (using.length > 3 ? ` y ${using.length - 3} más` : '');
+    throw new AssetInUseError(`No se puede borrar: está en ${using.length === 1 ? 'una publicación que todavía no sale' : `${using.length} publicaciones que todavía no salen`} (${list}). Quítalo de ahí o elimina esa publicación primero.`);
+  }
   const { data, error } = await supabase.from(TABLE).delete()
     .eq('id', id).filter('business_id', tenantOp(), tenantValue()).select('storage_path');
   if (error) throw new Error(`Error borrando: ${error.message}`);

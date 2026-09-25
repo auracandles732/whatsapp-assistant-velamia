@@ -11,7 +11,7 @@ import {
 } from './posts';
 import { planUpcomingPosts, draftUpcomingPosts, schedulePlan, lastPlanSummary, rewriteCaption } from './planner';
 import { claimAndPublish } from './publisher';
-import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed } from './library';
+import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed, AssetInUseError } from './library';
 import {
   getSupplierSettings, saveSupplierSettings, importSupplierCatalog, listSupplierCatalogs, updateSupplierProduct,
   addSupplierProductsToCatalog, deleteSupplierCatalog, mostUsedPackaging, moveSupplierCatalog
@@ -181,7 +181,7 @@ export function socialRouter(): Router {
       }
       const tasks = (Array.isArray(req.body?.tasks) ? req.body.tasks : []).map((t: unknown) => String(t || '').trim().slice(0, 240)).filter(Boolean).slice(0, 5);
       const created = await schedulePlan(drafts, String(req.body?.summary || '').slice(0, 600), tasks);
-      res.status(201).json({ created: created.length });
+      res.status(201).json({ created: created.length, skipped: drafts.length - created.length });
     } catch (error: any) {
       res.status(400).json({ error: explain(error) });
     }
@@ -275,6 +275,20 @@ export function socialRouter(): Router {
     }
   });
 
+  /** Salió solo en algunas redes: se reintenta únicamente en las que fallaron (las que ya salieron no se repiten). */
+  router.post('/api/posts/:postId/retry', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
+    try {
+      const post = await getPost(req.params.postId);
+      if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
+      if (post.status !== 'partial') return res.status(400).json({ error: 'Solo se reintenta una publicación que salió en parte' });
+      const done = await claimAndPublish(post, ['partial']);
+      if (!done) return res.status(409).json({ error: 'Esta publicación ya se está publicando' });
+      res.json({ post: done });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   /** Elimina una publicación que todavía no salió: desaparece del calendario y su día queda libre. */
   router.delete('/api/posts/:postId', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
     try {
@@ -341,7 +355,7 @@ export function socialRouter(): Router {
       if (!(await deleteAsset(req.params.assetId))) return res.status(404).json({ error: 'Archivo no encontrado' });
       res.json({ deleted: true });
     } catch (error: any) {
-      res.status(500).json({ error: explain(error) });
+      res.status(error instanceof AssetInUseError ? 409 : 500).json({ error: explain(error) });
     }
   });
 
