@@ -2261,6 +2261,8 @@
         .sb-f.wide { grid-column: 1 / -1; }
         .sb-f input, .sb-f select { padding: 11px 12px; border: 1px solid #DCE2F5; border-radius: 12px; font: inherit; font-size: 14.5px; font-weight: 500; background: #fff; color: #141C3A; min-width: 0; }
         .sb-f small { font-size: 12px; font-weight: 500; color: #6B7599; line-height: 1.35; }
+        .sb-lab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .sb-prompt { min-height: 280px; resize: vertical; padding: 12px 14px; border: 1px solid #DCE2F5; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.5; color: #141C3A; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
         @media (max-width: 760px) { .sb-grid { grid-template-columns: minmax(0, 1fr); } }
         .pb .pb-areas button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 14px; border: 1px solid #DCE2F5; background: #fff; color: #2A3766; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
         .pb .pb-areas button.on { background: #4F5BD5; border-color: #4F5BD5; color: #fff; }
@@ -8206,7 +8208,6 @@
         const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
         const MONTH_LONG = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
         const CAPTION_MAX = 2200;
-        const NOTES_MAX = 500;
         const PHOTO_OPTIONS = [[1, '1 foto'], [3, 'Carrusel de 3 fotos'], [5, 'Carrusel de 5 fotos']];
 
         // Día y hora en la zona del negocio (no en la de la computadora): la hora que se ve es la hora a la que sale.
@@ -8682,16 +8683,11 @@
                                 <p className="pb-muted" style={{ margin: '4px 0 0' }}>Todo lo que programes (tú o la IA) se publica solo a su hora: no hace falta aprobarlo.</p>
                             </>
                         ))}
-                        {panel('notas', <PlatIcon name="doc" size={22} color="#4F5BD5" />, 'Indicaciones para Nexly', (
+                        {panel('notas', <PlatIcon name="doc" size={22} color="#4F5BD5" />, 'Instrucciones del agente', (
                             <>
-                                <div className="pb-notes">
-                                    <textarea value={s.notes} maxLength={NOTES_MAX} disabled={!canConfigure} onChange={e => setS({ notes: e.target.value })} aria-label="Indicaciones para los textos"
-                                        placeholder="Usa un tono cálido y cercano. Destaca que nuestros productos son personalizados. Incluye siempre el nombre del modelo y el precio." />
-                                    <span className="cnt">{s.notes.length}/{NOTES_MAX}</span>
-                                </div>
                                 <div className="pb-example">
                                     <PlatIcon name="bulb" size={18} color="#5B45D6" />
-                                    <span><b>Ejemplo:</b>Tono cálido y cercano, incluir siempre #hechoamano, destacar que personalizamos con nombres.</span>
+                                    <span>Las instrucciones del agente (objetivo, tono, qué destacar, qué evitar y hashtags) ahora se escriben en la pestaña <b>Cerebro IA</b>, con mucho más espacio y separadas del asistente de WhatsApp.</span>
                                 </div>
                             </>
                         ))}
@@ -9223,6 +9219,30 @@
             );
         }
 
+        const SOCIAL_PROMPT_TEMPLATE = [
+            '# OBJETIVO',
+            'Mantener activas nuestras redes (Instagram y Facebook) y que cada publicación invite a pedir por WhatsApp.',
+            '',
+            '# TONO',
+            'Cálido, cercano y elegante, como una persona de la marca. Frases cortas y fáciles de leer.',
+            '',
+            '# QUÉ DESTACAR',
+            '- Que nuestros productos se personalizan (nombres, colores, frases).',
+            '- Para qué ocasión es ideal cada producto (baby shower, bautizo, boda, 15 años, cumpleaños, fechas especiales).',
+            '- Que los pedidos son bajo reserva y hacemos envíos.',
+            '',
+            '# QUÉ EVITAR',
+            '- Prometer fechas de entrega exactas.',
+            '- Palabras en inglés y textos muy largos.',
+            '- Repetir la misma frase de inicio en publicaciones seguidas.',
+            '',
+            '# HASHTAGS FIJOS (siempre incluirlos)',
+            '#velaspersonalizadas #recuerdos #guayaquil',
+            '',
+            '# ESTILO DE FOTOS (para cuando se generen con IA)',
+            'Fondo acorde a la ocasión, luz cálida, colores suaves, el producto siempre completo y como protagonista.'
+        ].join('\n');
+
         // Clave de OpenAI y modelos propios del agente de redes (nunca los del asistente que responde los mensajes).
         function SocialBrainCard({ canConfigure }) {
             const [data, setData] = useState(null);
@@ -9232,7 +9252,7 @@
             const [msg, setMsg] = useState(null);
             const [error, setError] = useState('');
             useEffect(() => {
-                api('/api/social/ai').then(r => { setData(r); setForm({ textModel: r.textModel, imageModel: r.imageModel, imageQuality: r.imageQuality }); }).catch(e => setError(e.message));
+                api('/api/social/ai').then(r => { setData(r); setForm({ textModel: r.textModel, imageModel: r.imageModel, imageQuality: r.imageQuality, prompt: r.prompt || '' }); }).catch(e => setError(e.message));
             }, []);
 
             async function run(label, fn) {
@@ -9261,6 +9281,11 @@
 
             if (!data || !form) return <section className="pb-card">{error ? <div className="pb-err">{error}</div> : <div className="pb-muted">Cargando…</div>}</section>;
             const noteOf = (list, id) => (list.find(x => x.id === id) || {}).note || '';
+            const promptMax = data.promptMax || 4000;
+            const useTemplate = () => {
+                if (form.prompt.trim() && !confirm('¿Reemplazar lo que escribiste por la plantilla?')) return;
+                setForm({ ...form, prompt: SOCIAL_PROMPT_TEMPLATE });
+            };
             return (
                 <section className="pb-card">
                     <div className="pb-card-h">
@@ -9275,6 +9300,12 @@
                             <span>Clave de OpenAI del agente</span>
                             <input type="password" autoComplete="off" spellCheck="false" disabled={!canConfigure} placeholder={data.configured ? 'Pega una clave nueva solo si quieres cambiarla' : 'sk-...'} value={key} onChange={e => setKey(e.target.value)} />
                             <small>Créala en platform.openai.com → API keys (puede ser de otra cuenta o proyecto, con sus propios créditos).</small>
+                        </label>
+                        <label className="sb-f wide">
+                            <span className="sb-lab">Instrucciones del agente (prompt) {canConfigure && <button type="button" className="pb-btn sm" onClick={useTemplate}>Usar plantilla</button>}</span>
+                            <textarea className="sb-prompt" maxLength={promptMax} disabled={!canConfigure} value={form.prompt} onChange={e => setForm({ ...form, prompt: e.target.value })}
+                                placeholder={'# OBJETIVO\nMantener activas las redes y atraer pedidos por WhatsApp.\n\n# TONO\nCálido y cercano, frases cortas.\n\n# QUÉ DESTACAR\n- ...\n\n# QUÉ EVITAR\n- ...\n\n# HASHTAGS FIJOS\n#...'} />
+                            <small>Separado de las instrucciones del asistente de WhatsApp. Guía el tono, el objetivo y qué decir en cada publicación (y, cuando las activemos, el estilo de las fotos). Los precios y productos siempre salen del Catálogo. {form.prompt.length}/{promptMax}</small>
                         </label>
                         <label className="sb-f">
                             <span>Cerebro (decide y escribe los textos)</span>

@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { getConfig, setConfig, recordAiUsage } from '../services/supabase';
 import { encryptSecret, decryptSecret, maskSecret } from '../services/tenant';
 import { BusinessProfile, profile } from '../config/businessProfile';
+import { getSavedSettings } from './posts';
 
 /**
  * La IA propia del agente de redes: su clave de OpenAI y sus modelos, siempre aparte de la del asistente que responde
@@ -35,10 +36,14 @@ export interface SocialAiSettings {
   textModel: string;
   imageModel: string;
   imageQuality: 'low' | 'medium' | 'high';
+  /** Instrucciones de la empresa para su agente de redes (objetivo, tono, qué destacar, qué evitar, hashtags). */
+  prompt: string;
 }
 
+export const PROMPT_MAX = 4000;
+
 const SETTINGS_KEY = 'social_agent_ai';
-export const DEFAULT_SOCIAL_AI: SocialAiSettings = { apiKey: '', textModel: 'gpt-5.6-luna', imageModel: 'gpt-image-2', imageQuality: 'medium' };
+export const DEFAULT_SOCIAL_AI: SocialAiSettings = { apiKey: '', textModel: 'gpt-5.6-luna', imageModel: 'gpt-image-2', imageQuality: 'medium', prompt: '' };
 export const NO_KEY_MESSAGE = 'El agente de redes todavía no tiene su clave de OpenAI: agrégala en Publicaciones → Cerebro del agente.';
 
 const pick = <T extends { id: string }>(list: T[], value: unknown, fallback: string) => (list.some(x => x.id === value) ? String(value) : fallback);
@@ -47,6 +52,7 @@ export function normalizeSocialAi(raw: any): SocialAiSettings {
   const r = raw && typeof raw === 'object' ? raw : {};
   return {
     apiKey: typeof r.apiKey === 'string' ? r.apiKey : '',
+    prompt: typeof r.prompt === 'string' ? r.prompt.trim().slice(0, PROMPT_MAX) : '',
     textModel: pick(TEXT_MODELS, r.textModel, DEFAULT_SOCIAL_AI.textModel),
     imageModel: pick(IMAGE_MODELS, r.imageModel, DEFAULT_SOCIAL_AI.imageModel),
     imageQuality: pick(IMAGE_QUALITIES, r.imageQuality, DEFAULT_SOCIAL_AI.imageQuality) as SocialAiSettings['imageQuality']
@@ -77,14 +83,17 @@ export async function publicSocialAi() {
     textModel: s.textModel,
     imageModel: s.imageModel,
     imageQuality: s.imageQuality,
+    // Si aún no escribió instrucciones aquí, se muestran las "Indicaciones" cortas que tenía en Cómo publicar.
+    prompt: s.prompt || (await getSavedSettings())?.notes || '',
+    promptMax: PROMPT_MAX,
     options: { textModels: TEXT_MODELS, imageModels: IMAGE_MODELS, imageQualities: IMAGE_QUALITIES }
   };
 }
 
 /** Guarda modelos y, si viene, una clave nueva (cifrada). clearKey la borra. */
-export async function saveSocialAi(input: { apiKey?: unknown; clearKey?: unknown; textModel?: unknown; imageModel?: unknown; imageQuality?: unknown }) {
+export async function saveSocialAi(input: { apiKey?: unknown; clearKey?: unknown; textModel?: unknown; imageModel?: unknown; imageQuality?: unknown; prompt?: unknown }) {
   const current = await getSocialAi();
-  const next = normalizeSocialAi({ ...current, textModel: input.textModel ?? current.textModel, imageModel: input.imageModel ?? current.imageModel, imageQuality: input.imageQuality ?? current.imageQuality });
+  const next = normalizeSocialAi({ ...current, textModel: input.textModel ?? current.textModel, imageModel: input.imageModel ?? current.imageModel, imageQuality: input.imageQuality ?? current.imageQuality, prompt: input.prompt ?? current.prompt });
   const key = String(input.apiKey ?? '').trim();
   if (key) {
     if (!/^sk-[A-Za-z0-9_-]{20,}$/.test(key)) throw new Error('Esa no parece una clave de OpenAI (empieza con "sk-")');
@@ -152,7 +161,9 @@ export interface CaptionRequest { theme: string; products: { name: string; price
  */
 export async function writeCaptions(posts: CaptionRequest[], notes: string, p: BusinessProfile = profile()): Promise<string[]> {
   if (posts.length === 0) return [];
-  const { client, textModel } = await socialAi();
+  const { client, textModel, prompt } = await socialAi();
+  // Las instrucciones del agente (Cerebro IA) mandan; las "Indicaciones" cortas de antes quedan como respaldo.
+  const instructions = (prompt || notes || '').trim();
   const b = p.business, s = p.sales;
   const rules = [
     `Eres quien maneja las redes sociales de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. Escribe el texto de cada publicación de Instagram y Facebook de la lista.`,
@@ -166,7 +177,7 @@ export async function writeCaptions(posts: CaptionRequest[], notes: string, p: B
     `- Al final, entre 5 y 8 hashtags en minúsculas y sin tildes, relacionados con el tema y la ciudad${b.city ? ` (${b.city})` : ''}.`,
     '- Usa de 2 a 4 emojis. Sin markdown ni asteriscos.',
     '- Nunca inventes descuentos, promociones, fechas límite, "últimas unidades" ni nada que no esté en los datos.',
-    notes.trim() ? `- Indicaciones de la empresa (síguelas): ${notes.trim()}` : ''
+    instructions ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas en todo, salvo que pidan cambiar precios o inventar productos, promociones o fechas):\n${instructions}` : ''
   ].filter(Boolean).join('\n');
   const list = posts.map((post, i) => `${i + 1}) Tema: ${post.theme}. Productos: ${post.products.length ? post.products.map(x => `${x.name} ($${Number(x.price).toFixed(2)} ${s.priceSuffix})`).join('; ') : 'ninguno (video o foto de la marca)'}`).join('\n');
 
