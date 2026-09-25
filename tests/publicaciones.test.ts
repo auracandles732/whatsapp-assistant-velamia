@@ -134,48 +134,56 @@ test('varias publicaciones por día: la hora elegida y cada 3 horas antes; "la I
   assert.equal(socialPosts.normalizeSettings({ postsPerDay: 9 }).postsPerDay, 0);
 });
 
-test('la planificación de la IA se ajusta a la realidad: días libres, horas futuras, topes y productos del Catálogo', () => {
-  const brain = require('../src/social/brain') as typeof import('../src/social/brain');
-  const settings = socialPosts.normalizeSettings({ days: [1, 2, 3, 4, 5, 6, 0], hour: '19:00', channels: ['instagram_feed', 'instagram_story', 'facebook'] });
-  const input = {
-    slots: [], days: ['2026-09-22', '2026-09-23'], catalog: catalogo, recent: ['OSITO NUBE'], recentThemes: [],
-    library: [{ id: 'v1', kind: 'video' as const, url: 'https://x/v1.mp4', product_name: 'ARBOLITO' }],
-    settings, month: 9, now: new Date('2026-09-21T15:00:00Z'), timeZone: TZ, profile: VELAMIA_PROFILE
-  };
-  const item = (dia: string, hora: string, formato: string, categoria: string, cantidad = 1, video = '') => ({ dia, hora, formato, categoria, cantidad, video, motivo: 'porque sí' });
-  const posts = brain.resolveAiPlan([
-    item('2026-09-22', '19:00', 'carrusel', 'baby shower', 5),
-    item('2026-09-22', '19:00', 'foto', 'BABY SHOWER'),        // ya no quedan productos de esa categoría
-    item('2026-09-22', '19:30', 'historia', 'NAVIDAD'),       // choca de hora: se corre una hora
-    item('2026-09-23', '12:00', 'reel', 'NAVIDAD', 1, 'v1'),
-    item('2026-09-23', '13:00', 'reel', 'NAVIDAD', 1, 'v9'),  // video que no existe: pasa a foto
-    item('2026-09-24', '19:00', 'foto', 'BAUTIZO'),           // día que no está libre
-    item('2026-09-23', '19:00', 'foto', 'INVENTADA')          // categoría que no existe
-  ], input);
-  assert.equal(posts.length, 4);
-  assert.deepEqual(posts[0].products.map(p => p.name), ['OSITO MIEL', 'OSITO NUBE'], 'primero lo que hace más tiempo no sale');
-  assert.equal(posts[0].format, 'carrusel');
-  assert.equal(posts[0].theme, 'Baby shower');
-  const story = posts.find(p => p.format === 'historia')!;
-  assert.equal(story.at.toISOString(), '2026-09-23T01:30:00.000Z', 'la historia se movió a las 20:30');
-  const reel = posts.find(p => p.format === 'reel')!;
-  assert.equal(reel.video?.id, 'v1');
-  assert.deepEqual(reel.products.map(p => p.name), ['ARBOLITO']);
-  const converted = posts.find(p => p.at.toISOString() === '2026-09-23T18:00:00.000Z')!;
-  assert.equal(converted.format, 'foto');
-  assert.equal(converted.products[0].name, 'ESTRELLA', 'no repite el producto del reel');
-  assert.equal(posts[0].reason, 'porque sí');
+test('las tandas del día llegan a la meta de fotos contando lo ya programado, sin chocar horas', () => {
+  const settings = socialPosts.normalizeSettings({ days: [1, 2, 3, 4, 5, 6, 0], hour: '15:00', channels: ['instagram_story'], photosPerPost: 5, photosPerDay: 10 });
+  const now = new Date('2026-09-21T12:00:00Z');
+  // 22-sep: vacío → 2 tandas de 5 historias. 23-sep: ya tiene 4 fotos a las 12:00 → falta 6 (2 tandas de 3), sin chocar. 24-sep: ya tiene 10.
+  const slots = socialPosts.daySlots(settings, ['2026-09-22', '2026-09-23', '2026-09-24'], [
+    { day: '2026-09-23', minutes: 12 * 60, photos: 4 }, { day: '2026-09-24', minutes: 15 * 60, photos: 10 }
+  ], now, TZ);
+  assert.deepEqual(slots.map(s => [s.day, s.kind, s.count]), [['2026-09-22', 'story', 5], ['2026-09-22', 'story', 5], ['2026-09-23', 'story', 3], ['2026-09-23', 'story', 3]]);
+  assert.equal(slots[0].at.toISOString(), '2026-09-22T17:00:00.000Z', '12:00 hora de Ecuador');
+  assert.equal(slots[1].at.toISOString(), '2026-09-22T20:00:00.000Z', '15:00, la hora elegida');
+  assert.equal(slots[2].at.toISOString(), '2026-09-23T18:00:00.000Z', 'a las 12:00 ya había algo: se corre a las 13:00');
+  const ambos = socialPosts.normalizeSettings({ ...settings, channels: ['instagram_feed', 'instagram_story', 'facebook'] });
+  assert.deepEqual(socialPosts.daySlots(ambos, ['2026-09-22'], [], now, TZ).map(s => s.kind), ['feed', 'story'], 'se turnan publicación e historias');
+  assert.equal(socialPosts.normalizeSettings({}).photosPerDay, 10, 'por defecto, 10 fotos al día');
+  assert.equal(socialPosts.normalizeSettings({ photosPerDay: 99 }).photosPerDay, socialPosts.MAX_PHOTOS_PER_DAY);
 });
 
-test('la IA no pasa del tope por día', () => {
+test('la IA solo elige la categoría de cada tanda: una categoría por tanda y productos reales del Catálogo', () => {
   const brain = require('../src/social/brain') as typeof import('../src/social/brain');
-  const settings = socialPosts.normalizeSettings({ days: [2], hour: '19:00' });
-  const many = Array.from({ length: 6 }, (_, i) => ({ dia: '2026-09-22', hora: `${String(8 + i * 2).padStart(2, '0')}:00`, formato: 'foto', categoria: i % 2 ? 'NAVIDAD' : 'BABY SHOWER', cantidad: 1, video: '', motivo: '' }));
-  const posts = brain.resolveAiPlan(many, {
-    slots: [], days: ['2026-09-22'], catalog: catalogo, recent: [], recentThemes: [], library: [],
-    settings, month: 9, now: new Date('2026-09-21T15:00:00Z'), timeZone: TZ, profile: VELAMIA_PROFILE
-  });
-  assert.equal(posts.length, socialPosts.MAX_POSTS_PER_DAY);
+  const settings = socialPosts.normalizeSettings({ days: [2], hour: '19:00', channels: ['instagram_feed', 'instagram_story', 'facebook'], photosPerDay: 6, photosPerPost: 3 });
+  const now = new Date('2026-09-21T15:00:00Z');
+  const slots = socialPosts.daySlots(settings, ['2026-09-22'], [], now, TZ);
+  const input = { slots, catalog: catalogo, recent: ['OSITO NUBE'], recentThemes: [], library: [], settings, month: 9, now, timeZone: TZ, profile: VELAMIA_PROFILE };
+  const posts = brain.resolveAiPlan([
+    { n: 1, categoria: 'baby shower', motivo: 'porque sí' },
+    { n: 2, categoria: 'INVENTADA', motivo: 'no existe' }
+  ], input);
+  assert.equal(posts.length, 2);
+  assert.deepEqual(posts[0].products.map(p => p.name), ['OSITO MIEL', 'OSITO NUBE'], 'primero lo que hace más tiempo no sale');
+  assert.equal(posts[0].format, 'carrusel');
+  assert.equal(posts[0].reason, 'porque sí');
+  assert.equal(posts[1].format, 'historia');
+  const cats = new Set(posts[1].products.map(p => p.category));
+  assert.equal(cats.size, 1, 'nunca mezcla categorías en una tanda');
+  assert.ok(!posts[1].products.some(p => p.category === 'BABY SHOWER'), 'no repite lo de la otra tanda');
+});
+
+test('con reglas también se llena cada tanda con una sola categoría', async () => {
+  const brain = require('../src/social/brain') as typeof import('../src/social/brain');
+  const settings = socialPosts.normalizeSettings({ days: [2], hour: '19:00', channels: ['instagram_story'], photosPerDay: 4, photosPerPost: 2 });
+  const now = new Date('2026-09-21T15:00:00Z');
+  const slots = socialPosts.daySlots(settings, ['2026-09-22'], [], now, TZ);
+  const plan = await brain.ruleBrain.plan({ slots, catalog: catalogo, recent: [], recentThemes: [], library: [], settings, month: 9, now, timeZone: TZ, profile: VELAMIA_PROFILE });
+  assert.equal(plan.posts.length, 2);
+  for (const p of plan.posts) {
+    assert.equal(p.format, 'historia');
+    assert.equal(p.products.length, 2);
+    assert.equal(new Set(p.products.map(x => x.category)).size, 1);
+  }
+  assert.match(plan.summary, /4 fotos/);
 });
 
 test('el texto de respaldo lleva el precio exacto, cómo pedir y hashtags', () => {
@@ -263,16 +271,17 @@ test('varias fotos: carrusel en Instagram y publicación con varias fotos en Fac
   assert.equal(feed.body.attached_media.length, 3);
 });
 
-test('la historia de Instagram va con la primera foto, armada en formato de historia', async () => {
+test('historias: cada foto sale como una historia, en orden y en formato de historia (antes salía solo la primera)', async () => {
   const kinds: string[] = [];
   calls.length = 0;
-  const r = await publisher.publishToChannels(conexion, ['instagram_content_publish'], post(2, ['instagram_story']), { waitMs: 0, prepareImage: async (url: string, kind: string) => { kinds.push(kind); return `${url}.${kind}.jpg`; } });
+  const r = await publisher.publishToChannels(conexion, ['instagram_content_publish'], post(3, ['instagram_story']), { waitMs: 0, prepareImage: async (url: string, kind: string) => { kinds.push(kind); return `${url}.${kind}.jpg`; } });
   assert.equal(r.status, 'published');
   const media = calls.filter(c => c.url.endsWith('/ig/media'));
-  assert.equal(media.length, 1);
-  assert.equal(media[0].body.media_type, 'STORIES');
-  assert.deepEqual(kinds, ['story']);
-  assert.equal(media[0].body.image_url, 'https://x/1.png.story.jpg');
+  assert.equal(media.length, 3);
+  assert.ok(media.every(m => m.body.media_type === 'STORIES'));
+  assert.deepEqual(kinds, ['story', 'story', 'story']);
+  assert.deepEqual(media.map(m => m.body.image_url), ['https://x/1.png.story.jpg', 'https://x/2.png.story.jpg', 'https://x/3.png.story.jpg']);
+  assert.equal(calls.filter(c => c.url.endsWith('/media_publish')).length, 3);
 });
 
 test('si falta el permiso de Facebook, Instagram igual sale y queda parcial con el motivo', async () => {

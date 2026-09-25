@@ -1,8 +1,9 @@
 import OpenAI from 'openai';
-import { getConfig, setConfig, recordAiUsage } from '../services/supabase';
+import { getConfig, setConfig, recordAiUsage, supabase, tenantOp, tenantValue } from '../services/supabase';
+import { costOf } from '../services/aiPrices';
 import { encryptSecret, decryptSecret, maskSecret } from '../services/tenant';
 import { BusinessProfile, profile } from '../config/businessProfile';
-import { getSavedSettings, saveSettings } from './posts';
+import { getSavedSettings, saveSettings, localParts, zonedTime } from './posts';
 
 /**
  * La IA propia del agente de redes: su clave de OpenAI y sus modelos, siempre aparte de la del asistente que responde
@@ -38,12 +39,19 @@ export interface SocialAiSettings {
   imageQuality: 'low' | 'medium' | 'high';
   /** Instrucciones de la empresa para su agente de redes (objetivo, tono, qué destacar, qué evitar, hashtags). */
   prompt: string;
+  /**
+   * Lo máximo (US$) que el agente puede gastar por día. Al llegar se detiene hasta el día siguiente: si la clave es de la
+   * misma cuenta de OpenAI que el asistente de WhatsApp, el agente nunca lo deja sin crédito.
+   */
+  dailyBudget: number;
 }
+
+export const DEFAULT_DAILY_BUDGET = 1;
 
 export const PROMPT_MAX = 4000;
 
 const SETTINGS_KEY = 'social_agent_ai';
-export const DEFAULT_SOCIAL_AI: SocialAiSettings = { apiKey: '', textModel: 'gpt-5.6-luna', imageModel: 'gpt-image-2', imageQuality: 'medium', prompt: '' };
+export const DEFAULT_SOCIAL_AI: SocialAiSettings = { apiKey: '', textModel: 'gpt-5.6-luna', imageModel: 'gpt-image-2', imageQuality: 'medium', prompt: '', dailyBudget: DEFAULT_DAILY_BUDGET };
 export const NO_KEY_MESSAGE = 'El agente de redes todavía no tiene su clave de OpenAI: agrégala en Publicaciones → Cerebro del agente.';
 
 const pick = <T extends { id: string }>(list: T[], value: unknown, fallback: string) => (list.some(x => x.id === value) ? String(value) : fallback);
@@ -55,8 +63,36 @@ export function normalizeSocialAi(raw: any): SocialAiSettings {
     prompt: typeof r.prompt === 'string' ? r.prompt.trim().slice(0, PROMPT_MAX) : '',
     textModel: pick(TEXT_MODELS, r.textModel, DEFAULT_SOCIAL_AI.textModel),
     imageModel: pick(IMAGE_MODELS, r.imageModel, DEFAULT_SOCIAL_AI.imageModel),
-    imageQuality: pick(IMAGE_QUALITIES, r.imageQuality, DEFAULT_SOCIAL_AI.imageQuality) as SocialAiSettings['imageQuality']
+    imageQuality: pick(IMAGE_QUALITIES, r.imageQuality, DEFAULT_SOCIAL_AI.imageQuality) as SocialAiSettings['imageQuality'],
+    dailyBudget: budgetOf(r.dailyBudget)
   };
+}
+
+/** Entre $0.10 y $50 por día; cualquier otra cosa vuelve a $1. */
+function budgetOf(value: unknown): number {
+  const n = Math.round(Number(value) * 100) / 100;
+  return Number.isFinite(n) && n >= 0.1 && n <= 50 ? n : DEFAULT_DAILY_BUDGET;
+}
+
+/** Lo que gastó hoy el agente de redes (día del negocio), según el consumo anotado. */
+export async function agentSpentToday(now = new Date()): Promise<number> {
+  const tz = profile().business.timezone;
+  const p = localParts(now, tz);
+  const start = zonedTime(p.year, p.month, p.day, 0, 0, tz);
+  const { data, error } = await supabase.from('ai_usage').select('model, input_tokens, cached_tokens, output_tokens')
+    .eq('purpose', 'publicaciones').filter('business_id', tenantOp(), tenantValue())
+    .gte('created_at', start.toISOString()).limit(20000);
+  if (error) throw new Error(`Error leyendo el consumo del agente: ${error.message}`);
+  return Math.round((data || []).reduce((sum, row) => sum + costOf(row as any), 0) * 100) / 100;
+}
+
+/** Se llegó al tope diario del agente. */
+export class BudgetReachedError extends Error {}
+
+/** Errores con los que no tiene sentido seguir: tope del día o cuenta de OpenAI sin crédito. */
+export function isStopError(error: unknown): boolean {
+  if (error instanceof BudgetReachedError) return true;
+  return /no credits|insufficient_quota|exceeded your current quota|billing/i.test(String((error as any)?.message || error));
 }
 
 export async function getSocialAi(): Promise<SocialAiSettings> {
@@ -98,14 +134,16 @@ export async function publicSocialAi() {
     imageQuality: s.imageQuality,
     prompt: s.prompt,
     promptMax: PROMPT_MAX,
+    dailyBudget: s.dailyBudget,
+    spentToday: await agentSpentToday().catch(() => 0),
     options: { textModels: TEXT_MODELS, imageModels: IMAGE_MODELS, imageQualities: IMAGE_QUALITIES }
   };
 }
 
 /** Guarda modelos y, si viene, una clave nueva (cifrada). clearKey la borra. */
-export async function saveSocialAi(input: { apiKey?: unknown; clearKey?: unknown; textModel?: unknown; imageModel?: unknown; imageQuality?: unknown; prompt?: unknown }) {
+export async function saveSocialAi(input: { apiKey?: unknown; clearKey?: unknown; textModel?: unknown; imageModel?: unknown; imageQuality?: unknown; prompt?: unknown; dailyBudget?: unknown }) {
   const current = await getSocialAi();
-  const next = normalizeSocialAi({ ...current, textModel: input.textModel ?? current.textModel, imageModel: input.imageModel ?? current.imageModel, imageQuality: input.imageQuality ?? current.imageQuality, prompt: input.prompt ?? current.prompt });
+  const next = normalizeSocialAi({ ...current, textModel: input.textModel ?? current.textModel, imageModel: input.imageModel ?? current.imageModel, imageQuality: input.imageQuality ?? current.imageQuality, prompt: input.prompt ?? current.prompt, dailyBudget: input.dailyBudget ?? current.dailyBudget });
   const key = String(input.apiKey ?? '').trim();
   if (key) {
     if (!/^sk-[A-Za-z0-9_-]{20,}$/.test(key)) throw new Error('Esa no parece una clave de OpenAI (empieza con "sk-")');
@@ -119,11 +157,18 @@ export async function saveSocialAi(input: { apiKey?: unknown; clearKey?: unknown
   return publicSocialAi();
 }
 
-/** Cliente de OpenAI del agente (con su clave) y sus modelos. Sin clave, error claro: nunca usa la del asistente. */
+/**
+ * Cliente de OpenAI del agente (con su clave) y sus modelos. Sin clave, error claro: nunca usa la del asistente.
+ * Antes de cada uso se revisa el tope diario: pasado el tope, nada del agente gasta hasta el día siguiente.
+ */
 export async function socialAi() {
   const settings = await getSocialAi();
   const apiKey = decryptSecret(settings.apiKey);
   if (!apiKey) throw new Error(NO_KEY_MESSAGE);
+  const spent = await agentSpentToday();
+  if (spent >= settings.dailyBudget) {
+    throw new BudgetReachedError(`El agente de redes llegó a su tope de gasto de hoy ($${settings.dailyBudget.toFixed(2)}; van $${spent.toFixed(2)}). Sigue mañana, o sube el tope en Publicaciones → Cerebro IA. El asistente de WhatsApp no se afecta.`);
+  }
   return { client: new OpenAI({ apiKey, maxRetries: 1, timeout: 120_000 }), ...settings };
 }
 
@@ -218,41 +263,33 @@ export async function writeCaptions(posts: CaptionRequest[], p: BusinessProfile 
   return posts.map((_, i) => String(captions[i] || '').replace(/\*/g, '').trim());
 }
 
-/** Lo que la IA propone para cada publicación (brain.ts lo convierte en productos y horas de verdad). */
-export interface AiPlanItem { dia: string; hora: string; formato: string; categoria: string; cantidad: number; video: string; motivo: string }
+/** La categoría que la IA elige para una tanda (brain.ts pone los productos de verdad). */
+export interface AiAssignment { n: number; categoria: string; motivo: string }
 
 export interface AiPlanRequest {
   hoy: string;
-  dias: { dia: string; semana: string }[];
-  horaPreferida: string;
-  maxPorDia: number;
-  maxHistoriasPorDia: number;
-  historias: boolean;
-  publicaciones: boolean;
+  /** Tandas ya armadas por el sistema: cuándo, dónde y cuántas fotos. La IA solo elige qué mostrar. */
+  tandas: { n: number; dia: string; semana: string; hora: string; donde: string; fotos: number }[];
   categorias: { categoria: string; productos: number; publicadosHace30Dias: number }[];
-  videos: { id: string; producto: string }[];
   recientes: { dia: string; tema: string }[];
   /** Lo que la dueña pidió para esta planificación (vacío = la IA decide sola). */
   pedido: string;
 }
 
 /**
- * La planificación de la semana hecha por la IA del agente: cuántas publicaciones por día, a qué hora, de qué categoría,
- * en qué formato y por qué. Solo decide; los productos exactos, los precios y las fotos los pone brain.ts desde el Catálogo.
+ * La IA del agente elige la categoría de cada tanda (ya armada por el sistema con su día, hora, lugar y cantidad de fotos)
+ * y explica por qué. Los productos exactos, los precios y las fotos los pone brain.ts desde el Catálogo.
  */
-export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = profile()): Promise<{ resumen: string; publicaciones: AiPlanItem[]; tareas: string[] }> {
+export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = profile()): Promise<{ resumen: string; asignaciones: AiAssignment[]; tareas: string[] }> {
   const { client, textModel, prompt } = await socialAi();
   const b = p.business;
   const rules = [
-    `Eres quien maneja las redes sociales de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. Planifica sus publicaciones de Instagram y Facebook para los días de la lista.`,
-    `- Decide tú cuántas publicaciones hacer cada día (de 0 a ${request.maxPorDia}) y a qué hora, pensando en vender: fechas y temporadas cercanas (Halloween, Día de los Difuntos, Navidad, San Valentín, Día de la Madre, graduaciones…), variedad de categorías y lo que menos se ha publicado. Calidad antes que cantidad: no llenes todos los días al máximo si no hace falta.`,
-    '- Formatos: "carrusel" = de 3 a 10 productos de una misma categoría (en "cantidad" cuántos); "foto" = un solo producto destacado; "reel" = solo con un video de la lista (pon su id en "video"); "historia" = un producto o un video.',
-    request.publicaciones ? '' : '- Las publicaciones del feed están desactivadas: usa solo historias.',
-    request.historias ? `- Historias: máximo ${request.maxHistoriasPorDia} al día.` : '- Las historias están desactivadas: no las uses.',
-    `- Horas entre 08:00 y 21:30, con al menos 2 horas entre publicaciones del mismo día. La hora preferida de la empresa es ${request.horaPreferida}: úsala para la publicación principal del día.`,
-    '- Usa solo categorías de la lista, escritas exactamente igual. "video" va vacío si no es un reel o una historia con video.',
-    '- "motivo": una frase corta y sencilla para la dueña explicando por qué esa publicación ese día.',
-    '- "resumen": dos frases con la estrategia de la semana.',
+    `Eres quien maneja las redes sociales de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. El día, la hora, el lugar (publicación o historias) y la cantidad de fotos de cada tanda ya están decididos: tú eliges QUÉ categoría mostrar en cada una.`,
+    '- Devuelve una "asignacion" por cada tanda de la lista, con su mismo "n".',
+    '- Piensa en vender: fechas y temporadas cercanas (Halloween, Día de los Difuntos, Navidad, San Valentín, Día de la Madre, graduaciones…), variedad y lo que menos se ha publicado. No repitas la misma categoría dos veces seguidas el mismo día.',
+    '- Una sola categoría por tanda, de la lista y escrita exactamente igual. Elige una que tenga al menos tantos productos como fotos lleva la tanda (si no hay, la que más tenga).',
+    '- "motivo": una frase corta y sencilla para la dueña explicando por qué esa categoría en esa tanda.',
+    '- "resumen": una o dos frases con la estrategia, en palabras simples.',
     '- "tareas": de 0 a 5 cosas concretas que la dueña puede hacer esta semana para que las redes funcionen mejor (por ejemplo "graba un video corto del proceso de la vela de Papá Noel para el reel del jueves" o "toma una foto de un pedido listo para entregar"). Nada que no ayude.',
     prompt.trim() ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas):\n${prompt.trim()}` : '',
     request.pedido ? `\nLO QUE LA DUEÑA PIDE PARA ESTA PLANIFICACIÓN (tiene prioridad, dentro de los límites de arriba):\n${request.pedido}` : ''
@@ -270,23 +307,19 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['resumen', 'publicaciones', 'tareas'],
+          required: ['resumen', 'asignaciones', 'tareas'],
           properties: {
             resumen: { type: 'string' },
             tareas: { type: 'array', items: { type: 'string' } },
-            publicaciones: {
+            asignaciones: {
               type: 'array',
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['dia', 'hora', 'formato', 'categoria', 'cantidad', 'video', 'motivo'],
+                required: ['n', 'categoria', 'motivo'],
                 properties: {
-                  dia: { type: 'string' },
-                  hora: { type: 'string' },
-                  formato: { type: 'string', enum: ['carrusel', 'foto', 'reel', 'historia'] },
+                  n: { type: 'integer' },
                   categoria: { type: 'string' },
-                  cantidad: { type: 'integer' },
-                  video: { type: 'string' },
                   motivo: { type: 'string' }
                 }
               }
@@ -301,7 +334,7 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
   const data = JSON.parse(response.choices[0]?.message?.content || '{}');
   return {
     resumen: String(data.resumen || '').trim(),
-    publicaciones: Array.isArray(data.publicaciones) ? data.publicaciones : [],
+    asignaciones: Array.isArray(data.asignaciones) ? data.asignaciones : [],
     tareas: (Array.isArray(data.tareas) ? data.tareas : []).map((t: unknown) => String(t || '').trim()).filter(Boolean).slice(0, 5)
   };
 }

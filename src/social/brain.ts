@@ -1,28 +1,21 @@
 import { BusinessProfile } from '../config/businessProfile';
 import { productKey } from '../services/openai';
-import { writeCaptions, CaptionRequest, planWithAi, AiPlanItem, AiPlanRequest } from './ai';
-import {
-  pickProducts, CatalogItem, PublishingSettings, LibraryItem, isSeasonal, plain, titleCase, zonedTime, toHour,
-  MAX_CAROUSEL, MAX_POSTS_PER_DAY, MAX_STORIES_PER_DAY
-} from './posts';
+import { writeCaptions, CaptionRequest, planWithAi, AiAssignment, AiPlanRequest } from './ai';
+import { pickProducts, CatalogItem, PublishingSettings, LibraryItem, isSeasonal, plain, titleCase, localParts, DaySlot } from './posts';
 
 /**
- * El "cerebro" del agente de redes: decide qué publicar, cuándo y en qué formato, y escribe los textos. Es independiente
- * del asistente que responde los mensajes: su propia clave de OpenAI y su propio modelo (ai.ts).
- * - Con "La IA decide" (postsPerDay = 0) la IA planifica la semana: cuántas publicaciones por día, a qué hora, de qué
- *   categoría, en qué formato (carrusel, foto, reel, historia) y por qué. Los productos, precios y fotos siempre salen
- *   del Catálogo (resolveAiPlan): la IA nunca inventa productos.
- * - Con un número fijo por día (o si la IA no responde) decide con reglas: lo que menos ha salido, variando la categoría
- *   y dando prioridad a la temporada.
+ * El "cerebro" del agente de redes: decide QUÉ mostrar en cada tanda y escribe los textos. Cuántas fotos, cuándo y dónde
+ * lo decide el sistema (daySlots en posts.ts) para llegar a la meta de fotos de cada día: así el plan siempre se cumple y
+ * se entiende. Cada tanda es de una sola categoría y los productos, precios y fotos salen del Catálogo.
+ * - Con la IA (postsPerDay = 0, o si la dueña escribe un pedido) la IA elige la categoría de cada tanda y explica por qué.
+ * - Con reglas (o si la IA no responde): lo que menos ha salido, variando la categoría y con la temporada primero.
  */
 
 export type PostFormat = 'carrusel' | 'foto' | 'reel' | 'historia';
 
 export interface PlanInput {
-  /** Horas libres para el plan con reglas (n por día). */
-  slots: Date[];
-  /** Días de publicación sin nada programado, "AAAA-MM-DD" en la zona del negocio. */
-  days: string[];
+  /** Tandas a llenar (día, hora, publicación o historias, cuántas fotos). */
+  slots: DaySlot[];
   catalog: CatalogItem[];
   /** Productos publicados últimamente, del más nuevo al más viejo. */
   recent: string[];
@@ -46,7 +39,7 @@ export interface PlannedPost {
   format: PostFormat;
   /** Por qué (se muestra en la planificación del CRM). */
   reason: string;
-  /** Video de la biblioteca de un reel o una historia. */
+  /** Video de la biblioteca (ya no lo elige el plan; se conserva para publicaciones hechas a mano). */
   video?: LibraryItem;
 }
 
@@ -54,7 +47,7 @@ export interface Plan { posts: PlannedPost[]; summary: string; /** Cosas que la 
 
 export interface SocialBrain {
   name: string;
-  /** Qué publicar en los días y horas libres (puede devolver menos si no hay qué publicar). */
+  /** Qué mostrar en cada tanda (puede devolver menos si no hay qué publicar). */
   plan(input: PlanInput): Promise<Plan>;
   /** Un texto por publicación, en el mismo orden. */
   write(posts: CaptionRequest[], profile: BusinessProfile): Promise<string[]>;
@@ -63,29 +56,40 @@ export interface SocialBrain {
 // Los textos los escribe la IA propia del agente (su clave y su modelo, nunca los del asistente de mensajes).
 const write = (posts: CaptionRequest[], profile: BusinessProfile) => writeCaptions(posts, profile);
 
+/** Historias para las tandas de historias; en publicaciones, carrusel si lleva más de una foto. */
+export const formatOf = (slot: DaySlot, photos: number): PostFormat => (slot.kind === 'story' ? 'historia' : photos > 1 ? 'carrusel' : 'foto');
+
+/** Qué se planificó, en palabras simples: fotos por día y cómo se reparten. */
+export function planSummary(posts: PlannedPost[], settings: PublishingSettings): string {
+  if (posts.length === 0) return 'No hay nada que agregar.';
+  const photos = posts.reduce((sum, p) => sum + p.products.length, 0);
+  const stories = posts.filter(p => p.format === 'historia').length;
+  const days = new Set(posts.map(p => p.at.toISOString().slice(0, 10))).size;
+  const parts = [`${posts.length - stories} publicación(es)`, `${stories} tanda(s) de historias`].filter(x => !x.startsWith('0 '));
+  return `Se agregan ${photos} fotos en ${days} día(s) (${parts.join(' y ')}) para llegar a ${settings.photosPerDay} fotos por día, contando lo que ya tenías programado. Cada tanda es de una sola categoría.`;
+}
+
 export const ruleBrain: SocialBrain = {
   name: 'reglas',
   async plan({ slots, catalog, recent, settings, month }) {
-    const picks = pickProducts(catalog, recent, slots.length, settings.photosPerPost, month);
-    const seasonal = picks.some(p => isSeasonal(p.products[0]?.category || '', month));
-    return {
-      posts: picks.map((pick, i) => ({
-        ...pick,
-        at: slots[i],
-        format: pick.products.length > 1 ? 'carrusel' as const : 'foto' as const,
-        reason: isSeasonal(pick.products[0]?.category || '', month) ? 'Es temporada: sale primero' : 'Lo que hace más tiempo no se publica'
-      })),
-      summary: `${settings.postsPerDay > 1 ? `${settings.postsPerDay} publicaciones` : 'Una publicación'} en cada día elegido, turnando las categorías y empezando por lo que hace más tiempo no sale${seasonal ? ', con la temporada primero' : ''}.`
-    };
+    const picks = pickProducts(catalog, recent, slots.length, slots.map(s => s.count), month);
+    const posts = picks.map((pick, i) => ({
+      ...pick,
+      at: slots[i].at,
+      format: formatOf(slots[i], pick.products.length),
+      reason: isSeasonal(pick.products[0]?.category || '', month) ? 'Es temporada: sale primero' : 'Lo que hace más tiempo no se publica'
+    }));
+    return { posts, summary: planSummary(posts, settings) };
   },
   write
 };
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const hhmm = (at: Date, timeZone: string) => { const p = localParts(at, timeZone); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`; };
 
-/** Lo que ve la IA para planificar: categorías con cuántos productos tienen y cuánto se publicaron, videos y lo reciente. */
+/** Lo que ve la IA: las tandas ya armadas (solo elige la categoría de cada una), las categorías y lo reciente. */
 export function aiPlanRequest(input: PlanInput): AiPlanRequest {
-  const { catalog, recent, recentThemes, library, settings, days, now, timeZone } = input;
+  const { catalog, recent, recentThemes, slots, now, timeZone } = input;
   const recentKeys = recent.map(productKey);
   const categories = new Map<string, { productos: number; publicadosHace30Dias: number }>();
   for (const c of catalog.filter(c => c.image_url)) {
@@ -98,26 +102,19 @@ export function aiPlanRequest(input: PlanInput): AiPlanRequest {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
   return {
     hoy: `${today} (${WEEKDAYS[new Date(today + 'T12:00:00Z').getUTCDay()]})`,
-    dias: days.map(dia => ({ dia, semana: WEEKDAYS[new Date(dia + 'T12:00:00Z').getUTCDay()] })),
-    horaPreferida: settings.hour,
-    maxPorDia: MAX_POSTS_PER_DAY,
-    maxHistoriasPorDia: MAX_STORIES_PER_DAY,
-    historias: settings.channels.includes('instagram_story'),
-    publicaciones: settings.channels.some(c => c !== 'instagram_story'),
+    tandas: slots.map((s, i) => ({ n: i + 1, dia: s.day, semana: WEEKDAYS[new Date(s.day + 'T12:00:00Z').getUTCDay()], hora: hhmm(s.at, timeZone), donde: s.kind === 'story' ? 'historias' : 'publicación', fotos: s.count })),
     categorias: [...categories.entries()].map(([categoria, v]) => ({ categoria, ...v })),
-    videos: library.filter(a => a.kind === 'video').slice(0, 30).map(a => ({ id: a.id, producto: a.product_name || '' })),
     recientes: recentThemes.slice(0, 20).map(r => ({ dia: r.day, tema: r.theme })),
     pedido: String(input.request || '').trim().slice(0, 600)
   };
 }
 
 /**
- * Convierte lo que decidió la IA en publicaciones de verdad: solo días libres y horas futuras, categorías y videos que
- * existen, productos del Catálogo (lo que hace más tiempo no sale, sin repetir en la semana) y los topes por día.
- * Lo que no cuadra se descarta.
+ * Llena cada tanda con la categoría que eligió la IA: productos del Catálogo de esa categoría, lo que hace más tiempo no
+ * sale y sin repetir en el plan. Si la categoría no existe o ya no le quedan productos, esa tanda se llena con reglas.
  */
-export function resolveAiPlan(items: AiPlanItem[], input: PlanInput): PlannedPost[] {
-  const { catalog, recent, library, settings, days, now, timeZone } = input;
+export function resolveAiPlan(assignments: AiAssignment[], input: PlanInput): PlannedPost[] {
+  const { catalog, recent, slots, month } = input;
   const lastSeen = new Map<string, number>();
   recent.forEach((name, i) => { if (!lastSeen.has(productKey(name))) lastSeen.set(productKey(name), i); });
   const age = (c: CatalogItem) => (lastSeen.has(productKey(c.name)) ? lastSeen.get(productKey(c.name))! : Number.MAX_SAFE_INTEGER);
@@ -128,60 +125,25 @@ export function resolveAiPlan(items: AiPlanItem[], input: PlanInput): PlannedPos
     group.items.push(c);
     groups.set(plain(name), group);
   }
-  const storiesOn = settings.channels.includes('instagram_story');
-  const feedOn = settings.channels.some(c => c !== 'instagram_story');
-  const usedProducts = new Set<string>();
-  const usedVideos = new Set<string>();
-  const perDay = new Map<string, { feed: number; stories: number; times: number[] }>();
+  const used = new Set<string>();
   const out: PlannedPost[] = [];
-
-  for (const item of items.slice(0, days.length * (MAX_POSTS_PER_DAY + MAX_STORIES_PER_DAY))) {
-    if (!days.includes(String(item.dia))) continue;
-    let format: PostFormat = (['carrusel', 'foto', 'reel', 'historia'] as PostFormat[]).includes(item.formato as PostFormat) ? item.formato as PostFormat : 'foto';
-    if (format === 'historia' ? !storiesOn : !feedOn) continue;
-    const day = perDay.get(item.dia) || { feed: 0, stories: 0, times: [] };
-    if (format === 'historia' ? day.stories >= MAX_STORIES_PER_DAY : day.feed >= MAX_POSTS_PER_DAY) continue;
-
-    // Hora: entre 8:00 y 21:30, sin chocar con otra del mismo día (al menos 1 hora entre ellas).
-    const match = String(item.hora || '').match(/^(\d{1,2}):(\d{2})$/);
-    let minutes = match ? Number(match[1]) * 60 + Number(match[2]) : Number(settings.hour.slice(0, 2)) * 60 + Number(settings.hour.slice(3));
-    minutes = Math.min(21 * 60 + 30, Math.max(8 * 60, minutes));
-    while (day.times.some(t => Math.abs(t - minutes) < 60)) minutes += 60;
-    if (minutes > 22 * 60) continue;
-    const [y, m, d] = item.dia.split('-').map(Number);
-    const [hh, mm] = toHour(minutes).split(':').map(Number);
-    const at = zonedTime(y, m, d, hh, mm, timeZone);
-    if (at.getTime() < now.getTime() + 60 * 60 * 1000) continue;
-
-    // Reel o historia con video: el video de la biblioteca (y el producto que muestra, para el texto).
-    const video = format === 'reel' || format === 'historia'
-      ? library.find(a => a.kind === 'video' && a.id === item.video && !usedVideos.has(a.id))
-      : undefined;
-    if (format === 'reel' && !video) format = 'carrusel';
-    let group = groups.get(plain(item.categoria));
-    let products: CatalogItem[] = [];
-    if (video) {
-      const shown = catalog.find(c => video.product_name && productKey(c.name) === productKey(video.product_name));
-      if (shown) {
-        products = [shown];
-        group = group || groups.get(plain(String(shown.category || '').trim() || 'Productos'));
-      }
-    } else {
-      if (!group) continue;
-      const want = format === 'carrusel' ? Math.min(MAX_CAROUSEL, Math.max(2, Math.round(Number(item.cantidad) || 3))) : 1;
-      products = group.items.filter(c => !usedProducts.has(productKey(c.name))).sort((a, b) => age(b) - age(a)).slice(0, want);
-      if (products.length === 0) continue;
-      if (format === 'carrusel' && products.length === 1) format = 'foto';
+  slots.forEach((slot, i) => {
+    const chosen = assignments.find(a => Number(a.n) === i + 1);
+    const group = chosen ? groups.get(plain(chosen.categoria)) : undefined;
+    let theme = group ? titleCase(group.name) : '';
+    let products = group ? group.items.filter(c => !used.has(productKey(c.name))).sort((a, b) => age(b) - age(a)).slice(0, slot.count) : [];
+    let reason = String(chosen?.motivo || '').trim().slice(0, 240);
+    if (products.length === 0) {
+      const [pick] = pickProducts(catalog.filter(c => !used.has(productKey(c.name))), recent, 1, slot.count, month);
+      if (!pick) return;
+      theme = pick.theme;
+      products = pick.products;
+      reason = isSeasonal(products[0]?.category || '', month) ? 'Es temporada' : 'Lo que hace más tiempo no se publica';
     }
-
-    products.forEach(p => usedProducts.add(productKey(p.name)));
-    if (video) usedVideos.add(video.id);
-    day.times.push(minutes);
-    if (format === 'historia') day.stories++; else day.feed++;
-    perDay.set(item.dia, day);
-    out.push({ theme: group ? titleCase(group.name) : 'Nuestros productos', products, at, format, reason: String(item.motivo || '').trim().slice(0, 240), video });
-  }
-  return out.sort((a, b) => a.at.getTime() - b.at.getTime());
+    products.forEach(p => used.add(productKey(p.name)));
+    out.push({ theme, products, at: slot.at, format: formatOf(slot, products.length), reason });
+  });
+  return out;
 }
 
 export const aiBrain: SocialBrain = {
@@ -189,21 +151,21 @@ export const aiBrain: SocialBrain = {
   async plan(input) {
     try {
       const plan = await planWithAi(aiPlanRequest(input), input.profile);
-      const posts = resolveAiPlan(plan.publicaciones, input);
-      if (posts.length) return { posts, summary: plan.resumen, tasks: plan.tareas };
+      const posts = resolveAiPlan(plan.asignaciones, input);
+      if (posts.length) return { posts, summary: [plan.resumen, planSummary(posts, input.settings)].filter(Boolean).join(' '), tasks: plan.tareas };
       console.warn('⚠️ La planificación de la IA no trajo publicaciones válidas; se usan las reglas');
     } catch (error: any) {
       console.warn('⚠️ La IA no pudo planificar; se usan las reglas:', error.message);
     }
     const fallback = await ruleBrain.plan(input);
-    return { ...fallback, summary: `La IA no respondió, así que se usaron las reglas: ${fallback.summary}` };
+    return { ...fallback, summary: `La IA no respondió, así que se eligió con reglas. ${fallback.summary}` };
   },
   write
 };
 
 let override: SocialBrain | null = null;
 
-/** El cerebro que toca: "La IA decide" (o un pedido escrito por la dueña) planifica con IA; un número fijo por día, con reglas. */
+/** El cerebro que toca: "La IA elige" (o un pedido escrito por la dueña) planifica con IA; si no, con reglas. */
 export const currentBrain = (settings?: PublishingSettings, request?: string) =>
   override || ((settings && settings.postsPerDay === 0) || String(request || '').trim() ? aiBrain : ruleBrain);
 

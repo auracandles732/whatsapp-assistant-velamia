@@ -26,6 +26,11 @@ export const MAX_CAROUSEL = 10;
 export const MAX_POSTS_PER_DAY = 3;
 export const MAX_STORIES_PER_DAY = 2;
 
+/** Meta de fotos por día (Instagram deja publicar hasta 50 cosas al día por la API: queda muy por debajo). */
+export const MAX_PHOTOS_PER_DAY = 30;
+/** Tandas por día como máximo: más que eso satura a los seguidores. */
+export const MAX_SETS_PER_DAY = 6;
+
 export interface SocialPost {
   id: string;
   scheduled_at: string;
@@ -46,8 +51,13 @@ export interface PublishingSettings {
   /** Hora local del negocio, "HH:MM". */
   hour: string;
   channels: PostChannel[];
-  /** 1 = una foto; de 2 a 10 = carrusel (en historias va solo la primera). */
+  /** Fotos por tanda como máximo: 1 = una foto; de 2 a 10 = carrusel o varias historias seguidas. */
   photosPerPost: number;
+  /**
+   * Fotos al día que busca el modo automático, sumando lo que ya está programado ese día (lo tuyo cuenta). Se reparten
+   * en tandas de una sola categoría: publicaciones y/o historias según los canales elegidos.
+   */
+  photosPerDay: number;
   /** Modo automático: la IA elige los productos, escribe el texto y programa cada semana sola. */
   autoPlan: boolean;
   /**
@@ -68,7 +78,8 @@ export const DEFAULT_SETTINGS: PublishingSettings = {
   days: [1, 3, 5],
   hour: '19:00',
   channels: ['instagram_feed', 'facebook'],
-  photosPerPost: 1,
+  photosPerPost: 5,
+  photosPerDay: 10,
   autoPlan: false,
   postsPerDay: 0,
   autoApprove: true,
@@ -84,11 +95,13 @@ export function normalizeSettings(raw: any): PublishingSettings {
   const channels = Array.isArray(r.channels) ? POST_CHANNELS.filter(c => r.channels.includes(c)) : DEFAULT_SETTINGS.channels;
   const photos = Math.round(Number(r.photosPerPost));
   const perDay = r.postsPerDay === undefined || r.postsPerDay === null || r.postsPerDay === '' ? NaN : Math.round(Number(r.postsPerDay));
+  const photosDay = Math.round(Number(r.photosPerDay));
   return {
     days,
     hour,
     channels: channels.length ? channels : DEFAULT_SETTINGS.channels,
     photosPerPost: Number.isFinite(photos) ? Math.min(MAX_CAROUSEL, Math.max(1, photos)) : DEFAULT_SETTINGS.photosPerPost,
+    photosPerDay: Number.isFinite(photosDay) && photosDay >= 1 ? Math.min(MAX_PHOTOS_PER_DAY, photosDay) : DEFAULT_SETTINGS.photosPerDay,
     autoPlan: typeof r.autoPlan === 'boolean' ? r.autoPlan : DEFAULT_SETTINGS.autoPlan,
     postsPerDay: Number.isFinite(perDay) && perDay >= 0 && perDay <= MAX_POSTS_PER_DAY ? perDay : DEFAULT_SETTINGS.postsPerDay,
     autoApprove: true,
@@ -185,6 +198,57 @@ export function publishingSlots(settings: PublishingSettings, from: Date, days: 
   return slots;
 }
 
+// ---------- Tandas del día ----------
+
+/** Una tanda que el plan debe llenar: cuándo sale, dónde (publicación o historias) y cuántas fotos lleva. */
+export interface DaySlot { day: string; at: Date; kind: 'feed' | 'story'; count: number }
+/** Lo que ya está programado: día, hora local en minutos y cuántas fotos lleva. */
+export interface DayUse { day: string; minutes: number; photos: number }
+
+/** Horas de n tandas en un día: la última cerca de la hora elegida, cada 3 horas (o menos si no caben), de 8:00 a 21:30. */
+export function setTimes(hour: string, n: number): number[] {
+  const preferred = toMinutes(hour);
+  const start = Math.max(8 * 60, Math.min(21 * 60 + 30, preferred) - 180 * (n - 1));
+  const step = n > 1 ? Math.min(180, Math.floor((21 * 60 + 30 - start) / (n - 1))) : 0;
+  return Array.from({ length: n }, (_, i) => start + step * i);
+}
+
+/**
+ * Las tandas que faltan para llegar a la meta de fotos de cada día, contando lo que ya está programado (nunca se toca).
+ * Cada tanda lleva hasta photosPerPost fotos; con publicaciones e historias activas, se turnan (primero la publicación).
+ * Nunca a menos de una hora de otra publicación de ese día, ni en el pasado.
+ */
+export function daySlots(settings: PublishingSettings, days: string[], used: DayUse[], now: Date, timeZone: string): DaySlot[] {
+  const storiesOn = settings.channels.includes('instagram_story');
+  const feedOn = settings.channels.some(c => c !== 'instagram_story');
+  if (!storiesOn && !feedOn) return [];
+  const size = Math.min(MAX_CAROUSEL, Math.max(1, settings.photosPerPost));
+  const slots: DaySlot[] = [];
+  for (const day of days) {
+    const today = used.filter(u => u.day === day);
+    const missing = settings.photosPerDay - today.reduce((sum, u) => sum + u.photos, 0);
+    if (missing <= 0) continue;
+    const n = Math.min(MAX_SETS_PER_DAY, Math.ceil(missing / size));
+    const counts = Array.from({ length: n }, (_, i) => Math.min(MAX_CAROUSEL, Math.floor(missing / n) + (i < missing % n ? 1 : 0)));
+    const taken = today.map(u => u.minutes);
+    const [y, m, d] = day.split('-').map(Number);
+    setTimes(settings.hour, n).forEach((minutes, i) => {
+      let t = minutes;
+      while (taken.some(x => Math.abs(x - t) < 60)) t += 60;
+      if (t > 22 * 60) return;
+      const at = zonedTime(y, m, d, Math.floor(t / 60), t % 60, timeZone);
+      if (at.getTime() < now.getTime() + 60 * 60 * 1000) return;
+      taken.push(t);
+      const kind: DaySlot['kind'] = storiesOn && feedOn ? (i % 2 === 0 ? 'feed' : 'story') : feedOn ? 'feed' : 'story';
+      slots.push({ day, at, kind, count: counts[i] });
+    });
+  }
+  return slots.sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+/** Fotos que lleva una publicación (en historias, cada foto sale como una historia). */
+export const photosOf = (post: Pick<SocialPost, 'media' | 'products'>) => Math.min(MAX_CAROUSEL, (post.media && post.media.length) || post.products.length || 0);
+
 // ---------- Qué productos mostrar ----------
 
 export interface CatalogItem { name: string; category?: string | null; image_url?: string | null; price: number }
@@ -209,7 +273,7 @@ export const titleCase = (text: string) => plain(text).length ? text.charAt(0).t
  * variando la categoría de una publicación a otra y dando prioridad a la temporada (Navidad en noviembre, etc.).
  * `recent` son los nombres ya publicados, del más nuevo al más viejo.
  */
-export function pickProducts(catalog: CatalogItem[], recent: string[], slots: number, perPost: number, month: number): { theme: string; products: CatalogItem[] }[] {
+export function pickProducts(catalog: CatalogItem[], recent: string[], slots: number, perPost: number | number[], month: number): { theme: string; products: CatalogItem[] }[] {
   const withPhoto = catalog.filter(c => c.image_url && Number(c.price) >= 0);
   if (withPhoto.length === 0 || slots <= 0) return [];
   const lastSeen = new Map<string, number>();
@@ -231,16 +295,20 @@ export function pickProducts(catalog: CatalogItem[], recent: string[], slots: nu
       .map(([cat, items]) => ({ cat, items: items.filter(c => !used.has(productKey(c.name))).sort((a, b) => age(b) - age(a)) }))
       .filter(x => x.items.length > 0);
     if (available.length === 0) break;
+    const want = Array.isArray(perPost) ? perPost[i] || 1 : perPost;
     // La temporada puede salir una publicación sí y otra no; el resto de categorías se turnan antes de repetirse.
+    // Primero las que alcanzan para llenar la tanda (una categoría por tanda, nunca mezcladas).
     const weight = (cat: string) => (isSeasonal(cat, month) ? 0 : timesUsed.get(cat) || 0);
+    const fills = (x: { items: CatalogItem[] }) => Number(x.items.length >= Math.min(want, 3));
     available.sort((a, b) =>
-      Number(a.cat === previous) - Number(b.cat === previous)
+      fills(b) - fills(a)
+      || Number(a.cat === previous) - Number(b.cat === previous)
       || weight(a.cat) - weight(b.cat)
       || Number(isSeasonal(b.cat, month)) - Number(isSeasonal(a.cat, month))
       || age(b.items[0]) - age(a.items[0])
       || b.items.length - a.items.length);
     const chosen = available[0];
-    const products = chosen.items.slice(0, perPost);
+    const products = chosen.items.slice(0, want);
     products.forEach(p => used.add(productKey(p.name)));
     timesUsed.set(chosen.cat, (timesUsed.get(chosen.cat) || 0) + 1);
     picks.push({ theme: titleCase(chosen.cat), products });

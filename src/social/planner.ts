@@ -2,7 +2,7 @@ import { getAllProducts, getConfig, setConfig } from '../services/supabase';
 import { profile } from '../config/businessProfile';
 import { currentBrain, PostFormat, PlannedPost } from './brain';
 import {
-  SocialPost, PublishingSettings, PostChannel, PostProduct, PostMedia, DEFAULT_SETTINGS, getSavedSettings, publishingSlots,
+  SocialPost, PublishingSettings, PostChannel, PostProduct, PostMedia, DEFAULT_SETTINGS, getSavedSettings, daySlots, photosOf,
   publishingDays, listPosts, localDay, localParts, recentActivity, insertPosts, fallbackCaption, toPostProduct, withLibraryMedia,
   LibraryItem, postsBetween, postFingerprint
 } from './posts';
@@ -53,7 +53,8 @@ function buildMedia(pick: PlannedPost, library: LibraryItem[], usedAssets: Set<s
     usedAssets.add(pick.video.id);
     return { products, media: [{ type: pick.video.kind, url: pick.video.url, asset_id: pick.video.id }] as PostMedia[], items: [{ asset: pick.video.id }] };
   }
-  if (pick.format === 'historia') return { products, media: [] as PostMedia[], items: products.slice(0, 1).map(p => ({ product: p.name })) };
+  // Historias: cada foto sale como una historia, una detrás de otra.
+  if (pick.format === 'historia') return { products, media: [] as PostMedia[], items: products.map(p => ({ product: p.name })) };
   const built = withLibraryMedia(products, library, usedAssets);
   if (!built.media.length) return { products: built.products, media: [] as PostMedia[], items: built.products.map(p => ({ product: p.name })) };
   let next = 0;
@@ -70,16 +71,19 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
 
   const allDays = publishingDays(settings, now, days, tz);
   if (allDays.length === 0) return empty('No hay días de publicación elegidos.');
+  // Lo ya programado (tuyo o de antes) cuenta para la meta del día y nunca se toca; lo que falló no salió, no cuenta.
   const existing = await listPosts(new Date(now.getTime() - 86_400_000).toISOString(), new Date(now.getTime() + (days + 1) * 86_400_000).toISOString());
-  const taken = new Set(existing.map(post => localDay(post.scheduled_at, tz)));
-  const freeDays = allDays.filter(day => !taken.has(day));
-  const slots = publishingSlots(settings, now, days, tz, settings.postsPerDay || 1).filter(slot => !taken.has(localDay(slot, tz)));
-  if (freeDays.length === 0 || slots.length === 0 && settings.postsPerDay > 0) return empty('Los próximos días de publicación ya tienen lo suyo.');
+  const used = existing.filter(post => post.status !== 'failed').map(post => {
+    const at = localParts(new Date(post.scheduled_at), tz);
+    return { day: localDay(post.scheduled_at, tz), minutes: at.hour * 60 + at.minute, photos: photosOf(post) };
+  });
+  const slots = daySlots(settings, allDays, used, now, tz);
+  if (slots.length === 0) return empty(`Los próximos días ya tienen sus ${settings.photosPerDay} fotos (o no queda hora libre hoy).`);
 
   // Sin la migración 025 no hay biblioteca: se publica solo con las fotos del Catálogo.
   const [catalog, recent, library] = await Promise.all([getAllProducts(), recentActivity(tz), listAssets().catch(() => [])]);
   const plan = await brain.plan({
-    slots, days: freeDays, catalog, recent: recent.names, recentThemes: recent.themes, library,
+    slots, catalog, recent: recent.names, recentThemes: recent.themes, library,
     settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p, request
   });
   if (plan.posts.length === 0) return empty(plan.summary || 'No hay productos con foto para publicar.');

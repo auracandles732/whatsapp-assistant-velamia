@@ -8386,16 +8386,17 @@
         // Instagram acepta hasta 10 fotos o videos (o una mezcla) en un carrusel.
         const MAX_CAROUSEL = 10;
         // 0 = decide la IA (hasta 3 al día y algunas historias); igual que MAX_POSTS_PER_DAY en el servidor.
-        const POSTS_PER_DAY_OPTIONS = [[0, 'La IA decide (hasta 3 al día + historias)'], [1, '1 al día'], [2, '2 al día'], [3, '3 al día']];
-        // Igual que dayHours en el servidor: la hora elegida y cada 3 horas antes, nunca antes de las 8:00.
-        function dayHoursOf(hour, n) {
+        // Quién elige qué mostrar en cada tanda (postsPerDay: 0 = la IA; 1 = reglas, sin gastar IA).
+        const CHOOSER_OPTIONS = [[0, 'La IA (temporada, variedad y tus instrucciones)'], [1, 'Reglas automáticas (no gasta IA)']];
+        const PHOTOS_PER_DAY_OPTIONS = [2, 4, 6, 8, 10, 12, 15, 20, 25, 30];
+        // Igual que setTimes en el servidor: n tandas, la última cerca de la hora elegida, cada 3 horas, de 8:00 a 21:30.
+        function setTimesOf(hour, n) {
             const [hh, mm] = hour.split(':').map(Number);
-            const base = hh * 60 + mm;
-            const set = new Set();
-            for (let k = n - 1; k >= 0; k--) { const t = base - k * 180; set.add(t >= 480 ? t : 480 + (n - 1 - k) * 180); }
-            return [...set].sort((a, b) => a - b).map(t => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
+            const start = Math.max(480, Math.min(1290, hh * 60 + mm) - 180 * (n - 1));
+            const step = n > 1 ? Math.min(180, Math.floor((1290 - start) / (n - 1))) : 0;
+            return Array.from({ length: n }, (_, i) => { const t = start + step * i; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); });
         }
-        const PHOTO_OPTIONS = [[1, '1 foto'], [3, 'Carrusel de 3'], [5, 'Carrusel de 5'], [7, 'Carrusel de 7'], [MAX_CAROUSEL, 'Carrusel de 10 (máximo de Instagram)']];
+        const PHOTO_OPTIONS = [[1, '1 foto'], [3, 'Hasta 3 fotos'], [5, 'Hasta 5 fotos'], [7, 'Hasta 7 fotos'], [MAX_CAROUSEL, 'Hasta 10 fotos (máximo de Instagram)']];
 
         // Día y hora en la zona del negocio (no en la de la computadora): la hora que se ve es la hora a la que sale.
         function tzParts(date) {
@@ -8860,22 +8861,25 @@
                                         <button key={d} type="button" className={'pb-daychip' + (s.days.includes(d) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ days: toggleIn(s.days, d) })}>{label}</button>
                                     ))}
                                 </div>
-                                <div className="pb-label">Cuántas publicaciones</div>
+                                <div className="pb-label">Fotos por día</div>
                                 <div className="pb-select">
                                     <PbIcon name="bolt" size={18} color="#3A4570" />
-                                    <select value={s.postsPerDay ?? 0} disabled={!canConfigure} onChange={e => setS({ postsPerDay: Number(e.target.value) })} aria-label="Cuántas publicaciones">
-                                        {POSTS_PER_DAY_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
+                                    <select value={s.photosPerDay ?? 10} disabled={!canConfigure} onChange={e => setS({ photosPerDay: Number(e.target.value) })} aria-label="Fotos por día">
+                                        {PHOTOS_PER_DAY_OPTIONS.map(n => <option key={n} value={n}>{n} fotos al día</option>)}
                                     </select>
                                 </div>
-                                <div className="pb-label">{s.postsPerDay ? 'Hora de publicación' : 'Hora principal'}</div>
+                                <div className="pb-label">Hora principal</div>
                                 <div className="pb-select">
                                     <PlatIcon name="clock" size={18} color="#3A4570" />
                                     <select value={s.hour} disabled={!canConfigure} onChange={e => setS({ hour: e.target.value })} aria-label="Hora de publicación">
                                         {hourOptions(s.hour).map(h => <option key={h} value={h}>{h}</option>)}
                                     </select>
                                 </div>
-                                {!s.postsPerDay && <p className="pb-muted" style={{ margin: '6px 0 0' }}>La IA decide en los días marcados cuántas publicaciones hacer, a qué hora, de qué productos y en qué formato (carrusel, foto, reel o historia). Revisa lo que planea en "Planificación del agente".</p>}
-                                {s.postsPerDay > 1 && <p className="pb-muted" style={{ margin: '6px 0 0' }}>Salen a las {dayHoursOf(s.hour, s.postsPerDay).join(', ')}.</p>}
+                                {(() => {
+                                    const perSet = Math.max(1, s.photosPerPost || 1);
+                                    const sets = Math.min(6, Math.ceil((s.photosPerDay || 10) / perSet));
+                                    return <p className="pb-muted" style={{ margin: '6px 0 0' }}>Cada día marcado se completan <b>{s.photosPerDay || 10} fotos</b>, contando lo que ya programaste tú (nunca se toca). Van en {sets} tanda(s) de hasta {perSet} foto(s), a las {setTimesOf(s.hour, sets).join(', ')} (si esa hora está ocupada, se corre). Cada tanda es de una sola categoría.</p>;
+                                })()}
                                 <div className="pb-tz"><PbIcon name="globe" size={20} color="#3A4570" /><div>Zona horaria<b>{tzCity()}{tzOffset() ? ` (${tzOffset()})` : ''}</b></div></div>
                             </>
                         ))}
@@ -8889,17 +8893,21 @@
                                         {POST_CHANNEL_NAMES[c]}
                                     </label>
                                 ))}
-                                {s.postsPerDay ? (
-                                    <>
-                                        <div className="pb-label"><PlatIcon name="image" size={14} color="#3A4570" /> Fotos por publicación</div>
-                                        <div className="pb-select">
-                                            <PlatIcon name="image" size={18} color="#3A4570" />
-                                            <select value={s.photosPerPost} disabled={!canConfigure} onChange={e => setS({ photosPerPost: Number(e.target.value) })} aria-label="Fotos por publicación">
-                                                {PHOTO_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
-                                            </select>
-                                        </div>
-                                    </>
-                                ) : <p className="pb-muted" style={{ margin: '8px 0 0' }}>🖼️ La IA elige el tamaño de cada carrusel (hasta {MAX_CAROUSEL}).</p>}
+                                <div className="pb-label"><PlatIcon name="image" size={14} color="#3A4570" /> Fotos por tanda</div>
+                                <div className="pb-select">
+                                    <PlatIcon name="image" size={18} color="#3A4570" />
+                                    <select value={s.photosPerPost} disabled={!canConfigure} onChange={e => setS({ photosPerPost: Number(e.target.value) })} aria-label="Fotos por tanda">
+                                        {PHOTO_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
+                                    </select>
+                                </div>
+                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>En publicaciones van como carrusel; en historias, cada foto sale como una historia, una detrás de otra.</p>
+                                <div className="pb-label">Quién elige qué mostrar</div>
+                                <div className="pb-select">
+                                    <PbIcon name="bolt" size={18} color="#3A4570" />
+                                    <select value={s.postsPerDay ? 1 : 0} disabled={!canConfigure} onChange={e => setS({ postsPerDay: Number(e.target.value) })} aria-label="Quién elige qué mostrar">
+                                        {CHOOSER_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
+                                    </select>
+                                </div>
                                 <p className="pb-muted" style={{ margin: '6px 0 0' }}>Si en la Biblioteca hay videos o fotos de esos productos, se suman al carrusel (máximo {MAX_CAROUSEL} entre fotos y videos).</p>
                             </>
                         ))}
@@ -8907,7 +8915,7 @@
                             <>
                                 <label className="pb-toggle">
                                     <input type="checkbox" checked={s.autoPlan} disabled={!canConfigure || saving} onChange={e => onAuto(e.target.checked)} />
-                                    <span><b>Modo automático con IA</b><small>{s.autoPlan ? 'Activado: la IA elige los productos, escribe los textos y publica sola en los días y la hora de arriba.' : 'Actívalo y la IA prepara y publica sola cada semana, con las fotos y precios de tu catálogo.'}</small></span>
+                                    <span><b>Modo automático</b><small>{s.autoPlan ? `Activado: cada día marcado se completa solo hasta ${s.photosPerDay || 10} fotos (sumando lo tuyo), con las fotos y precios de tu catálogo, y sale a su hora.` : `Actívalo y cada día marcado se completa solo hasta ${s.photosPerDay || 10} fotos con tu catálogo.`}</small></span>
                                 </label>
                                 <p className="pb-muted" style={{ margin: '4px 0 0' }}>Todo lo que programes (tú o la IA) se publica solo a su hora: no hace falta aprobarlo.</p>
                             </>
@@ -8934,7 +8942,7 @@
             const photos = items.length - videos;
             if (channels.includes('facebook') && videos && photos) notes.push(`Facebook no deja mezclar fotos y videos: ahí salen solo ${photos === 1 ? 'la foto' : `las ${photos} fotos`}; en Instagram, todo.`);
             else if (channels.includes('facebook') && videos > 1) notes.push('En Facebook sale solo el primer video (no acepta varios en una publicación).');
-            if (channels.includes('instagram_story') && items.length > 1) notes.push('En la historia de Instagram sale solo el primero.');
+            if (channels.includes('instagram_story') && items.length > 1) notes.push(`En historias sale cada una como una historia (${items.length} seguidas).`);
             return notes;
         }
 
@@ -8947,8 +8955,9 @@
         // Formato de una publicación para mostrarlo: historia, reel, carrusel de N o foto.
         function postFormat(post) {
             const items = postItems(post);
-            if (post.format) return post.format === 'carrusel' ? `Carrusel de ${items.length}` : { foto: 'Foto', reel: 'Reel', historia: 'Historia' }[post.format];
-            if (post.channels.length === 1 && post.channels[0] === 'instagram_story') return 'Historia';
+            const stories = n => (n > 1 ? `${n} historias` : 'Historia');
+            if (post.format) return post.format === 'carrusel' ? `Carrusel de ${items.length}` : post.format === 'historia' ? stories(items.length) : { foto: 'Foto', reel: 'Reel' }[post.format];
+            if (post.channels.length === 1 && post.channels[0] === 'instagram_story') return stories(items.length);
             if (items.length > 1) return `Carrusel de ${items.length}`;
             return items[0]?.type === 'video' ? 'Reel' : 'Foto';
         }
@@ -9963,7 +9972,7 @@
             const [msg, setMsg] = useState(null);
             const [error, setError] = useState('');
             useEffect(() => {
-                api('/api/social/ai').then(r => { setData(r); setForm({ textModel: r.textModel, imageModel: r.imageModel, imageQuality: r.imageQuality, prompt: r.prompt || '' }); }).catch(e => setError(e.message));
+                api('/api/social/ai').then(r => { setData(r); setForm({ textModel: r.textModel, imageModel: r.imageModel, imageQuality: r.imageQuality, prompt: r.prompt || '', dailyBudget: r.dailyBudget ?? 1 }); }).catch(e => setError(e.message));
             }, []);
 
             async function run(label, fn) {
@@ -10038,6 +10047,11 @@
                                 {data.options.imageQualities.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                             </select>
                             <small>{noteOf(data.options.imageQualities, form.imageQuality)} · las fotos con IA se activan en el siguiente paso</small>
+                        </label>
+                        <label className="sb-f">
+                            <span>Tope de gasto por día (US$)</span>
+                            <input type="number" min="0.1" max="50" step="0.5" inputMode="decimal" value={form.dailyBudget ?? 1} disabled={!canConfigure} onChange={e => setForm({ ...form, dailyBudget: e.target.value })} />
+                            <small>Hoy lleva ${Number(data.spentToday || 0).toFixed(2)} de ${Number(data.dailyBudget || 1).toFixed(2)}. Al llegar al tope, el agente se detiene solo hasta mañana y tu bot de WhatsApp nunca se queda sin crédito por su culpa.</small>
                         </label>
                     </div>
                     {error && <div className="pb-err" style={{ margin: '10px 0' }}>{error}</div>}

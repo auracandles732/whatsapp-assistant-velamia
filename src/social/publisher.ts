@@ -78,14 +78,27 @@ async function instagramFeed(conn: PublishingConnection, post: SocialPost, { wai
   return publishContainer(conn, await create({ media_type: 'CAROUSEL', children: children.map(c => c.id).join(','), caption: post.caption }), waitMs);
 }
 
-/** Historia de Instagram: la primera foto (armada en 9:16) o el primer video. */
+/**
+ * Historias de Instagram: cada foto o video sale como una historia, en orden (armadas en 9:16). Si una falla después de
+ * que otras salieron, se deja como publicada (reintentarla repetiría las que ya salieron) y se anota en el registro.
+ */
 async function instagramStory(conn: PublishingConnection, post: SocialPost, { waitMs, prepareImage }: PublishOptions): Promise<ChannelResult> {
-  const [item] = mediaOf(post);
-  const body = item.type === 'video'
-    ? { media_type: 'STORIES', video_url: item.url }
-    : { media_type: 'STORIES', image_url: await prepareImage(item.url, 'story') };
-  const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media`, body, { params: { access_token: conn.pageToken } });
-  return publishContainer(conn, String(data.id), waitMs, item.type === 'video' ? VIDEO_CHECKS : READY_CHECKS);
+  let first: ChannelResult | null = null;
+  const items = mediaOf(post);
+  for (const [i, item] of items.entries()) {
+    try {
+      const body = item.type === 'video'
+        ? { media_type: 'STORIES', video_url: item.url }
+        : { media_type: 'STORIES', image_url: await prepareImage(item.url, 'story') };
+      const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media`, body, { params: { access_token: conn.pageToken } });
+      const done = await publishContainer(conn, String(data.id), waitMs, item.type === 'video' ? VIDEO_CHECKS : READY_CHECKS);
+      first = first || done;
+    } catch (error: any) {
+      if (!first) throw error;
+      console.warn(`⚠️ Historia ${i + 1} de ${items.length} no salió: ${metaError(error)}`);
+    }
+  }
+  return first!;
 }
 
 /**

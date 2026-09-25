@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getAllProducts, getConfig, setConfig, updateProduct, supabase, tenantOp, tenantValue } from '../services/supabase';
 import { uploadBufferToStorage } from '../services/storage';
 import { profile } from '../config/businessProfile';
-import { socialAi, track } from './ai';
+import { socialAi, track, isStopError } from './ai';
 import { toJpeg, toJpegMax, isOwnStorageUrl } from './images';
 import { getSupplierSettings, getSupplierProduct, SupplierProduct, SupplierSettings, addSupplierProductsToCatalog, discardAsDuplicate } from './suppliers';
 
@@ -46,7 +46,8 @@ export interface PosterState {
 export const POSTER_COST = 0.08;
 const WORKERS = 3;
 // Hasta 3 intentos: el diseño tiene que quedar igual al de la empresa, y a veces la IA de imágenes se desvía.
-const TRIES = 3;
+// Cada intento es una foto nueva (lo más caro): dos como mucho; si ninguna pasa, queda "para revisar".
+const TRIES = 2;
 const stateKey = (catalogId: string) => `supplier_posters_${catalogId}`;
 
 // ---------- Avance por catálogo (se guarda en la configuración: no hace falta otra tabla) ----------
@@ -573,6 +574,7 @@ async function makeOne(catalogId: string, job: Job, refs: References) {
     await setState(catalogId, model.id, { status: 'lista', url: last.url, detail: '' });
   } catch (error: any) {
     await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
+    if (isStopError(error)) throw error;
   }
 }
 
@@ -642,9 +644,12 @@ async function runQueue(catalogId: string) {
       return refs;
     };
 
+    // Tope del día o cuenta sin crédito: se detiene toda la fila (seguir solo acumularía errores o gasto).
+    let stopped = '';
     // Primero se revisan (y entran al Catálogo) todos los modelos; las fotos, que tardan, van después.
     const next = async (): Promise<{ model: SupplierProduct; state: PosterState } | null> => {
       for (;;) {
+        if (stopped) return null;
         const states = await posterStates(catalogId);
         const queued = Object.keys(states).filter(k => states[k].status === 'cola');
         const id = queued.find(k => !states[k].checked && !states[k].keep) || queued[0];
@@ -690,10 +695,16 @@ async function runQueue(catalogId: string) {
           await makeOne(catalogId, { model, texts, occasion: occasionOf(category), price, unitPrice, instructions }, ref);
         } catch (error: any) {
           await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
+          if (isStopError(error)) stopped = String(error?.message || error).slice(0, 200);
         }
       }
     };
     await Promise.all(Array.from({ length: WORKERS }, worker));
+    if (stopped) {
+      console.warn(`⏸️ Fotos de proveedores detenidas: ${stopped}`);
+      const states = await posterStates(catalogId);
+      for (const [id, state] of Object.entries(states)) if (BUSY.includes(state.status)) await setState(catalogId, id, { status: 'error', detail: stopped });
+    }
   } catch (error: any) {
     console.error('❌ Revisión de modelos de proveedor detenida:', error.message);
     const states = await posterStates(catalogId);
