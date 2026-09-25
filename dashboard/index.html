@@ -6420,6 +6420,13 @@
             );
         }
 
+        // La sección abierta queda en la dirección (#/cotizaciones, #/conversaciones/<chat>…): al recargar se vuelve ahí.
+        const APP_TABS = ['conversaciones', 'estadisticas', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'configuracion', 'consumo', 'claves'];
+        function readRoute() {
+            const [tab, id] = decodeURIComponent(window.location.hash || '').replace(/^#\/?/, '').split('/');
+            return { tab: APP_TABS.includes(tab) ? tab : 'conversaciones', id: /^[0-9a-f-]{36}$/i.test(id || '') ? id : '' };
+        }
+
         function App({ onLogout, branding, onBrandingChange }) {
             const [conversations, setConversations] = useState([]);
             const [selectedConv, setSelectedConv] = useState(null);
@@ -6430,7 +6437,9 @@
             const [botEnabled, setBotEnabled] = useState(true);
             const [stats, setStats] = useState({ total: 0, active: 0, orders: 0, revenue: 0 });
             const [loading, setLoading] = useState(true);
-            const [activeTab, setActiveTab] = useState('conversaciones');
+            const [activeTab, setActiveTab] = useState(() => readRoute().tab);
+            // Chat que estaba abierto antes de recargar: se abre apenas llegue la lista de conversaciones.
+            const routeConv = useRef(readRoute().tab === 'conversaciones' ? readRoute().id : '');
             const [products, setProducts] = useState([]);
             const [systemPrompt, setSystemPrompt] = useState('');
             const [savingPrompt, setSavingPrompt] = useState(false);
@@ -6500,10 +6509,26 @@
             const [composer, setComposer] = useState(null);
             const [catalogFocus, setCatalogFocus] = useState(null);
             const [lastOther, setLastOther] = useState('cotizaciones');
-            const [mxQuoteId, setMxQuoteId] = useState(null);
+            const [mxQuoteId, setMxQuoteId] = useState(() => (readRoute().tab === 'cotizaciones' ? readRoute().id || null : null));
             const [showKpis, setShowKpis] = useState(false);
             const [mxToast, setMxToast] = useState('');
             useEffect(() => { if (MX_SECTIONS[activeTab]) setLastOther(activeTab); }, [activeTab]);
+            useEffect(() => {
+                const id = activeTab === 'conversaciones' ? selectedConv?.id : activeTab === 'cotizaciones' && mobile ? mxQuoteId : '';
+                const hash = '#/' + activeTab + (id ? '/' + id : '');
+                if (window.location.hash !== hash) window.history.replaceState(null, '', hash);
+            }, [activeTab, selectedConv?.id, mxQuoteId, mobile]);
+            useEffect(() => {
+                if (!routeConv.current || conversations.length === 0) return;
+                const conv = conversations.find(c => c.id === routeConv.current);
+                routeConv.current = '';
+                if (conv) setSelectedConv(conv);
+            }, [conversations]);
+            // Estadísticas es una pantalla del celular y Claves solo existe para el dueño: si no aplica, se vuelve a Conversaciones.
+            useEffect(() => { if (!mobile && activeTab === 'estadisticas') setActiveTab('conversaciones'); }, [mobile, activeTab]);
+            useEffect(() => {
+                if (activeTab === 'claves' && session && !(session.role === 'owner' && session.business && !session.business.legacy)) setActiveTab('conversaciones');
+            }, [activeTab, session]);
             useEffect(() => { setEmojiOpen(false); }, [selectedConv?.id]);
             useEffect(() => {
                 if (!mxToast) return;
