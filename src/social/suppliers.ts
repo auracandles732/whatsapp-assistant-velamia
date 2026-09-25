@@ -19,6 +19,8 @@ export const SIZES: CandleSize[] = ['pequena', 'mediana', 'grande'];
 export interface SupplierSettings {
   /** Precio de venta por tamaño (el mismo que usa el Catálogo: por docena, por unidad… según el negocio). 0 = sin definir. */
   sizePrices: Record<CandleSize, number>;
+  /** Precio por unidad por tamaño, solo para mostrarlo en la foto ("UNIDAD $5") como en los afiches de la empresa. 0 = no se muestra. */
+  unitPrices: Record<CandleSize, number>;
   /** Tamaño que se usa cuando el PDF no lo dice (queda marcado como estimado). */
   defaultSize: CandleSize;
   /** Palabra que va antes del nombre del modelo en el Catálogo ("VELA" → "VELA CALABAZA 1"). */
@@ -29,15 +31,22 @@ export interface SupplierSettings {
   autoAddToCatalog: boolean;
   /** Hacer la foto de cada modelo con el diseño de la empresa apenas entra al Catálogo (posters.ts). */
   autoPosters: boolean;
+  /**
+   * Productos del Catálogo cuyas fotos son "el diseño a copiar" (1 o 2 del mismo estilo). Vacío = una foto de la empresa
+   * de la misma ocasión, elegida sola (nunca dos de estilos distintos: la IA los mezcla).
+   */
+  designProductIds: string[];
 }
 
 export const DEFAULT_SUPPLIER_SETTINGS: SupplierSettings = {
   sizePrices: { pequena: 0, mediana: 0, grande: 0 },
+  unitPrices: { pequena: 0, mediana: 0, grande: 0 },
   defaultSize: 'mediana',
   namePrefix: '',
   packaging: '',
   autoAddToCatalog: true,
-  autoPosters: true
+  autoPosters: true,
+  designProductIds: []
 };
 
 const SETTINGS_KEY = 'supplier_settings';
@@ -46,13 +55,17 @@ const money = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Ma
 export function normalizeSupplierSettings(raw: any): SupplierSettings {
   const r = raw && typeof raw === 'object' ? raw : {};
   const prices = r.sizePrices && typeof r.sizePrices === 'object' ? r.sizePrices : {};
+  const units = r.unitPrices && typeof r.unitPrices === 'object' ? r.unitPrices : {};
   return {
     sizePrices: { pequena: money(prices.pequena), mediana: money(prices.mediana), grande: money(prices.grande) },
+    unitPrices: { pequena: money(units.pequena), mediana: money(units.mediana), grande: money(units.grande) },
     defaultSize: SIZES.includes(r.defaultSize) ? r.defaultSize : DEFAULT_SUPPLIER_SETTINGS.defaultSize,
     namePrefix: String(r.namePrefix ?? '').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 20),
     packaging: String(r.packaging ?? '').trim().slice(0, 60),
     autoAddToCatalog: typeof r.autoAddToCatalog === 'boolean' ? r.autoAddToCatalog : true,
-    autoPosters: typeof r.autoPosters === 'boolean' ? r.autoPosters : true
+    autoPosters: typeof r.autoPosters === 'boolean' ? r.autoPosters : true,
+    designProductIds: (Array.isArray(r.designProductIds) ? r.designProductIds : []).map(String)
+      .filter((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)).slice(0, 2)
   };
 }
 
@@ -167,10 +180,10 @@ async function storeImage(base64: unknown): Promise<string> {
 }
 
 /** Pasa un modelo al Catálogo con su precio por tamaño. Devuelve el id del producto creado ('' si falta el precio). */
-async function toCatalog(product: { name: string; size: CandleSize; image_url: string }, category: string, settings: SupplierSettings, packaging: string): Promise<string> {
+async function toCatalog(product: { name: string; size: CandleSize; image_url: string }, category: string, settings: SupplierSettings, packaging: string, image = product.image_url): Promise<string> {
   const price = settings.sizePrices[product.size];
   if (!(price > 0)) return '';
-  const created: any = await createProduct(product.name, price, category, product.image_url || undefined, packaging);
+  const created: any = await createProduct(product.name, price, category, image || undefined, packaging);
   return String(created?.id || '');
 }
 
@@ -309,9 +322,10 @@ export async function updateSupplierProduct(id: string, changes: { size?: unknow
 
 /**
  * Pasa al Catálogo los modelos indicados. Los descartados por repetidos (la empresa ya los tenía) solo con
- * includeDiscarded: cuando la empresa dice "no es el mismo".
+ * includeDiscarded: cuando la empresa dice "no es el mismo". images: la foto con la que entra cada uno (la foto con el
+ * diseño de la empresa); sin ella, la del PDF.
  */
-export async function addSupplierProductsToCatalog(ids: string[], includeDiscarded = false) {
+export async function addSupplierProductsToCatalog(ids: string[], includeDiscarded = false, images: Record<string, string> = {}) {
   const settings = await getSupplierSettings();
   const { catalogs, products } = await listSupplierCatalogs();
   const byId = new Map(catalogs.map((c: any) => [c.id, c]));
@@ -322,7 +336,7 @@ export async function addSupplierProductsToCatalog(ids: string[], includeDiscard
   for (const product of products.filter(p => ids.includes(p.id) && p.status !== 'en_catalogo' && (includeDiscarded || p.status !== 'descartado'))) {
     if (existing.has(productKey(product.name))) { alreadyThere++; continue; }
     const catalog: any = byId.get(product.catalog_id);
-    const productId = await toCatalog(product, String(catalog?.name || 'PROVEEDOR'), settings, packaging);
+    const productId = await toCatalog(product, String(catalog?.name || 'PROVEEDOR'), settings, packaging, images[product.id] || product.image_url);
     if (!productId) { withoutPrice++; continue; }
     existing.add(productKey(product.name));
     await supabase.from(PRODUCTS).update({ status: 'en_catalogo', catalog_product_id: productId, updated_at: new Date().toISOString() })
@@ -357,24 +371,36 @@ export async function moveSupplierCatalog(id: string, name: unknown) {
 
 /**
  * Borra un catálogo de proveedor de todos lados: la lista, sus productos en el Catálogo (solo los que entraron desde
- * este PDF: lo demás del Catálogo no se toca) y sus fotos, salvo que algún producto que queda las siga usando.
+ * este PDF: lo demás del Catálogo no se toca), las publicaciones todavía no publicadas que los mostraban (sin sus fotos
+ * fallarían) y sus fotos, salvo que algún producto que queda las siga usando.
  */
-export async function deleteSupplierCatalog(id: string): Promise<{ deleted: boolean; removed: number }> {
+export async function deleteSupplierCatalog(id: string): Promise<{ deleted: boolean; removed: number; posts: number }> {
   const { data: models, error: modelsError } = await supabase.from(PRODUCTS).select('catalog_product_id, image_url')
     .eq('catalog_id', id).filter('business_id', tenantOp(), tenantValue());
   if (modelsError) throw new Error(`Error leyendo los modelos: ${modelsError.message}`);
   let removed = 0;
   const photos = new Set<string>();
+  const removedNames = new Set<string>();
   for (const model of (models || []) as { catalog_product_id: string | null; image_url: string }[]) {
     if (model.image_url) photos.add(model.image_url);
     if (!model.catalog_product_id) continue;
     const deleted: any = await deleteProduct(model.catalog_product_id);
     if (!deleted) continue;
     removed++;
+    removedNames.add(productKey(deleted.name));
     if (deleted.image_url) photos.add(deleted.image_url);
   }
   const { data, error } = await supabase.from(CATALOGS).delete().eq('id', id).filter('business_id', tenantOp(), tenantValue()).select('id');
   if (error) throw new Error(`Error borrando el catálogo: ${error.message}`);
+  let posts = 0;
+  if (removedNames.size) {
+    const { data: pending } = await supabase.from('social_posts').select('id, products').filter('business_id', tenantOp(), tenantValue()).in('status', ['approved', 'draft', 'failed']);
+    const stale = ((pending || []) as any[]).filter(p => (Array.isArray(p.products) ? p.products : []).some((x: any) => removedNames.has(productKey(String(x?.name || '')))));
+    if (stale.length) {
+      const { data: gone } = await supabase.from('social_posts').delete().in('id', stale.map(p => p.id)).filter('business_id', tenantOp(), tenantValue()).in('status', ['approved', 'draft', 'failed']).select('id');
+      posts = (gone || []).length;
+    }
+  }
   // Las fotos al final: si algo falla antes, no quedan productos sin foto.
   try {
     const stillUsed = new Set((await getAllProducts()).map((p: any) => p.image_url));
@@ -383,5 +409,5 @@ export async function deleteSupplierCatalog(id: string): Promise<{ deleted: bool
   } catch (photoError: any) {
     console.warn('⚠️ No se pudieron borrar las fotos del catálogo de proveedor:', photoError.message);
   }
-  return { deleted: (data || []).length > 0, removed };
+  return { deleted: (data || []).length > 0, removed, posts };
 }

@@ -232,13 +232,15 @@ export interface AiPlanRequest {
   categorias: { categoria: string; productos: number; publicadosHace30Dias: number }[];
   videos: { id: string; producto: string }[];
   recientes: { dia: string; tema: string }[];
+  /** Lo que la dueña pidió para esta planificación (vacío = la IA decide sola). */
+  pedido: string;
 }
 
 /**
  * La planificación de la semana hecha por la IA del agente: cuántas publicaciones por día, a qué hora, de qué categoría,
  * en qué formato y por qué. Solo decide; los productos exactos, los precios y las fotos los pone brain.ts desde el Catálogo.
  */
-export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = profile()): Promise<{ resumen: string; publicaciones: AiPlanItem[] }> {
+export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = profile()): Promise<{ resumen: string; publicaciones: AiPlanItem[]; tareas: string[] }> {
   const { client, textModel, prompt } = await socialAi();
   const b = p.business;
   const rules = [
@@ -251,7 +253,9 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
     '- Usa solo categorías de la lista, escritas exactamente igual. "video" va vacío si no es un reel o una historia con video.',
     '- "motivo": una frase corta y sencilla para la dueña explicando por qué esa publicación ese día.',
     '- "resumen": dos frases con la estrategia de la semana.',
-    prompt.trim() ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas):\n${prompt.trim()}` : ''
+    '- "tareas": de 0 a 5 cosas concretas que la dueña puede hacer esta semana para que las redes funcionen mejor (por ejemplo "graba un video corto del proceso de la vela de Papá Noel para el reel del jueves" o "toma una foto de un pedido listo para entregar"). Nada que no ayude.',
+    prompt.trim() ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas):\n${prompt.trim()}` : '',
+    request.pedido ? `\nLO QUE LA DUEÑA PIDE PARA ESTA PLANIFICACIÓN (tiene prioridad, dentro de los límites de arriba):\n${request.pedido}` : ''
   ].filter(Boolean).join('\n');
 
   const response = await client.chat.completions.create({
@@ -266,9 +270,10 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['resumen', 'publicaciones'],
+          required: ['resumen', 'publicaciones', 'tareas'],
           properties: {
             resumen: { type: 'string' },
+            tareas: { type: 'array', items: { type: 'string' } },
             publicaciones: {
               type: 'array',
               items: {
@@ -294,5 +299,9 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
   } as any);
   track(textModel, response.usage);
   const data = JSON.parse(response.choices[0]?.message?.content || '{}');
-  return { resumen: String(data.resumen || '').trim(), publicaciones: Array.isArray(data.publicaciones) ? data.publicaciones : [] };
+  return {
+    resumen: String(data.resumen || '').trim(),
+    publicaciones: Array.isArray(data.publicaciones) ? data.publicaciones : [],
+    tareas: (Array.isArray(data.tareas) ? data.tareas : []).map((t: unknown) => String(t || '').trim()).filter(Boolean).slice(0, 5)
+  };
 }

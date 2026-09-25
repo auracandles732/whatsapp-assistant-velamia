@@ -34,7 +34,7 @@ export interface PlanDraft {
   items: ({ product: string } | { asset: string })[];
 }
 
-export interface PlanProposal { drafts: PlanDraft[]; summary: string; brain: string }
+export interface PlanProposal { drafts: PlanDraft[]; summary: string; brain: string; tasks: string[]; days: number }
 
 const SUMMARY_KEY = 'social_plan_summary';
 
@@ -61,12 +61,12 @@ function buildMedia(pick: PlannedPost, library: LibraryItem[], usedAssets: Set<s
   return { products: built.products, media: built.media, items };
 }
 
-export async function draftUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<PlanProposal> {
+export async function draftUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings, request = ''): Promise<PlanProposal> {
   const settings = settingsParam || (await getSavedSettings()) || DEFAULT_SETTINGS;
   const p = profile();
   const tz = p.business.timezone;
-  const brain = currentBrain(settings);
-  const empty = (summary: string) => ({ drafts: [], summary, brain: brain.name });
+  const brain = currentBrain(settings, request);
+  const empty = (summary: string) => ({ drafts: [], summary, brain: brain.name, tasks: [], days });
 
   const allDays = publishingDays(settings, now, days, tz);
   if (allDays.length === 0) return empty('No hay días de publicación elegidos.');
@@ -80,7 +80,7 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
   const [catalog, recent, library] = await Promise.all([getAllProducts(), recentActivity(tz), listAssets().catch(() => [])]);
   const plan = await brain.plan({
     slots, days: freeDays, catalog, recent: recent.names, recentThemes: recent.themes, library,
-    settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p
+    settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p, request
   });
   if (plan.posts.length === 0) return empty(plan.summary || 'No hay productos con foto para publicar.');
 
@@ -103,6 +103,8 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
   return {
     summary: plan.summary,
     brain: brain.name,
+    tasks: plan.tasks || [],
+    days,
     drafts: plan.posts.map((pick, i) => ({
       scheduled_at: pick.at.toISOString(),
       format: pick.format,
@@ -118,7 +120,7 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
 }
 
 /** Guarda publicaciones ya armadas como programadas (salen solas a su hora) y anota la estrategia de la semana. */
-export async function schedulePlan(drafts: Omit<PlanDraft, 'items' | 'format' | 'reason'>[], summary: string): Promise<SocialPost[]> {
+export async function schedulePlan(drafts: Omit<PlanDraft, 'items' | 'format' | 'reason'>[], summary: string, tasks: string[] = []): Promise<SocialPost[]> {
   if (drafts.length === 0) return [];
   // Todas las filas llevan las mismas columnas (media no acepta vacío): "media" va en todas o en ninguna.
   const withMedia = drafts.some(d => d.media.length > 0);
@@ -135,12 +137,12 @@ export async function schedulePlan(drafts: Omit<PlanDraft, 'items' | 'format' | 
   })));
   const assets = drafts.flatMap(d => d.media.filter(m => m.asset_id).map(m => m.asset_id!));
   if (assets.length) await markAssetsUsed([...new Set(assets)]).catch(() => {});
-  if (summary) await setConfig(SUMMARY_KEY, JSON.stringify({ at: new Date().toISOString(), summary })).catch(() => {});
+  if (summary) await setConfig(SUMMARY_KEY, JSON.stringify({ at: new Date().toISOString(), summary, tasks: tasks.slice(0, 5) })).catch(() => {});
   return posts;
 }
 
 /** La estrategia de la última planificación (se muestra en el CRM). */
-export async function lastPlanSummary(): Promise<{ at: string; summary: string } | null> {
+export async function lastPlanSummary(): Promise<{ at: string; summary: string; tasks?: string[] } | null> {
   try {
     const raw = await getConfig(SUMMARY_KEY);
     return raw ? JSON.parse(raw) : null;
@@ -152,7 +154,7 @@ export async function lastPlanSummary(): Promise<{ at: string; summary: string }
 /** Prepara y programa de una vez (modo automático y "Programar" sin revisar). */
 export async function planUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<SocialPost[]> {
   const proposal = await draftUpcomingPosts(now, days, settingsParam);
-  return schedulePlan(proposal.drafts, proposal.drafts.length ? proposal.summary : '');
+  return schedulePlan(proposal.drafts, proposal.drafts.length ? proposal.summary : '', proposal.tasks);
 }
 
 /** Otro texto para una publicación (botón "Otro texto" del CRM). */

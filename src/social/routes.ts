@@ -147,10 +147,15 @@ export function socialRouter(): Router {
     }
   });
 
-  /** La planificación que propone el agente para los próximos 7 días, sin guardar nada (se revisa en el CRM). */
-  router.post('/api/posts/plan/preview', requireCrmSession, requireEditorRole, requirePublishing, async (_req: Request, res: Response) => {
+  /**
+   * La planificación que propone el agente (7 o 14 días), sin guardar nada: se revisa en el CRM. Con "pedido" la dueña
+   * le dice qué quiere (por ejemplo "enfócate en Navidad") y la planifica la IA aunque la frecuencia sea fija.
+   */
+  router.post('/api/posts/plan/preview', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
     try {
-      res.json(await draftUpcomingPosts(new Date(), 7, (await getSavedSettings()) || DEFAULT_SETTINGS));
+      const days = Number(req.body?.days) === 14 ? 14 : 7;
+      const request = String(req.body?.request || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+      res.json(await draftUpcomingPosts(new Date(), days, (await getSavedSettings()) || DEFAULT_SETTINGS, request));
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
@@ -165,7 +170,7 @@ export function socialRouter(): Router {
       for (const d of list) {
         const when = new Date(String(d?.scheduled_at || ''));
         if (!Number.isFinite(when.getTime()) || when.getTime() < Date.now() + 2 * 60 * 1000) throw new Error('Alguna publicación ya pasó su hora: vuelve a pedir la propuesta');
-        if (when.getTime() > Date.now() + 15 * 86_400_000) throw new Error('Fecha fuera de rango');
+        if (when.getTime() > Date.now() + 16 * 86_400_000) throw new Error('Fecha fuera de rango');
         const channels = cleanChannels(d?.channels);
         const caption = String(d?.caption || '').trim();
         if (caption.length > CAPTION_LIMIT) throw new Error(`Un texto pasa de ${CAPTION_LIMIT} caracteres`);
@@ -174,7 +179,8 @@ export function socialRouter(): Router {
         if (products.length === 0 && media.length === 0) throw new Error('A una publicación le faltan las fotos');
         drafts.push({ scheduled_at: when.toISOString(), channels, caption, products, media, theme: String(d?.theme || '').trim().slice(0, 80) || 'Nuestros productos' });
       }
-      const created = await schedulePlan(drafts, String(req.body?.summary || '').slice(0, 600));
+      const tasks = (Array.isArray(req.body?.tasks) ? req.body.tasks : []).map((t: unknown) => String(t || '').trim().slice(0, 240)).filter(Boolean).slice(0, 5);
+      const created = await schedulePlan(drafts, String(req.body?.summary || '').slice(0, 600), tasks);
       res.status(201).json({ created: created.length });
     } catch (error: any) {
       res.status(400).json({ error: explain(error) });

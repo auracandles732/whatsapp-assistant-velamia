@@ -60,3 +60,29 @@ test('para saber si ya lo tienes se compara con la misma ocasión y con nombres 
   assert.deepEqual(found, ['reno', 'gnomo'], 'primero el mismo nombre, luego la misma ocasión; sin el del PDF ni los sin foto');
   assert.deepEqual(duplicateCandidates({ name: 'VELA ESTRELLA' }, 'VARIOS', catalog, new Set()), [], 'sin nada parecido no se gasta en comparar');
 });
+
+test('el afiche nuevo dice lo mismo que el afiche de referencia de la empresa, con la ocasión del catálogo', () => {
+  const { ribbonFor } = require('../src/social/posters') as typeof import('../src/social/posters');
+  assert.equal(ribbonFor('UN DETALLE ESPECIAL PARA NAVIDAD', 'NAVIDAD', 'NAVIDAD'), 'UN DETALLE ESPECIAL PARA NAVIDAD');
+  assert.equal(ribbonFor('Un detalle especial para Navidad', 'NAVIDAD', 'HALLOWEEN'), 'UN DETALLE ESPECIAL PARA HALLOWEEN');
+  assert.equal(ribbonFor('', '', 'BAUTIZO'), 'UN DETALLE ESPECIAL PARA BAUTIZO');
+  const ref = { cinta: 'Un recuerdo tierno para momentos especiales', iconos: ['Con aroma', 'Ideal para baby shower'], franja: 'Pedidos bajo reserva', franjaPequena: 'Asegura tu pedido', etiquetaPrecio: 'por docena', occasion: 'ANIMALES' };
+  const t = posterTexts('Vela osito', 38, 'ANIMALES', 'docena', ref, 3.5);
+  assert.equal(t.ribbon, 'UN RECUERDO TIERNO PARA MOMENTOS ESPECIALES');
+  assert.deepEqual(t.features, ['CON AROMA', 'IDEAL PARA BABY SHOWER']);
+  assert.equal(t.unit, 'POR DOCENA');
+  assert.equal(t.band, 'PEDIDOS BAJO RESERVA');
+  assert.match(posterPrompt(t, 'ANIMALES'), /UNIDAD \$3\.50/);
+  assert.doesNotMatch(posterPrompt(posterTexts('Vela osito', 38, 'ANIMALES', 'docena'), 'ANIMALES'), /UNIDAD \$/);
+});
+
+test('la revisión rechaza el afiche si no sigue el diseño, si cambia la vela o si el precio por unidad no cuadra', () => {
+  const t = posterTexts('VELA RENO', 35, 'NAVIDAD', 'docena', {}, 5);
+  const ok = { titulo: 'VELA RENO', precio: '$35', etiquetaPrecio: 'DOCENA', precioUnidad: '$5', otrosPrecios: ['$5'], errores: [], disenoIgual: true, velaIgual: true };
+  assert.equal(posterProblem(ok, t), '');
+  assert.match(posterProblem({ ...ok, disenoIgual: false, diferenciasDiseno: 'sin franja inferior' }, t), /diseño.*sin franja/);
+  assert.match(posterProblem({ ...ok, velaIgual: false, diferenciasVela: 'le puso gorro' }, t), /vela.*gorro/);
+  assert.match(posterProblem({ ...ok, precioUnidad: '$4' }, t), /unidad/);
+  const noUnit = posterTexts('VELA RENO', 35, 'NAVIDAD', 'docena');
+  assert.match(posterProblem({ ...ok, otrosPrecios: [] }, noUnit), /unidad que no va/);
+});

@@ -142,6 +142,24 @@ export function toInstagramJpeg(buffer: Buffer, kind: ImageKind = 'feed'): Buffe
   return Buffer.from(jpeg.encode({ width: composed.width, height: composed.height, data: composed.data as Buffer }, JPEG_QUALITY).data);
 }
 
+/** La foto achicada para que su lado más largo mida como mucho maxSide (para mandarla a la IA sin gastar de más). */
+export function toJpegMax(buffer: Buffer, maxSide: number, quality = 85): Buffer {
+  const img = decodeImage(buffer);
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  if (scale >= 1) return Buffer.from(jpeg.encode({ width: img.width, height: img.height, data: img.data as Buffer }, quality).data);
+  const width = Math.max(1, Math.round(img.width * scale)), height = Math.max(1, Math.round(img.height * scale));
+  const out = Buffer.alloc(width * height * 4);
+  const rgb = [0, 0, 0];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      bilinear(img, (x + 0.5) / scale - 0.5, (y + 0.5) / scale - 0.5, rgb);
+      const i = (y * width + x) * 4;
+      out[i] = rgb[0]; out[i + 1] = rgb[1]; out[i + 2] = rgb[2]; out[i + 3] = 255;
+    }
+  }
+  return Buffer.from(jpeg.encode({ width, height, data: out }, quality).data);
+}
+
 /** PNG o JPG → JPG (las fotos hechas por la IA pesan ~1,5 MB en PNG; en JPG, unas 10 veces menos). */
 export function toJpeg(buffer: Buffer, quality = JPEG_QUALITY): Buffer {
   const img = decodeImage(buffer);

@@ -3,7 +3,7 @@ import { getAllProducts, getConfig, setConfig, updateProduct, supabase, tenantOp
 import { uploadBufferToStorage } from '../services/storage';
 import { profile } from '../config/businessProfile';
 import { socialAi, track } from './ai';
-import { toJpeg, isOwnStorageUrl } from './images';
+import { toJpeg, toJpegMax, isOwnStorageUrl } from './images';
 import { getSupplierSettings, SupplierProduct, addSupplierProductsToCatalog, discardAsDuplicate } from './suppliers';
 
 /**
@@ -45,7 +45,8 @@ export interface PosterState {
 /** Lo que cuesta cada afiche con gpt-image-2 en calidad media (medido: ~4.000 tokens de entrada y ~1.750 de salida). */
 export const POSTER_COST = 0.08;
 const WORKERS = 3;
-const TRIES = 2;
+// Hasta 3 intentos: el diseño tiene que quedar igual al de la empresa, y a veces la IA de imágenes se desvía.
+const TRIES = 3;
 const stateKey = (catalogId: string) => `supplier_posters_${catalogId}`;
 
 // ---------- Avance por catálogo (se guarda en la configuración: no hace falta otra tabla) ----------
@@ -96,32 +97,81 @@ export function occasionOf(category: string): string {
   return clean || 'TI';
 }
 
-export interface PosterTexts { title: string; price: number; unit: string; ribbon: string; features: string[]; band: string; bandSmall: string }
+/** Lo que dicen los afiches de la empresa: se lee de su foto de referencia para copiarlos igual. */
+export interface ReferenceTexts {
+  cinta: string;
+  iconos: string[];
+  franja: string;
+  franjaPequena: string;
+  etiquetaPrecio: string;
+  /** El diseño del afiche descrito con precisión (posiciones, letras, colores, íconos) para copiarlo igual. */
+  diseno?: string;
+}
 
-export function posterTexts(name: string, price: number, category: string, unit = profile().sales.unitSingular): PosterTexts {
+export const DEFAULT_REFERENCE_TEXTS: ReferenceTexts = {
+  cinta: '',
+  iconos: ['DISEÑO DECORATIVO', 'IDEAL PARA REGALAR', 'ELABORADAS BAJO PEDIDO'],
+  franja: 'PEDIDOS BAJO RESERVA',
+  franjaPequena: 'Asegura tu pedido con anticipación',
+  etiquetaPrecio: '',
+  diseno: ''
+};
+
+/** El diseño de los afiches de VELAMIA, por si no se pudo leer el de la referencia. */
+const DEFAULT_DESIGN = 'Square poster. Left column: title in huge heavy bold sans-serif capital letters with a gold-to-brown metallic gradient, a small gold Christmas-tree ornament with two lines above it; a gold ribbon banner with pointed ends and white capital text under the title, with a small gold sparkle on each side; a white rounded price box with a thin gold border containing a huge bold dark-brown/gold "$" price and, under it, a gold-brown rounded label with white bold capital text; optionally a white rounded pill with thin gold border for the unit price; three rows, each with a round gold-brown circle containing a white line icon (gift, heart, calendar) and dark-brown bold capital text at its right, separated by thin gold lines. Bottom: a full-width brown-gold band with a white padlock-with-heart icon, a thin vertical white line, white bold capital text and a smaller white line under it, and white snowflakes at both ends. Right half: the product large and centered, on a soft light surface, over a warm golden bokeh background with pine branches, gold ornaments and gift boxes.';
+
+export interface PosterTexts { title: string; price: number; unit: string; unitPrice: number; ribbon: string; features: string[]; band: string; bandSmall: string }
+
+/** La cinta: la de la referencia si es de la misma ocasión; si no, la misma frase con la ocasión nueva. */
+export function ribbonFor(refRibbon: string, refOccasion: string, occasion: string): string {
+  const ribbon = String(refRibbon || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  if (!ribbon) return `UN DETALLE ESPECIAL PARA ${occasion}`;
+  if (!refOccasion || refOccasion === occasion) return ribbon;
+  if (ribbon.includes(refOccasion)) return ribbon.replace(refOccasion, occasion);
+  return `UN DETALLE ESPECIAL PARA ${occasion}`;
+}
+
+const cleanText = (text: unknown, max = 60) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+/**
+ * Los textos del afiche nuevo: el nombre y el precio del modelo y, lo demás (cinta, íconos, franja, cómo se escribe la
+ * unidad), igual que en el afiche de referencia de la empresa.
+ */
+export function posterTexts(name: string, price: number, category: string, unit = profile().sales.unitSingular,
+  reference: Partial<ReferenceTexts> & { occasion?: string } = {}, unitPrice = 0): PosterTexts {
+  const occasion = occasionOf(category);
+  // Con la referencia leída se copia tal cual: si el afiche de la empresa no tiene franja abajo, el nuevo tampoco.
+  const read = !!(reference.cinta || reference.iconos?.length || reference.franja || reference.franjaPequena);
+  const band = read ? cleanText(reference.franja, 40).toUpperCase() : DEFAULT_REFERENCE_TEXTS.franja;
+  const icons = (Array.isArray(reference.iconos) ? reference.iconos : []).map(x => cleanText(x, 40).toUpperCase())
+    .filter(x => x && !(band && sameText(x, band)));
   return {
-    title: String(name).replace(/\s+/g, ' ').trim().toUpperCase(),
+    title: cleanText(name, 80).toUpperCase(),
     price,
-    unit: String(unit || 'unidad').toUpperCase(),
-    ribbon: `UN DETALLE ESPECIAL PARA ${occasionOf(category)}`,
-    features: ['DISEÑO DECORATIVO', 'IDEAL PARA REGALAR', 'ELABORADAS BAJO PEDIDO'],
-    band: 'PEDIDOS BAJO RESERVA',
-    bandSmall: 'Asegura tu pedido con anticipación'
+    unit: (cleanText(reference.etiquetaPrecio, 30) || String(unit || 'unidad')).toUpperCase(),
+    unitPrice: unitPrice > 0 ? unitPrice : 0,
+    ribbon: ribbonFor(cleanText(reference.cinta, 80), reference.occasion || '', occasion),
+    features: icons.length >= 2 ? icons.slice(0, 4) : DEFAULT_REFERENCE_TEXTS.iconos,
+    band,
+    bandSmall: read ? cleanText(reference.franjaPequena, 60) : DEFAULT_REFERENCE_TEXTS.franjaPequena
   };
 }
 
 const money = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
-export function posterPrompt(t: PosterTexts, occasion: string): string {
-  return `Create a square 1:1 advertising poster for a handmade candle shop. Copy EXACTLY the layout, typography, colors and decorative style of the reference posters (every image after the first one): a left column with the title in huge bold capital letters, a ribbon banner under it, a rounded price box with a big price and a label under it, three round icons (gift, heart, calendar) each with a short text, and a band across the bottom with a padlock-heart icon. The background decoration must fit the occasion "${occasion}" (keep the same warm, elegant, bokeh look as the references).
-On the right side, place the candle from the FIRST image, large and well lit, standing on a soft surface. Reproduce that candle faithfully: same shape, colors, face, details and proportions; do not redesign it. Show it with a short white unlit cotton wick.
+export function posterPrompt(t: PosterTexts, occasion: string, design = ''): string {
+  return `Create a square 1:1 advertising poster for a handmade candle shop.
+The FIRST image is the candle to sell. Every image after it is a REAL poster of this shop: the new poster must look like one more poster of the same series. Replicate that design exactly — the same layout and positions, the same fonts, the same text colors and gradients, the same ribbon, the same price box, the same round icons with their texts, the same bottom band, the same lighting and the same kind of decorated bokeh background. Do not change the font, the colors of the title or the order of the elements, and do not add or remove elements. Change only the candle, the texts listed below and, if needed, the background theme so it fits the occasion "${occasion}".
+The shop's design, described: ${design || DEFAULT_DESIGN}`
+    + `
+Place the candle from the FIRST image where the shop's posters place their product, large and well lit. Reproduce that candle faithfully: same shape, colors, face, details and proportions; do not redesign it. Show it with a short white unlit cotton wick.
 Write exactly these Spanish texts and nothing else:
 - Title: "${t.title}"
 - Ribbon: "${t.ribbon}"
 - Price box: "$${money(t.price)}" and under it "${t.unit}"
-- Icons: "${t.features.join('", "')}"
-- Bottom band: "${t.band}" and smaller "${t.bandSmall}"
-No other text, no unit price, no second price, no logos, no watermarks. Spelling must be exact, including accents and Ñ.`;
+${t.unitPrice > 0 ? `- Under the price box, a small rounded pill: "UNIDAD $${money(t.unitPrice)}"\n` : ''}- Icons: "${t.features.join('", "')}"
+${t.band ? `- Bottom band: "${t.band}"${t.bandSmall ? ` and smaller "${t.bandSmall}"` : ''}` : t.bandSmall ? `- Closing line where the shop's posters put it: "${t.bandSmall}"` : ''}
+No other text${t.unitPrice > 0 ? '' : ', no unit price pill'}, no second price, no logos, no watermarks. Spelling must be exact, including accents and Ñ.`;
 }
 
 /** Para comparar textos: mayúsculas, sin espacios repetidos ni tildes, pero la Ñ cuenta. */
@@ -131,14 +181,34 @@ export function sameText(a: string, b: string): boolean {
   return norm(a) === norm(b);
 }
 
-export interface PosterReading { titulo: string; precio: string; etiquetaPrecio: string; otrosPrecios: string[]; errores: string[] }
+export interface PosterReading {
+  titulo: string;
+  precio: string;
+  etiquetaPrecio: string;
+  precioUnidad?: string;
+  otrosPrecios: string[];
+  errores: string[];
+  /** ¿Sigue el diseño del afiche de referencia de la empresa? */
+  disenoIgual?: boolean;
+  diferenciasDiseno?: string;
+  /** ¿La vela es la misma de la foto del PDF? */
+  velaIgual?: boolean;
+  diferenciasVela?: string;
+}
 
-/** Qué salió mal en un afiche leído por la IA ('' = todo bien). */
+const amount = (text: unknown) => Number(String(text || '').replace(/[^\d.,]/g, '').replace(',', '.'));
+
+/** Qué salió mal en un afiche revisado por la IA ('' = todo bien). */
 export function posterProblem(reading: PosterReading, t: PosterTexts): string {
+  if (reading.velaIgual === false) return `La vela no quedó igual a la del PDF${reading.diferenciasVela ? `: ${reading.diferenciasVela}` : ''}`;
+  if (reading.disenoIgual === false) return `No sigue el diseño de tus fotos${reading.diferenciasDiseno ? `: ${reading.diferenciasDiseno}` : ''}`;
   if (!sameText(reading.titulo, t.title)) return `El nombre salió "${reading.titulo}" en vez de "${t.title}"`;
-  const price = Number(String(reading.precio || '').replace(/[^\d.,]/g, '').replace(',', '.'));
-  if (!(Math.abs(price - t.price) < 0.01)) return `El precio salió "${reading.precio}" en vez de $${money(t.price)}`;
-  if ((reading.otrosPrecios || []).length) return `Apareció otro precio: ${reading.otrosPrecios.join(', ')}`;
+  if (!(Math.abs(amount(reading.precio) - t.price) < 0.01)) return `El precio salió "${reading.precio}" en vez de $${money(t.price)}`;
+  const unit = String(reading.precioUnidad || '').trim();
+  if (t.unitPrice > 0 && !(Math.abs(amount(unit) - t.unitPrice) < 0.01)) return `El precio por unidad salió "${unit || 'sin poner'}" en vez de $${money(t.unitPrice)}`;
+  if (!(t.unitPrice > 0) && unit) return `Apareció un precio por unidad que no va: ${unit}`;
+  const others = (reading.otrosPrecios || []).filter(p => !(t.unitPrice > 0 && Math.abs(amount(p) - t.unitPrice) < 0.01));
+  if (others.length) return `Apareció otro precio: ${others.join(', ')}`;
   if ((reading.errores || []).length) return `Textos mal escritos o inventados: ${reading.errores.slice(0, 3).join(', ')}`;
   return '';
 }
@@ -147,16 +217,37 @@ export function posterProblem(reading: PosterReading, t: PosterTexts): string {
 
 async function download(url: string): Promise<Buffer> {
   if (!isOwnStorageUrl(url)) throw new Error('La foto no está en el almacenamiento propio');
-  const { data } = await axios.get(url, { responseType: 'arraybuffer', timeout: 60_000, maxContentLength: 15 * 1024 * 1024 });
-  return Buffer.from(data);
+  try {
+    const { data } = await axios.get(url, { responseType: 'arraybuffer', timeout: 60_000, maxContentLength: 15 * 1024 * 1024 });
+    return Buffer.from(data);
+  } catch (error: any) {
+    const status = error?.response?.status;
+    throw new Error(status === 400 || status === 404 ? 'Esa foto ya no existe en el almacenamiento' : `No se pudo abrir una foto (${error.message})`);
+  }
+}
+
+// Fotos que se le muestran a la IA: las manda el servidor (achicadas), nunca la dirección. Así la IA no depende de que
+// el almacenamiento sea público y no se descarga lo mismo varias veces (los parecidos del Catálogo se repiten).
+const seen = new Map<string, Promise<string>>();
+const SEEN_MAX = 300;
+export function imageForAi(url: string, maxSide = 1024): Promise<string> {
+  const key = `${maxSide}:${url}`;
+  let found = seen.get(key);
+  if (!found) {
+    found = download(url).then(buffer => `data:image/jpeg;base64,${toJpegMax(buffer, maxSide).toString('base64')}`);
+    found.catch(() => seen.delete(key));
+    if (seen.size >= SEEN_MAX) seen.delete(seen.keys().next().value as string);
+    seen.set(key, found);
+  }
+  return found;
 }
 
 /** refs ya en JPG (se convierten una vez por tanda). */
-async function drawPoster(model: Buffer, refs: Buffer[], t: PosterTexts, occasion: string): Promise<Buffer> {
+async function drawPoster(model: Buffer, refs: Buffer[], t: PosterTexts, occasion: string, design = ''): Promise<Buffer> {
   const ai = await socialAi();
   const form = new FormData();
   form.append('model', ai.imageModel);
-  form.append('prompt', posterPrompt(t, occasion));
+  form.append('prompt', posterPrompt(t, occasion, design));
   form.append('size', '1024x1024');
   form.append('quality', ai.imageQuality);
   [toJpeg(model), ...refs].forEach((buffer, i) => form.append('image[]', new Blob([buffer], { type: 'image/jpeg' }), `foto${i}.jpg`));
@@ -169,28 +260,37 @@ async function drawPoster(model: Buffer, refs: Buffer[], t: PosterTexts, occasio
   return toJpeg(Buffer.from(b64, 'base64'));
 }
 
-async function readPoster(jpegBuffer: Buffer, t: PosterTexts): Promise<PosterReading> {
+/**
+ * Revisión del afiche nuevo (con el modelo más preciso): lee los textos y precios, y lo compara con el afiche de
+ * referencia de la empresa (¿mismo diseño?) y con la foto del PDF (¿la misma vela?).
+ */
+async function readPoster(jpegBuffer: Buffer, t: PosterTexts, referenceUrl: string, modelUrl: string): Promise<PosterReading> {
   const ai = await socialAi();
-  const expected = [t.title, t.ribbon, `$${money(t.price)}`, t.unit, ...t.features, t.band, t.bandSmall];
+  const expected = [t.title, t.ribbon, `$${money(t.price)}`, t.unit, ...(t.unitPrice > 0 ? [`UNIDAD $${money(t.unitPrice)}`] : []), ...t.features, ...(t.band ? [t.band] : []), ...(t.bandSmall ? [t.bandSmall] : [])];
   const response = await ai.client.chat.completions.create({
-    model: ai.textModel,
-    ...(/^(gpt-5|o\d)/.test(ai.textModel) ? { reasoning_effort: 'low' } : {}),
-    max_completion_tokens: 2000,
+    model: COMPARE_MODEL,
+    ...(/^(gpt-5|o\d)/.test(COMPARE_MODEL) ? { reasoning_effort: 'low' } : {}),
+    max_completion_tokens: 3000,
     response_format: {
       type: 'json_schema',
       json_schema: {
-        name: 'lectura',
+        name: 'revision',
         strict: true,
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['titulo', 'precio', 'etiquetaPrecio', 'otrosPrecios', 'errores'],
+          required: ['titulo', 'precio', 'etiquetaPrecio', 'precioUnidad', 'otrosPrecios', 'errores', 'disenoIgual', 'diferenciasDiseno', 'velaIgual', 'diferenciasVela'],
           properties: {
             titulo: { type: 'string' },
             precio: { type: 'string' },
             etiquetaPrecio: { type: 'string' },
+            precioUnidad: { type: 'string' },
             otrosPrecios: { type: 'array', items: { type: 'string' } },
-            errores: { type: 'array', items: { type: 'string' } }
+            errores: { type: 'array', items: { type: 'string' } },
+            disenoIgual: { type: 'boolean' },
+            diferenciasDiseno: { type: 'string' },
+            velaIgual: { type: 'boolean' },
+            diferenciasVela: { type: 'string' }
           }
         }
       }
@@ -198,13 +298,80 @@ async function readPoster(jpegBuffer: Buffer, t: PosterTexts): Promise<PosterRea
     messages: [{
       role: 'user',
       content: [
-        { type: 'text', text: `Lee con cuidado los textos de este afiche. Devuelve: "titulo" = el nombre grande del producto, letra por letra tal como está escrito; "precio" = el precio grande tal cual (con $); "etiquetaPrecio" = lo que dice debajo del precio; "otrosPrecios" = cualquier otro precio o monto que aparezca; "errores" = cada texto que esté mal escrito, deformado o que no sea uno de estos: ${expected.map(x => `"${x}"`).join(', ')}. Si todo está bien, las listas van vacías.` },
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`, detail: 'high' } }
+        { type: 'text', text: `Foto 1: un afiche nuevo hecho por IA. Foto 2: un afiche real de la tienda (el diseño que había que copiar). Foto 3: la vela del proveedor que debía aparecer.
+Revisa el afiche nuevo (foto 1) con mucho cuidado:
+- "titulo": el nombre grande del producto, letra por letra tal como está escrito.
+- "precio": el precio grande tal cual (con $). "etiquetaPrecio": lo que dice debajo del precio.
+- "precioUnidad": el precio por unidad si aparece (por ejemplo "$5"); si no aparece, "".
+- "otrosPrecios": cualquier otro precio o monto.
+- "errores": cada texto mal escrito, deformado o que no sea uno de estos: ${expected.map(x => `"${x}"`).join(', ')}.
+- "disenoIgual": ¿parece un afiche más de la misma serie que la foto 2? Debe tener la misma disposición y orden de los elementos (título grande, cinta, recuadro de precio con su etiqueta, íconos con textos, franja inferior), el mismo tipo de letra, los mismos colores del título, la cinta y el recuadro de precio, el mismo estilo de íconos y la misma cantidad de elementos. El tema del fondo puede cambiar con la ocasión. false si cambia la letra, los colores del título, el orden o la posición de los elementos, o si sobra o falta algo (por ejemplo un ícono de más); di en "diferenciasDiseno" qué cambia.
+- "velaIgual": ¿la vela del afiche es la misma de la foto 3? Ignora la mecha y la llama (en el afiche va apagada a propósito), la luz, el tamaño y pequeños cambios de tono por la iluminación. false solo si cambia la figura o la forma, faltan partes o hay partes inventadas; di en "diferenciasVela" qué cambia.` },
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`, detail: 'high' } },
+        { type: 'image_url', image_url: { url: await imageForAi(referenceUrl), detail: 'high' } },
+        { type: 'image_url', image_url: { url: await imageForAi(modelUrl), detail: 'high' } }
       ]
     }]
   } as any);
-  track(ai.textModel, response.usage);
+  track(COMPARE_MODEL, response.usage);
   return JSON.parse(response.choices[0]?.message?.content || '{}');
+}
+
+// v2: además de los textos, la descripción del diseño (y los íconos sin la franja).
+const REFERENCE_TEXTS_KEY = 'poster_reference_texts_v2';
+
+/** Lee (una vez, luego se recuerda) los textos fijos del afiche de referencia de la empresa: cinta, íconos, franja… */
+async function referenceTexts(url: string): Promise<Partial<ReferenceTexts>> {
+  let cache: Record<string, ReferenceTexts> = {};
+  try { cache = JSON.parse((await getConfig(REFERENCE_TEXTS_KEY)) || '{}'); } catch { cache = {}; }
+  if (cache[url]) return cache[url];
+  try {
+    const ai = await socialAi();
+    const response = await ai.client.chat.completions.create({
+      model: ai.textModel,
+      ...(/^(gpt-5|o\d)/.test(ai.textModel) ? { reasoning_effort: 'low' } : {}),
+      max_completion_tokens: 1500,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'textos',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['cinta', 'iconos', 'franja', 'franjaPequena', 'etiquetaPrecio', 'diseno'],
+            properties: {
+              cinta: { type: 'string' }, iconos: { type: 'array', items: { type: 'string' } }, franja: { type: 'string' },
+              franjaPequena: { type: 'string' }, etiquetaPrecio: { type: 'string' }, diseno: { type: 'string' }
+            }
+          }
+        }
+      },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Este es un afiche de una tienda de velas. Copia, letra por letra, sus textos fijos (los que no son el nombre del producto ni los precios): "cinta" = la frase de la cinta o banda bajo el título; "iconos" = solo el texto que va junto a cada ícono redondo o viñeta, en orden (no incluyas la franja de abajo); "franja" = el texto grande de la franja de abajo del todo; "franjaPequena" = el texto chico de esa franja; "etiquetaPrecio" = lo que dice junto al precio grande (por ejemplo "DOCENA" o "POR DOCENA"). Lo que no exista va vacío. Además, "diseno": en inglés, describe con precisión el diseño para que un diseñador lo copie igual en otro afiche: posición de cada elemento (título, cinta, recuadro de precio, píldora de unidad si hay, íconos, franja de abajo, producto), tipo de letra (grosor, estilo), colores y degradados de cada texto y recuadro, formas y bordes, qué dibujo tiene cada ícono y cómo es el fondo. No describas el producto.' },
+          { type: 'image_url', image_url: { url: await imageForAi(url), detail: 'high' } }
+        ]
+      }]
+    } as any);
+    track(ai.textModel, response.usage);
+    const read = JSON.parse(response.choices[0]?.message?.content || '{}');
+    const texts: ReferenceTexts = {
+      cinta: cleanText(read.cinta, 80),
+      iconos: (Array.isArray(read.iconos) ? read.iconos : []).map((x: unknown) => cleanText(x, 40)).filter(Boolean).slice(0, 4),
+      franja: cleanText(read.franja, 40),
+      franjaPequena: cleanText(read.franjaPequena, 60),
+      etiquetaPrecio: cleanText(read.etiquetaPrecio, 30),
+      diseno: String(read.diseno || '').replace(/\s+/g, ' ').trim().slice(0, 1500)
+    };
+    cache[url] = texts;
+    await setConfig(REFERENCE_TEXTS_KEY, JSON.stringify(cache)).catch(() => {});
+    return texts;
+  } catch (error: any) {
+    console.warn('⚠️ No se pudieron leer los textos del afiche de referencia:', error.message);
+    return {};
+  }
 }
 
 // ---------- Fotos de referencia ----------
@@ -216,13 +383,17 @@ const words = (text: string) => occasionOf(text).split(' ').filter(w => w.length
  * de la misma ocasión (MOLDES NAVIDAD → NAVIDAD) y, si no hay, las más recientes.
  */
 export function pickReferences(category: string, catalog: any[], fromPdf: Set<string>): string[] {
+  return pickReferenceProducts(category, catalog, fromPdf).map(p => p.image_url);
+}
+
+export function pickReferenceProducts(category: string, catalog: any[], fromPdf: Set<string>): any[] {
   const own = catalog.filter(p => p.image_url && isOwnStorageUrl(p.image_url) && !fromPdf.has(p.id));
   const wanted = words(category);
   const score = (p: any) => words(String(p.category || '')).filter(w => wanted.includes(w)).length;
   const sorted = [...own].sort((a, b) => score(b) - score(a) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
-  const urls: string[] = [];
-  for (const p of sorted) if (!urls.includes(p.image_url) && urls.length < 2) urls.push(p.image_url);
-  return urls;
+  const picked: any[] = [];
+  for (const p of sorted) if (!picked.some(x => x.image_url === p.image_url) && picked.length < 2) picked.push(p);
+  return picked;
 }
 
 // ---------- ¿Ya lo tiene la empresa? ----------
@@ -261,8 +432,14 @@ const jsonSchema = (name: string, properties: Record<string, unknown>) => ({
  *   2. Mira cada par en grande y confirma que es el mismo molde (sameMold). Dos gnomos o dos Papá Noel distintos no
  *      cuentan, pero sí se aceptan pequeñas diferencias de dibujo (los afiches son la vela redibujada).
  */
-async function findExisting(model: SupplierProduct, candidates: any[]): Promise<{ id: string; name: string; image_url: string } | null> {
+async function findExisting(model: SupplierProduct, allCandidates: any[]): Promise<{ id: string; name: string; image_url: string } | null> {
+  // Solo fotos del almacenamiento propio (el servidor las descarga para mostrárselas a la IA).
+  const candidates = allCandidates.filter(c => isOwnStorageUrl(c.image_url));
   if (candidates.length === 0 || !model.image_url) return null;
+  // Un producto cuya foto no se puede descargar se salta (no detiene la revisión).
+  const loaded = await Promise.allSettled(candidates.map(async c => ({ ...c, data: await imageForAi(c.image_url, 512) })));
+  const shown = loaded.flatMap(r => (r.status === 'fulfilled' ? [r.value] : []));
+  if (shown.length === 0) return null;
   const ai = await socialAi();
   const pick = await ai.client.chat.completions.create({
     model: ai.textModel,
@@ -272,15 +449,15 @@ async function findExisting(model: SupplierProduct, candidates: any[]): Promise<
     messages: [{
       role: 'user',
       content: [
-        { type: 'text', text: `La foto 0 es una vela del catálogo de un proveedor. Las fotos 1 a ${candidates.length} son productos que la tienda ya vende: suelen ser afiches con textos, precio y otro fondo, y la vela puede tener otro color. ¿Cuáles podrían ser la misma vela (la misma figura)? Pon en "posibles" hasta 2 números, del más parecido al menos; vacío si ninguna se le parece. Después se revisa cada una con calma.` },
-        { type: 'image_url', image_url: { url: model.image_url, detail: 'low' } },
-        ...candidates.map(c => ({ type: 'image_url', image_url: { url: c.image_url, detail: 'low' } }))
+        { type: 'text', text: `La foto 0 es una vela del catálogo de un proveedor. Las fotos 1 a ${shown.length} son productos que la tienda ya vende: suelen ser afiches con textos, precio y otro fondo, y la vela puede tener otro color. ¿Cuáles podrían ser la misma vela (la misma figura)? Pon en "posibles" hasta 2 números, del más parecido al menos; vacío si ninguna se le parece. Después se revisa cada una con calma.` },
+        { type: 'image_url', image_url: { url: await imageForAi(model.image_url, 512), detail: 'low' } },
+        ...shown.map(c => ({ type: 'image_url', image_url: { url: c.data, detail: 'low' } }))
       ]
     }]
   } as any);
   track(ai.textModel, pick.usage);
   const picked: unknown[] = JSON.parse(pick.choices[0]?.message?.content || '{}').posibles || [];
-  const options = [...new Set(picked.map(Number))].filter(i => Number.isInteger(i) && i >= 1 && i <= candidates.length).slice(0, 2).map(i => candidates[i - 1]);
+  const options = [...new Set(picked.map(Number))].filter(i => Number.isInteger(i) && i >= 1 && i <= shown.length).slice(0, 2).map(i => shown[i - 1]);
   if (options.length === 0) console.log(`🔁 ${model.name}: nada parecido en el Catálogo (${candidates.length} revisados)`);
   for (const found of options) {
     // Dos confirmaciones seguidas: descartar de más es peor (quita un producto nuevo del Catálogo) y la IA a veces duda.
@@ -315,8 +492,8 @@ export async function sameMold(modelUrl: string, productUrl: string): Promise<bo
         { type: 'text', text: `La primera foto es una vela de un proveedor. La segunda es un afiche de una tienda hecho con la foto de una vela: puede estar redibujada, con otro color, otra luz, otro fondo y textos encima (eso no importa).
 Primero describe cada vela por separado, en pocas palabras: qué figura es; su gorro o sombrero (forma); su cara (qué se ve); brazos y manos (posición y qué sostienen); piernas o base; adornos en relieve.
 Después decide: "mismoMolde" = true solo si es la misma figura y coinciden la forma del gorro, la postura de brazos y piernas y los adornos principales. Diferencias pequeñas de dibujo no cuentan; un personaje del mismo tema pero con otra forma (otro gnomo, otro Papá Noel) no es el mismo.` },
-        { type: 'image_url', image_url: { url: modelUrl, detail: 'high' } },
-        { type: 'image_url', image_url: { url: productUrl, detail: 'high' } }
+        { type: 'image_url', image_url: { url: await imageForAi(modelUrl), detail: 'high' } },
+        { type: 'image_url', image_url: { url: await imageForAi(productUrl), detail: 'high' } }
       ]
     }]
   } as any);
@@ -327,15 +504,21 @@ Después decide: "mismoMolde" = true solo si es la misma figura y coinciden la f
 // ---------- Trabajo en segundo plano ----------
 
 interface Job { model: SupplierProduct; texts: PosterTexts; occasion: string }
+interface References { buffers: Buffer[]; urls: string[]; design?: string }
 
-async function makeOne(catalogId: string, job: Job, refs: Buffer[]) {
+/**
+ * Hace la foto con el diseño de la empresa, la revisa y, si está bien, el modelo entra al Catálogo con ella (o, si ya
+ * estaba, se le cambia la foto). Si no pasa la revisión dos veces, queda "para revisar" y NO entra: nunca va al
+ * Catálogo una foto sin el diseño de la empresa.
+ */
+async function makeOne(catalogId: string, job: Job, refs: References) {
   const { model, texts, occasion } = job;
   try {
     const photo = await download(model.image_url);
     let last: { url: string; problem: string } | null = null;
     for (let attempt = 1; attempt <= TRIES; attempt++) {
-      const poster = await drawPoster(photo, refs, texts, occasion);
-      const problem = posterProblem(await readPoster(poster, texts), texts);
+      const poster = await drawPoster(photo, refs.buffers, texts, occasion, refs.design);
+      const problem = posterProblem(await readPoster(poster, texts, refs.urls[0], model.image_url), texts);
       const url = await uploadBufferToStorage(poster, 'image/jpeg', 'product-images');
       last = { url, problem };
       if (!problem) break;
@@ -346,11 +529,21 @@ async function makeOne(catalogId: string, job: Job, refs: Buffer[]) {
       await setState(catalogId, model.id, { status: 'revisar', url: last.url, detail: last.problem });
       return;
     }
-    if (model.catalog_product_id) await updateProduct(model.catalog_product_id, { image_url: last.url });
+    await putInCatalog(model, last.url);
     await setState(catalogId, model.id, { status: 'lista', url: last.url, detail: '' });
   } catch (error: any) {
     await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
   }
+}
+
+/** El modelo con su foto con el diseño: entra al Catálogo con ella o, si ya estaba, se le cambia la foto. */
+async function putInCatalog(model: SupplierProduct, posterUrl: string) {
+  if (model.status === 'en_catalogo' && model.catalog_product_id) {
+    await updateProduct(model.catalog_product_id, { image_url: posterUrl });
+    return;
+  }
+  const result = await addSupplierProductsToCatalog([model.id], true, { [model.id]: posterUrl });
+  if (!result.added) throw new Error(result.withoutPrice ? 'Falta el precio de su tamaño en la regla' : 'Ya hay un producto con ese nombre en el Catálogo');
 }
 
 const DONE_FOR_POSTER: PosterStatus[] = ['lista', 'revisar', 'repetido', 'cola', 'revisando', 'creando'];
@@ -392,14 +585,20 @@ async function runQueue(catalogId: string) {
     const { data: own } = await supabase.from('supplier_products').select('catalog_product_id').eq('catalog_id', catalogId).filter('business_id', tenantOp(), tenantValue());
     const fromThisPdf = new Set(((own || []) as any[]).map(r => r.catalog_product_id).filter(Boolean));
     const catalogAtStart = await getAllProducts();
-    let refs: Buffer[] | null = null;
+    let refs: (References & { texts: Partial<ReferenceTexts> & { occasion?: string } }) | null = null;
     const references = async () => {
       if (refs) return refs;
       const { data: all } = await supabase.from('supplier_products').select('catalog_product_id').filter('business_id', tenantOp(), tenantValue());
       const fromPdf = new Set(((all || []) as any[]).map(r => r.catalog_product_id).filter(Boolean));
-      const urls = pickReferences(category, await getAllProducts(), fromPdf);
-      if (urls.length === 0) throw new Error('Para copiar tu diseño hace falta al menos una foto tuya en el Catálogo');
-      refs = (await Promise.all(urls.map(download))).map(buffer => toJpeg(buffer));
+      const catalogNow = await getAllProducts();
+      const chosen = settings.designProductIds.map(id => catalogNow.find((p: any) => p.id === id)).filter((p: any) => p?.image_url && isOwnStorageUrl(p.image_url));
+      // Nunca dos fotos de estilos distintos (la IA los mezcla): las que eligió la empresa o una sola de la misma ocasión.
+      const picked = chosen.length ? chosen : pickReferenceProducts(category, catalogNow, fromPdf).slice(0, 1);
+      if (picked.length === 0) throw new Error('Para copiar tu diseño hace falta al menos una foto tuya en el Catálogo');
+      const buffers = (await Promise.all(picked.map(p => download(p.image_url)))).map(buffer => toJpeg(buffer));
+      // Los textos fijos (cinta, íconos, franja) salen del primer afiche de referencia, para que el nuevo diga lo mismo.
+      const texts = { ...(await referenceTexts(picked[0].image_url)), occasion: occasionOf(String(picked[0].category || '')) };
+      refs = { buffers, urls: picked.map(p => p.image_url), texts, design: texts.diseno || '' };
       return refs;
     };
 
@@ -430,8 +629,9 @@ async function runQueue(catalogId: string) {
               await setState(catalogId, model.id, { status: 'repetido', checked: true, match, detail: '' });
               continue;
             }
-            // Nuevo: entra al Catálogo con su precio (si la regla lo pide) y, si lleva foto, vuelve a la fila para después.
-            if (model.status !== 'en_catalogo' && settings.autoAddToCatalog) {
+            // Nuevo. Con foto con el diseño, vuelve a la fila y entra al Catálogo recién con su foto lista; sin ella, entra
+            // ya con la foto del PDF (si la regla lo pide).
+            if (!state.poster && model.status !== 'en_catalogo' && settings.autoAddToCatalog) {
               await addSupplierProductsToCatalog([model.id]);
               const { data } = await supabase.from('supplier_products').select('*').eq('id', model.id).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
               if (data) model = data as SupplierProduct;
@@ -440,9 +640,11 @@ async function runQueue(catalogId: string) {
             continue;
           }
           if (!state.poster) { await setState(catalogId, model.id, { status: 'nuevo' }); continue; }
-          const product: any = model.catalog_product_id ? (await getAllProducts()).find((p: any) => p.id === model.catalog_product_id) : null;
-          if (!product) { await setState(catalogId, model.id, { status: 'error', detail: 'No está en el Catálogo (revisa que tenga precio)' }); continue; }
-          await makeOne(catalogId, { model, texts: posterTexts(product.name, Number(product.price) || settings.sizePrices[model.size], category), occasion: occasionOf(category) }, await references());
+          const price = settings.sizePrices[model.size];
+          if (!(price > 0)) { await setState(catalogId, model.id, { status: 'error', detail: 'Falta el precio de su tamaño en la regla' }); continue; }
+          const ref = await references();
+          const texts = posterTexts(model.name, price, category, undefined, ref.texts, settings.unitPrices?.[model.size] || 0);
+          await makeOne(catalogId, { model, texts, occasion: occasionOf(category) }, ref);
         } catch (error: any) {
           await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
         }
@@ -462,16 +664,21 @@ async function runQueue(catalogId: string) {
 export async function applyPoster(catalogId: string, model: SupplierProduct): Promise<PosterState> {
   const state = (await posterStates(catalogId))[model.id];
   if (!state?.url) throw new Error('Ese modelo no tiene afiche');
-  if (model.catalog_product_id) await updateProduct(model.catalog_product_id, { image_url: state.url });
+  await putInCatalog(model, state.url);
   await setState(catalogId, model.id, { status: 'lista', detail: '' });
   return (await posterStates(catalogId))[model.id];
 }
 
-/** "No es el mismo": el modelo entra al Catálogo y, si la regla lo pide, se le hace la foto con el diseño. */
+/**
+ * "No es el mismo": con fotos con el diseño, se le hace la suya y entra al Catálogo con ella; si no, entra ya con la
+ * foto del PDF.
+ */
 export async function keepModel(catalogId: string, model: SupplierProduct): Promise<PosterState> {
   const settings = await getSupplierSettings();
-  const added = await addSupplierProductsToCatalog([model.id], true);
-  if (!added.added && model.status !== 'en_catalogo') throw new Error(added.withoutPrice ? 'Falta el precio de su tamaño en la regla' : 'No se pudo agregar al Catálogo');
+  if (!settings.autoPosters) {
+    const added = await addSupplierProductsToCatalog([model.id], true);
+    if (!added.added && model.status !== 'en_catalogo') throw new Error(added.withoutPrice ? 'Falta el precio de su tamaño en la regla' : 'No se pudo agregar al Catálogo');
+  }
   await setState(catalogId, model.id, { status: settings.autoPosters ? 'cola' : 'nuevo', keep: true, checked: true, match: undefined, poster: settings.autoPosters, detail: '' });
   if (settings.autoPosters && !postersRunning(catalogId)) void runQueue(catalogId);
   return (await posterStates(catalogId))[model.id];

@@ -34,6 +34,8 @@ export interface PlanInput {
   now: Date;
   timeZone: string;
   profile: BusinessProfile;
+  /** Lo que la dueña pidió para esta planificación. */
+  request?: string;
 }
 
 export interface PlannedPost {
@@ -48,7 +50,7 @@ export interface PlannedPost {
   video?: LibraryItem;
 }
 
-export interface Plan { posts: PlannedPost[]; summary: string }
+export interface Plan { posts: PlannedPost[]; summary: string; /** Cosas que la dueña puede hacer (grabar un video…). */ tasks?: string[] }
 
 export interface SocialBrain {
   name: string;
@@ -104,7 +106,8 @@ export function aiPlanRequest(input: PlanInput): AiPlanRequest {
     publicaciones: settings.channels.some(c => c !== 'instagram_story'),
     categorias: [...categories.entries()].map(([categoria, v]) => ({ categoria, ...v })),
     videos: library.filter(a => a.kind === 'video').slice(0, 30).map(a => ({ id: a.id, producto: a.product_name || '' })),
-    recientes: recentThemes.slice(0, 20).map(r => ({ dia: r.day, tema: r.theme }))
+    recientes: recentThemes.slice(0, 20).map(r => ({ dia: r.day, tema: r.theme })),
+    pedido: String(input.request || '').trim().slice(0, 600)
   };
 }
 
@@ -187,7 +190,7 @@ export const aiBrain: SocialBrain = {
     try {
       const plan = await planWithAi(aiPlanRequest(input), input.profile);
       const posts = resolveAiPlan(plan.publicaciones, input);
-      if (posts.length) return { posts, summary: plan.resumen };
+      if (posts.length) return { posts, summary: plan.resumen, tasks: plan.tareas };
       console.warn('⚠️ La planificación de la IA no trajo publicaciones válidas; se usan las reglas');
     } catch (error: any) {
       console.warn('⚠️ La IA no pudo planificar; se usan las reglas:', error.message);
@@ -200,8 +203,9 @@ export const aiBrain: SocialBrain = {
 
 let override: SocialBrain | null = null;
 
-/** El cerebro que toca: "La IA decide" planifica con IA; un número fijo por día, con reglas. */
-export const currentBrain = (settings?: PublishingSettings) => override || (settings && settings.postsPerDay === 0 ? aiBrain : ruleBrain);
+/** El cerebro que toca: "La IA decide" (o un pedido escrito por la dueña) planifica con IA; un número fijo por día, con reglas. */
+export const currentBrain = (settings?: PublishingSettings, request?: string) =>
+  override || ((settings && settings.postsPerDay === 0) || String(request || '').trim() ? aiBrain : ruleBrain);
 
 /** Fija un cerebro (lo usan las pruebas); null vuelve al de la configuración. */
 export function useBrain(next: SocialBrain | null) {
