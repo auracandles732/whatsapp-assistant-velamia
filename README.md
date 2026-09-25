@@ -208,7 +208,7 @@ usa reglas y la IA solo escribe los textos; el definitivo se enchufa con `useBra
 
 - **IA propia** (`ai.ts`): el agente usa **su propia clave de OpenAI y sus propios modelos**, nunca los del asistente de
   mensajes. Se configura por empresa en Publicaciones → Cerebro IA (clave cifrada, botón "Probar clave"). Por defecto
-  gpt-5.6-sol para decidir y escribir, gpt-image-2 en calidad media para fotos. Sin clave, publica con textos de respaldo.
+  gpt-5.6-luna (económico) para decidir y escribir, gpt-image-2 en calidad media para fotos. Sin clave, publica con textos de respaldo.
 
 - **Biblioteca** (`library.ts`): la empresa sube fotos (JPG/PNG, 10 MB) y videos (MP4/MOV, 50 MB). El archivo va directo
   del navegador al almacenamiento con un permiso de subida de un solo uso y después se registra. Los videos se publican

@@ -10,9 +10,9 @@ import { BusinessProfile, profile } from '../config/businessProfile';
  */
 
 export const TEXT_MODELS = [
-  { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol (recomendado)', note: '$2 / $10 por millón de tokens (promoción hasta nov-2026)' },
+  { id: 'gpt-5.6-luna', label: 'gpt-5.6-luna (recomendado, económico)', note: '$0.20 / $1.20 por millón de tokens: centavos al mes' },
+  { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', note: '$2 / $10 por millón de tokens (promoción hasta nov-2026)' },
   { id: 'gpt-5.6-terra', label: 'gpt-5.6-terra', note: '$2 / $12 por millón de tokens' },
-  { id: 'gpt-5.6-luna', label: 'gpt-5.6-luna (económico)', note: '$0.20 / $1.20 por millón de tokens' },
   { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini', note: '$0.75 / $4.50 por millón de tokens' }
 ];
 
@@ -38,7 +38,7 @@ export interface SocialAiSettings {
 }
 
 const SETTINGS_KEY = 'social_agent_ai';
-export const DEFAULT_SOCIAL_AI: SocialAiSettings = { apiKey: '', textModel: 'gpt-5.6-sol', imageModel: 'gpt-image-2', imageQuality: 'medium' };
+export const DEFAULT_SOCIAL_AI: SocialAiSettings = { apiKey: '', textModel: 'gpt-5.6-luna', imageModel: 'gpt-image-2', imageQuality: 'medium' };
 export const NO_KEY_MESSAGE = 'El agente de redes todavía no tiene su clave de OpenAI: agrégala en Publicaciones → Cerebro del agente.';
 
 const pick = <T extends { id: string }>(list: T[], value: unknown, fallback: string) => (list.some(x => x.id === value) ? String(value) : fallback);
