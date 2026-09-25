@@ -9669,6 +9669,13 @@
                                 </label>
                                 <DesignPicker selected={s.designProductIds || []} disabled={!canConfigure} excludeIds={new Set(data.products.map(p => p.catalog_product_id).filter(Boolean))}
                                     onSave={ids => { const next = { ...s, designProductIds: ids }; setSettings(next); saveSettings(next); }} />
+                                <label className="sp-name" style={{ marginTop: 10 }}>
+                                    <span>✍️ Cómo quiero mis fotos (instrucciones para la IA)</span>
+                                    <textarea rows={5} maxLength={1500} value={s.posterInstructions || ''} disabled={!canConfigure} onChange={e => setSettings({ ...s, posterInstructions: e.target.value })}
+                                        placeholder={'Escríbelo con tus palabras, una idea por línea. Por ejemplo:\n- Fondo blanco liso, sin adornos ni luces\n- La vela grande, centrada y un poco a la derecha\n- El precio en letras doradas dentro del recuadro blanco\n- No agregues flores ni hojas'}
+                                        style={{ width: '100%', minHeight: 110, resize: 'vertical', fontFamily: 'inherit', fontSize: 14, padding: '8px 10px', borderRadius: 10, border: '1px solid #DCE2F5' }} />
+                                    <small className="pb-muted">La IA lo sigue al hacer cada foto (manda sobre el diseño copiado) y la revisión comprueba que se cumpla; si no, la foto queda "para revisar". Guarda la regla y usa "Rehacer todas" en el catálogo para aplicarlo a las fotos ya hechas. {(s.posterInstructions || '').length}/1500</small>
+                                </label>
                                 {canConfigure && <button type="button" className="pb-btn main sm" style={{ marginTop: 10 }} disabled={busy === 'settings'} onClick={() => saveSettings()}><PlatIcon name="save" size={16} color="#fff" /> {busy === 'settings' ? 'Guardando…' : 'Guardar regla'}</button>}
                             </div>
                             <div className="sp-box">
@@ -9787,6 +9794,13 @@
                                                 </div>
                                                 {canEdit && !creating && unchecked > 0 && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => makePosters(catalog, null, false)}>🔍 Buscar los que ya tengo ({unchecked})</button>}
                                                 {canEdit && missing > 0 && !creating && <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => makePosters(catalog)}>🎨 Crear {missing} {missing === 1 ? 'foto' : 'fotos'} con mi diseño (≈ ${(missing * (data.posterCost || 0.08)).toFixed(2)})</button>}
+                                                {canEdit && !creating && (() => {
+                                                    // Rehacer todas las fotos ya hechas (por ejemplo, después de cambiar las instrucciones).
+                                                    const redo = models.filter(p => ['lista', 'revisar', 'error'].includes(stateOf(p)));
+                                                    if (redo.length === 0) return null;
+                                                    const cost = (redo.length * (data.posterCost || 0.08)).toFixed(2);
+                                                    return <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => { if (confirm(`¿Rehacer las ${redo.length} fotos de ${catalog.name} con tus instrucciones actuales? Cuesta ≈ $${cost}. Mientras tanto, cada modelo mantiene su foto actual en el Catálogo.`)) makePosters(catalog, redo.map(p => p.id)); }}>🔁 Rehacer todas ({redo.length}, ≈ ${cost})</button>;
+                                                })()}
                                             </div>
                                         )}
                                         {canEdit && pending.length > 0 && (

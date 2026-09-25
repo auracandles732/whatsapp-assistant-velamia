@@ -86,3 +86,27 @@ test('la revisión rechaza el afiche si no sigue el diseño, si cambia la vela o
   const noUnit = posterTexts('VELA RENO', 35, 'NAVIDAD', 'docena');
   assert.match(posterProblem({ ...ok, otrosPrecios: [] }, noUnit), /unidad que no va/);
 });
+
+test('las instrucciones de la empresa van a la IA con la máxima prioridad (y sin ellas el pedido no cambia)', () => {
+  const t = posterTexts('Vela Osito', 35, 'BAUTIZO');
+  const sin = posterPrompt(t, 'BAUTIZO', 'diseño');
+  const con = posterPrompt(t, 'BAUTIZO', 'diseño', '  Fondo blanco liso, sin flores  ');
+  assert.ok(!/OWNER'S OWN INSTRUCTIONS/.test(sin));
+  assert.ok(con.startsWith(sin), 'lo demás queda igual');
+  assert.match(con, /HIGHEST PRIORITY/);
+  assert.match(con, /"""\nFondo blanco liso, sin flores\n"""/);
+});
+
+test('si la foto no cumple las instrucciones, queda para revisar con el motivo', () => {
+  const t = posterTexts('Vela Osito', 35, 'BAUTIZO');
+  const ok: any = { titulo: 'VELA OSITO', precio: '$35', etiquetaPrecio: '', otrosPrecios: [], errores: [], disenoIgual: true, velaIgual: true };
+  assert.equal(posterProblem({ ...ok, instruccionesCumplidas: true }, t), '');
+  assert.equal(posterProblem({ ...ok, instruccionesCumplidas: false, faltaInstrucciones: 'el fondo no es blanco' }, t), 'No siguió tus instrucciones: el fondo no es blanco');
+});
+
+test('las instrucciones se guardan limpias y con tope', async () => {
+  const { normalizeSupplierSettings, POSTER_INSTRUCTIONS_MAX } = await import('../src/social/suppliers');
+  assert.equal(normalizeSupplierSettings({}).posterInstructions, '');
+  assert.equal(normalizeSupplierSettings({ posterInstructions: ' - Fondo blanco\r\n\n\n\n- Sin flores ' }).posterInstructions, '- Fondo blanco\n\n- Sin flores');
+  assert.equal(normalizeSupplierSettings({ posterInstructions: 'x'.repeat(5000) }).posterInstructions.length, POSTER_INSTRUCTIONS_MAX);
+});

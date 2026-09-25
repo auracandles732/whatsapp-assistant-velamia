@@ -159,7 +159,8 @@ export function posterTexts(name: string, price: number, category: string, unit 
 
 const money = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
-export function posterPrompt(t: PosterTexts, occasion: string, design = ''): string {
+export function posterPrompt(t: PosterTexts, occasion: string, design = '', instructions = ''): string {
+  const owner = instructions.trim();
   return `Create a square 1:1 advertising poster for a handmade candle shop.
 The FIRST image is the candle to sell. Every image after it is a REAL poster of this shop: the new poster must look like one more poster of the same series. Replicate that design exactly — the same layout and positions, the same fonts, the same text colors and gradients, the same ribbon, the same price box, the same round icons with their texts, the same bottom band, the same lighting and the same kind of decorated bokeh background. Do not change the font, the colors of the title or the order of the elements, and do not add or remove elements. Change only the candle, the texts listed below and, if needed, the background theme so it fits the occasion "${occasion}".
 The shop's design, described: ${design || DEFAULT_DESIGN}`
@@ -171,7 +172,13 @@ Write exactly these Spanish texts and nothing else:
 - Price box: "$${money(t.price)}" and under it "${t.unit}"
 ${t.unitPrice > 0 ? `- Under the price box, a small rounded pill: "UNIDAD $${money(t.unitPrice)}"\n` : ''}- Icons: "${t.features.join('", "')}"
 ${t.band ? `- Bottom band: "${t.band}"${t.bandSmall ? ` and smaller "${t.bandSmall}"` : ''}` : t.bandSmall ? `- Closing line where the shop's posters put it: "${t.bandSmall}"` : ''}
-No other text${t.unitPrice > 0 ? '' : ', no unit price pill'}, no second price, no logos, no watermarks. Spelling must be exact, including accents and Ñ.`;
+No other text${t.unitPrice > 0 ? '' : ', no unit price pill'}, no second price, no logos, no watermarks. Spelling must be exact, including accents and Ñ.`
+    + (owner ? `
+
+THE SHOP OWNER'S OWN INSTRUCTIONS FOR THIS PHOTO (written in Spanish). They have the HIGHEST PRIORITY: follow every one of them exactly, even where they differ from the design description or the reference posters above (if they ask for a change, a different element or an extra text, do it; keep the price and title exact):
+"""
+${owner}
+"""` : '');
 }
 
 /** Para comparar textos: mayúsculas, sin espacios repetidos ni tildes, pero la Ñ cuenta. */
@@ -182,6 +189,9 @@ export function sameText(a: string, b: string): boolean {
 }
 
 export interface PosterReading {
+  /** ¿Cumple las instrucciones que escribió la empresa? (sin instrucciones, true) */
+  instruccionesCumplidas?: boolean;
+  faltaInstrucciones?: string;
   titulo: string;
   precio: string;
   etiquetaPrecio: string;
@@ -201,6 +211,7 @@ const amount = (text: unknown) => Number(String(text || '').replace(/[^\d.,]/g, 
 /** Qué salió mal en un afiche revisado por la IA ('' = todo bien). */
 export function posterProblem(reading: PosterReading, t: PosterTexts): string {
   if (reading.velaIgual === false) return `La vela no quedó igual a la del PDF${reading.diferenciasVela ? `: ${reading.diferenciasVela}` : ''}`;
+  if (reading.instruccionesCumplidas === false) return `No siguió tus instrucciones${reading.faltaInstrucciones ? `: ${reading.faltaInstrucciones}` : ''}`;
   if (reading.disenoIgual === false) return `No sigue el diseño de tus fotos${reading.diferenciasDiseno ? `: ${reading.diferenciasDiseno}` : ''}`;
   if (!sameText(reading.titulo, t.title)) return `El nombre salió "${reading.titulo}" en vez de "${t.title}"`;
   if (!(Math.abs(amount(reading.precio) - t.price) < 0.01)) return `El precio salió "${reading.precio}" en vez de $${money(t.price)}`;
@@ -243,11 +254,11 @@ export function imageForAi(url: string, maxSide = 1024): Promise<string> {
 }
 
 /** refs ya en JPG (se convierten una vez por tanda). */
-async function drawPoster(model: Buffer, refs: Buffer[], t: PosterTexts, occasion: string, design = ''): Promise<Buffer> {
+async function drawPoster(model: Buffer, refs: Buffer[], t: PosterTexts, occasion: string, design = '', instructions = ''): Promise<Buffer> {
   const ai = await socialAi();
   const form = new FormData();
   form.append('model', ai.imageModel);
-  form.append('prompt', posterPrompt(t, occasion, design));
+  form.append('prompt', posterPrompt(t, occasion, design, instructions));
   form.append('size', '1024x1024');
   form.append('quality', ai.imageQuality);
   [toJpeg(model), ...refs].forEach((buffer, i) => form.append('image[]', new Blob([buffer], { type: 'image/jpeg' }), `foto${i}.jpg`));
@@ -264,7 +275,8 @@ async function drawPoster(model: Buffer, refs: Buffer[], t: PosterTexts, occasio
  * Revisión del afiche nuevo (con el modelo más preciso): lee los textos y precios, y lo compara con el afiche de
  * referencia de la empresa (¿mismo diseño?) y con la foto del PDF (¿la misma vela?).
  */
-async function readPoster(jpegBuffer: Buffer, t: PosterTexts, referenceUrl: string, modelUrl: string): Promise<PosterReading> {
+async function readPoster(jpegBuffer: Buffer, t: PosterTexts, referenceUrl: string, modelUrl: string, instructions = ''): Promise<PosterReading> {
+  const owner = instructions.trim();
   const ai = await socialAi();
   const expected = [t.title, t.ribbon, `$${money(t.price)}`, t.unit, ...(t.unitPrice > 0 ? [`UNIDAD $${money(t.unitPrice)}`] : []), ...t.features, ...(t.band ? [t.band] : []), ...(t.bandSmall ? [t.bandSmall] : [])];
   const response = await ai.client.chat.completions.create({
@@ -279,8 +291,10 @@ async function readPoster(jpegBuffer: Buffer, t: PosterTexts, referenceUrl: stri
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['titulo', 'precio', 'etiquetaPrecio', 'precioUnidad', 'otrosPrecios', 'errores', 'disenoIgual', 'diferenciasDiseno', 'velaIgual', 'diferenciasVela'],
+          required: ['titulo', 'precio', 'etiquetaPrecio', 'precioUnidad', 'otrosPrecios', 'errores', 'disenoIgual', 'diferenciasDiseno', 'velaIgual', 'diferenciasVela', 'instruccionesCumplidas', 'faltaInstrucciones'],
           properties: {
+            instruccionesCumplidas: { type: 'boolean' },
+            faltaInstrucciones: { type: 'string' },
             titulo: { type: 'string' },
             precio: { type: 'string' },
             etiquetaPrecio: { type: 'string' },
@@ -306,7 +320,10 @@ Revisa el afiche nuevo (foto 1) con mucho cuidado:
 - "otrosPrecios": cualquier otro precio o monto.
 - "errores": cada texto mal escrito, deformado o que no sea uno de estos: ${expected.map(x => `"${x}"`).join(', ')}.
 - "disenoIgual": ¿parece un afiche más de la misma serie que la foto 2? Debe tener la misma disposición y orden de los elementos (título grande, cinta, recuadro de precio con su etiqueta, íconos con textos, franja inferior), el mismo tipo de letra, los mismos colores del título, la cinta y el recuadro de precio, el mismo estilo de íconos y la misma cantidad de elementos. El tema del fondo puede cambiar con la ocasión. false si cambia la letra, los colores del título, el orden o la posición de los elementos, o si sobra o falta algo (por ejemplo un ícono de más); di en "diferenciasDiseno" qué cambia.
-- "velaIgual": ¿la vela del afiche es la misma de la foto 3? Ignora la mecha y la llama (en el afiche va apagada a propósito), la luz, el tamaño y pequeños cambios de tono por la iluminación. false solo si cambia la figura o la forma, faltan partes o hay partes inventadas; di en "diferenciasVela" qué cambia.` },
+- "velaIgual": ¿la vela del afiche es la misma de la foto 3? Ignora la mecha y la llama (en el afiche va apagada a propósito), la luz, el tamaño y pequeños cambios de tono por la iluminación. false solo si cambia la figura o la forma, faltan partes o hay partes inventadas; di en "diferenciasVela" qué cambia.
+${owner
+    ? `- La dueña de la tienda escribió cómo quiere sus fotos: """${owner}""". "instruccionesCumplidas": ¿el afiche nuevo cumple TODAS esas instrucciones? false si alguna no se cumple; di en "faltaInstrucciones" cuál, en pocas palabras. Lo que pidan esas instrucciones manda sobre la foto 2: una diferencia con la foto 2 que las instrucciones piden no cuenta en "disenoIgual", y los textos que ellas pidan no son "errores".`
+    : '- "instruccionesCumplidas": true. "faltaInstrucciones": "".'}` },
         { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`, detail: 'high' } },
         { type: 'image_url', image_url: { url: await imageForAi(referenceUrl), detail: 'high' } },
         { type: 'image_url', image_url: { url: await imageForAi(modelUrl), detail: 'high' } }
@@ -503,7 +520,7 @@ Después decide: "mismoMolde" = true solo si es la misma figura y coinciden la f
 
 // ---------- Trabajo en segundo plano ----------
 
-interface Job { model: SupplierProduct; texts: PosterTexts; occasion: string; price: number; unitPrice: number }
+interface Job { model: SupplierProduct; texts: PosterTexts; occasion: string; price: number; unitPrice: number; instructions?: string }
 
 /**
  * ¿Cambió el modelo mientras se hacía su foto (tamaño, nombre o el precio de la regla)? Entonces la foto dice datos viejos
@@ -528,8 +545,8 @@ async function makeOne(catalogId: string, job: Job, refs: References) {
     const photo = await download(model.image_url);
     let last: { url: string; problem: string } | null = null;
     for (let attempt = 1; attempt <= TRIES; attempt++) {
-      const poster = await drawPoster(photo, refs.buffers, texts, occasion, refs.design);
-      const problem = posterProblem(await readPoster(poster, texts, refs.urls[0], model.image_url), texts);
+      const poster = await drawPoster(photo, refs.buffers, texts, occasion, refs.design, job.instructions);
+      const problem = posterProblem(await readPoster(poster, texts, refs.urls[0], model.image_url, job.instructions), texts);
       const url = await uploadBufferToStorage(poster, 'image/jpeg', 'product-images');
       last = { url, problem };
       if (!problem) break;
@@ -668,7 +685,9 @@ async function runQueue(catalogId: string) {
           const ref = await references();
           const unitPrice = settings.unitPrices?.[model.size] || 0;
           const texts = posterTexts(model.name, price, category, undefined, ref.texts, unitPrice);
-          await makeOne(catalogId, { model, texts, occasion: occasionOf(category), price, unitPrice }, ref);
+          // Las instrucciones se leen en cada foto: si la empresa las cambia a mitad de la tanda, las siguientes ya las usan.
+          const instructions = (await getSupplierSettings()).posterInstructions;
+          await makeOne(catalogId, { model, texts, occasion: occasionOf(category), price, unitPrice, instructions }, ref);
         } catch (error: any) {
           await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
         }

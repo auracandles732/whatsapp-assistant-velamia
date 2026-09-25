@@ -36,6 +36,8 @@ export interface SupplierSettings {
    * de la misma ocasión, elegida sola (nunca dos de estilos distintos: la IA los mezcla).
    */
   designProductIds: string[];
+  /** Cómo quiere la empresa sus fotos, con sus palabras: la IA lo sigue al hacerlas y la revisión comprueba que se cumpla. */
+  posterInstructions: string;
 }
 
 export const DEFAULT_SUPPLIER_SETTINGS: SupplierSettings = {
@@ -46,10 +48,12 @@ export const DEFAULT_SUPPLIER_SETTINGS: SupplierSettings = {
   packaging: '',
   autoAddToCatalog: true,
   autoPosters: true,
-  designProductIds: []
+  designProductIds: [],
+  posterInstructions: ''
 };
 
 const SETTINGS_KEY = 'supplier_settings';
+export const POSTER_INSTRUCTIONS_MAX = 1500;
 const money = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v) * 100) / 100 : 0);
 
 export function normalizeSupplierSettings(raw: any): SupplierSettings {
@@ -65,7 +69,8 @@ export function normalizeSupplierSettings(raw: any): SupplierSettings {
     autoAddToCatalog: typeof r.autoAddToCatalog === 'boolean' ? r.autoAddToCatalog : true,
     autoPosters: typeof r.autoPosters === 'boolean' ? r.autoPosters : true,
     designProductIds: (Array.isArray(r.designProductIds) ? r.designProductIds : []).map(String)
-      .filter((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)).slice(0, 2)
+      .filter((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)).slice(0, 2),
+    posterInstructions: String(r.posterInstructions ?? '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, POSTER_INSTRUCTIONS_MAX)
   };
 }
 
