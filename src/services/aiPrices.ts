@@ -1,5 +1,5 @@
 /**
- * Precios de OpenAI por millón de tokens (platform.openai.com/docs/pricing, consultados 17-sep-2026).
+ * Precios de OpenAI por millón de tokens (developers.openai.com/api/docs/pricing, consultados 25-sep-2026).
  * Sirven para estimar lo que consume cada empresa: la factura real siempre manda.
  * Si OpenAI cambia sus precios, se actualizan aquí.
  */
@@ -10,8 +10,16 @@ export interface ModelPrice {
 }
 
 const PRICES: Record<string, ModelPrice> = {
-  'gpt-5.6-sol': { input: 4, cached: 0.4, output: 20 },
+  // Precio de promoción al menos hasta el 21-nov-2026 (después: 4 / 0.4 / 20).
+  'gpt-5.6-sol': { input: 2, cached: 0.2, output: 10 },
   'gpt-5.6-terra': { input: 2, cached: 0.2, output: 12 },
+  // Modelos de imagen del agente de redes: la entrada es texto de la instrucción y la salida, la foto.
+  'gpt-image-2': { input: 5, cached: 1.25, output: 30 },
+  'gpt-image-2.5-flare': { input: 5, cached: 1.25, output: 30 },
+  'gpt-image-2.5-sunburst': { input: 5, cached: 1.25, output: 30 },
+  'gpt-image-1.5': { input: 5, cached: 1.25, output: 32 },
+  'gpt-image-1': { input: 5, cached: 1.25, output: 40 },
+  'gpt-image-1-mini': { input: 2, cached: 0.2, output: 8 },
   'gpt-5.6-luna': { input: 0.2, cached: 0.02, output: 1.2 },
   'gpt-5.5': { input: 5, cached: 0.5, output: 30 },
   'gpt-5.4': { input: 2.5, cached: 0.25, output: 15 },

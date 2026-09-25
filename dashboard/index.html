@@ -2256,6 +2256,12 @@
         .nx-ai-alert span { display: block; font-size: 13px; line-height: 1.4; margin-top: 2px; }
         .mx .nx-ai-alert { margin: 10px 14px 0; }
         .pb-areas { display: flex; gap: 8px; flex-wrap: wrap; }
+        .sb-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+        .sb-f { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; color: #1E2A4A; }
+        .sb-f.wide { grid-column: 1 / -1; }
+        .sb-f input, .sb-f select { padding: 11px 12px; border: 1px solid #DCE2F5; border-radius: 12px; font: inherit; font-size: 14.5px; font-weight: 500; background: #fff; color: #141C3A; min-width: 0; }
+        .sb-f small { font-size: 12px; font-weight: 500; color: #6B7599; line-height: 1.35; }
+        @media (max-width: 760px) { .sb-grid { grid-template-columns: minmax(0, 1fr); } }
         .pb .pb-areas button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 14px; border: 1px solid #DCE2F5; background: #fff; color: #2A3766; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
         .pb .pb-areas button.on { background: #4F5BD5; border-color: #4F5BD5; color: #fff; }
         .pb .pb-backlink { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: #2F4BD8; font-size: 15px; font-weight: 700; padding: 4px 0; cursor: pointer; }
@@ -8717,7 +8723,7 @@
                 : <img className={className} src={item.url} alt="" loading="lazy" />;
         }
 
-        const PB_AREAS = [['calendario', 'calendar', 'Calendario'], ['biblioteca', 'image', 'Biblioteca'], ['proveedores', 'box', 'Proveedores'], ['resultados', 'chart', 'Resultados']];
+        const PB_AREAS = [['calendario', 'calendar', 'Calendario'], ['biblioteca', 'image', 'Biblioteca'], ['proveedores', 'box', 'Proveedores'], ['resultados', 'chart', 'Resultados'], ['cerebro', 'robot', 'Cerebro IA']];
 
         function PbAreaTabs({ area, setArea }) {
             return (
@@ -9217,6 +9223,94 @@
             );
         }
 
+        // Clave de OpenAI y modelos propios del agente de redes (nunca los del asistente que responde los mensajes).
+        function SocialBrainCard({ canConfigure }) {
+            const [data, setData] = useState(null);
+            const [form, setForm] = useState(null);
+            const [key, setKey] = useState('');
+            const [busy, setBusy] = useState('');
+            const [msg, setMsg] = useState(null);
+            const [error, setError] = useState('');
+            useEffect(() => {
+                api('/api/social/ai').then(r => { setData(r); setForm({ textModel: r.textModel, imageModel: r.imageModel, imageQuality: r.imageQuality }); }).catch(e => setError(e.message));
+            }, []);
+
+            async function run(label, fn) {
+                setBusy(label);
+                setMsg(null);
+                setError('');
+                try {
+                    await fn();
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+            const save = extra => run('save', async () => {
+                const r = await api('/api/social/ai', { method: 'PUT', body: JSON.stringify({ ...form, apiKey: key, ...extra }) });
+                setData(r);
+                setKey('');
+                setMsg({ ok: true, text: extra && extra.clearKey ? 'Clave quitada: el agente publica con textos de respaldo.' : '✅ Guardado' });
+            });
+            const test = () => run('test', async () => {
+                if (key.trim()) await api('/api/social/ai', { method: 'PUT', body: JSON.stringify({ ...form, apiKey: key }) }).then(r => { setData(r); setKey(''); });
+                const r = await api('/api/social/ai/test', { method: 'POST' });
+                setMsg({ ok: r.ok, text: (r.ok ? '✅ ' : '⚠️ ') + r.detail });
+            });
+
+            if (!data || !form) return <section className="pb-card">{error ? <div className="pb-err">{error}</div> : <div className="pb-muted">Cargando…</div>}</section>;
+            const noteOf = (list, id) => (list.find(x => x.id === id) || {}).note || '';
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="robot" size={22} color="#4F5BD5" /></div>
+                        <div className="grow"><h2>Cerebro del agente de redes</h2><p>Su propia clave de OpenAI y sus propios modelos, separados del asistente que responde los mensajes. La clave se guarda cifrada.</p></div>
+                    </div>
+                    <div className={'pb-notice' + (data.configured ? ' ok' : '')} style={data.configured ? undefined : { background: '#FFF3DC', color: '#7A5300' }}>
+                        {data.configured ? `🔑 Clave guardada (${data.keyHint}). El agente escribe con ${data.textModel}.` : '⚠️ Todavía sin clave: el agente publica con textos de respaldo (sin IA) hasta que la agregues.'}
+                    </div>
+                    <div className="sb-grid">
+                        <label className="sb-f wide">
+                            <span>Clave de OpenAI del agente</span>
+                            <input type="password" autoComplete="off" spellCheck="false" disabled={!canConfigure} placeholder={data.configured ? 'Pega una clave nueva solo si quieres cambiarla' : 'sk-...'} value={key} onChange={e => setKey(e.target.value)} />
+                            <small>Créala en platform.openai.com → API keys (puede ser de otra cuenta o proyecto, con sus propios créditos).</small>
+                        </label>
+                        <label className="sb-f">
+                            <span>Cerebro (decide y escribe los textos)</span>
+                            <select value={form.textModel} disabled={!canConfigure} onChange={e => setForm({ ...form, textModel: e.target.value })}>
+                                {data.options.textModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                            </select>
+                            <small>{noteOf(data.options.textModels, form.textModel)}</small>
+                        </label>
+                        <label className="sb-f">
+                            <span>Modelo de fotos</span>
+                            <select value={form.imageModel} disabled={!canConfigure} onChange={e => setForm({ ...form, imageModel: e.target.value })}>
+                                {data.options.imageModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                            </select>
+                            <small>{noteOf(data.options.imageModels, form.imageModel)}</small>
+                        </label>
+                        <label className="sb-f">
+                            <span>Calidad de las fotos</span>
+                            <select value={form.imageQuality} disabled={!canConfigure} onChange={e => setForm({ ...form, imageQuality: e.target.value })}>
+                                {data.options.imageQualities.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                            </select>
+                            <small>{noteOf(data.options.imageQualities, form.imageQuality)} · las fotos con IA se activan en el siguiente paso</small>
+                        </label>
+                    </div>
+                    {error && <div className="pb-err" style={{ margin: '10px 0' }}>{error}</div>}
+                    {msg && <div className={'pb-notice' + (msg.ok ? ' ok' : '')} style={msg.ok ? { marginTop: 10 } : { marginTop: 10, background: '#FDECEC', color: '#B42318' }}>{msg.text}</div>}
+                    {canConfigure ? (
+                        <div className="pb-actions" style={{ marginTop: 12 }}>
+                            <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => save()}>{busy === 'save' ? 'Guardando…' : 'Guardar'}</button>
+                            <button type="button" className="pb-btn sm" disabled={!!busy || (!data.configured && !key.trim())} onClick={test}>{busy === 'test' ? 'Probando…' : 'Probar clave'}</button>
+                            {data.configured && <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={() => { if (confirm('¿Quitar la clave del agente de redes? Publicará con textos de respaldo hasta que pongas otra.')) save({ clearKey: true }); }}>Quitar clave</button>}
+                        </div>
+                    ) : <p className="pb-muted" style={{ marginTop: 10 }}>Solo el dueño puede cambiar la clave y los modelos.</p>}
+                </section>
+            );
+        }
+
         function PostsView({ canEdit, canConfigure, isAdmin }) {
             const mobile = useMobile();
             const [view, setView] = useState('home');
@@ -9498,7 +9592,7 @@
 
             // Biblioteca, proveedores y resultados: las otras áreas del agente de redes.
             if (area !== 'calendario') {
-                const areaView = area === 'biblioteca' ? <SocialLibrary canEdit={canEdit} /> : area === 'proveedores' ? <SupplierCatalogs canEdit={canEdit} canConfigure={canConfigure} /> : <SocialResults />;
+                const areaView = area === 'biblioteca' ? <SocialLibrary canEdit={canEdit} /> : area === 'proveedores' ? <SupplierCatalogs canEdit={canEdit} canConfigure={canConfigure} /> : area === 'cerebro' ? <SocialBrainCard canConfigure={canConfigure} /> : <SocialResults />;
                 return (
                     <div className="pb">
                         {mobile
@@ -9598,7 +9692,7 @@
                             <div className="tt"><b>Cómo publicar</b><span>Días, hora, redes y textos</span></div>
                             <PbIcon name="next" size={20} color="#3A4570" />
                         </button>
-                        {[['biblioteca', 'image', 'Biblioteca', 'Tus fotos y videos para redes'], ['proveedores', 'box', 'Proveedores', 'Sube un PDF y pasa sus modelos al Catálogo'], ['resultados', 'chart', 'Resultados', 'Me gusta, comentarios, visualizaciones y alcance']].map(([id, icon, title, sub]) => (
+                        {[['biblioteca', 'image', 'Biblioteca', 'Tus fotos y videos para redes'], ['proveedores', 'box', 'Proveedores', 'Sube un PDF y pasa sus modelos al Catálogo'], ['resultados', 'chart', 'Resultados', 'Me gusta, comentarios, visualizaciones y alcance'], ['cerebro', 'robot', 'Cerebro IA', 'Clave y modelos propios del agente']].map(([id, icon, title, sub]) => (
                             <button key={id} type="button" className="pb-navcard" onClick={() => { setArea(id); window.scrollTo(0, 0); }}>
                                 <div className="pb-tile"><PlatIcon name={icon} size={22} color="#4F5BD5" /></div>
                                 <div className="tt"><b>{title}</b><span>{sub}</span></div>

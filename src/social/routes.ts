@@ -17,6 +17,7 @@ import {
   addSupplierProductsToCatalog, deleteSupplierCatalog
 } from './suppliers';
 import { listResults } from './insights';
+import { publicSocialAi, saveSocialAi, testSocialAi } from './ai';
 
 /**
  * Rutas del agente de redes (servicio adicional "publicaciones"): calendario de publicaciones, biblioteca de fotos y
@@ -335,6 +336,28 @@ export function socialRouter(): Router {
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
+  });
+
+  // ---------- Cerebro del agente: su propia clave de OpenAI y sus modelos ----------
+
+  router.get('/api/social/ai', requireCrmSession, requirePublishing, async (_req: Request, res: Response) => {
+    try {
+      res.json(await publicSocialAi());
+    } catch (error: any) {
+      res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  router.put('/api/social/ai', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
+    try {
+      res.json(await saveSocialAi(req.body || {}));
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
+    }
+  });
+
+  router.post('/api/social/ai/test', requireCrmSession, requireOwnerRole, requirePublishing, async (_req: Request, res: Response) => {
+    res.json(await testSocialAi());
   });
 
   // ---------- Resultados ----------

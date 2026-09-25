@@ -1,10 +1,10 @@
 import { BusinessProfile } from '../config/businessProfile';
-import { writeSocialCaptions } from '../services/openai';
+import { writeCaptions, CaptionRequest } from './ai';
 import { pickProducts, CatalogItem, PublishingSettings } from './posts';
 
 /**
  * El "cerebro" del agente de redes: decide qué publicar cada día y escribe los textos. Es independiente del asistente
- * que responde los mensajes (su propia configuración y su propio consumo). Por ahora decide con reglas —lo que menos ha
+ * que responde los mensajes: su propia clave de OpenAI y su propio modelo (ai.ts). Por ahora decide con reglas —lo que menos ha
  * salido, variando la categoría y dando prioridad a la temporada— y la IA solo escribe los textos. El cerebro definitivo
  * se enchufa aquí (useBrain) sin tocar el calendario, la publicación ni el CRM.
  */
@@ -22,8 +22,6 @@ export interface PlanInput {
 
 export interface PlannedPost { theme: string; products: CatalogItem[] }
 
-export interface CaptionRequest { theme: string; products: { name: string; price: number }[] }
-
 export interface SocialBrain {
   name: string;
   /** Qué mostrar en cada día libre (puede devolver menos si no hay qué publicar). */
@@ -37,7 +35,8 @@ export const ruleBrain: SocialBrain = {
   async plan({ slots, catalog, recent, settings, month }) {
     return pickProducts(catalog, recent, slots.length, settings.photosPerPost, month);
   },
-  write: (posts, notes, profile) => writeSocialCaptions(posts, notes, profile)
+  // Los textos los escribe la IA propia del agente (su clave y su modelo, nunca los del asistente de mensajes).
+  write: (posts, notes, profile) => writeCaptions(posts, notes, profile)
 };
 
 let brain: SocialBrain = ruleBrain;
