@@ -60,7 +60,7 @@ import { notifyOwner } from '../services/notifications';
 import { reportAiFailure, isNoCredits } from '../services/aiStatus';
 import { customDesignAlerts, looksLikeCustomDesign } from '../services/customDesign';
 import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsPhotoNudge, sameCategoryAsMost } from '../services/photoBackup';
-import { textToVoice } from '../services/elevenlabs';
+import { textToVoice, voiceNotesEnabled } from '../services/elevenlabs';
 import { downloadSocialMedia, socialProfileName, wasSentByUs, isSocialAddress } from '../services/metaChannels';
 import { voiceNoteFits } from '../services/voiceNotes';
 
@@ -894,7 +894,9 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     if (plan.reply) {
+      // La dueña puede apagar las notas de voz desde el CRM (Configuración → Notas de voz).
       const voiceSent = wantsVoiceNote(history, phoneNumber, plan.reply)
+        && await voiceNotesEnabled().catch(() => false)
         && await sendAndSaveVoiceNote(conversationId, phoneNumber, plan.reply);
       if (!voiceSent) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
     }

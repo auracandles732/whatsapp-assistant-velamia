@@ -7301,6 +7301,12 @@
                     subtitle: 'Mensajes y comentarios atendidos por el mismo asistente', sub: 'Conecta tus redes sociales',
                     node: <SocialConnect available={!!session?.business?.legacy || !session?.business} canConfigure={canConfigure} />
                 },
+                // La voz de ElevenLabs es de VELAMIA: las demás empresas no la ven.
+                ...(session?.business?.legacy || !session?.business ? [{
+                    id: 'voz', icon: 'chat', label: 'Notas de voz', title: 'Notas de voz (ElevenLabs)',
+                    subtitle: 'El asistente responde algunos mensajes con tu voz', sub: 'Voz de tu asistente',
+                    node: <VoiceSettings canConfigure={canConfigure} />
+                }] : []),
                 {
                     id: 'tiktok', icon: 'tiktok', label: 'TikTok', title: 'TikTok',
                     subtitle: 'Mensajes y comentarios de TikTok en el mismo asistente', sub: 'Integración con TikTok',
@@ -9811,6 +9817,62 @@
         }
 
         // TikTok: el botón queda visible pero inactivo hasta que TikTok apruebe los permisos de mensajes y comentarios.
+        // Notas de voz con ElevenLabs: estado de las claves en Render, interruptor y una muestra para escuchar.
+        function VoiceSettings({ canConfigure }) {
+            const [status, setStatus] = useState(null);
+            const [busy, setBusy] = useState('');
+            const [sample, setSample] = useState('');
+            const [error, setError] = useState('');
+            useEffect(() => { api('/api/voice').then(setStatus).catch(e => setError(e.message)); }, []);
+
+            async function toggle(enabled) {
+                setBusy('toggle');
+                setError('');
+                try {
+                    setStatus(await api('/api/voice', { method: 'PUT', body: JSON.stringify({ enabled }) }));
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+            async function listen() {
+                setBusy('test');
+                setError('');
+                setSample('');
+                try {
+                    setSample((await api('/api/voice/test', { method: 'POST' })).url);
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            if (!status) return error ? <p className="hint" style={{ color: '#B42318' }}>{error}</p> : <p className="hint">Revisando la voz…</p>;
+            if (!status.available) return <p className="hint">Las notas de voz con voz propia por ahora son solo para VELAMIA.</p>;
+            const ready = status.configured && !status.problem;
+            return (
+                <>
+                    <p className="hint">Cuando la clienta responde después de ver fotos, el asistente puede contestarle con una <b>nota de voz</b> con tu voz en lugar de texto: máximo una por chat al día y nunca con precios ni totales (esos siempre van por escrito). Solo por WhatsApp.</p>
+                    <div className={'pb-notice' + (ready ? ' ok' : '')} style={ready ? undefined : { background: '#FFF3DC', color: '#7A5300' }}>
+                        {ready ? `🎙️ Voz conectada: ${status.voiceName}` : `⚠️ ${status.problem}`}
+                    </div>
+                    <label className="check-row wide" style={{ marginTop: 10 }}>
+                        <input type="checkbox" checked={!!status.enabled} disabled={!canConfigure || busy === 'toggle'} onChange={e => toggle(e.target.checked)} /> Responder con nota de voz cuando convenga
+                    </label>
+                    {canConfigure && ready && (
+                        <div className="settings-actions">
+                            <span className="save-status">{busy === 'test' ? 'Generando la muestra…' : ''}</span>
+                            <button type="button" className="btn-save-prompt" disabled={!!busy} onClick={listen}>🔊 Escuchar una muestra</button>
+                        </div>
+                    )}
+                    {sample && <audio src={sample} controls autoPlay style={{ width: '100%', marginTop: 10 }} />}
+                    {error && <p className="hint" style={{ color: '#B42318', marginTop: 8 }}>{error}</p>}
+                </>
+            );
+        }
+
         function TikTokConnect() {
             return (
                 <>

@@ -66,6 +66,7 @@ import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } 
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
 import { socialRouter, startSocialAgent } from './social';
 import { currentAiProblem } from './services/aiStatus';
+import { voiceStatus, setVoiceNotesEnabled, textToMp3, describeVoiceError } from './services/elevenlabs';
 import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
@@ -1036,6 +1037,38 @@ app.get('/api/bot-status', requireCrmSession, async (_req: Request, res: Respons
     res.json({ enabled: (await getConfig('bot_enabled')) !== 'false' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Notas de voz (ElevenLabs): solo VELAMIA, con su voz ----------
+
+app.get('/api/voice', requireCrmSession, async (_req: Request, res: Response) => {
+  if (currentTenant()) return res.json({ available: false });
+  try {
+    res.json({ available: true, ...(await voiceStatus()) });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/voice', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+  if (currentTenant()) return res.status(400).json({ error: 'Las notas de voz con la voz de VELAMIA son solo para VELAMIA' });
+  try {
+    await setVoiceNotesEnabled(req.body?.enabled !== false);
+    res.json({ available: true, ...(await voiceStatus()) });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Una frase de muestra con la voz real, para escucharla en el CRM (gasta unos 50 caracteres de ElevenLabs). */
+app.post('/api/voice/test', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
+  if (currentTenant()) return res.status(400).json({ error: 'Las notas de voz con la voz de VELAMIA son solo para VELAMIA' });
+  try {
+    const mp3 = await textToMp3(`Hola, te saluda ${profile().business.name}. ¿En qué te puedo ayudar hoy?`);
+    res.json({ url: await uploadBufferToStorage(mp3, 'audio/mpeg') });
+  } catch (error: any) {
+    res.status(500).json({ error: describeVoiceError(error) });
   }
 });
 
