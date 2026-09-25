@@ -4,11 +4,15 @@ import { uploadBufferToStorage } from '../services/storage';
 import { profile } from '../config/businessProfile';
 import { socialAi, track } from './ai';
 import { toJpeg, isOwnStorageUrl } from './images';
-import { getSupplierSettings, SupplierProduct } from './suppliers';
+import { getSupplierSettings, SupplierProduct, addSupplierProductsToCatalog, discardAsDuplicate } from './suppliers';
 
 /**
- * Fotos con el diseño de la empresa para los modelos de los PDF de proveedores. El PDF trae fotos simples (fondo blanco);
- * la empresa vende con afiches: título grande, precio, frases, franja de "pedidos bajo reserva"… Para cada modelo:
+ * Lo que pasa con cada modelo de un PDF de proveedor, en segundo plano:
+ *   0. ¿Ya lo tiene la empresa? La IA compara la foto del modelo con las del Catálogo (la empresa sube sus propios
+ *      diseños a mano y el nombre casi nunca coincide). Si ya lo tiene, no entra al Catálogo ni se le hace foto: queda
+ *      "ya lo tienes" (la empresa puede decir "no es el mismo"). Si es nuevo, entra al Catálogo con su precio.
+ * Y, si la empresa lo pide, la foto con su diseño. El PDF trae fotos simples (fondo blanco); la empresa vende con
+ * afiches: título grande, precio, frases, franja de "pedidos bajo reserva"…
  *   1. La IA de imágenes del agente (su clave, gpt-image-2) arma el afiche copiando el estilo de dos fotos del Catálogo
  *      de la empresa, con la vela del PDF tal cual, el nombre y el precio según su tamaño.
  *   2. La IA de texto lee el afiche y revisa que el nombre y el precio estén bien escritos y que no haya textos
@@ -18,8 +22,25 @@ import { getSupplierSettings, SupplierProduct } from './suppliers';
  * Se trabaja en segundo plano (un afiche tarda cerca de un minuto); el avance se guarda por catálogo.
  */
 
-export type PosterStatus = 'cola' | 'creando' | 'lista' | 'revisar' | 'error';
-export interface PosterState { status: PosterStatus; url?: string; detail?: string; at: string }
+/**
+ * cola: esperando · revisando: comparando con el Catálogo · repetido: ya lo tenía · nuevo: revisado, sin foto propia ·
+ * creando / lista / revisar / error: la foto con el diseño.
+ */
+export type PosterStatus = 'cola' | 'revisando' | 'repetido' | 'nuevo' | 'creando' | 'lista' | 'revisar' | 'error';
+export interface PosterState {
+  status: PosterStatus;
+  url?: string;
+  detail?: string;
+  at: string;
+  /** Ya se comparó con el Catálogo. */
+  checked?: boolean;
+  /** Se le hace la foto con el diseño. */
+  poster?: boolean;
+  /** El producto del Catálogo que ya era este modelo. */
+  match?: { id: string; name: string; image_url: string };
+  /** La empresa dijo "no es el mismo": no se vuelve a comparar. */
+  keep?: boolean;
+}
 
 /** Lo que cuesta cada afiche con gpt-image-2 en calidad media (medido: ~4.000 tokens de entrada y ~1.750 de salida). */
 export const POSTER_COST = 0.08;
@@ -47,11 +68,11 @@ export async function posterStates(catalogId: string): Promise<Record<string, Po
 
 export const postersRunning = (catalogId: string) => running.has(scope(catalogId));
 
-/** Cambia el estado de un modelo; las escrituras van en fila para que dos afiches a la vez no se pisen. */
-async function setState(catalogId: string, productId: string, state: Omit<PosterState, 'at'>) {
+/** Cambia el estado de un modelo (lo demás se conserva); las escrituras van en fila para que dos a la vez no se pisen. */
+async function setState(catalogId: string, productId: string, state: Partial<Omit<PosterState, 'at'>>) {
   const key = scope(catalogId);
   const states = memory.get(key) || await posterStates(catalogId);
-  states[productId] = { ...state, at: new Date().toISOString() };
+  states[productId] = { ...states[productId], ...state, at: new Date().toISOString() } as PosterState;
   memory.set(key, states);
   const previous = writes.get(key) || Promise.resolve();
   const next = previous.then(() => setConfig(stateKey(catalogId), JSON.stringify(states))).catch(error => console.warn('⚠️ No se guardó el avance de los afiches:', error.message));
@@ -204,6 +225,98 @@ export function pickReferences(category: string, catalog: any[], fromPdf: Set<st
   return urls;
 }
 
+// ---------- ¿Ya lo tiene la empresa? ----------
+
+// Palabras que no ayudan a encontrar el mismo producto.
+const NAME_NOISE = new Set(['VELA', 'VELAS', 'DEL', 'LOS', 'LAS', 'CON', 'PARA', 'MINI', 'GRANDE', 'PEQUENA', 'MEDIANA']);
+const nameWords = (name: string) => String(name || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z ]+/g, ' ')
+  .split(' ').filter(w => w.length > 2 && !NAME_NOISE.has(w));
+
+/**
+ * Productos del Catálogo con los que comparar un modelo: los de la misma ocasión (MOLDES NAVIDAD → NAVIDAD) y los que
+ * comparten alguna palabra del nombre (RENO, GNOMO…), hasta 20. Nunca los que entraron desde este mismo PDF.
+ */
+export function duplicateCandidates(model: { name: string }, category: string, catalog: any[], exclude: Set<string>, max = 20): any[] {
+  const wantedCategory = words(category);
+  const wantedName = nameWords(model.name);
+  const score = (p: any) => 2 * nameWords(p.name).filter(w => wantedName.includes(w)).length + words(String(p.category || '')).filter(w => wantedCategory.includes(w)).length;
+  return catalog
+    .filter(p => p.image_url && !exclude.has(p.id))
+    .map(p => ({ p, score: score(p) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map(x => x.p);
+}
+
+const reasoning = (model: string) => (/^(gpt-5|o\d)/.test(model) ? { reasoning_effort: 'low' } : {});
+const jsonSchema = (name: string, properties: Record<string, unknown>) => ({
+  type: 'json_schema',
+  json_schema: { name, strict: true, schema: { type: 'object', additionalProperties: false, required: Object.keys(properties), properties } }
+});
+
+/**
+ * ¿La empresa ya vende esta vela? En dos pasos:
+ *   1. Entre los parecidos del Catálogo (fotos chicas), la IA elige hasta dos que podrían ser la misma vela.
+ *   2. Mira cada par en grande y confirma que es el mismo molde (sameMold). Dos gnomos o dos Papá Noel distintos no
+ *      cuentan, pero sí se aceptan pequeñas diferencias de dibujo (los afiches son la vela redibujada).
+ */
+async function findExisting(model: SupplierProduct, candidates: any[]): Promise<{ id: string; name: string; image_url: string } | null> {
+  if (candidates.length === 0 || !model.image_url) return null;
+  const ai = await socialAi();
+  const pick = await ai.client.chat.completions.create({
+    model: ai.textModel,
+    ...reasoning(ai.textModel),
+    max_completion_tokens: 1500,
+    response_format: jsonSchema('comparacion', { posibles: { type: 'array', items: { type: 'integer' } } }),
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: `La foto 0 es una vela del catálogo de un proveedor. Las fotos 1 a ${candidates.length} son productos que la tienda ya vende: suelen ser afiches con textos, precio y otro fondo, y la vela puede tener otro color. ¿Cuáles podrían ser la misma vela (la misma figura)? Pon en "posibles" hasta 2 números, del más parecido al menos; vacío si ninguna se le parece. Después se revisa cada una con calma.` },
+        { type: 'image_url', image_url: { url: model.image_url, detail: 'low' } },
+        ...candidates.map(c => ({ type: 'image_url', image_url: { url: c.image_url, detail: 'low' } }))
+      ]
+    }]
+  } as any);
+  track(ai.textModel, pick.usage);
+  const picked: unknown[] = JSON.parse(pick.choices[0]?.message?.content || '{}').posibles || [];
+  const options = [...new Set(picked.map(Number))].filter(i => Number.isInteger(i) && i >= 1 && i <= candidates.length).slice(0, 2).map(i => candidates[i - 1]);
+  if (options.length === 0) console.log(`🔁 ${model.name}: nada parecido en el Catálogo (${candidates.length} revisados)`);
+  for (const found of options) {
+    const same = await sameMold(model.image_url, found.image_url);
+    console.log(`🔁 ${model.name}: ¿es ${found.name}? ${same ? "sí, ya lo tiene" : "no"}`);
+    if (same) return { id: found.id, name: found.name, image_url: found.image_url };
+  }
+  return null;
+}
+
+/**
+ * Segundo paso: ¿estas dos fotos muestran el mismo molde? La IA describe cada vela por separado (gorro, cara, brazos,
+ * piernas, adornos) y recién después compara: así no confunde dos Papá Noel distintos (probado 24 de 24 con 4 pares
+ * iguales y 4 distintos de MOLDES NAVIDAD).
+ */
+async function sameMold(modelUrl: string, productUrl: string): Promise<boolean> {
+  const ai = await socialAi();
+  const confirm = await ai.client.chat.completions.create({
+    model: ai.textModel,
+    ...reasoning(ai.textModel),
+    max_completion_tokens: 2000,
+    response_format: jsonSchema('confirmacion', { proveedor: { type: 'string' }, afiche: { type: 'string' }, mismoMolde: { type: 'boolean' } }),
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: `La primera foto es una vela de un proveedor. La segunda es un afiche de una tienda hecho con la foto de una vela: puede estar redibujada, con otro color, otra luz, otro fondo y textos encima (eso no importa).
+Primero describe cada vela por separado, en pocas palabras: qué figura es; su gorro o sombrero (forma); su cara (qué se ve); brazos y manos (posición y qué sostienen); piernas o base; adornos en relieve.
+Después decide: "mismoMolde" = true solo si es la misma figura y coinciden la forma del gorro, la postura de brazos y piernas y los adornos principales. Diferencias pequeñas de dibujo no cuentan; un personaje del mismo tema pero con otra forma (otro gnomo, otro Papá Noel) no es el mismo.` },
+        { type: 'image_url', image_url: { url: modelUrl, detail: 'high' } },
+        { type: 'image_url', image_url: { url: productUrl, detail: 'high' } }
+      ]
+    }]
+  } as any);
+  track(ai.textModel, confirm.usage);
+  return JSON.parse(confirm.choices[0]?.message?.content || '{}').mismoMolde === true;
+}
+
 // ---------- Trabajo en segundo plano ----------
 
 interface Job { model: SupplierProduct; texts: PosterTexts; occasion: string }
@@ -227,68 +340,112 @@ async function makeOne(catalogId: string, job: Job, refs: Buffer[]) {
       return;
     }
     if (model.catalog_product_id) await updateProduct(model.catalog_product_id, { image_url: last.url });
-    await setState(catalogId, model.id, { status: 'lista', url: last.url });
+    await setState(catalogId, model.id, { status: 'lista', url: last.url, detail: '' });
   } catch (error: any) {
     await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
   }
 }
 
-/**
- * Pone en fila los afiches de un catálogo: los indicados (rehacer) o todos los que todavía no tienen uno listo. Solo los
- * modelos que ya están en el Catálogo (el afiche lleva su precio). Sigue en segundo plano; se ve el avance en el CRM.
- */
-export async function startPosters(catalogId: string, ids?: string[]): Promise<{ queued: number; references: string[] }> {
-  await socialAi(); // sin clave del agente, error claro antes de empezar
-  const { data: catalog, error } = await supabase.from('supplier_catalogs').select('*').eq('id', catalogId).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
-  if (error) throw new Error(`Error leyendo el catálogo: ${error.message}`);
-  if (!catalog) throw new Error('El catálogo ya no existe');
-  const { data: rows, error: rowsError } = await supabase.from('supplier_products').select('*').eq('catalog_id', catalogId).filter('business_id', tenantOp(), tenantValue()).order('page');
-  if (rowsError) throw new Error(`Error leyendo los modelos: ${rowsError.message}`);
-  const models = (rows || []) as SupplierProduct[];
-  const states = await posterStates(catalogId);
-  const products = await getAllProducts();
-  const byId = new Map(products.map((p: any) => [p.id, p]));
-  const allPdf = await supabase.from('supplier_products').select('catalog_product_id').filter('business_id', tenantOp(), tenantValue());
-  const fromPdf = new Set(((allPdf.data || []) as any[]).map(r => r.catalog_product_id).filter(Boolean));
-  const references = pickReferences(catalog.name, products, fromPdf);
-  if (references.length === 0) throw new Error('Para copiar tu diseño hace falta al menos una foto tuya en el Catálogo');
+const DONE_FOR_POSTER: PosterStatus[] = ['lista', 'revisar', 'repetido', 'cola', 'revisando', 'creando'];
+const BUSY: PosterStatus[] = ['cola', 'revisando', 'creando'];
 
-  const wanted = models.filter(m => m.status === 'en_catalogo' && m.catalog_product_id && byId.has(m.catalog_product_id) && m.image_url
-    && (ids ? ids.includes(m.id) : !['lista', 'creando'].includes(states[m.id]?.status || '')));
-  for (const model of wanted) await setState(catalogId, model.id, { status: 'cola' });
-  if (wanted.length && !postersRunning(catalogId)) void runQueue(catalogId, references);
-  return { queued: wanted.length, references };
+/**
+ * Pone en fila los modelos de un catálogo: los indicados (rehacer) o todos los que falten. Cada uno se compara primero
+ * con el Catálogo (una vez) y, con posters, después se le hace la foto con el diseño. Sigue en segundo plano; el avance
+ * se ve en el CRM.
+ */
+export async function startPosters(catalogId: string, options: { ids?: string[]; posters?: boolean } = {}): Promise<{ queued: number }> {
+  const posters = options.posters !== false;
+  await socialAi(); // sin clave del agente, error claro antes de empezar
+  const { data: rows, error } = await supabase.from('supplier_products').select('*').eq('catalog_id', catalogId).filter('business_id', tenantOp(), tenantValue()).order('page');
+  if (error) throw new Error(`Error leyendo los modelos: ${error.message}`);
+  const models = (rows || []) as SupplierProduct[];
+  if (models.length === 0) throw new Error('El catálogo no tiene modelos');
+  const states = await posterStates(catalogId);
+  const statusOf = (m: SupplierProduct) => states[m.id]?.status as PosterStatus;
+  const wanted = models.filter(m => m.image_url && (options.ids
+    ? options.ids.includes(m.id) && !BUSY.includes(statusOf(m))
+    : posters
+      ? !DONE_FOR_POSTER.includes(statusOf(m))
+      : !states[m.id]?.checked && !states[m.id]?.keep && !BUSY.includes(statusOf(m))));
+  for (const model of wanted) await setState(catalogId, model.id, { status: 'cola', poster: posters || !!states[model.id]?.poster, detail: '' });
+  if (wanted.length && !postersRunning(catalogId)) void runQueue(catalogId);
+  return { queued: wanted.length };
 }
 
-async function runQueue(catalogId: string, references: string[]) {
+async function runQueue(catalogId: string) {
   const key = scope(catalogId);
   running.add(key);
   try {
-    const refs = (await Promise.all(references.map(download))).map(buffer => toJpeg(buffer));
-    // Se leen los pendientes cada vez: lo que se agregue a la fila mientras trabaja también sale.
-    const next = async (): Promise<SupplierProduct | null> => {
-      const states = await posterStates(catalogId);
-      const id = Object.keys(states).find(k => states[k].status === 'cola');
-      if (!id) return null;
-      await setState(catalogId, id, { status: 'creando' });
-      const { data } = await supabase.from('supplier_products').select('*').eq('id', id).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
-      return (data as SupplierProduct) || null;
-    };
+    const { data: catalog } = await supabase.from('supplier_catalogs').select('name').eq('id', catalogId).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
+    if (!catalog) return;
+    const category = String(catalog.name || '');
     const settings = await getSupplierSettings();
-    const { data: catalog } = await supabase.from('supplier_catalogs').select('name').eq('id', catalogId).maybeSingle();
-    const category = String(catalog?.name || '');
+    // Con qué comparar: el Catálogo al empezar, sin lo que vino de este PDF; y las fotos de referencia, solo si hacen falta.
+    const { data: own } = await supabase.from('supplier_products').select('catalog_product_id').eq('catalog_id', catalogId).filter('business_id', tenantOp(), tenantValue());
+    const fromThisPdf = new Set(((own || []) as any[]).map(r => r.catalog_product_id).filter(Boolean));
+    const catalogAtStart = await getAllProducts();
+    let refs: Buffer[] | null = null;
+    const references = async () => {
+      if (refs) return refs;
+      const { data: all } = await supabase.from('supplier_products').select('catalog_product_id').filter('business_id', tenantOp(), tenantValue());
+      const fromPdf = new Set(((all || []) as any[]).map(r => r.catalog_product_id).filter(Boolean));
+      const urls = pickReferences(category, await getAllProducts(), fromPdf);
+      if (urls.length === 0) throw new Error('Para copiar tu diseño hace falta al menos una foto tuya en el Catálogo');
+      refs = (await Promise.all(urls.map(download))).map(buffer => toJpeg(buffer));
+      return refs;
+    };
+
+    // Primero se revisan (y entran al Catálogo) todos los modelos; las fotos, que tardan, van después.
+    const next = async (): Promise<{ model: SupplierProduct; state: PosterState } | null> => {
+      for (;;) {
+        const states = await posterStates(catalogId);
+        const queued = Object.keys(states).filter(k => states[k].status === 'cola');
+        const id = queued.find(k => !states[k].checked && !states[k].keep) || queued[0];
+        if (!id) return null;
+        const state = { ...states[id] };
+        await setState(catalogId, id, { status: !state.checked && !state.keep ? 'revisando' : 'creando' });
+        const { data } = await supabase.from('supplier_products').select('*').eq('id', id).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
+        if (data) return { model: data as SupplierProduct, state };
+        await setState(catalogId, id, { status: 'error', detail: 'El modelo ya no existe' });
+      }
+    };
+
     const worker = async () => {
-      for (let model = await next(); model; model = await next()) {
-        const product: any = model.catalog_product_id ? (await getAllProducts()).find((p: any) => p.id === model!.catalog_product_id) : null;
-        if (!product) { await setState(catalogId, model.id, { status: 'error', detail: 'El producto ya no está en el Catálogo' }); continue; }
-        await makeOne(catalogId, { model, texts: posterTexts(product.name, Number(product.price) || settings.sizePrices[model.size], category), occasion: occasionOf(category) }, refs);
+      for (let job = await next(); job; job = await next()) {
+        let { model } = job;
+        const { state } = job;
+        try {
+          if (!state.checked && !state.keep) {
+            const match = await findExisting(model, duplicateCandidates(model, category, catalogAtStart, fromThisPdf));
+            if (match) {
+              await discardAsDuplicate(model);
+              await setState(catalogId, model.id, { status: 'repetido', checked: true, match, detail: '' });
+              continue;
+            }
+            // Nuevo: entra al Catálogo con su precio (si la regla lo pide) y, si lleva foto, vuelve a la fila para después.
+            if (model.status !== 'en_catalogo' && settings.autoAddToCatalog) {
+              await addSupplierProductsToCatalog([model.id]);
+              const { data } = await supabase.from('supplier_products').select('*').eq('id', model.id).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
+              if (data) model = data as SupplierProduct;
+            }
+            await setState(catalogId, model.id, { status: state.poster ? 'cola' : 'nuevo', checked: true });
+            continue;
+          }
+          if (!state.poster) { await setState(catalogId, model.id, { status: 'nuevo' }); continue; }
+          const product: any = model.catalog_product_id ? (await getAllProducts()).find((p: any) => p.id === model.catalog_product_id) : null;
+          if (!product) { await setState(catalogId, model.id, { status: 'error', detail: 'No está en el Catálogo (revisa que tenga precio)' }); continue; }
+          await makeOne(catalogId, { model, texts: posterTexts(product.name, Number(product.price) || settings.sizePrices[model.size], category), occasion: occasionOf(category) }, await references());
+        } catch (error: any) {
+          await setState(catalogId, model.id, { status: 'error', detail: String(error?.message || error).slice(0, 200) });
+        }
       }
     };
     await Promise.all(Array.from({ length: WORKERS }, worker));
   } catch (error: any) {
-    console.error('❌ Afiches de proveedor detenidos:', error.message);
+    console.error('❌ Revisión de modelos de proveedor detenida:', error.message);
     const states = await posterStates(catalogId);
-    for (const [id, state] of Object.entries(states)) if (state.status === 'cola' || state.status === 'creando') await setState(catalogId, id, { status: 'error', detail: String(error.message).slice(0, 200) });
+    for (const [id, state] of Object.entries(states)) if (BUSY.includes(state.status)) await setState(catalogId, id, { status: 'error', detail: String(error.message).slice(0, 200) });
   } finally {
     running.delete(key);
   }
@@ -299,14 +456,32 @@ export async function applyPoster(catalogId: string, model: SupplierProduct): Pr
   const state = (await posterStates(catalogId))[model.id];
   if (!state?.url) throw new Error('Ese modelo no tiene afiche');
   if (model.catalog_product_id) await updateProduct(model.catalog_product_id, { image_url: state.url });
-  await setState(catalogId, model.id, { status: 'lista', url: state.url });
+  await setState(catalogId, model.id, { status: 'lista', detail: '' });
   return (await posterStates(catalogId))[model.id];
 }
 
-/** Un afiche que se quedó "creando" porque el servidor se reinició vuelve a la fila. */
+/** "No es el mismo": el modelo entra al Catálogo y, si la regla lo pide, se le hace la foto con el diseño. */
+export async function keepModel(catalogId: string, model: SupplierProduct): Promise<PosterState> {
+  const settings = await getSupplierSettings();
+  const added = await addSupplierProductsToCatalog([model.id], true);
+  if (!added.added && model.status !== 'en_catalogo') throw new Error(added.withoutPrice ? 'Falta el precio de su tamaño en la regla' : 'No se pudo agregar al Catálogo');
+  await setState(catalogId, model.id, { status: settings.autoPosters ? 'cola' : 'nuevo', keep: true, checked: true, match: undefined, poster: settings.autoPosters, detail: '' });
+  if (settings.autoPosters && !postersRunning(catalogId)) void runQueue(catalogId);
+  return (await posterStates(catalogId))[model.id];
+}
+
+/** Lo que se quedó a medias porque el servidor se reinició vuelve a la fila. */
 export async function resumeStuck(catalogId: string) {
   if (postersRunning(catalogId)) return;
   const states = await posterStates(catalogId);
-  const stuck = Object.entries(states).filter(([, s]) => s.status === 'creando' || s.status === 'cola').map(([id]) => id);
-  if (stuck.length) await startPosters(catalogId, stuck).catch(error => console.warn('⚠️ No se pudieron retomar los afiches:', error.message));
+  const stuck = Object.entries(states).filter(([, s]) => BUSY.includes(s.status));
+  if (stuck.length === 0) return;
+  try {
+    await socialAi();
+  } catch (error: any) {
+    console.warn('⚠️ No se pudo retomar la revisión de modelos:', error.message);
+    return;
+  }
+  for (const [id] of stuck) await setState(catalogId, id, { status: 'cola' });
+  if (!postersRunning(catalogId)) void runQueue(catalogId);
 }

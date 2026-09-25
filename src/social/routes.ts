@@ -14,11 +14,14 @@ import { claimAndPublish } from './publisher';
 import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed } from './library';
 import {
   getSupplierSettings, saveSupplierSettings, importSupplierCatalog, listSupplierCatalogs, updateSupplierProduct,
-  addSupplierProductsToCatalog, deleteSupplierCatalog, mostUsedPackaging
+  addSupplierProductsToCatalog, deleteSupplierCatalog, mostUsedPackaging, moveSupplierCatalog
 } from './suppliers';
 import { listResults } from './insights';
-import { startPosters, posterStates, postersRunning, applyPoster, clearPosterStates, resumeStuck, POSTER_COST } from './posters';
-import { publicSocialAi, saveSocialAi, testSocialAi } from './ai';
+import { startPosters, posterStates, postersRunning, applyPoster, keepModel, clearPosterStates, resumeStuck, POSTER_COST } from './posters';
+import { publicSocialAi, saveSocialAi, testSocialAi, socialAi } from './ai';
+
+/** ¿El agente tiene su propia clave de OpenAI? (sin ella, los modelos de un PDF entran al Catálogo sin revisar). */
+const hasSocialAi = () => socialAi().then(() => true, () => false);
 
 /**
  * Rutas del agente de redes (servicio adicional "publicaciones"): calendario de publicaciones, biblioteca de fotos y
@@ -350,7 +353,8 @@ export function socialRouter(): Router {
         working[c.id] = postersRunning(c.id);
       }
       // Con qué empaque entran si la regla no elige uno (el más usado en su Catálogo).
-      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: POSTER_COST });
+      const categories = [...new Set((catalog as any[]).map(p => String(p.category || '').trim()).filter(Boolean))].sort();
+      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: POSTER_COST, categories });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
@@ -367,7 +371,15 @@ export function socialRouter(): Router {
   /** Catálogo ya leído en el navegador: se guarda y (en automático) sus modelos pasan al Catálogo. */
   router.post('/api/social/suppliers', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
     try {
-      res.status(201).json(await importSupplierCatalog(req.body || {}));
+      // Con la IA del agente, los modelos no entran directo: primero se revisa cuáles ya tiene la empresa (en segundo
+      // plano, en el servidor: no depende de que la pantalla siga abierta) y, si la regla lo pide, se hacen sus fotos.
+      const review = await hasSocialAi();
+      const result = await importSupplierCatalog(req.body || {}, review);
+      if (review && result.ids.length) {
+        const settings = await getSupplierSettings();
+        await startPosters(result.catalog.id, { ids: result.ids, posters: settings.autoPosters });
+      }
+      res.status(201).json(result);
     } catch (error: any) {
       res.status(400).json({ error: explain(error) });
     }
@@ -381,7 +393,7 @@ export function socialRouter(): Router {
       // Catálogo muestra la foto original del PDF (nunca un precio equivocado).
       if ((req.body?.size !== undefined || req.body?.name !== undefined) && (await posterStates(product.catalog_id))[product.id]) {
         if (product.catalog_product_id && product.image_url) await updateProduct(product.catalog_product_id, { image_url: product.image_url });
-        await startPosters(product.catalog_id, [product.id]).catch(error => console.warn('⚠️ No se pudo rehacer la foto con el diseño:', error.message));
+        await startPosters(product.catalog_id, { ids: [product.id], posters: true }).catch(error => console.warn('⚠️ No se pudo rehacer la foto con el diseño:', error.message));
       }
       res.json({ product });
     } catch (error: any) {
@@ -414,7 +426,29 @@ export function socialRouter(): Router {
   router.post('/api/social/suppliers/:catalogId/posters', requireCrmSession, requireEditorRole, requirePublishing, requireUuid('catalogId', 'Catálogo'), async (req: Request, res: Response) => {
     try {
       const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter((id: string) => UUID_PATTERN.test(id)) : undefined;
-      res.json(await startPosters(req.params.catalogId, ids));
+      // posters: false = solo revisar cuáles ya tiene la empresa (sin hacer fotos).
+      res.json(await startPosters(req.params.catalogId, { ids, posters: req.body?.posters !== false }));
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
+    }
+  });
+
+  /** "No es el mismo": la IA creyó que la empresa ya lo tenía; entra al Catálogo (y a la fila de fotos si la regla lo pide). */
+  router.post('/api/social/suppliers/:catalogId/models/:productId/keep', requireCrmSession, requireEditorRole, requirePublishing, requireUuid('catalogId', 'Catálogo'), requireUuid('productId', 'Modelo'), async (req: Request, res: Response) => {
+    try {
+      const { products } = await listSupplierCatalogs();
+      const model = products.find(p => p.id === req.params.productId && p.catalog_id === req.params.catalogId);
+      if (!model) return res.status(404).json({ error: 'Modelo no encontrado' });
+      res.json({ poster: await keepModel(req.params.catalogId, model) });
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
+    }
+  });
+
+  /** Lleva el catálogo (y sus productos) a otra categoría del Catálogo, nueva o de las que ya existen. */
+  router.patch('/api/social/suppliers/:catalogId', requireCrmSession, requireEditorRole, requirePublishing, requireUuid('catalogId', 'Catálogo'), async (req: Request, res: Response) => {
+    try {
+      res.json(await moveSupplierCatalog(req.params.catalogId, req.body?.name));
     } catch (error: any) {
       res.status(400).json({ error: explain(error) });
     }

@@ -2317,6 +2317,13 @@
         .sp-making { opacity: .45; animation: sp-pulse 1.4s ease-in-out infinite; }
         @keyframes sp-pulse { 50% { opacity: .8; } }
         .sp-poster-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .sp-match { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px; border-radius: 10px; background: #F3F4FF; font-size: 12.5px; color: #2A3766; }
+        .sp-match img { width: 40px !important; height: 40px; aspect-ratio: auto !important; object-fit: cover; border-radius: 8px; }
+        .sp-move { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; font-size: 13.5px; color: #3A4570; }
+        .sp-move input { flex: 1; min-width: 160px; max-width: 280px; border: 1px solid #DCE2F5; border-radius: 10px; padding: 8px 10px; font: inherit; }
+        .sp-name small { display: block; margin-top: 4px; }
+        .sp-posters .pb-btn, .sp-match .pb-btn, .sp-move .pb-btn { white-space: normal; max-width: 100%; }
+        @media (max-width: 767px) { .sp-posters .pb-btn { flex: 1 1 100%; justify-content: center; } .sp-move input { max-width: none; } }
         .sp-model a img { display: block; }
         .sp-trash { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px; border: 1px solid #F3D2CE; background: #FFF5F4; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .sp-trash:hover { background: #FDE7E4; }
@@ -9209,22 +9216,16 @@
                     const read = await extractSupplierPdf(pdf, text => setNotice('📖 ' + text + '…'));
                     if (!read.products.length) throw new Error('No encontré modelos con foto, nombre y precio en este PDF');
                     // Por partes de 12: un catálogo grande no choca con el límite de tamaño de cada envío.
-                    const r = { total: 0, added: 0, estimated: 0, withoutPrice: 0, catalog: null };
+                    const r = { total: 0, added: 0, estimated: 0, withoutPrice: 0, catalog: null, review: false };
                     for (let i = 0; i < read.products.length; i += 12) {
                         setNotice(`💾 Guardando modelos ${i + 1}-${Math.min(i + 12, read.products.length)} de ${read.products.length}${s.autoAddToCatalog ? ' y agregándolos al Catálogo' : ''}…`);
                         const part = await api('/api/social/suppliers', { method: 'POST', body: JSON.stringify({ catalogId: r.catalog?.id, name: pdfName, fileName: pdf.name, pages: read.pages, products: read.products.slice(i, i + 12) }) });
                         r.catalog = part.catalog;
                         ['total', 'added', 'estimated', 'withoutPrice'].forEach(k => { r[k] += part[k]; });
+                        r.review = !!part.review;
                     }
-                    let posters = '';
-                    if (s.autoPosters && r.added) {
-                        try {
-                            const p = await api(`/api/social/suppliers/${r.catalog.id}/posters`, { method: 'POST', body: '{}' });
-                            posters = ` · 🎨 creando ${p.queued} fotos con tu diseño (tarda cerca de un minuto cada 3)`;
-                        } catch (e) {
-                            posters = ` · no se pudieron crear las fotos con tu diseño: ${e.message}`;
-                        }
-                    }
+                    // Con la IA del agente, el servidor revisa cuáles ya tienes: solo los nuevos entran al Catálogo (y reciben su foto).
+                    const posters = r.review ? ` · 🔍 revisando cuáles ya tienes: los nuevos entran solos a ${r.catalog.name}${s.autoPosters ? ' y luego se hacen sus fotos con tu diseño' : ''}` : '';
                     setNotice(`✅ ${r.total} modelos leídos del PDF${r.added ? ` · ${r.added} agregados al Catálogo en ${r.catalog.name}` : ''}${r.estimated ? ` · ${r.estimated} con tamaño estimado (${SIZE_LABELS[s.defaultSize]}): revísalos abajo` : ''}${r.withoutPrice ? ` · ${r.withoutPrice} sin precio (completa la regla de precios)` : ''}${posters}.`);
                     setPdf(null);
                     setPdfName('');
@@ -9262,13 +9263,16 @@
                 }
             }
 
-            // Fotos con el diseño de la empresa: todas las que faltan o, con ids, las que se piden rehacer.
-            async function makePosters(catalog, ids) {
+            // Fotos con el diseño de la empresa (todas las que faltan o, con ids, las que se piden rehacer). Sin posters, solo
+            // se revisa cuáles ya tienes en el Catálogo. Antes de cada foto, igual se revisa.
+            async function makePosters(catalog, ids, posters = true) {
                 setBusy('posters');
                 setError('');
                 try {
-                    const r = await api(`/api/social/suppliers/${catalog.id}/posters`, { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) });
-                    setNotice(r.queued ? `🎨 Creando ${r.queued} foto(s) con tu diseño. Puedes seguir usando el CRM: se ven aquí a medida que salen.` : 'Todas las fotos ya tienen tu diseño.');
+                    const r = await api(`/api/social/suppliers/${catalog.id}/posters`, { method: 'POST', body: JSON.stringify({ ...(ids ? { ids } : {}), posters }) });
+                    setNotice(!r.queued ? (posters ? 'Todas las fotos ya tienen tu diseño.' : 'Ya se revisaron todos.')
+                        : posters ? `🎨 Creando ${r.queued} foto(s) con tu diseño (antes se revisa que no las tengas ya). Puedes seguir usando el CRM.`
+                            : `🔍 Revisando ${r.queued} modelo(s): los que ya tienes se quitan del Catálogo.`);
                     load();
                 } catch (e) {
                     setError(e.message);
@@ -9276,6 +9280,30 @@
                     setBusy('');
                 }
             }
+            async function keepModel(catalog, model) {
+                try {
+                    await api(`/api/social/suppliers/${catalog.id}/models/${model.id}/keep`, { method: 'POST', body: '{}' });
+                    load();
+                } catch (e) {
+                    setError(e.message);
+                }
+            }
+            const [moving, setMoving] = useState(null);
+            async function moveCatalog(catalog) {
+                if (!moving?.name?.trim()) return;
+                setBusy('move');
+                try {
+                    const r = await api('/api/social/suppliers/' + catalog.id, { method: 'PATCH', body: JSON.stringify({ name: moving.name }) });
+                    setNotice(`✅ ${r.moved} productos pasaron a la categoría ${r.category}.`);
+                    setMoving(null);
+                    load();
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
             async function applyPoster(catalog, model) {
                 try {
                     await api(`/api/social/suppliers/${catalog.id}/posters/${model.id}/apply`, { method: 'POST', body: '{}' });
@@ -9316,6 +9344,7 @@
                         </div>
                         {notice && <div className="pb-notice ok">{notice}</div>}
                         {error && <div className="pb-err" style={{ marginBottom: 12 }}>{error}</div>}
+                        <datalist id="sp-categories">{(data.categories || []).map(c => <option key={c} value={c} />)}</datalist>
                         <div className="sp-grid">
                             <div className="sp-box">
                                 <b>1. Tu regla de precios</b>
@@ -9368,7 +9397,8 @@
                                         </label>
                                         {pdf && (
                                             <label className="sp-name"><span>Categoría en el Catálogo</span>
-                                                <input type="text" maxLength={60} value={pdfName} onChange={e => setPdfName(e.target.value.toUpperCase())} />
+                                                <input type="text" maxLength={60} value={pdfName} list="sp-categories" onChange={e => setPdfName(e.target.value.toUpperCase())} />
+                                                <small className="pb-muted">Elige una que ya tienes (por ejemplo {(data.categories || [])[0] || 'NAVIDAD'}) o escribe una nueva.</small>
                                             </label>
                                         )}
                                         {pdf && !pricesReady && s.autoAddToCatalog && <div className="pb-muted" style={{ color: '#B36B00' }}>Primero guarda los 3 precios de la regla: sin precio los modelos no pueden entrar al Catálogo.</div>}
@@ -9384,18 +9414,21 @@
 
                     {data.catalogs.map(catalog => {
                         const models = data.products.filter(p => p.catalog_id === catalog.id);
-                        const pending = models.filter(p => p.status !== 'en_catalogo');
                         const estimated = models.filter(p => p.size_estimated).length;
                         const isOpen = openCatalog === catalog.id;
-                        const inCatalog = models.length - pending.length;
                         const dup = repeated(catalog);
-                        // Fotos con el diseño de la empresa.
+                        // Revisión contra el Catálogo y fotos con el diseño de la empresa.
                         const posters = data.posters?.[catalog.id] || {};
                         const stateOf = p => posters[p.id]?.status || '';
+                        const busyState = p => ['cola', 'revisando', 'creando'].includes(stateOf(p));
+                        const inCatalog = models.filter(p => p.status === 'en_catalogo').length;
+                        const pending = models.filter(p => p.status === 'nuevo' && !busyState(p));
+                        const already = models.filter(p => stateOf(p) === 'repetido').length;
+                        const unchecked = models.filter(p => !posters[p.id]?.checked && !posters[p.id]?.keep && !busyState(p)).length;
                         const withDesign = models.filter(p => stateOf(p) === 'lista').length;
                         const toReview = models.filter(p => stateOf(p) === 'revisar').length;
-                        const inQueue = models.filter(p => ['cola', 'creando'].includes(stateOf(p))).length;
-                        const missing = models.filter(p => p.status === 'en_catalogo' && !['lista', 'cola', 'creando', 'revisar'].includes(stateOf(p))).length;
+                        const inQueue = models.filter(busyState).length;
+                        const missing = models.filter(p => p.status !== 'descartado' && !['lista', 'cola', 'revisando', 'creando', 'revisar', 'repetido'].includes(stateOf(p))).length;
                         const creating = inQueue > 0 || !!data.postersRunning?.[catalog.id];
                         return (
                             <section key={catalog.id} className={'pb-card' + (dup ? ' sp-dup' : '')}>
@@ -9403,7 +9436,7 @@
                                     <div className="pb-tile"><PlatIcon name="layers" size={22} color="#4F5BD5" /></div>
                                     <div className="grow">
                                         <h2>{catalog.name}{dup && <span className="sp-tag warn" style={{ marginLeft: 8, verticalAlign: 'middle' }}>Repetido</span>}</h2>
-                                        <p>{models.length} modelos · {inCatalog} en el Catálogo{withDesign ? ` · 🎨 ${withDesign} con tu diseño` : ''}{estimated ? ` · ${estimated} con tamaño estimado` : ''} · {catalog.file_name} · subido el {new Date(catalog.created_at).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                                        <p>{models.length} modelos · {inCatalog} en el Catálogo{already ? ` · 🔁 ${already} ya los tenías` : ''}{withDesign ? ` · 🎨 ${withDesign} con tu diseño` : ''}{estimated ? ` · ${estimated} con tamaño estimado` : ''} · {catalog.file_name} · subido el {new Date(catalog.created_at).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
                                     {canEdit && (
                                         <button type="button" className="sp-trash" title="Borrar este catálogo" aria-label={'Borrar el catálogo ' + catalog.name}
@@ -9413,6 +9446,23 @@
                                     )}
                                     <PbIcon name={isOpen ? 'back' : 'next'} size={20} color="#3A4570" />
                                 </div>
+                                {isOpen && (
+                                    <div className="sp-move">
+                                        {moving?.id === catalog.id ? (
+                                            <>
+                                                <span>Categoría:</span>
+                                                <input type="text" maxLength={60} list="sp-categories" value={moving.name} autoFocus onChange={e => setMoving({ ...moving, name: e.target.value.toUpperCase() })} />
+                                                <button type="button" className="pb-btn main sm" disabled={busy === 'move' || !moving.name.trim()} onClick={() => moveCatalog(catalog)}>{busy === 'move' ? 'Moviendo…' : 'Mover'}</button>
+                                                <button type="button" className="pb-btn sm" onClick={() => setMoving(null)}>Cancelar</button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>Categoría en el Catálogo: <b>{catalog.name}</b></span>
+                                                {canEdit && <button type="button" className="pb-btn sm" onClick={() => setMoving({ id: catalog.id, name: catalog.name })}>Cambiar categoría</button>}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                                 {deleting === catalog.id && (
                                     <div className="sp-delete">
                                         <b>¿Borrar el catálogo {catalog.name}{dup ? ' repetido' : ''} de todos lados?</b>
@@ -9438,13 +9488,18 @@
                                                 </div>
                                             </div>
                                         )}
-                                        {inCatalog > 0 && (
+                                        {models.length > 0 && (
                                             <div className="sp-posters">
                                                 <div className="grow">
-                                                    <b>🎨 Fotos con tu diseño: {withDesign} de {inCatalog}</b>
-                                                    <small>{creating ? `Creando… faltan ${inQueue} (cerca de un minuto cada 3). Puedes salir de esta pantalla.` : toReview ? `${toReview} para revisar: la IA vio algo mal escrito; míralas abajo.` : missing ? 'La IA arma cada foto con el estilo de tus fotos del Catálogo y revisa el nombre y el precio.' : 'Todas listas: ya son las fotos del Catálogo.'}</small>
-                                                    {creating && <div className="sp-bar"><i style={{ width: Math.round(100 * (withDesign + toReview) / Math.max(1, withDesign + toReview + inQueue)) + '%' }} /></div>}
+                                                    <b>🎨 Fotos con tu diseño: {withDesign} de {Math.max(0, models.length - already)}{already ? ` · 🔁 ${already} ya los tenías` : ''}</b>
+                                                    <small>{creating
+                                                        ? `Trabajando… faltan ${inQueue}: primero se revisa cuáles ya tienes (segundos) y luego se hacen las fotos (cerca de un minuto cada 3). Puedes salir de esta pantalla.`
+                                                        : toReview ? `${toReview} para revisar: la IA vio algo mal escrito; míralas abajo.`
+                                                            : missing ? 'Antes de agregar o hacer la foto, la IA compara cada modelo con tu Catálogo: lo que ya tienes no se duplica.'
+                                                                : 'Todo listo: los nuevos ya están en el Catálogo con tu diseño.'}</small>
+                                                    {creating && <div className="sp-bar"><i style={{ width: Math.round(100 * (models.length - inQueue) / Math.max(1, models.length)) + '%' }} /></div>}
                                                 </div>
+                                                {canEdit && !creating && unchecked > 0 && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => makePosters(catalog, null, false)}>🔍 Buscar los que ya tengo ({unchecked})</button>}
                                                 {canEdit && missing > 0 && !creating && <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => makePosters(catalog)}>🎨 Crear {missing} {missing === 1 ? 'foto' : 'fotos'} con mi diseño (≈ ${(missing * (data.posterCost || 0.08)).toFixed(2)})</button>}
                                             </div>
                                         )}
@@ -9470,7 +9525,15 @@
                                                     {p.size_estimated && <span className="sp-tag warn" title={p.size_note || 'El PDF no dice el tamaño'}>Tamaño estimado</span>}
                                                     {p.status === 'en_catalogo'
                                                         ? <span className="sp-tag ok">En el Catálogo</span>
-                                                        : canEdit && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => addToCatalog([p.id])}>Agregar al Catálogo</button>}
+                                                        : p.status === 'nuevo' && !busyState(p) && canEdit && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => addToCatalog([p.id])}>Agregar al Catálogo</button>}
+                                                    {stateOf(p) === 'revisando' && <span className="sp-tag wait">Buscando si ya lo tienes…</span>}
+                                                    {stateOf(p) === 'repetido' && (
+                                                        <div className="sp-match">
+                                                            {posters[p.id].match?.image_url && <img src={posters[p.id].match.image_url} alt="" loading="lazy" />}
+                                                            <span>🔁 Ya lo tienes: <b>{posters[p.id].match?.name}</b></span>
+                                                            {canEdit && <button type="button" className="pb-btn sm" onClick={() => keepModel(catalog, p)}>No es el mismo</button>}
+                                                        </div>
+                                                    )}
                                                     {stateOf(p) === 'lista' && <span className="sp-tag design">🎨 Con tu diseño</span>}
                                                     {stateOf(p) === 'creando' && <span className="sp-tag wait">Creando foto…</span>}
                                                     {stateOf(p) === 'cola' && <span className="sp-tag wait">En fila</span>}

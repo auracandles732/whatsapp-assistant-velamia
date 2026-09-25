@@ -46,3 +46,17 @@ test('las referencias son fotos propias del Catálogo, primero las de la misma o
   assert.deepEqual(pickReferences('MOLDES NAVIDAD', catalog, new Set(['pdf'])), [own + 'n2.png', own + 'n1.png']);
   assert.deepEqual(pickReferences('HALLOWEEN', catalog, new Set(['pdf'])), [own + 'a.png', own + 'n2.png'], 'sin la ocasión, las más recientes');
 });
+
+test('para saber si ya lo tienes se compara con la misma ocasión y con nombres parecidos, nunca con el mismo PDF', () => {
+  const { duplicateCandidates } = require('../src/social/posters') as typeof import('../src/social/posters');
+  const catalog = [
+    { id: 'gnomo', name: 'VELA GNOMO NAVIDEÑO', category: 'NAVIDAD', image_url: 'https://x/g.png' },
+    { id: 'reno', name: 'VELA RENO TIERNO', category: 'ANIMALES', image_url: 'https://x/r.png' },
+    { id: 'osito', name: 'OSITO NUBE', category: 'BABY SHOWER', image_url: 'https://x/o.png' },
+    { id: 'pdf', name: 'VELA RENO', category: 'MOLDES NAVIDAD', image_url: 'https://x/p.png' },
+    { id: 'sinfoto', name: 'VELA RENO GRANDE', category: 'NAVIDAD', image_url: null }
+  ];
+  const found = duplicateCandidates({ name: 'VELA RENO' }, 'MOLDES NAVIDAD', catalog, new Set(['pdf'])).map(p => p.id);
+  assert.deepEqual(found, ['reno', 'gnomo'], 'primero el mismo nombre, luego la misma ocasión; sin el del PDF ni los sin foto');
+  assert.deepEqual(duplicateCandidates({ name: 'VELA ESTRELLA' }, 'VARIOS', catalog, new Set()), [], 'sin nada parecido no se gasta en comparar');
+});

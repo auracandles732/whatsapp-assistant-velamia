@@ -185,8 +185,10 @@ async function existingCatalog(id: unknown) {
 /**
  * Importa un catálogo de proveedor ya leído por el CRM (en una o varias partes: con catalogId se agregan al mismo).
  * Los modelos sin nombre se descartan y los nombres nunca se repiten en el Catálogo.
+ * Con review (el agente tiene su IA) los modelos no entran todavía al Catálogo: primero se revisa cuáles ya tiene la
+ * empresa (posters.ts) y solo los nuevos pasan. Sin IA entran de una vez, como siempre.
  */
-export async function importSupplierCatalog(input: { catalogId?: unknown; name?: unknown; supplier?: unknown; fileName?: unknown; pages?: unknown; products?: unknown }) {
+export async function importSupplierCatalog(input: { catalogId?: unknown; name?: unknown; supplier?: unknown; fileName?: unknown; pages?: unknown; products?: unknown }, review = false) {
   const settings = await getSupplierSettings();
   const category = String(input.name || '').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
   if (!category) throw new Error('Escribe el nombre del catálogo (será la categoría en el Catálogo)');
@@ -220,7 +222,7 @@ export async function importSupplierCatalog(input: { catalogId?: unknown; name?:
   const [existing, { products: supplierProducts }] = await Promise.all([getAllProducts(), listSupplierCatalogs()]);
   const taken = new Set<string>([...existing.map((p: any) => productKey(p.name)), ...supplierProducts.map(p => productKey(p.name))]);
   const packaging = packagingOf(settings, existing);
-  const summary = { catalog, total: 0, added: 0, estimated: 0, withoutPrice: 0 };
+  const summary = { catalog, total: 0, added: 0, estimated: 0, withoutPrice: 0, ids: [] as string[], review };
   for (const item of valid) {
     const supplierName = String(item.name).replace(/\s+/g, ' ').trim().slice(0, 120);
     const detected = sizeFromNote(String(item.sizeNote || ''));
@@ -240,7 +242,7 @@ export async function importSupplierCatalog(input: { catalogId?: unknown; name?:
       status: 'nuevo',
       catalog_product_id: null
     };
-    if (settings.autoAddToCatalog) {
+    if (settings.autoAddToCatalog && !review) {
       const productId = await toCatalog(row, String(catalog.name || category), settings, packaging);
       if (productId) {
         row.status = 'en_catalogo';
@@ -253,6 +255,7 @@ export async function importSupplierCatalog(input: { catalogId?: unknown; name?:
     const { error: rowError } = await supabase.from(PRODUCTS).insert([row]);
     if (rowError) throw new Error(`Error guardando los modelos: ${rowError.message}`);
     summary.total++;
+    summary.ids.push(row.id);
     if (!detected) summary.estimated++;
   }
   return summary;
@@ -304,8 +307,11 @@ export async function updateSupplierProduct(id: string, changes: { size?: unknow
   return data as SupplierProduct;
 }
 
-/** Pasa al Catálogo los modelos indicados (o todos los que falten de un catálogo). */
-export async function addSupplierProductsToCatalog(ids: string[]) {
+/**
+ * Pasa al Catálogo los modelos indicados. Los descartados por repetidos (la empresa ya los tenía) solo con
+ * includeDiscarded: cuando la empresa dice "no es el mismo".
+ */
+export async function addSupplierProductsToCatalog(ids: string[], includeDiscarded = false) {
   const settings = await getSupplierSettings();
   const { catalogs, products } = await listSupplierCatalogs();
   const byId = new Map(catalogs.map((c: any) => [c.id, c]));
@@ -313,7 +319,7 @@ export async function addSupplierProductsToCatalog(ids: string[]) {
   const existing = new Set(catalogNow.map((p: any) => productKey(p.name)));
   const packaging = packagingOf(settings, catalogNow);
   let added = 0, withoutPrice = 0, alreadyThere = 0;
-  for (const product of products.filter(p => ids.includes(p.id) && p.status !== 'en_catalogo')) {
+  for (const product of products.filter(p => ids.includes(p.id) && p.status !== 'en_catalogo' && (includeDiscarded || p.status !== 'descartado'))) {
     if (existing.has(productKey(product.name))) { alreadyThere++; continue; }
     const catalog: any = byId.get(product.catalog_id);
     const productId = await toCatalog(product, String(catalog?.name || 'PROVEEDOR'), settings, packaging);
@@ -324,6 +330,29 @@ export async function addSupplierProductsToCatalog(ids: string[]) {
     added++;
   }
   return { added, withoutPrice, alreadyThere };
+}
+
+/** El modelo ya estaba en el Catálogo (lo subió la empresa): se quita el producto que entró desde el PDF y queda descartado. */
+export async function discardAsDuplicate(model: SupplierProduct) {
+  if (model.catalog_product_id) await deleteProduct(model.catalog_product_id);
+  const { error } = await supabase.from(PRODUCTS).update({ status: 'descartado', catalog_product_id: null, updated_at: new Date().toISOString() })
+    .eq('id', model.id).filter('business_id', tenantOp(), tenantValue());
+  if (error) throw new Error(`Error descartando el modelo: ${error.message}`);
+}
+
+/** Lleva un catálogo de proveedor (y sus productos del Catálogo) a otra categoría, nueva o de las que ya existen. */
+export async function moveSupplierCatalog(id: string, name: unknown) {
+  const category = String(name || '').replace(/s+/g, ' ').trim().toUpperCase().slice(0, 60);
+  if (!category) throw new Error('Escribe la categoría');
+  const catalog = await existingCatalog(id);
+  const { error } = await supabase.from(CATALOGS).update({ name: category }).eq('id', catalog.id).filter('business_id', tenantOp(), tenantValue());
+  if (error) throw new Error(`Error cambiando la categoría: ${error.message}`);
+  const { data: models } = await supabase.from(PRODUCTS).select('catalog_product_id').eq('catalog_id', catalog.id).filter('business_id', tenantOp(), tenantValue());
+  let moved = 0;
+  for (const productId of ((models || []) as any[]).map(m => m.catalog_product_id).filter(Boolean)) {
+    if (await updateProduct(productId, { category })) moved++;
+  }
+  return { category, moved };
 }
 
 /**
