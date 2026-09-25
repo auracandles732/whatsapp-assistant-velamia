@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
 import {
-  supabase, tenantOp, tenantValue, tenantColumns, getConfig, setConfig, getAllProducts, createProduct, updateProduct
+  supabase, tenantOp, tenantValue, tenantColumns, getConfig, setConfig, getAllProducts, createProduct, updateProduct, deleteProduct
 } from '../services/supabase';
-import { uploadBufferToStorage } from '../services/storage';
+import { uploadBufferToStorage, removeFilesByPublicUrls } from '../services/storage';
 import { productKey } from '../services/openai';
-import { findPackaging } from '../config/businessProfile';
+import { findPackaging, profile, BusinessProfile } from '../config/businessProfile';
 
 /**
  * Catálogos de proveedores (PDF): el CRM lee el PDF en el navegador y manda cada modelo con su foto, su nombre, el
@@ -23,7 +23,7 @@ export interface SupplierSettings {
   defaultSize: CandleSize;
   /** Palabra que va antes del nombre del modelo en el Catálogo ("VELA" → "VELA CALABAZA 1"). */
   namePrefix: string;
-  /** Empaque incluido (de los del perfil del negocio) con el que entran al Catálogo. */
+  /** Empaque incluido (de los del perfil del negocio) con el que entran al Catálogo. Vacío = el más usado en su Catálogo. */
   packaging: string;
   /** Pasar cada modelo al Catálogo apenas se sube el PDF. */
   autoAddToCatalog: boolean;
@@ -61,11 +61,46 @@ export async function getSupplierSettings(): Promise<SupplierSettings> {
   }
 }
 
-export async function saveSupplierSettings(raw: unknown): Promise<SupplierSettings> {
+/** Guarda la regla y pone su empaque en los productos de los PDF que no tienen (o que tenían el de la regla anterior). */
+export async function saveSupplierSettings(raw: unknown): Promise<{ settings: SupplierSettings; packaged: number }> {
   const settings = normalizeSupplierSettings(raw);
   if (settings.packaging && !findPackaging(settings.packaging)) throw new Error('Ese empaque no está en el perfil del negocio');
+  const previous = await getSupplierSettings();
   await setConfig(SETTINGS_KEY, JSON.stringify(settings));
-  return settings;
+  return { settings, packaged: await applySupplierPackaging(settings, previous.packaging) };
+}
+
+/**
+ * El empaque más usado en el Catálogo: con él entran los modelos de los PDF cuando la regla no elige uno
+ * (un producto sin empaque hace que el asistente no sepa qué ofrecer).
+ */
+export function mostUsedPackaging(products: { description?: string | null }[], p: BusinessProfile = profile()): string {
+  const count = new Map<string, number>();
+  for (const product of products) {
+    const type = findPackaging(product.description || '', p);
+    if (type) count.set(type.name, (count.get(type.name) || 0) + 1);
+  }
+  return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+
+const packagingOf = (settings: SupplierSettings, catalog: { description?: string | null }[]) => settings.packaging || mostUsedPackaging(catalog);
+
+/** Pone el empaque de la regla en los productos que entraron desde PDF sin empaque (o con el de la regla anterior). */
+async function applySupplierPackaging(settings: SupplierSettings, previous: string): Promise<number> {
+  const catalog = await getAllProducts();
+  const packaging = packagingOf(settings, catalog);
+  if (!packaging) return 0;
+  const { products } = await listSupplierCatalogs();
+  const fromPdf = new Set(products.map(p => p.catalog_product_id).filter(Boolean));
+  let changed = 0;
+  for (const product of catalog as any[]) {
+    if (!fromPdf.has(product.id)) continue;
+    const current = String(product.description || '').trim();
+    if (current === packaging || (current && current !== previous)) continue;
+    await updateProduct(product.id, { description: packaging });
+    changed++;
+  }
+  return changed;
 }
 
 /**
@@ -128,10 +163,10 @@ async function storeImage(base64: unknown): Promise<string> {
 }
 
 /** Pasa un modelo al Catálogo con su precio por tamaño. Devuelve el id del producto creado ('' si falta el precio). */
-async function toCatalog(product: { name: string; size: CandleSize; image_url: string }, category: string, settings: SupplierSettings): Promise<string> {
+async function toCatalog(product: { name: string; size: CandleSize; image_url: string }, category: string, settings: SupplierSettings, packaging: string): Promise<string> {
   const price = settings.sizePrices[product.size];
   if (!(price > 0)) return '';
-  const created: any = await createProduct(product.name, price, category, product.image_url || undefined, settings.packaging);
+  const created: any = await createProduct(product.name, price, category, product.image_url || undefined, packaging);
   return String(created?.id || '');
 }
 
@@ -159,6 +194,12 @@ export async function importSupplierCatalog(input: { catalogId?: unknown; name?:
   if (input.catalogId) {
     catalog = await existingCatalog(input.catalogId);
   } else {
+    // El mismo PDF dos veces duplicaría cada modelo en el Catálogo ("VELA CALABAZA 1 2").
+    const fileName = String(input.fileName || '').trim();
+    if (fileName) {
+      const { data: same } = await supabase.from(CATALOGS).select('name').eq('file_name', fileName.slice(0, 160)).filter('business_id', tenantOp(), tenantValue()).limit(1);
+      if (same && same.length) throw new Error(`Este PDF ya está subido (catálogo ${same[0].name}). Si quieres subirlo de nuevo, primero borra el anterior.`);
+    }
     const { data, error } = await supabase.from(CATALOGS).insert([{
       id: randomUUID(),
       ...tenantColumns(),
@@ -174,6 +215,7 @@ export async function importSupplierCatalog(input: { catalogId?: unknown; name?:
   // Nombres ya usados: los del Catálogo y los de los modelos de proveedores (aunque todavía no hayan pasado al Catálogo).
   const [existing, { products: supplierProducts }] = await Promise.all([getAllProducts(), listSupplierCatalogs()]);
   const taken = new Set<string>([...existing.map((p: any) => productKey(p.name)), ...supplierProducts.map(p => productKey(p.name))]);
+  const packaging = packagingOf(settings, existing);
   const summary = { catalog, total: 0, added: 0, estimated: 0, withoutPrice: 0 };
   for (const item of valid) {
     const supplierName = String(item.name).replace(/\s+/g, ' ').trim().slice(0, 120);
@@ -195,7 +237,7 @@ export async function importSupplierCatalog(input: { catalogId?: unknown; name?:
       catalog_product_id: null
     };
     if (settings.autoAddToCatalog) {
-      const productId = await toCatalog(row, String(catalog.name || category), settings);
+      const productId = await toCatalog(row, String(catalog.name || category), settings, packaging);
       if (productId) {
         row.status = 'en_catalogo';
         row.catalog_product_id = productId;
@@ -263,12 +305,14 @@ export async function addSupplierProductsToCatalog(ids: string[]) {
   const settings = await getSupplierSettings();
   const { catalogs, products } = await listSupplierCatalogs();
   const byId = new Map(catalogs.map((c: any) => [c.id, c]));
-  const existing = new Set((await getAllProducts()).map((p: any) => productKey(p.name)));
+  const catalogNow = await getAllProducts();
+  const existing = new Set(catalogNow.map((p: any) => productKey(p.name)));
+  const packaging = packagingOf(settings, catalogNow);
   let added = 0, withoutPrice = 0, alreadyThere = 0;
   for (const product of products.filter(p => ids.includes(p.id) && p.status !== 'en_catalogo')) {
     if (existing.has(productKey(product.name))) { alreadyThere++; continue; }
     const catalog: any = byId.get(product.catalog_id);
-    const productId = await toCatalog(product, String(catalog?.name || 'PROVEEDOR'), settings);
+    const productId = await toCatalog(product, String(catalog?.name || 'PROVEEDOR'), settings, packaging);
     if (!productId) { withoutPrice++; continue; }
     existing.add(productKey(product.name));
     await supabase.from(PRODUCTS).update({ status: 'en_catalogo', catalog_product_id: productId, updated_at: new Date().toISOString() })
@@ -278,9 +322,33 @@ export async function addSupplierProductsToCatalog(ids: string[]) {
   return { added, withoutPrice, alreadyThere };
 }
 
-/** Borra un catálogo de proveedor y sus modelos. Lo que ya pasó al Catálogo se queda ahí. */
-export async function deleteSupplierCatalog(id: string): Promise<boolean> {
+/**
+ * Borra un catálogo de proveedor de todos lados: la lista, sus productos en el Catálogo (solo los que entraron desde
+ * este PDF: lo demás del Catálogo no se toca) y sus fotos, salvo que algún producto que queda las siga usando.
+ */
+export async function deleteSupplierCatalog(id: string): Promise<{ deleted: boolean; removed: number }> {
+  const { data: models, error: modelsError } = await supabase.from(PRODUCTS).select('catalog_product_id, image_url')
+    .eq('catalog_id', id).filter('business_id', tenantOp(), tenantValue());
+  if (modelsError) throw new Error(`Error leyendo los modelos: ${modelsError.message}`);
+  let removed = 0;
+  const photos = new Set<string>();
+  for (const model of (models || []) as { catalog_product_id: string | null; image_url: string }[]) {
+    if (model.image_url) photos.add(model.image_url);
+    if (!model.catalog_product_id) continue;
+    const deleted: any = await deleteProduct(model.catalog_product_id);
+    if (!deleted) continue;
+    removed++;
+    if (deleted.image_url) photos.add(deleted.image_url);
+  }
   const { data, error } = await supabase.from(CATALOGS).delete().eq('id', id).filter('business_id', tenantOp(), tenantValue()).select('id');
   if (error) throw new Error(`Error borrando el catálogo: ${error.message}`);
-  return (data || []).length > 0;
+  // Las fotos al final: si algo falla antes, no quedan productos sin foto.
+  try {
+    const stillUsed = new Set((await getAllProducts()).map((p: any) => p.image_url));
+    const orphan = [...photos].filter(url => !stillUsed.has(url));
+    if (orphan.length) await removeFilesByPublicUrls(orphan, 'product-images');
+  } catch (photoError: any) {
+    console.warn('⚠️ No se pudieron borrar las fotos del catálogo de proveedor:', photoError.message);
+  }
+  return { deleted: (data || []).length > 0, removed };
 }

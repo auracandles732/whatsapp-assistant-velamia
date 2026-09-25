@@ -1,50 +1,158 @@
-import { getAllProducts } from '../services/supabase';
+import { getAllProducts, getConfig, setConfig } from '../services/supabase';
 import { profile } from '../config/businessProfile';
-import { currentBrain } from './brain';
+import { currentBrain, PostFormat, PlannedPost } from './brain';
 import {
-  SocialPost, PublishingSettings, DEFAULT_SETTINGS, getSavedSettings, publishingSlots, listPosts, localDay, localParts,
-  recentProductNames, insertPosts, fallbackCaption, toPostProduct
+  SocialPost, PublishingSettings, PostChannel, PostProduct, PostMedia, DEFAULT_SETTINGS, getSavedSettings, publishingSlots,
+  publishingDays, listPosts, localDay, localParts, recentActivity, insertPosts, fallbackCaption, toPostProduct, withLibraryMedia,
+  LibraryItem
 } from './posts';
+import { listAssets, markAssetsUsed } from './library';
 
 /**
- * Prepara y programa las publicaciones de los próximos días de publicación que todavía no tienen una (un día cuya
- * publicación se eliminó vuelve a quedar libre). Qué mostrar y qué decir lo decide el cerebro del agente; si la IA no
- * responde, cada publicación lleva un texto de respaldo.
+ * Prepara las publicaciones de los próximos días de publicación que todavía no tienen ninguna (un día cuya publicación
+ * se eliminó vuelve a quedar libre). Qué mostrar, cuándo y en qué formato lo decide el cerebro del agente (brain.ts);
+ * si la IA no escribe los textos, cada publicación lleva uno de respaldo. Los videos y fotos de la biblioteca que
+ * muestran esos productos se suman al carrusel (hasta 10).
+ *
+ * draftUpcomingPosts solo propone (la planificación que se ve en el CRM); planUpcomingPosts además la programa (modo
+ * automático).
  */
-export async function planUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<SocialPost[]> {
+
+/** Una publicación propuesta, todavía sin guardar. */
+export interface PlanDraft {
+  scheduled_at: string;
+  format: PostFormat;
+  channels: PostChannel[];
+  theme: string;
+  /** Por qué la eligió el agente. */
+  reason: string;
+  caption: string;
+  products: PostProduct[];
+  /** Lo que se publica, en orden (vacío = las fotos de los productos). */
+  media: PostMedia[];
+  /** Lo mismo en el formato que acepta "Programar": fotos del Catálogo por nombre y archivos de la biblioteca por id. */
+  items: ({ product: string } | { asset: string })[];
+}
+
+export interface PlanProposal { drafts: PlanDraft[]; summary: string; brain: string }
+
+const SUMMARY_KEY = 'social_plan_summary';
+
+/** Redes de cada formato: las historias van solo a historias; lo demás, a las redes elegidas (sin historias si la IA planifica aparte). */
+function channelsFor(format: PostFormat, settings: PublishingSettings, byAi: boolean): PostChannel[] {
+  if (format === 'historia') return ['instagram_story'];
+  if (!byAi) return settings.channels;
+  const feed = settings.channels.filter(c => c !== 'instagram_story');
+  return feed.length ? feed : settings.channels;
+}
+
+/** Arma lo que se publica: el video (reel o historia) o las fotos del Catálogo con lo suyo de la biblioteca. */
+function buildMedia(pick: PlannedPost, library: LibraryItem[], usedAssets: Set<string>) {
+  const products = pick.products.map(toPostProduct);
+  if (pick.video) {
+    usedAssets.add(pick.video.id);
+    return { products, media: [{ type: pick.video.kind, url: pick.video.url, asset_id: pick.video.id }] as PostMedia[], items: [{ asset: pick.video.id }] };
+  }
+  if (pick.format === 'historia') return { products, media: [] as PostMedia[], items: products.slice(0, 1).map(p => ({ product: p.name })) };
+  const built = withLibraryMedia(products, library, usedAssets);
+  if (!built.media.length) return { products: built.products, media: [] as PostMedia[], items: built.products.map(p => ({ product: p.name })) };
+  let next = 0;
+  const items = built.media.map(m => (m.asset_id ? { asset: m.asset_id } : { product: built.products[next++].name }));
+  return { products: built.products, media: built.media, items };
+}
+
+export async function draftUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<PlanProposal> {
   const settings = settingsParam || (await getSavedSettings()) || DEFAULT_SETTINGS;
   const p = profile();
   const tz = p.business.timezone;
-  const slots = publishingSlots(settings, now, days, tz);
-  if (slots.length === 0) return [];
+  const brain = currentBrain(settings);
+  const empty = (summary: string) => ({ drafts: [], summary, brain: brain.name });
 
-  const existing = await listPosts(new Date(slots[0].getTime() - 86_400_000).toISOString(), new Date(slots[slots.length - 1].getTime() + 86_400_000).toISOString());
+  const allDays = publishingDays(settings, now, days, tz);
+  if (allDays.length === 0) return empty('No hay días de publicación elegidos.');
+  const existing = await listPosts(new Date(now.getTime() - 86_400_000).toISOString(), new Date(now.getTime() + (days + 1) * 86_400_000).toISOString());
   const taken = new Set(existing.map(post => localDay(post.scheduled_at, tz)));
-  const free = slots.filter(slot => !taken.has(localDay(slot, tz)));
-  if (free.length === 0) return [];
+  const freeDays = allDays.filter(day => !taken.has(day));
+  const slots = publishingSlots(settings, now, days, tz, settings.postsPerDay || 1).filter(slot => !taken.has(localDay(slot, tz)));
+  if (freeDays.length === 0 || slots.length === 0 && settings.postsPerDay > 0) return empty('Los próximos días de publicación ya tienen lo suyo.');
 
-  const brain = currentBrain();
-  const [catalog, recent] = await Promise.all([getAllProducts(), recentProductNames()]);
-  const picks = (await brain.plan({ slots: free, catalog, recent, settings, month: localParts(now, tz).month, profile: p })).slice(0, free.length);
-  if (picks.length === 0) return [];
+  // Sin la migración 025 no hay biblioteca: se publica solo con las fotos del Catálogo.
+  const [catalog, recent, library] = await Promise.all([getAllProducts(), recentActivity(tz), listAssets().catch(() => [])]);
+  const plan = await brain.plan({
+    slots, days: freeDays, catalog, recent: recent.names, recentThemes: recent.themes, library,
+    settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p
+  });
+  if (plan.posts.length === 0) return empty(plan.summary || 'No hay productos con foto para publicar.');
 
+  const usedAssets = new Set<string>();
+  const built = plan.posts.map(pick => buildMedia(pick, library, usedAssets));
+  const byAi = brain.name === 'ia';
+  const channels = plan.posts.map(pick => channelsFor(pick.format, settings, byAi));
+  // Las historias no llevan texto: solo se escribe para lo que va al feed o a Facebook.
+  const needsText = plan.posts.map((_, i) => channels[i].some(c => c !== 'instagram_story'));
   let captions: string[] = [];
   try {
-    captions = await brain.write(picks.map(x => ({ theme: x.theme, products: x.products.map(c => ({ name: c.name, price: Number(c.price) })) })), p);
+    const requests = plan.posts.map((pick, i) => ({ theme: pick.theme, products: built[i].products.map(c => ({ name: c.name, price: c.price })) })).filter((_, i) => needsText[i]);
+    const written = requests.length ? await brain.write(requests, p) : [];
+    let next = 0;
+    captions = plan.posts.map((_, i) => (needsText[i] ? written[next++] || '' : ''));
   } catch (error: any) {
     console.warn('⚠️ La IA no escribió los textos de las publicaciones; se usa el texto de respaldo:', error.message);
   }
 
-  return insertPosts(picks.map((pick, i) => ({
-    scheduled_at: free[i].toISOString(),
-    status: 'approved',
-    channels: settings.channels,
-    caption: captions[i] || fallbackCaption(pick, p),
-    products: pick.products.map(toPostProduct),
-    theme: pick.theme,
+  return {
+    summary: plan.summary,
+    brain: brain.name,
+    drafts: plan.posts.map((pick, i) => ({
+      scheduled_at: pick.at.toISOString(),
+      format: pick.format,
+      channels: channels[i],
+      theme: pick.theme,
+      reason: pick.reason,
+      caption: needsText[i] ? captions[i] || fallbackCaption({ theme: pick.theme, products: built[i].products }, p) : '',
+      products: built[i].products,
+      media: built[i].media,
+      items: built[i].items
+    }))
+  };
+}
+
+/** Guarda publicaciones ya armadas como programadas (salen solas a su hora) y anota la estrategia de la semana. */
+export async function schedulePlan(drafts: Omit<PlanDraft, 'items' | 'format' | 'reason'>[], summary: string): Promise<SocialPost[]> {
+  if (drafts.length === 0) return [];
+  // Todas las filas llevan las mismas columnas (media no acepta vacío): "media" va en todas o en ninguna.
+  const withMedia = drafts.some(d => d.media.length > 0);
+  const posts = await insertPosts(drafts.map(d => ({
+    scheduled_at: d.scheduled_at,
+    status: 'approved' as const,
+    channels: d.channels,
+    caption: d.caption,
+    products: d.products,
+    ...(withMedia ? { media: d.media } : {}),
+    theme: d.theme,
     results: {},
     error: null
   })));
+  const assets = drafts.flatMap(d => d.media.filter(m => m.asset_id).map(m => m.asset_id!));
+  if (assets.length) await markAssetsUsed([...new Set(assets)]).catch(() => {});
+  if (summary) await setConfig(SUMMARY_KEY, JSON.stringify({ at: new Date().toISOString(), summary })).catch(() => {});
+  return posts;
+}
+
+/** La estrategia de la última planificación (se muestra en el CRM). */
+export async function lastPlanSummary(): Promise<{ at: string; summary: string } | null> {
+  try {
+    const raw = await getConfig(SUMMARY_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Prepara y programa de una vez (modo automático y "Programar" sin revisar). */
+export async function planUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings): Promise<SocialPost[]> {
+  const proposal = await draftUpcomingPosts(now, days, settingsParam);
+  return schedulePlan(proposal.drafts, proposal.drafts.length ? proposal.summary : '');
 }
 
 /** Otro texto para una publicación (botón "Otro texto" del CRM). */

@@ -19,6 +19,13 @@ export interface PostProduct { name: string; image_url: string; price: number }
 /** Foto o video de la biblioteca que lleva la publicación (si no, van las fotos de los productos). */
 export interface PostMedia { type: 'image' | 'video'; url: string; asset_id?: string }
 
+/** Instagram acepta hasta 10 fotos o videos (o una mezcla) en un carrusel. */
+export const MAX_CAROUSEL = 10;
+
+/** Tope por día cuando decide la IA (o el máximo fijo que se puede elegir): más que eso ya cansa a los seguidores. */
+export const MAX_POSTS_PER_DAY = 3;
+export const MAX_STORIES_PER_DAY = 2;
+
 export interface SocialPost {
   id: string;
   scheduled_at: string;
@@ -43,6 +50,11 @@ export interface PublishingSettings {
   photosPerPost: number;
   /** Modo automático: la IA elige los productos, escribe el texto y programa cada semana sola. */
   autoPlan: boolean;
+  /**
+   * Publicaciones por día: 0 = decide la IA (cuántas, a qué hora, de qué y en qué formato, hasta MAX_POSTS_PER_DAY
+   * más historias); de 1 a 3 = fijas, a la hora elegida y cada 3 horas antes.
+   */
+  postsPerDay: number;
   /** Ya no se usa: todo lo programado se publica sin aprobación. Se conserva para leer configuraciones guardadas. */
   autoApprove: boolean;
   /**
@@ -58,6 +70,7 @@ export const DEFAULT_SETTINGS: PublishingSettings = {
   channels: ['instagram_feed', 'facebook'],
   photosPerPost: 1,
   autoPlan: false,
+  postsPerDay: 0,
   autoApprove: true,
   notes: ''
 };
@@ -70,12 +83,14 @@ export function normalizeSettings(raw: any): PublishingSettings {
   const hour = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(r.hour)) ? String(r.hour) : DEFAULT_SETTINGS.hour;
   const channels = Array.isArray(r.channels) ? POST_CHANNELS.filter(c => r.channels.includes(c)) : DEFAULT_SETTINGS.channels;
   const photos = Math.round(Number(r.photosPerPost));
+  const perDay = r.postsPerDay === undefined || r.postsPerDay === null || r.postsPerDay === '' ? NaN : Math.round(Number(r.postsPerDay));
   return {
     days,
     hour,
     channels: channels.length ? channels : DEFAULT_SETTINGS.channels,
-    photosPerPost: Number.isFinite(photos) ? Math.min(10, Math.max(1, photos)) : DEFAULT_SETTINGS.photosPerPost,
+    photosPerPost: Number.isFinite(photos) ? Math.min(MAX_CAROUSEL, Math.max(1, photos)) : DEFAULT_SETTINGS.photosPerPost,
     autoPlan: typeof r.autoPlan === 'boolean' ? r.autoPlan : DEFAULT_SETTINGS.autoPlan,
+    postsPerDay: Number.isFinite(perDay) && perDay >= 0 && perDay <= MAX_POSTS_PER_DAY ? perDay : DEFAULT_SETTINGS.postsPerDay,
     autoApprove: true,
     notes: typeof r.notes === 'string' ? r.notes.trim().slice(0, 1000) : ''
   };
@@ -128,20 +143,44 @@ export const localDay = (date: Date | string, timeZone: string) => {
   return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
 };
 
-/**
- * Próximos días de publicación desde `from`. Se deja al menos una hora de margen: no se programa algo para dentro de
- * cinco minutos, que la empresa no alcanzaría a revisar.
- */
-export function publishingSlots(settings: PublishingSettings, from: Date, days: number, timeZone: string): Date[] {
-  const [hh, mm] = settings.hour.split(':').map(Number);
+const toMinutes = (hour: string) => { const [hh, mm] = hour.split(':').map(Number); return hh * 60 + mm; };
+export const toHour = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** Horas de un día con n publicaciones: la elegida y, antes, cada 3 horas (13:00, 16:00, 19:00), nunca antes de las 8:00. */
+export function dayHours(hour: string, n: number): string[] {
+  const base = toMinutes(hour);
+  const hours = new Set<number>();
+  for (let k = n - 1; k >= 0; k--) {
+    const t = base - k * 180;
+    hours.add(t >= 480 ? t : 480 + (n - 1 - k) * 180);
+  }
+  return [...hours].sort((a, b) => a - b).map(toHour);
+}
+
+/** Días de publicación ("AAAA-MM-DD" en la zona del negocio) desde hoy. */
+export function publishingDays(settings: PublishingSettings, from: Date, days: number, timeZone: string): string[] {
   const start = localParts(from, timeZone);
-  const slots: Date[] = [];
+  const list: string[] = [];
   for (let i = 0; i < days; i++) {
     const noon = new Date(Date.UTC(start.year, start.month - 1, start.day + i, 12));
-    const weekday = noon.getUTCDay();
-    if (!settings.days.includes(weekday)) continue;
-    const slot = zonedTime(noon.getUTCFullYear(), noon.getUTCMonth() + 1, noon.getUTCDate(), hh, mm, timeZone);
-    if (slot.getTime() >= from.getTime() + 60 * 60 * 1000) slots.push(slot);
+    if (settings.days.includes(noon.getUTCDay())) list.push(noon.toISOString().slice(0, 10));
+  }
+  return list;
+}
+
+/**
+ * Próximas horas de publicación desde `from` (perDay por día de publicación). Se deja al menos una hora de margen: no
+ * se programa algo para dentro de cinco minutos, que la empresa no alcanzaría a revisar.
+ */
+export function publishingSlots(settings: PublishingSettings, from: Date, days: number, timeZone: string, perDay = 1): Date[] {
+  const slots: Date[] = [];
+  for (const day of publishingDays(settings, from, days, timeZone)) {
+    const [y, m, d] = day.split('-').map(Number);
+    for (const hour of dayHours(settings.hour, perDay)) {
+      const [hh, mm] = hour.split(':').map(Number);
+      const slot = zonedTime(y, m, d, hh, mm, timeZone);
+      if (slot.getTime() >= from.getTime() + 60 * 60 * 1000) slots.push(slot);
+    }
   }
   return slots;
 }
@@ -159,11 +198,11 @@ const SEASONS: { months: number[]; words: string[] }[] = [
   { months: [9, 10], words: ['halloween', 'difunto'] }
 ];
 
-const plain = (text: unknown) => String(text ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+export const plain = (text: unknown) => String(text ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 export const isSeasonal = (category: string, month: number) =>
   SEASONS.some(s => s.months.includes(month) && s.words.some(w => plain(category).includes(w)));
 
-const titleCase = (text: string) => plain(text).length ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : text;
+export const titleCase = (text: string) => plain(text).length ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : text;
 
 /**
  * Elige qué mostrar en cada publicación: primero lo que nunca se publicó y lo que hace más tiempo que no sale,
@@ -257,13 +296,22 @@ export async function getPost(id: string): Promise<SocialPost | null> {
 
 /** Productos publicados (o por publicar) últimamente, del más nuevo al más viejo: para no repetirlos. */
 export async function recentProductNames(): Promise<string[]> {
-  const { data, error } = await supabase.from(POSTS).select('products, scheduled_at')
+  return (await recentActivity()).names;
+}
+
+/** Lo publicado (o programado) últimamente, del más nuevo al más viejo: productos y temas por día. */
+export async function recentActivity(timeZone = profile().business.timezone): Promise<{ names: string[]; themes: { day: string; theme: string }[] }> {
+  const { data, error } = await supabase.from(POSTS).select('products, scheduled_at, theme')
     .filter('business_id', tenantOp(), tenantValue())
     .neq('status', 'cancelled')
     .order('scheduled_at', { ascending: false })
     .limit(60);
   if (error) throw new Error(`Error leyendo publicaciones: ${error.message}`);
-  return (data || []).flatMap((row: any) => (Array.isArray(row.products) ? row.products : []).map((p: any) => String(p.name || '')));
+  const rows = (data || []) as any[];
+  return {
+    names: rows.flatMap(row => (Array.isArray(row.products) ? row.products : []).map((p: any) => String(p.name || ''))),
+    themes: rows.map(row => ({ day: localDay(row.scheduled_at, timeZone), theme: String(row.theme || '') }))
+  };
 }
 
 export async function insertPosts(rows: Partial<SocialPost>[]): Promise<SocialPost[]> {
@@ -325,3 +373,32 @@ export async function stuckPosts(olderThan: Date): Promise<SocialPost[]> {
 // ---------- Preparar la semana ----------
 
 export const toPostProduct = (c: CatalogItem): PostProduct => ({ name: c.name, image_url: String(c.image_url || ''), price: Number(c.price) });
+
+export interface LibraryItem { id: string; kind: 'image' | 'video'; url: string; product_name: string | null; used_count?: number }
+
+/**
+ * Carrusel del modo automático: cada foto del Catálogo va seguida de los videos y fotos de la biblioteca que muestran
+ * ese producto (los videos y los menos usados primero), hasta 10. Un archivo se usa una sola vez por tanda (taken).
+ * Si no cabe todo, el producto que queda fuera tampoco se nombra en el texto. Sin archivos de esos productos, media
+ * va vacío y se publican solo las fotos del Catálogo, como siempre.
+ */
+export function withLibraryMedia(products: PostProduct[], library: LibraryItem[], taken: Set<string>): { products: PostProduct[]; media: PostMedia[] } {
+  const media: PostMedia[] = [];
+  const kept: PostProduct[] = [];
+  const picked: string[] = [];
+  for (const product of products) {
+    if (media.length >= MAX_CAROUSEL) break;
+    kept.push(product);
+    media.push({ type: 'image', url: product.image_url });
+    const linked = library
+      .filter(a => a.product_name && productKey(a.product_name) === productKey(product.name) && !taken.has(a.id) && !picked.includes(a.id))
+      .sort((a, b) => Number(b.kind === 'video') - Number(a.kind === 'video') || (a.used_count || 0) - (b.used_count || 0));
+    for (const asset of linked) {
+      if (media.length >= MAX_CAROUSEL) break;
+      media.push({ type: asset.kind, url: asset.url, asset_id: asset.id });
+      picked.push(asset.id);
+    }
+  }
+  picked.forEach(id => taken.add(id));
+  return { products: kept, media: picked.length ? media : [] };
+}

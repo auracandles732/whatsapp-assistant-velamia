@@ -97,6 +97,87 @@ test('lo que se publicó hace poco espera su turno y el carrusel junta fotos de 
   assert.equal(new Set(picks[0].products.map(p => p.category)).size, 1);
 });
 
+test('modo automático: los videos de la biblioteca de esos productos se suman al carrusel, sin pasar de 10', () => {
+  const producto = (n: number) => ({ name: `VELA ${n}`, image_url: `https://x/vela${n}.png`, price: 35 });
+  const biblioteca = [
+    { id: 'f1', kind: 'image' as const, url: 'https://x/f1.jpg', product_name: 'vela 1', used_count: 3 },
+    { id: 'v1', kind: 'video' as const, url: 'https://x/v1.mp4', product_name: 'VELA 1', used_count: 5 },
+    { id: 'v2', kind: 'video' as const, url: 'https://x/v2.mp4', product_name: 'VELA 2', used_count: 0 },
+    { id: 'otro', kind: 'video' as const, url: 'https://x/otro.mp4', product_name: 'OTRA COSA', used_count: 0 }
+  ];
+  const usados = new Set<string>();
+  const uno = socialPosts.withLibraryMedia([producto(1), producto(2)], biblioteca, usados);
+  // Cada foto del Catálogo seguida de lo suyo: primero el video.
+  assert.deepEqual(uno.media.map(m => m.url), ['https://x/vela1.png', 'https://x/v1.mp4', 'https://x/f1.jpg', 'https://x/vela2.png', 'https://x/v2.mp4']);
+  assert.equal(uno.media[1].type, 'video');
+  assert.deepEqual([...usados].sort(), ['f1', 'v1', 'v2']);
+
+  // En la misma tanda un archivo no se repite: la siguiente publicación va solo con fotos del Catálogo.
+  const dos = socialPosts.withLibraryMedia([producto(1)], biblioteca, usados);
+  assert.deepEqual(dos.media, []);
+
+  // Diez productos con videos: se corta en 10 y lo que no entra tampoco se nombra en el texto.
+  const muchos = Array.from({ length: 10 }, (_, i) => producto(i + 1));
+  const conVideos = muchos.map((p, i) => ({ id: `v${i}`, kind: 'video' as const, url: `https://x/v${i}.mp4`, product_name: p.name }));
+  const lleno = socialPosts.withLibraryMedia(muchos, conVideos, new Set());
+  assert.equal(lleno.media.length, 10);
+  assert.equal(lleno.products.length, 5);
+});
+
+test('varias publicaciones por día: la hora elegida y cada 3 horas antes; "la IA decide" es lo normal', () => {
+  assert.deepEqual(socialPosts.dayHours('19:00', 3), ['13:00', '16:00', '19:00']);
+  assert.deepEqual(socialPosts.dayHours('09:00', 2), ['08:00', '09:00']);
+  const settings = socialPosts.normalizeSettings({ days: [1], hour: '19:00', postsPerDay: 2 });
+  const slots = socialPosts.publishingSlots(settings, new Date('2026-09-21T15:00:00Z'), 7, TZ, settings.postsPerDay);
+  assert.deepEqual(slots.map(s => s.toISOString()), ['2026-09-21T21:00:00.000Z', '2026-09-22T00:00:00.000Z']);
+  assert.equal(socialPosts.normalizeSettings({}).postsPerDay, 0, 'por defecto decide la IA');
+  assert.equal(socialPosts.normalizeSettings({ postsPerDay: 9 }).postsPerDay, 0);
+});
+
+test('la planificación de la IA se ajusta a la realidad: días libres, horas futuras, topes y productos del Catálogo', () => {
+  const brain = require('../src/social/brain') as typeof import('../src/social/brain');
+  const settings = socialPosts.normalizeSettings({ days: [1, 2, 3, 4, 5, 6, 0], hour: '19:00', channels: ['instagram_feed', 'instagram_story', 'facebook'] });
+  const input = {
+    slots: [], days: ['2026-09-22', '2026-09-23'], catalog: catalogo, recent: ['OSITO NUBE'], recentThemes: [],
+    library: [{ id: 'v1', kind: 'video' as const, url: 'https://x/v1.mp4', product_name: 'ARBOLITO' }],
+    settings, month: 9, now: new Date('2026-09-21T15:00:00Z'), timeZone: TZ, profile: VELAMIA_PROFILE
+  };
+  const item = (dia: string, hora: string, formato: string, categoria: string, cantidad = 1, video = '') => ({ dia, hora, formato, categoria, cantidad, video, motivo: 'porque sí' });
+  const posts = brain.resolveAiPlan([
+    item('2026-09-22', '19:00', 'carrusel', 'baby shower', 5),
+    item('2026-09-22', '19:00', 'foto', 'BABY SHOWER'),        // ya no quedan productos de esa categoría
+    item('2026-09-22', '19:30', 'historia', 'NAVIDAD'),       // choca de hora: se corre una hora
+    item('2026-09-23', '12:00', 'reel', 'NAVIDAD', 1, 'v1'),
+    item('2026-09-23', '13:00', 'reel', 'NAVIDAD', 1, 'v9'),  // video que no existe: pasa a foto
+    item('2026-09-24', '19:00', 'foto', 'BAUTIZO'),           // día que no está libre
+    item('2026-09-23', '19:00', 'foto', 'INVENTADA')          // categoría que no existe
+  ], input);
+  assert.equal(posts.length, 4);
+  assert.deepEqual(posts[0].products.map(p => p.name), ['OSITO MIEL', 'OSITO NUBE'], 'primero lo que hace más tiempo no sale');
+  assert.equal(posts[0].format, 'carrusel');
+  assert.equal(posts[0].theme, 'Baby shower');
+  const story = posts.find(p => p.format === 'historia')!;
+  assert.equal(story.at.toISOString(), '2026-09-23T01:30:00.000Z', 'la historia se movió a las 20:30');
+  const reel = posts.find(p => p.format === 'reel')!;
+  assert.equal(reel.video?.id, 'v1');
+  assert.deepEqual(reel.products.map(p => p.name), ['ARBOLITO']);
+  const converted = posts.find(p => p.at.toISOString() === '2026-09-23T18:00:00.000Z')!;
+  assert.equal(converted.format, 'foto');
+  assert.equal(converted.products[0].name, 'ESTRELLA', 'no repite el producto del reel');
+  assert.equal(posts[0].reason, 'porque sí');
+});
+
+test('la IA no pasa del tope por día', () => {
+  const brain = require('../src/social/brain') as typeof import('../src/social/brain');
+  const settings = socialPosts.normalizeSettings({ days: [2], hour: '19:00' });
+  const many = Array.from({ length: 6 }, (_, i) => ({ dia: '2026-09-22', hora: `${String(8 + i * 2).padStart(2, '0')}:00`, formato: 'foto', categoria: i % 2 ? 'NAVIDAD' : 'BABY SHOWER', cantidad: 1, video: '', motivo: '' }));
+  const posts = brain.resolveAiPlan(many, {
+    slots: [], days: ['2026-09-22'], catalog: catalogo, recent: [], recentThemes: [], library: [],
+    settings, month: 9, now: new Date('2026-09-21T15:00:00Z'), timeZone: TZ, profile: VELAMIA_PROFILE
+  });
+  assert.equal(posts.length, socialPosts.MAX_POSTS_PER_DAY);
+});
+
 test('el texto de respaldo lleva el precio exacto, cómo pedir y hashtags', () => {
   const p = normalizeProfile(VELAMIA_PROFILE, VELAMIA_PROFILE);
   const text = socialPosts.fallbackCaption({ theme: 'Baby shower', products: [{ name: 'OSITO NUBE', price: 30 }] }, p);

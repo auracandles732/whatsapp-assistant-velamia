@@ -7,14 +7,14 @@ import { publishingStatus } from '../services/metaChannels';
 import { profile } from '../config/businessProfile';
 import {
   listPosts, getPost, insertPosts, updatePost, deletePost, getSavedSettings, saveSettings,
-  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, toPostProduct, fallbackCaption, PostStatus, PostChannel, PostMedia
+  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, MAX_CAROUSEL, toPostProduct, fallbackCaption, PostStatus, PostChannel, PostMedia
 } from './posts';
-import { planUpcomingPosts, rewriteCaption } from './planner';
+import { planUpcomingPosts, draftUpcomingPosts, schedulePlan, lastPlanSummary, rewriteCaption } from './planner';
 import { claimAndPublish } from './publisher';
 import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed } from './library';
 import {
   getSupplierSettings, saveSupplierSettings, importSupplierCatalog, listSupplierCatalogs, updateSupplierProduct,
-  addSupplierProductsToCatalog, deleteSupplierCatalog
+  addSupplierProductsToCatalog, deleteSupplierCatalog, mostUsedPackaging
 } from './suppliers';
 import { listResults } from './insights';
 import { publicSocialAi, saveSocialAi, testSocialAi } from './ai';
@@ -51,7 +51,7 @@ function explain(error: any): string {
 async function catalogProducts(names: unknown) {
   if (!Array.isArray(names) || names.length === 0) return [];
   const catalog = await getAllProducts();
-  const found = names.slice(0, 10).map(n => catalog.find((c: any) => c.name === String(n) && c.image_url));
+  const found = names.slice(0, MAX_CAROUSEL).map(n => catalog.find((c: any) => c.name === String(n) && c.image_url));
   if (found.some(f => !f)) throw new Error('Algún producto no está en el catálogo o no tiene foto');
   return found.map(toPostProduct);
 }
@@ -59,11 +59,28 @@ async function catalogProducts(names: unknown) {
 /** Fotos y videos de la biblioteca, en el orden elegido. */
 async function libraryMedia(ids: unknown): Promise<PostMedia[]> {
   if (!Array.isArray(ids) || ids.length === 0) return [];
-  const wanted = ids.slice(0, 10).map(String).filter(id => UUID_PATTERN.test(id));
+  const wanted = ids.slice(0, MAX_CAROUSEL).map(String).filter(id => UUID_PATTERN.test(id));
   const assets = await getAssets(wanted);
   const media = wanted.map(id => assets.find(a => a.id === id)).filter(Boolean).map(a => ({ type: a!.kind, url: a!.url, asset_id: a!.id }));
   if (media.length !== wanted.length) throw new Error('Algún archivo ya no está en la biblioteca');
   return media;
+}
+
+/**
+ * Carrusel mezclado, en el orden elegido: fotos del Catálogo ({ product: nombre }) y fotos o videos de la biblioteca
+ * ({ asset: id }). Hasta 10 elementos, el máximo que Instagram acepta en un carrusel.
+ */
+async function mixedItems(items: unknown[]): Promise<{ products: ReturnType<typeof toPostProduct>[]; media: PostMedia[] }> {
+  const list = items.slice(0, MAX_CAROUSEL).map((item: any) => ({ product: item?.product ? String(item.product) : '', asset: item?.asset ? String(item.asset) : '' }));
+  if (items.length > MAX_CAROUSEL) throw new Error(`Un carrusel lleva máximo ${MAX_CAROUSEL} fotos o videos`);
+  const products = await catalogProducts(list.filter(i => i.product).map(i => i.product));
+  const assets = await libraryMedia(list.filter(i => !i.product && i.asset).map(i => i.asset));
+  let p = 0, a = 0;
+  const media = list.filter(i => i.product || i.asset).map(i => (i.product
+    ? { type: 'image' as const, url: products[p++].image_url }
+    : assets[a++]));
+  // Solo fotos del Catálogo: se guarda como siempre (sin "media"), igual que las que prepara la IA.
+  return { products, media: assets.length ? media : [] };
 }
 
 function cleanChannels(value: unknown) {
@@ -93,12 +110,13 @@ export function socialRouter(): Router {
       const now = Date.now();
       const from = new Date(Number.isFinite(Date.parse(String(req.query.from))) ? String(req.query.from) : now - 30 * 86_400_000).toISOString();
       const to = new Date(Number.isFinite(Date.parse(String(req.query.to))) ? String(req.query.to) : now + 60 * 86_400_000).toISOString();
-      const [posts, saved, status] = await Promise.all([
+      const [posts, saved, status, plan] = await Promise.all([
         listPosts(from, to),
         getSavedSettings(),
-        publishingStatus().catch(error => ({ connected: false, error: error.message }))
+        publishingStatus().catch(error => ({ connected: false, error: error.message })),
+        lastPlanSummary()
       ]);
-      res.json({ enabled: true, posts, settings: saved || DEFAULT_SETTINGS, settingsSaved: !!saved, status, timezone: profile().business.timezone });
+      res.json({ enabled: true, posts, settings: saved || DEFAULT_SETTINGS, settingsSaved: !!saved, status, timezone: profile().business.timezone, plan });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -125,6 +143,40 @@ export function socialRouter(): Router {
     }
   });
 
+  /** La planificación que propone el agente para los próximos 7 días, sin guardar nada (se revisa en el CRM). */
+  router.post('/api/posts/plan/preview', requireCrmSession, requireEditorRole, requirePublishing, async (_req: Request, res: Response) => {
+    try {
+      res.json(await draftUpcomingPosts(new Date(), 7, (await getSavedSettings()) || DEFAULT_SETTINGS));
+    } catch (error: any) {
+      res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  /** Programa la planificación revisada (tal como se vio, sin las que se quitaron). Precios y fotos se leen de nuevo del Catálogo. */
+  router.post('/api/posts/plan/confirm', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
+    try {
+      const list = Array.isArray(req.body?.drafts) ? req.body.drafts.slice(0, 40) : [];
+      if (list.length === 0) return res.status(400).json({ error: 'No hay publicaciones para programar' });
+      const drafts = [];
+      for (const d of list) {
+        const when = new Date(String(d?.scheduled_at || ''));
+        if (!Number.isFinite(when.getTime()) || when.getTime() < Date.now() + 2 * 60 * 1000) throw new Error('Alguna publicación ya pasó su hora: vuelve a pedir la propuesta');
+        if (when.getTime() > Date.now() + 15 * 86_400_000) throw new Error('Fecha fuera de rango');
+        const channels = cleanChannels(d?.channels);
+        const caption = String(d?.caption || '').trim();
+        if (caption.length > CAPTION_LIMIT) throw new Error(`Un texto pasa de ${CAPTION_LIMIT} caracteres`);
+        if (!caption && channels.some(c => c !== 'instagram_story')) throw new Error('A una publicación le falta el texto');
+        const { products, media } = await mixedItems(Array.isArray(d?.items) ? d.items : []);
+        if (products.length === 0 && media.length === 0) throw new Error('A una publicación le faltan las fotos');
+        drafts.push({ scheduled_at: when.toISOString(), channels, caption, products, media, theme: String(d?.theme || '').trim().slice(0, 80) || 'Nuestros productos' });
+      }
+      const created = await schedulePlan(drafts, String(req.body?.summary || '').slice(0, 600));
+      res.status(201).json({ created: created.length });
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
+    }
+  });
+
   router.post('/api/posts', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
     try {
       const when = new Date(String(req.body?.scheduled_at || ''));
@@ -132,8 +184,9 @@ export function socialRouter(): Router {
       if (when.getTime() < Date.now() - 2 * 60 * 1000) return res.status(400).json({ error: 'Esa hora ya pasó: elige otra (o créala y usa "Publicar ahora")' });
       let caption = String(req.body?.caption || '').trim();
       if (caption.length > CAPTION_LIMIT) return res.status(400).json({ error: `El texto pasa de ${CAPTION_LIMIT} caracteres` });
-      const products = await catalogProducts(req.body?.products);
-      const media = await libraryMedia(req.body?.media);
+      const { products, media } = Array.isArray(req.body?.items)
+        ? await mixedItems(req.body.items)
+        : { products: await catalogProducts(req.body?.products), media: await libraryMedia(req.body?.media) };
       if (products.length === 0 && media.length === 0) return res.status(400).json({ error: 'Elige al menos una foto o video' });
       const channels = cleanChannels(req.body?.channels);
       const theme = String(req.body?.theme || '').trim().slice(0, 80) || 'Nuestros productos';
@@ -147,7 +200,8 @@ export function socialRouter(): Router {
         // "media" solo si lleva archivos de la biblioteca: así crear publicaciones funciona aunque falte la migración 025.
         scheduled_at: when.toISOString(), status: 'approved', channels, caption, products, ...(media.length ? { media } : {}), theme, results: {}, error: null
       }]);
-      if (media.length) await markAssetsUsed(media.map(m => m.asset_id!)).catch(() => {});
+      const used = media.filter(m => m.asset_id).map(m => m.asset_id!);
+      if (used.length) await markAssetsUsed(used).catch(() => {});
       // La publicación trae su propio campo "error" (motivo de un fallo): va envuelta para que el CRM no lo tome como error de la petición.
       res.status(201).json({ post });
     } catch (error: any) {
@@ -285,8 +339,9 @@ export function socialRouter(): Router {
 
   router.get('/api/social/suppliers', requireCrmSession, requirePublishing, async (_req: Request, res: Response) => {
     try {
-      const [settings, data] = await Promise.all([getSupplierSettings(), listSupplierCatalogs()]);
-      res.json({ settings, ...data });
+      const [settings, data, catalog] = await Promise.all([getSupplierSettings(), listSupplierCatalogs(), getAllProducts()]);
+      // Con qué empaque entran si la regla no elige uno (el más usado en su Catálogo).
+      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog) });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
@@ -294,7 +349,7 @@ export function socialRouter(): Router {
 
   router.put('/api/social/suppliers/settings', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
     try {
-      res.json({ settings: await saveSupplierSettings(req.body) });
+      res.json(await saveSupplierSettings(req.body));
     } catch (error: any) {
       res.status(400).json({ error: explain(error) });
     }
@@ -330,8 +385,10 @@ export function socialRouter(): Router {
 
   router.delete('/api/social/suppliers/:catalogId', requireCrmSession, requireEditorRole, requirePublishing, requireUuid('catalogId', 'Catálogo'), async (req: Request, res: Response) => {
     try {
-      if (!(await deleteSupplierCatalog(req.params.catalogId))) return res.status(404).json({ error: 'Catálogo no encontrado' });
-      res.json({ deleted: true });
+      // Se borra de todos lados: la lista y los productos que entraron al Catálogo desde este PDF.
+      const result = await deleteSupplierCatalog(req.params.catalogId);
+      if (!result.deleted) return res.status(404).json({ error: 'Catálogo no encontrado' });
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }

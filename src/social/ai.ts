@@ -217,3 +217,82 @@ export async function writeCaptions(posts: CaptionRequest[], p: BusinessProfile 
   const captions: unknown[] = JSON.parse(response.choices[0]?.message?.content || '{}').captions || [];
   return posts.map((_, i) => String(captions[i] || '').replace(/\*/g, '').trim());
 }
+
+/** Lo que la IA propone para cada publicación (brain.ts lo convierte en productos y horas de verdad). */
+export interface AiPlanItem { dia: string; hora: string; formato: string; categoria: string; cantidad: number; video: string; motivo: string }
+
+export interface AiPlanRequest {
+  hoy: string;
+  dias: { dia: string; semana: string }[];
+  horaPreferida: string;
+  maxPorDia: number;
+  maxHistoriasPorDia: number;
+  historias: boolean;
+  publicaciones: boolean;
+  categorias: { categoria: string; productos: number; publicadosHace30Dias: number }[];
+  videos: { id: string; producto: string }[];
+  recientes: { dia: string; tema: string }[];
+}
+
+/**
+ * La planificación de la semana hecha por la IA del agente: cuántas publicaciones por día, a qué hora, de qué categoría,
+ * en qué formato y por qué. Solo decide; los productos exactos, los precios y las fotos los pone brain.ts desde el Catálogo.
+ */
+export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = profile()): Promise<{ resumen: string; publicaciones: AiPlanItem[] }> {
+  const { client, textModel, prompt } = await socialAi();
+  const b = p.business;
+  const rules = [
+    `Eres quien maneja las redes sociales de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. Planifica sus publicaciones de Instagram y Facebook para los días de la lista.`,
+    `- Decide tú cuántas publicaciones hacer cada día (de 0 a ${request.maxPorDia}) y a qué hora, pensando en vender: fechas y temporadas cercanas (Halloween, Día de los Difuntos, Navidad, San Valentín, Día de la Madre, graduaciones…), variedad de categorías y lo que menos se ha publicado. Calidad antes que cantidad: no llenes todos los días al máximo si no hace falta.`,
+    '- Formatos: "carrusel" = de 3 a 10 productos de una misma categoría (en "cantidad" cuántos); "foto" = un solo producto destacado; "reel" = solo con un video de la lista (pon su id en "video"); "historia" = un producto o un video.',
+    request.publicaciones ? '' : '- Las publicaciones del feed están desactivadas: usa solo historias.',
+    request.historias ? `- Historias: máximo ${request.maxHistoriasPorDia} al día.` : '- Las historias están desactivadas: no las uses.',
+    `- Horas entre 08:00 y 21:30, con al menos 2 horas entre publicaciones del mismo día. La hora preferida de la empresa es ${request.horaPreferida}: úsala para la publicación principal del día.`,
+    '- Usa solo categorías de la lista, escritas exactamente igual. "video" va vacío si no es un reel o una historia con video.',
+    '- "motivo": una frase corta y sencilla para la dueña explicando por qué esa publicación ese día.',
+    '- "resumen": dos frases con la estrategia de la semana.',
+    prompt.trim() ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas):\n${prompt.trim()}` : ''
+  ].filter(Boolean).join('\n');
+
+  const response = await client.chat.completions.create({
+    model: textModel,
+    ...reasoningFor(textModel),
+    max_completion_tokens: 6000,
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'planificacion',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['resumen', 'publicaciones'],
+          properties: {
+            resumen: { type: 'string' },
+            publicaciones: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['dia', 'hora', 'formato', 'categoria', 'cantidad', 'video', 'motivo'],
+                properties: {
+                  dia: { type: 'string' },
+                  hora: { type: 'string' },
+                  formato: { type: 'string', enum: ['carrusel', 'foto', 'reel', 'historia'] },
+                  categoria: { type: 'string' },
+                  cantidad: { type: 'integer' },
+                  video: { type: 'string' },
+                  motivo: { type: 'string' }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    messages: [{ role: 'system', content: rules }, { role: 'user', content: JSON.stringify(request) }]
+  } as any);
+  track(textModel, response.usage);
+  const data = JSON.parse(response.choices[0]?.message?.content || '{}');
+  return { resumen: String(data.resumen || '').trim(), publicaciones: Array.isArray(data.publicaciones) ? data.publicaciones : [] };
+}

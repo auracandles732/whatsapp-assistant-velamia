@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from '../services/metaChannels';
 import { instagramReadyUrl, ImageKind } from './images';
-import { SocialPost, PostChannel, PostStatus, PostMedia, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts } from './posts';
+import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts } from './posts';
 import { planUpcomingPosts } from './planner';
 import { getPublishingTenants } from '../services/supabase';
 import { runWithTenant } from '../services/tenant';
@@ -26,8 +26,8 @@ export type ChannelResult = { id?: string; permalink?: string; error?: string };
 
 /** Lo que se publica: las fotos y videos de la biblioteca elegidos o, si no hay, las fotos de los productos. */
 export function mediaOf(post: SocialPost): PostMedia[] {
-  if (post.media && post.media.length > 0) return post.media.slice(0, 10);
-  return post.products.slice(0, 10).map(p => ({ type: 'image' as const, url: p.image_url }));
+  if (post.media && post.media.length > 0) return post.media.slice(0, MAX_CAROUSEL);
+  return post.products.slice(0, MAX_CAROUSEL).map(p => ({ type: 'image' as const, url: p.image_url }));
 }
 
 async function waitUntilReady(containerId: string, token: string, waitMs: number, checks = READY_CHECKS) {

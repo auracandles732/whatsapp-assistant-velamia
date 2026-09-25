@@ -2277,6 +2277,7 @@
         .sl-item img, .sl-item video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #F1F4FC; display: block; }
         .sl-badge { position: absolute; top: 12px; left: 12px; background: rgba(20, 28, 58, 0.75); color: #fff; font-size: 11px; font-weight: 700; border-radius: 8px; padding: 2px 7px; }
         .sl-title { font-size: 13px; font-weight: 700; color: #141C3A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sl-prod { font-size: 11.5px; font-weight: 600; color: #4F5BD5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .sl-used { font-size: 11.5px; color: #6B7599; }
         .pb-pick video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
         .pb-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -2304,6 +2305,18 @@
         .sp-tag { align-self: flex-start; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
         .sp-tag.ok { background: #E3F6EA; color: #1E8A4A; }
         .sp-tag.warn { background: #FFF1DA; color: #B36B00; }
+        .pb-card.sp-dup { border: 1.5px solid #F5C58A; }
+        .sp-trash { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px; border: 1px solid #F3D2CE; background: #FFF5F4; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .sp-trash:hover { background: #FDE7E4; }
+        .sp-delete { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; padding: 12px 14px; border-radius: 14px; background: #FFF5F4; border: 1px solid #F3D2CE; }
+        .sp-delete b { color: #8A1C12; font-size: 14px; }
+        .sp-delete small { color: #6B4A45; font-size: 12.5px; }
+        .sp-delete .pb-btn { white-space: normal; max-width: 100%; text-align: center; }
+        .sp-where { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .sp-where > div { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; border-radius: 14px; background: #F2FAF5; border: 1px solid #CDEBD8; font-size: 13px; color: #2E4A3A; }
+        .sp-where > div:last-child { background: #F3F4FF; border-color: #DADFFB; color: #2A3766; }
+        .sp-where > div > b { font-size: 14px; }
+        @media (max-width: 767px) { .sp-where { grid-template-columns: minmax(0, 1fr); } }
         .sr-days { padding: 8px 10px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; font: inherit; font-size: 13.5px; }
         .sr-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
         .sr-totals div { background: #F4F6FF; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
@@ -2362,6 +2375,7 @@
         .pb-field textarea:read-only { background: #F7F8FC; }
         .pb-field input[type=datetime-local], .pb-field input[type=search] { border: 1px solid #DCE2F5; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; color: #1E2A4A; background: #fff; max-width: 280px; }
         .pb-field input[type=search] { max-width: none; }
+        .pb-field select { border: 1px solid #DCE2F5; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; color: #1E2A4A; background: #fff; width: 100%; }
         .pb-count { font-size: 12px; color: #7A84AE; text-align: right; }
         .pb-count.bad { color: #B42318; font-weight: 700; }
         .pb-netchips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -2376,6 +2390,35 @@
         .pb-pick button { display: flex; flex-direction: column; gap: 4px; font-size: 12px; text-align: left; padding: 4px; border-radius: 10px; border: 2px solid transparent; background: #fff; cursor: pointer; color: #2A3766; }
         .pb-pick button.on { border-color: #6C7CF0; background: #F2F4FF; }
         .pb-pick img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+        .pl-summary { padding: 12px 14px; border-radius: 14px; background: #F3F4FF; border: 1px solid #DADFFB; color: #2A3766; font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
+        .pl-list { display: flex; flex-direction: column; gap: 8px; }
+        .pl-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #E8ECF6; border-radius: 14px; background: #fff; }
+        .pl-when { flex: 0 0 74px; font-size: 12.5px; color: #4A5582; line-height: 1.3; }
+        .pl-when b { display: block; font-size: 16px; color: #141C3A; }
+        .pl-thumbs { position: relative; flex: 0 0 auto; display: flex; }
+        .pl-thumbs img, .pl-thumbs video { width: 48px; height: 48px; object-fit: cover; border-radius: 10px; border: 2px solid #fff; margin-left: -14px; background: #F1F4FC; }
+        .pl-thumbs > :first-child { margin-left: 0; }
+        .pl-thumbs span { position: absolute; right: -6px; bottom: -4px; background: #4F5BD5; color: #fff; font-size: 11px; font-weight: 800; border-radius: 9px; padding: 1px 6px; }
+        .pl-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .pl-info b { font-size: 14px; color: #141C3A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pl-info small { font-size: 12.5px; color: #5B6690; line-height: 1.35; }
+        .pl-tags { display: flex; align-items: center; gap: 6px; }
+        .pl-fmt { padding: 2px 9px; border-radius: 999px; background: #EEF0FF; color: #4F5BD5; font-size: 11.5px; font-weight: 800; }
+        .pl-x { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 10px; border: 1px solid #F3D2CE; background: #FFF5F4; color: #B42318; font-size: 20px; line-height: 1; cursor: pointer; }
+        @media (max-width: 767px) {
+            .pl-row { flex-wrap: wrap; gap: 8px 10px; }
+            .pl-when { flex: 0 0 auto; display: flex; gap: 6px; align-items: baseline; }
+            .pl-when b { display: inline; font-size: 14px; }
+            .pl-info { flex: 1 1 100%; order: 3; }
+            .pl-info b { white-space: normal; }
+            .pl-thumbs { order: 1; }
+            .pl-x { order: 2; margin-left: auto; }
+        }
+        .pb-strip { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-bottom: 4px; }
+        .pb-strip button { position: relative; flex: 0 0 56px; height: 56px; padding: 0; border: 2px solid #6C7CF0; border-radius: 10px; overflow: hidden; background: #F2F4FF; cursor: pointer; }
+        .pb-strip img, .pb-strip video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pb-strip span { position: absolute; top: 2px; left: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: #4F5BD5; color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; }
+        .pb-strip em { position: absolute; bottom: 2px; right: 3px; color: #fff; font-style: normal; font-size: 12px; text-shadow: 0 0 3px rgba(0,0,0,.7); }
         .pb-close { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #F1F4FC; cursor: pointer; font-size: 20px; color: #3A4570; }
 
         /* Celular: pantallas con flecha para volver */
@@ -5002,6 +5045,18 @@
         const EMPTY_PRODUCT = { name: '', price: '', category: '', packaging: '', sale_unit: '', measure: '', pieces_per_unit: '', gender: '', photoBase64: '', photoPreview: '' };
         const SORTS = { recent: 'Más recientes', name: 'Nombre (A-Z)', low: 'Precio: menor a mayor', high: 'Precio: mayor a menor' };
 
+        // Categoría que otra pantalla pide mostrar al abrir el Catálogo ("Ver en el Catálogo" de Proveedores).
+        let pendingCatalogCategory = '';
+        function openCatalogCategory(category) {
+            pendingCatalogCategory = category;
+            window.location.hash = '#/catalogo';
+        }
+        function takeCatalogCategory() {
+            const category = pendingCatalogCategory;
+            pendingCatalogCategory = '';
+            return category;
+        }
+
         function CatalogView({ products, biz, legacy, reload, readOnly = false }) {
             const perProductUnits = !!biz?.sales?.perProductUnits;
             const genderTagging = !!biz?.sales?.genderTagging;
@@ -5011,7 +5066,7 @@
             const [saving, setSaving] = useState(false);
             const [drag, setDrag] = useState(false);
             const [search, setSearch] = useState('');
-            const [categoryFilter, setCategoryFilter] = useState('');
+            const [categoryFilter, setCategoryFilter] = useState(takeCatalogCategory);
             const [sort, setSort] = useState('recent');
             const [view, setView] = useState('grid');
             const [editing, setEditing] = useState(null);
@@ -5455,7 +5510,7 @@
             const categoryLabel = biz?.dates?.enabled ? 'Categoría / ' + biz.dates.eventLabel : 'Categoría';
             const emoji = biz?.business?.productEmoji || '🛍️';
             const [search, setSearch] = useState('');
-            const [cat, setCat] = useState('');
+            const [cat, setCat] = useState(takeCatalogCategory);
             const [sort, setSort] = useState('recent');
             const [view, setView] = useState('grid');
             const [tools, setTools] = useState(false);
@@ -6756,6 +6811,9 @@
                     setSavingTransfer(false);
                 }
             }
+
+            // Al entrar al Catálogo se vuelve a leer: otras pantallas lo cambian (los PDF de proveedores agregan o quitan productos).
+            useEffect(() => { if (activeTab === 'catalogo') loadProducts(); }, [activeTab]);
 
             async function loadProducts() {
                 try {
@@ -8214,7 +8272,19 @@
         const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
         const MONTH_LONG = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
         const CAPTION_MAX = 2200;
-        const PHOTO_OPTIONS = [[1, '1 foto'], [3, 'Carrusel de 3 fotos'], [5, 'Carrusel de 5 fotos']];
+        // Instagram acepta hasta 10 fotos o videos (o una mezcla) en un carrusel.
+        const MAX_CAROUSEL = 10;
+        // 0 = decide la IA (hasta 3 al día y algunas historias); igual que MAX_POSTS_PER_DAY en el servidor.
+        const POSTS_PER_DAY_OPTIONS = [[0, 'La IA decide (hasta 3 al día + historias)'], [1, '1 al día'], [2, '2 al día'], [3, '3 al día']];
+        // Igual que dayHours en el servidor: la hora elegida y cada 3 horas antes, nunca antes de las 8:00.
+        function dayHoursOf(hour, n) {
+            const [hh, mm] = hour.split(':').map(Number);
+            const base = hh * 60 + mm;
+            const set = new Set();
+            for (let k = n - 1; k >= 0; k--) { const t = base - k * 180; set.add(t >= 480 ? t : 480 + (n - 1 - k) * 180); }
+            return [...set].sort((a, b) => a - b).map(t => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
+        }
+        const PHOTO_OPTIONS = [[1, '1 foto'], [3, 'Carrusel de 3'], [5, 'Carrusel de 5'], [7, 'Carrusel de 7'], [MAX_CAROUSEL, 'Carrusel de 10 (máximo de Instagram)']];
 
         // Día y hora en la zona del negocio (no en la de la computadora): la hora que se ve es la hora a la que sale.
         function tzParts(date) {
@@ -8535,9 +8605,9 @@
             // Qué se publica: productos del Catálogo o fotos y videos de la biblioteca.
             const [source, setSource] = useState('catalogo');
             const [library, setLibrary] = useState(null);
-            const [chosenMedia, setChosenMedia] = useState([]);
+            // Lo elegido, en orden: fotos del Catálogo y fotos o videos de la biblioteca mezclados (hasta 10).
+            const [picked, setPicked] = useState([]);
             const [search, setSearch] = useState('');
-            const [chosen, setChosen] = useState([]);
             const [when, setWhen] = useState(`${day || addDays(pbToday(), 1)}T${settings.hour}`);
             const [channels, setChannels] = useState(settings.channels);
             const [caption, setCaption] = useState('');
@@ -8548,21 +8618,24 @@
             useEffect(() => {
                 if (source === 'biblioteca' && !library) api('/api/social/assets').then(r => setLibrary(r.assets)).catch(e => setError(e.message));
             }, [source]);
-            const toggleMedia = id => setChosenMedia(chosenMedia.includes(id) ? chosenMedia.filter(x => x !== id) : chosenMedia.length >= 10 ? chosenMedia : [...chosenMedia, id]);
-            const count = source === 'catalogo' ? chosen.length : chosenMedia.length;
+            const togglePick = item => setPicked(picked.some(x => x.key === item.key) ? picked.filter(x => x.key !== item.key) : picked.length >= MAX_CAROUSEL ? picked : [...picked, item]);
+            const place = key => picked.findIndex(x => x.key === key);
+            const count = picked.length;
+            const videos = picked.filter(x => x.type === 'video').length;
 
             const plain = t => String(t || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
             const shown = (catalog || []).filter(p => !search || plain(p.name + ' ' + p.category).includes(plain(search)));
-            const toggle = name => setChosen(chosen.includes(name) ? chosen.filter(n => n !== name) : chosen.length >= 10 ? chosen : [...chosen, name]);
 
             async function create() {
                 setBusy(true);
                 setError('');
                 try {
-                    const fromLibrary = source === 'biblioteca';
-                    // El nombre del archivo ("IMG_2031") no sirve de tema para el texto: se usa el producto que muestra, si lo tiene.
-                    const theme = fromLibrary ? (library.find(a => a.id === chosenMedia[0])?.product_name || 'Nuestros productos') : niceName(catalog.find(p => p.name === chosen[0])?.category || '');
-                    onCreated((await api('/api/posts', { method: 'POST', body: JSON.stringify({ products: fromLibrary ? [] : chosen, media: fromLibrary ? chosenMedia : [], scheduled_at: fromTzInput(when), channels, caption, theme }) })).post);
+                    // Tema del texto: la categoría del primer producto; si solo hay archivos, el producto que muestra el primero
+                    // (el nombre del archivo, "IMG_2031", no sirve).
+                    const firstProduct = picked.find(x => x.product);
+                    const theme = firstProduct ? niceName(catalog.find(p => p.name === firstProduct.product)?.category || '') : ((library || []).find(a => a.id === picked[0].asset)?.product_name || 'Nuestros productos');
+                    const items = picked.map(x => (x.product ? { product: x.product } : { asset: x.asset }));
+                    onCreated((await api('/api/posts', { method: 'POST', body: JSON.stringify({ items, scheduled_at: fromTzInput(when), channels, caption, theme }) })).post);
                 } catch (e) {
                     setError(e.message);
                 } finally {
@@ -8575,28 +8648,39 @@
                     <div className="pb-modal-b single">
                         <div>
                             <div className="pb-field">
-                                <span className="pb-label">Qué mostrar <span className="pb-muted">· {count ? `${count} elegido(s)${count > 1 ? ', va como carrusel' : ''}` : 'una foto o video, o varios (carrusel, hasta 10)'}</span></span>
+                                <span className="pb-label">Qué mostrar <span className="pb-muted">· {count ? `${count} de ${MAX_CAROUSEL}${count > 1 ? ' · carrusel' + (videos ? ` con ${videos} video(s)` : '') : ''}` : `una foto o video, o un carrusel de hasta ${MAX_CAROUSEL} mezclando fotos y videos`}</span></span>
                                 <div className="pb-chips-row" style={{ margin: '4px 0 6px' }}>
                                     <button type="button" className={'pb-pchip' + (source === 'catalogo' ? ' on' : '')} onClick={() => setSource('catalogo')}>Catálogo</button>
                                     <button type="button" className={'pb-pchip' + (source === 'biblioteca' ? ' on' : '')} onClick={() => setSource('biblioteca')}>Biblioteca (fotos y videos)</button>
                                 </div>
-                                {source === 'catalogo' && <input type="search" placeholder="Buscar en el catálogo…" value={search} onChange={e => setSearch(e.target.value)} />}
+                                {count > 0 && (
+                                    <div className="pb-strip" aria-label="Orden del carrusel">
+                                        {picked.map((x, i) => (
+                                            <button key={x.key} type="button" title={'Quitar ' + x.label} onClick={() => togglePick(x)}>
+                                                <PbMediaThumb item={x} />
+                                                <span>{i + 1}</span>
+                                                {x.type === 'video' && <em>▶</em>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                {source === 'catalogo' && <input type="search" placeholder="Buscar en el catálogo (nombre o categoría)…" value={search} onChange={e => setSearch(e.target.value)} />}
                             </div>
                             {source === 'catalogo' ? (
                                 <div className="pb-pick">
                                     {!catalog ? <div className="pb-muted">Cargando catálogo…</div> : shown.length === 0 ? <div className="pb-muted">Nada coincide con la búsqueda</div> : shown.map(p => (
-                                        <button type="button" key={p.id || p.name} className={chosen.includes(p.name) ? 'on' : ''} onClick={() => toggle(p.name)}>
+                                        <button type="button" key={p.id || p.name} className={place('p:' + p.name) >= 0 ? 'on' : ''} onClick={() => togglePick({ key: 'p:' + p.name, product: p.name, type: 'image', url: p.image_url, label: p.name })}>
                                             <img src={p.image_url} alt="" loading="lazy" />
-                                            <span>{chosen.includes(p.name) ? `✓ ${chosen.indexOf(p.name) + 1}. ` : ''}{p.name}</span>
+                                            <span>{place('p:' + p.name) >= 0 ? `✓ ${place('p:' + p.name) + 1}. ` : ''}{p.name}</span>
                                         </button>
                                     ))}
                                 </div>
                             ) : (
                                 <div className="pb-pick">
                                     {!library ? <div className="pb-muted">Cargando biblioteca…</div> : library.length === 0 ? <div className="pb-muted">La biblioteca está vacía: sube tus videos y fotos en Publicaciones → Biblioteca.</div> : library.map(a => (
-                                        <button type="button" key={a.id} className={chosenMedia.includes(a.id) ? 'on' : ''} onClick={() => toggleMedia(a.id)}>
+                                        <button type="button" key={a.id} className={place('a:' + a.id) >= 0 ? 'on' : ''} onClick={() => togglePick({ key: 'a:' + a.id, asset: a.id, type: a.kind, url: a.url, label: a.title || (a.kind === 'video' ? 'Video' : 'Foto') })}>
                                             <PbMediaThumb item={{ type: a.kind, url: a.url }} />
-                                            <span>{chosenMedia.includes(a.id) ? `✓ ${chosenMedia.indexOf(a.id) + 1}. ` : ''}{a.kind === 'video' ? '▶ ' : ''}{a.title || (a.kind === 'video' ? 'Video' : 'Foto')}</span>
+                                            <span>{place('a:' + a.id) >= 0 ? `✓ ${place('a:' + a.id) + 1}. ` : ''}{a.kind === 'video' ? '▶ ' : ''}{a.title || (a.kind === 'video' ? 'Video' : 'Foto')}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -8604,6 +8688,7 @@
                             <div className="pb-field" style={{ marginTop: '14px' }}>
                                 <span className="pb-label">Dónde se publica</span>
                                 <PbNetChips channels={channels} setChannels={setChannels} />
+                                {videos > 0 && count > 1 && channels.includes('facebook') && <div className="pb-muted" style={{ marginTop: 6 }}>Facebook no deja mezclar fotos y videos en una publicación: ahí sale el video; en Instagram, el carrusel completo.</div>}
                             </div>
                             <div className="pb-field">
                                 <label className="pb-label" htmlFor="pb-new-when">Día y hora</label>
@@ -8651,13 +8736,22 @@
                                         <button key={d} type="button" className={'pb-daychip' + (s.days.includes(d) ? ' on' : '')} disabled={!canConfigure} onClick={() => setS({ days: toggleIn(s.days, d) })}>{label}</button>
                                     ))}
                                 </div>
-                                <div className="pb-label">Hora de publicación</div>
+                                <div className="pb-label">Cuántas publicaciones</div>
+                                <div className="pb-select">
+                                    <PbIcon name="bolt" size={18} color="#3A4570" />
+                                    <select value={s.postsPerDay ?? 0} disabled={!canConfigure} onChange={e => setS({ postsPerDay: Number(e.target.value) })} aria-label="Cuántas publicaciones">
+                                        {POSTS_PER_DAY_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
+                                    </select>
+                                </div>
+                                <div className="pb-label">{s.postsPerDay ? 'Hora de publicación' : 'Hora principal'}</div>
                                 <div className="pb-select">
                                     <PlatIcon name="clock" size={18} color="#3A4570" />
                                     <select value={s.hour} disabled={!canConfigure} onChange={e => setS({ hour: e.target.value })} aria-label="Hora de publicación">
                                         {hourOptions(s.hour).map(h => <option key={h} value={h}>{h}</option>)}
                                     </select>
                                 </div>
+                                {!s.postsPerDay && <p className="pb-muted" style={{ margin: '6px 0 0' }}>La IA decide en los días marcados cuántas publicaciones hacer, a qué hora, de qué productos y en qué formato (carrusel, foto, reel o historia). Revisa lo que planea en "Planificación del agente".</p>}
+                                {s.postsPerDay > 1 && <p className="pb-muted" style={{ margin: '6px 0 0' }}>Salen a las {dayHoursOf(s.hour, s.postsPerDay).join(', ')}.</p>}
                                 <div className="pb-tz"><PbIcon name="globe" size={20} color="#3A4570" /><div>Zona horaria<b>{tzCity()}{tzOffset() ? ` (${tzOffset()})` : ''}</b></div></div>
                             </>
                         ))}
@@ -8671,13 +8765,18 @@
                                         {POST_CHANNEL_NAMES[c]}
                                     </label>
                                 ))}
-                                <div className="pb-label"><PlatIcon name="image" size={14} color="#3A4570" /> Fotos por publicación</div>
-                                <div className="pb-select">
-                                    <PlatIcon name="image" size={18} color="#3A4570" />
-                                    <select value={s.photosPerPost} disabled={!canConfigure} onChange={e => setS({ photosPerPost: Number(e.target.value) })} aria-label="Fotos por publicación">
-                                        {PHOTO_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
-                                    </select>
-                                </div>
+                                {s.postsPerDay ? (
+                                    <>
+                                        <div className="pb-label"><PlatIcon name="image" size={14} color="#3A4570" /> Fotos por publicación</div>
+                                        <div className="pb-select">
+                                            <PlatIcon name="image" size={18} color="#3A4570" />
+                                            <select value={s.photosPerPost} disabled={!canConfigure} onChange={e => setS({ photosPerPost: Number(e.target.value) })} aria-label="Fotos por publicación">
+                                                {PHOTO_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
+                                            </select>
+                                        </div>
+                                    </>
+                                ) : <p className="pb-muted" style={{ margin: '8px 0 0' }}>🖼️ La IA elige el tamaño de cada carrusel (hasta {MAX_CAROUSEL}).</p>}
+                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>Si en la Biblioteca hay videos o fotos de esos productos, se suman al carrusel (máximo {MAX_CAROUSEL} entre fotos y videos).</p>
                             </>
                         ))}
                         {panel('auto', <PbIcon name="bolt" size={22} color="#4F5BD5" />, 'Automatización', (
@@ -8708,6 +8807,80 @@
         function postItems(post) {
             if (post.media && post.media.length) return post.media.map(m => ({ type: m.type, url: m.url, name: m.type === 'video' ? 'Video' : 'Foto' }));
             return (post.products || []).map(p => ({ type: 'image', url: p.image_url, name: p.name }));
+        }
+
+        // Formato de una publicación para mostrarlo: historia, reel, carrusel de N o foto.
+        function postFormat(post) {
+            const items = postItems(post);
+            if (post.format) return post.format === 'carrusel' ? `Carrusel de ${items.length}` : { foto: 'Foto', reel: 'Reel', historia: 'Historia' }[post.format];
+            if (post.channels.length === 1 && post.channels[0] === 'instagram_story') return 'Historia';
+            if (items.length > 1) return `Carrusel de ${items.length}`;
+            return items[0]?.type === 'video' ? 'Reel' : 'Foto';
+        }
+
+        /**
+         * Planificación del agente: qué va a publicar la IA y por qué. Sin propuesta muestra lo ya programado y la
+         * estrategia de la última planificación; con propuesta, cada publicación con su día, hora, formato, fotos y motivo,
+         * para quitar las que no convencen y programar el resto.
+         */
+        function PbPlanning({ canEdit, proposal, setProposal, lastPlan, posts, autoPlan, busy, onPropose, onConfirm }) {
+            const upcoming = posts
+                .filter(p => ['approved', 'draft'].includes(p.status) && new Date(p.scheduled_at).getTime() > Date.now() && new Date(p.scheduled_at).getTime() < Date.now() + 7 * 86400000)
+                .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+            const row = (post, key, onRemove) => {
+                const items = postItems(post);
+                const day = dayOf(post.scheduled_at);
+                const n = postNets(post);
+                return (
+                    <div className="pl-row" key={key}>
+                        <div className="pl-when">{DAY_SHORT[weekdayOf(day)]} {dayParts(day).d} {MONTH_SHORT[dayParts(day).m - 1]}<b>{timeOf(post.scheduled_at)}</b></div>
+                        <div className="pl-thumbs">
+                            {items.slice(0, 3).map((item, i) => <PbMediaThumb key={i} item={item} />)}
+                            {items.length > 3 && <span>+{items.length - 3}</span>}
+                        </div>
+                        <div className="pl-info">
+                            <div className="pl-tags">
+                                <span className="pl-fmt">{postFormat(post)}</span>
+                                {n.ig && <PbNetLogo net="instagram" size={16} />}{n.fb && <PbNetLogo net="facebook" size={16} />}
+                            </div>
+                            <b>{post.theme}{post.products.length ? ' · ' + post.products.slice(0, 3).map(p => niceName(p.name)).join(', ') + (post.products.length > 3 ? ` y ${post.products.length - 3} más` : '') : ''}</b>
+                            {post.reason && <small>{post.reason}</small>}
+                        </div>
+                        {onRemove && <button type="button" className="pl-x" title="Quitar de la propuesta" aria-label="Quitar de la propuesta" onClick={onRemove}>×</button>}
+                    </div>
+                );
+            };
+            return (
+                <section className="pb-card" id="pb-plan">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="robot" size={22} color="#4F5BD5" /></div>
+                        <div className="grow"><h2>Planificación del agente</h2><p>{proposal ? 'Propuesta de la IA para los próximos 7 días: quita lo que no te guste y programa el resto.' : 'Qué va a publicar la IA en los próximos 7 días y por qué.'}</p></div>
+                        {canEdit && !proposal && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={onPropose}>✨ {busy === 'plan' ? 'La IA está planificando…' : 'Ver propuesta de la IA'}</button>}
+                    </div>
+                    {proposal ? (
+                        <>
+                            {proposal.summary && <div className="pl-summary">🧠 {proposal.summary}</div>}
+                            {proposal.drafts.length === 0
+                                ? <div className="pb-muted">No hay nada que proponer: los días de publicación ya tienen lo suyo o no hay productos con foto.</div>
+                                : <div className="pl-list">{proposal.drafts.map((d, i) => row(d, i, () => setProposal({ ...proposal, drafts: proposal.drafts.filter((_, k) => k !== i) })))}</div>}
+                            <div className="pb-actions" style={{ marginTop: 12 }}>
+                                {proposal.drafts.length > 0 && <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={onConfirm}>{busy === 'confirm' ? 'Programando…' : `Programar ${proposal.drafts.length === 1 ? 'esta publicación' : `estas ${proposal.drafts.length} publicaciones`}`}</button>}
+                                <button type="button" className="pb-btn sm" disabled={!!busy} onClick={onPropose}>{busy === 'plan' ? 'Pensando…' : 'Otra propuesta'}</button>
+                                <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setProposal(null)}>Descartar</button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {lastPlan?.summary && <div className="pl-summary">🧠 {lastPlan.summary}</div>}
+                            {upcoming.length
+                                ? <div className="pl-list">{upcoming.slice(0, 8).map(p => row(p, p.id))}</div>
+                                : <div className="pb-muted">No hay nada programado para los próximos 7 días.{canEdit ? ' Pide una propuesta a la IA y decide qué programar.' : ''}</div>}
+                            {upcoming.length > 8 && <div className="pb-muted" style={{ marginTop: 6 }}>y {upcoming.length - 8} más en el calendario.</div>}
+                            <p className="pb-muted" style={{ margin: '10px 0 0' }}>{autoPlan ? '🤖 Modo automático: la IA programa sola los días libres y cada publicación sale a su hora.' : 'Modo automático apagado: solo sale lo que programes tú (o lo que aceptes de la propuesta).'}</p>
+                        </>
+                    )}
+                </section>
+            );
         }
 
         function PbMediaThumb({ item, className }) {
@@ -8769,8 +8942,22 @@
             const [progress, setProgress] = useState('');
             const [filter, setFilter] = useState('all');
             const [open, setOpen] = useState(null);
+            const [catalog, setCatalog] = useState(null);
             const load = () => api('/api/social/assets').then(r => { setAssets(r.assets); setError(''); }).catch(e => setError(e.message));
             useEffect(() => { load(); }, []);
+            useEffect(() => { if (open && !catalog) api('/api/products').then(setCatalog).catch(() => setCatalog([])); }, [open]);
+
+            // El producto que muestra el archivo: con eso la IA lo suma al carrusel cuando publica ese producto.
+            async function linkProduct(asset, productName) {
+                try {
+                    const updated = (await api('/api/social/assets/' + asset.id, { method: 'PATCH', body: JSON.stringify({ product_name: productName }) })).asset;
+                    setAssets(list => list.map(a => (a.id === updated.id ? updated : a)));
+                    setOpen(updated);
+                } catch (e) {
+                    setError(e.message);
+                }
+            }
+            const byCategory = (catalog || []).reduce((groups, p) => ({ ...groups, [p.category || 'Sin categoría']: [...(groups[p.category || 'Sin categoría'] || []), p.name] }), {});
 
             async function upload(list) {
                 const files = Array.from(list || []);
@@ -8805,7 +8992,7 @@
                 <section className="pb-card">
                     <div className="pb-card-h">
                         <div className="pb-tile"><PlatIcon name="image" size={22} color="#4F5BD5" /></div>
-                        <div className="grow"><h2>Biblioteca</h2><p>Tus fotos y videos para redes. Los videos salen como reel o historia; las fotos del Catálogo el agente ya las tiene.</p></div>
+                        <div className="grow"><h2>Biblioteca</h2><p>Tus fotos y videos propios para redes. Las fotos del Catálogo (también las de los PDF de proveedores) el agente ya las usa desde ahí: no hace falta subirlas otra vez. Marca en cada video qué producto muestra y la IA lo suma al carrusel de ese producto.</p></div>
                         {canEdit && (
                             <label className="pb-btn main" style={{ cursor: 'pointer' }}>
                                 <PlatIcon name="plus" size={18} color="#fff" /> Subir fotos o videos
@@ -8829,6 +9016,7 @@
                                     <PbMediaThumb item={{ type: a.kind, url: a.url }} />
                                     {a.kind === 'video' && <span className="sl-badge">▶ {a.duration_seconds ? Math.round(a.duration_seconds) + ' s' : 'Video'}</span>}
                                     <span className="sl-title">{a.title || (a.kind === 'video' ? 'Video' : 'Foto')}</span>
+                                    {a.product_name && <span className="sl-prod">🛍️ {a.product_name}</span>}
                                     {a.used_count > 0 && <span className="sl-used">Usado {a.used_count}×</span>}
                                 </button>
                             ))}
@@ -8844,6 +9032,19 @@
                                     <p className="pb-muted" style={{ margin: '10px 0' }}>
                                         {[open.width && open.height ? open.width + '×' + open.height : '', open.duration_seconds ? Math.round(open.duration_seconds) + ' s' : '', open.size_bytes ? (open.size_bytes / 1048576).toFixed(1) + ' MB' : '', 'Usado ' + (open.used_count || 0) + ' vez/veces'].filter(Boolean).join(' · ')}
                                     </p>
+                                    <div className="pb-field">
+                                        <label className="pb-label" htmlFor="sl-product">Producto que muestra</label>
+                                        <select id="sl-product" value={open.product_name || ''} disabled={!canEdit || !catalog} onChange={e => linkProduct(open, e.target.value)}>
+                                            <option value="">{catalog ? 'Ninguno en especial' : 'Cargando catálogo…'}</option>
+                                            {open.product_name && catalog && !catalog.some(p => p.name === open.product_name) && <option value={open.product_name}>{open.product_name}</option>}
+                                            {Object.entries(byCategory).map(([category, names]) => (
+                                                <optgroup key={category} label={category}>
+                                                    {names.map(n => <option key={n} value={n}>{n}</option>)}
+                                                </optgroup>
+                                            ))}
+                                        </select>
+                                        <span className="pb-muted" style={{ fontSize: 12.5 }}>Con esto, cuando la IA publique ese producto, suma este {open.kind === 'video' ? 'video' : 'archivo'} al carrusel.</span>
+                                    </div>
                                     {canEdit && <div className="pb-actions"><button type="button" className="pb-btn sm danger" onClick={() => remove(open)}>Borrar de la biblioteca</button></div>}
                                 </div>
                             </div>
@@ -8945,6 +9146,7 @@
             const [pdf, setPdf] = useState(null);
             const [pdfName, setPdfName] = useState('');
             const [openCatalog, setOpenCatalog] = useState(null);
+            const [deleting, setDeleting] = useState(null);
 
             const load = () => api('/api/social/suppliers').then(r => {
                 setData(r);
@@ -8967,8 +9169,10 @@
             async function saveSettings() {
                 setBusy('settings');
                 try {
-                    setSettings((await api('/api/social/suppliers/settings', { method: 'PUT', body: JSON.stringify(s) })).settings);
-                    setNotice('✅ Regla de precios guardada');
+                    const r = await api('/api/social/suppliers/settings', { method: 'PUT', body: JSON.stringify(s) });
+                    setSettings(r.settings);
+                    setNotice('✅ Regla guardada' + (r.packaged ? ` · empaque ${r.settings.packaging || data.autoPackaging} puesto en ${r.packaged} productos del Catálogo` : ''));
+                    load();
                 } catch (e) {
                     setError(e.message);
                 } finally {
@@ -9027,19 +9231,28 @@
                 }
             }
 
+            // Se borra de todos lados: esta lista, sus productos del Catálogo y sus fotos.
             async function removeCatalog(catalog) {
-                if (!confirm(`¿Borrar el catálogo ${catalog.name} de esta lista? Lo que ya pasó al Catálogo se queda ahí.`)) return;
+                setBusy('delete');
+                setError('');
                 try {
-                    await api('/api/social/suppliers/' + catalog.id, { method: 'DELETE' });
+                    const r = await api('/api/social/suppliers/' + catalog.id, { method: 'DELETE' });
+                    setNotice(`🗑️ Catálogo ${catalog.name} borrado${r.removed ? ` y ${r.removed} productos quitados del Catálogo` : ''}.`);
+                    setDeleting(null);
                     setOpenCatalog(null);
                     load();
                 } catch (e) {
                     setError(e.message);
+                } finally {
+                    setBusy('');
                 }
             }
 
             if (!data) return <section className="pb-card">{error ? <div className="pb-err">{error}</div> : <div className="pb-muted">Cargando…</div>}</section>;
             const priceOf = p => Number(s.sizePrices[p.size]) || 0;
+            // El mismo PDF subido otra vez: se marca el más nuevo para borrarlo.
+            const repeated = catalog => data.catalogs.some(c => c.id !== catalog.id && c.file_name && c.file_name === catalog.file_name && c.created_at < catalog.created_at);
+            const alreadyUploaded = pdf && data.catalogs.find(c => c.file_name === pdf.name);
             return (
                 <>
                     <section className="pb-card">
@@ -9073,7 +9286,7 @@
                                     {packagingTypes.length > 0 && (
                                         <label><span>Empaque incluido</span>
                                             <select value={s.packaging} disabled={!canConfigure} onChange={e => setSettings({ ...s, packaging: e.target.value })}>
-                                                <option value="">Sin definir</option>
+                                                <option value="">{data.autoPackaging ? `Automático (${data.autoPackaging}, el más usado)` : 'Sin definir'}</option>
                                                 {packagingTypes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
                                             </select>
                                         </label>
@@ -9101,7 +9314,8 @@
                                             </label>
                                         )}
                                         {pdf && !pricesReady && s.autoAddToCatalog && <div className="pb-muted" style={{ color: '#B36B00' }}>Primero guarda los 3 precios de la regla: sin precio los modelos no pueden entrar al Catálogo.</div>}
-                                        <button type="button" className="pb-btn main" disabled={!pdf || !pdfName.trim() || !!busy} onClick={importPdf}>
+                                        {alreadyUploaded && <div className="pb-muted" style={{ color: '#B42318' }}>Este PDF ya está subido (catálogo {alreadyUploaded.name}): subirlo otra vez repetiría los productos. Si quieres cambiarlo, primero borra el anterior.</div>}
+                                        <button type="button" className="pb-btn main" disabled={!pdf || !pdfName.trim() || !!busy || !!alreadyUploaded} onClick={importPdf}>
                                             ✨ {busy === 'import' ? 'Leyendo…' : s.autoAddToCatalog ? 'Leer y agregar al Catálogo' : 'Leer PDF'}
                                         </button>
                                     </>
@@ -9115,19 +9329,54 @@
                         const pending = models.filter(p => p.status !== 'en_catalogo');
                         const estimated = models.filter(p => p.size_estimated).length;
                         const isOpen = openCatalog === catalog.id;
+                        const inCatalog = models.length - pending.length;
+                        const dup = repeated(catalog);
                         return (
-                            <section key={catalog.id} className="pb-card">
+                            <section key={catalog.id} className={'pb-card' + (dup ? ' sp-dup' : '')}>
                                 <div className="pb-card-h" style={{ cursor: 'pointer' }} onClick={() => setOpenCatalog(isOpen ? null : catalog.id)}>
                                     <div className="pb-tile"><PlatIcon name="layers" size={22} color="#4F5BD5" /></div>
-                                    <div className="grow"><h2>{catalog.name}</h2><p>{models.length} modelos · {models.length - pending.length} en el Catálogo{estimated ? ` · ${estimated} con tamaño estimado` : ''} · {catalog.file_name}</p></div>
+                                    <div className="grow">
+                                        <h2>{catalog.name}{dup && <span className="sp-tag warn" style={{ marginLeft: 8, verticalAlign: 'middle' }}>Repetido</span>}</h2>
+                                        <p>{models.length} modelos · {inCatalog} en el Catálogo{estimated ? ` · ${estimated} con tamaño estimado` : ''} · {catalog.file_name} · subido el {new Date(catalog.created_at).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                                    </div>
+                                    {canEdit && (
+                                        <button type="button" className="sp-trash" title="Borrar este catálogo" aria-label={'Borrar el catálogo ' + catalog.name}
+                                            onClick={e => { e.stopPropagation(); setDeleting(deleting === catalog.id ? null : catalog.id); }}>
+                                            <PlatIcon name="trash" size={18} color="#B42318" />
+                                        </button>
+                                    )}
                                     <PbIcon name={isOpen ? 'back' : 'next'} size={20} color="#3A4570" />
                                 </div>
+                                {deleting === catalog.id && (
+                                    <div className="sp-delete">
+                                        <b>¿Borrar el catálogo {catalog.name}{dup ? ' repetido' : ''} de todos lados?</b>
+                                        <small>Se borra esta lista{inCatalog ? `, sus ${inCatalog} productos del Catálogo` : ''} y sus fotos: el asistente y el agente de redes dejan de ofrecerlos. Los productos de otros catálogos no se tocan.</small>
+                                        <div className="pb-actions">
+                                            <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={() => removeCatalog(catalog)}>{busy === 'delete' ? 'Borrando…' : 'Sí, borrar de todos lados'}</button>
+                                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setDeleting(null)}>Cancelar</button>
+                                        </div>
+                                    </div>
+                                )}
                                 {isOpen && (
                                     <>
-                                        <div className="pb-actions" style={{ marginBottom: 12 }}>
-                                            {canEdit && pending.length > 0 && <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => addToCatalog(pending.map(p => p.id))}>Agregar los {pending.length} que faltan al Catálogo</button>}
-                                            {canEdit && <button type="button" className="pb-btn sm danger" onClick={() => removeCatalog(catalog)}>Borrar de esta lista</button>}
-                                        </div>
+                                        {inCatalog > 0 && (
+                                            <div className="sp-where">
+                                                <div>
+                                                    <b>🛍️ Ya están en el Catálogo</b>
+                                                    <span>{inCatalog} productos en la categoría <b>{catalog.name}</b>, con su foto y su precio. El asistente de WhatsApp ya los ofrece a las clientas.</span>
+                                                    <button type="button" className="pb-btn sm" onClick={() => openCatalogCategory(catalog.name)}>Ver en el Catálogo</button>
+                                                </div>
+                                                <div>
+                                                    <b>📣 El agente de redes los usa</b>
+                                                    <span>Publica con estas mismas fotos del Catálogo (no hace falta subirlas a la Biblioteca). También puedes elegirlos tú en Calendario → Nueva publicación, buscando "{catalog.name.toLowerCase()}".</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {canEdit && pending.length > 0 && (
+                                            <div className="pb-actions" style={{ marginBottom: 12 }}>
+                                                <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => addToCatalog(pending.map(p => p.id))}>Agregar los {pending.length} que faltan al Catálogo</button>
+                                            </div>
+                                        )}
                                         <div className="sp-models">
                                             {models.map(p => (
                                                 <div key={p.id} className={'sp-model' + (p.size_estimated ? ' est' : '')}>
@@ -9357,6 +9606,8 @@
             const [selDay, setSelDay] = useState(pbToday());
             // Área del agente de redes: calendario, biblioteca, proveedores o resultados.
             const [area, setArea] = useState('calendario');
+            // Propuesta de la IA para los próximos 7 días (sin guardar hasta que se programe).
+            const [proposal, setProposal] = useState(null);
             const cardRefs = useRef({});
 
             const gridStart = mode === 'month' ? monthGridStart(anchor) : anchor;
@@ -9385,7 +9636,7 @@
                     {withActions && canEdit && (
                         <div className="pb-hero-actions">
                             <button type="button" className="pb-btn" onClick={() => setCreating({})}><PlatIcon name="plus" size={20} color="#2F3A8F" /> Nueva publicación</button>
-                            <button type="button" className="pb-btn main" disabled={busy === 'plan'} onClick={plan}>✨ {busy === 'plan' ? 'Preparando…' : 'Preparar próximos 7 días'}</button>
+                            <button type="button" className="pb-btn main" disabled={busy === 'plan'} onClick={plan}>✨ {busy === 'plan' ? 'Planificando…' : 'Planificar próximos 7 días'}</button>
                         </div>
                     )}
                     <PbHeroArt className="pb-hero-art" />
@@ -9454,14 +9705,27 @@
                 saveSettings(next).then(() => { if (!on) setNotice({ ok: true, text: 'Modo automático apagado: solo sale lo que programes tú.' }); });
             }
 
+            // La IA propone la semana (nada se guarda): se revisa en "Planificación del agente".
             async function plan() {
                 setBusy('plan');
                 setNotice(null);
                 try {
-                    const r = await api('/api/posts/plan', { method: 'POST' });
-                    setNotice(r.created.length
-                        ? { ok: true, text: `Listo: se programaron ${r.created.length} publicación(es). Saldrán solas a su hora (puedes cambiarlas antes).` }
-                        : { ok: true, text: 'Los próximos 7 días ya tienen sus publicaciones (o no hay días de publicación elegidos).' });
+                    setProposal(await api('/api/posts/plan/preview', { method: 'POST' }));
+                    if (mobile && view !== 'home') setView('home');
+                    setTimeout(() => document.getElementById('pb-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+                } catch (e) {
+                    setNotice({ ok: false, text: 'La IA no pudo planificar: ' + e.message });
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            async function confirmPlan() {
+                setBusy('confirm');
+                try {
+                    const r = await api('/api/posts/plan/confirm', { method: 'POST', body: JSON.stringify({ drafts: proposal.drafts, summary: proposal.summary }) });
+                    setProposal(null);
+                    setNotice({ ok: true, text: `Listo: se programaron ${r.created} publicación(es). Saldrán solas a su hora (puedes cambiarlas antes).` });
                     if (mode !== 'week' || anchor !== mondayOf(pbToday())) {
                         setMode('week');
                         setAnchor(mondayOf(pbToday()));
@@ -9469,7 +9733,7 @@
                         await load();
                     }
                 } catch (e) {
-                    setNotice({ ok: false, text: 'No se pudo preparar: ' + e.message });
+                    setNotice({ ok: false, text: 'No se pudo programar: ' + e.message });
                 } finally {
                     setBusy('');
                 }
@@ -9594,6 +9858,11 @@
                 </>
             );
 
+            const planningCard = canEdit || posts.length ? (
+                <PbPlanning canEdit={canEdit} proposal={proposal} setProposal={setProposal} lastPlan={data.plan} posts={posts} autoPlan={s.autoPlan}
+                    busy={busy === 'plan' || busy === 'confirm' ? busy : ''} onPropose={plan} onConfirm={confirmPlan} />
+            ) : null;
+
             const thumb = post => {
                 const items = postItems(post);
                 return (
@@ -9710,6 +9979,7 @@
                     <div className="pb">
                         {hero(true)}
                         {notices}
+                        {planningCard}
                         {channelsCard}
                         <button type="button" className="pb-navcard" onClick={() => goTo('posts')}>
                             <div className="pb-tile"><PlatIcon name="calendar" size={22} color="#4F5BD5" /></div>
@@ -9747,6 +10017,7 @@
                     {hero(true)}
                     <PbAreaTabs area={area} setArea={setArea} />
                     {notices}
+                    {planningCard}
                     {channelsCard}
 
                     <section className="pb-card">

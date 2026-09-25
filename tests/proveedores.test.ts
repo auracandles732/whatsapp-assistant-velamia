@@ -6,7 +6,8 @@ import './entorno';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sizeFromNote, catalogName, normalizeSupplierSettings } from '../src/social/suppliers';
+import { VELAMIA_PROFILE } from '../src/config/businessProfile';
+import { sizeFromNote, catalogName, normalizeSupplierSettings, mostUsedPackaging } from '../src/social/suppliers';
 
 test('el tamaño sale del peso en cera y, si no está, de la medida', () => {
   assert.equal(sizeFromNote('Medida de la vela : 7,8 x 5,8 cm Peso en cera: 85 g'), 'grande');
@@ -32,4 +33,10 @@ test('la regla de precios se limpia y por defecto agrega al Catálogo', () => {
   assert.equal(s.defaultSize, 'mediana');
   assert.equal(s.namePrefix, 'VELA');
   assert.equal(s.autoAddToCatalog, true);
+});
+
+test('sin empaque en la regla, los modelos entran con el empaque más usado del Catálogo', () => {
+  const catalogo = [{ description: 'Tul' }, { description: 'tul' }, { description: 'Acetato' }, { description: '' }, { description: null }, { description: 'Algo raro' }];
+  assert.equal(mostUsedPackaging(catalogo, VELAMIA_PROFILE), 'Tul');
+  assert.equal(mostUsedPackaging([{ description: '' }], VELAMIA_PROFILE), '', 'si nadie tiene empaque no se inventa uno');
 });
