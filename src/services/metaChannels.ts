@@ -331,12 +331,18 @@ export async function subscribePage(): Promise<string> {
 // Publicar en Instagram pide instagram_content_publish y en la página de Facebook, pages_manage_posts.
 export const PUBLISH_SCOPES = { instagram: 'instagram_content_publish', facebook: 'pages_manage_posts' };
 
+/** Permisos de estadísticas: Instagram (alcance, vistas…) y Facebook (reacciones, comentarios, impresiones). */
+export const INSIGHTS_SCOPES = ['instagram_manage_insights', 'read_insights', 'pages_read_user_content'];
+
 // Permisos que se piden al conectar. Solo los que la App tiene agregados: uno que no esté hace fallar la ventana de Facebook.
 // Por eso pages_manage_posts se pide recién cuando la App ya lo tiene (variable META_PUBLISH_FACEBOOK=true en Render).
 export const CONNECT_SCOPES = [
   'pages_show_list', 'pages_messaging', 'pages_manage_metadata', 'pages_read_engagement',
   'instagram_basic', 'instagram_manage_messages', 'instagram_manage_comments', PUBLISH_SCOPES.instagram, 'business_management',
-  ...(process.env.META_PUBLISH_FACEBOOK === 'true' ? [PUBLISH_SCOPES.facebook] : [])
+  ...(process.env.META_PUBLISH_FACEBOOK === 'true' ? [PUBLISH_SCOPES.facebook] : []),
+  // Estadísticas para Resultados (me gusta, comentarios, alcance): se piden recién cuando la App ya los tiene agregados
+  // (META_INSIGHTS=true en Render). Sin ellos Meta rechaza las métricas de Instagram y Facebook.
+  ...(process.env.META_INSIGHTS === 'true' ? INSIGHTS_SCOPES : [])
 ];
 
 const STORED_KEY = 'meta_page_connection';

@@ -116,8 +116,8 @@ export async function collectMetricsForCurrent(now = new Date()) {
       } catch (err: any) {
         if (isPermission(err)) {
           problem = channel === 'facebook'
-            ? 'Para ver los resultados de Facebook falta el permiso read_insights: agrégalo en la App de Meta y vuelve a conectar con Facebook.'
-            : 'Para ver los resultados de Instagram falta el permiso instagram_manage_insights: agrégalo en la App de Meta y vuelve a conectar con Facebook.';
+            ? 'Para ver los resultados de Facebook faltan los permisos read_insights y pages_read_user_content: agrégalos en la App de Meta, pon META_INSIGHTS=true en Render y vuelve a conectar con Facebook.'
+            : 'Para ver los resultados de Instagram falta el permiso instagram_manage_insights: agrégalo en la App de Meta, pon META_INSIGHTS=true en Render y vuelve a conectar con Facebook.';
         } else {
           console.warn(`⚠️ Resultados de ${channel} (${post.id}):`, metaError(err));
         }
