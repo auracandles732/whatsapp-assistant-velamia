@@ -27,6 +27,8 @@ export interface SupplierSettings {
   packaging: string;
   /** Pasar cada modelo al Catálogo apenas se sube el PDF. */
   autoAddToCatalog: boolean;
+  /** Hacer la foto de cada modelo con el diseño de la empresa apenas entra al Catálogo (posters.ts). */
+  autoPosters: boolean;
 }
 
 export const DEFAULT_SUPPLIER_SETTINGS: SupplierSettings = {
@@ -34,7 +36,8 @@ export const DEFAULT_SUPPLIER_SETTINGS: SupplierSettings = {
   defaultSize: 'mediana',
   namePrefix: '',
   packaging: '',
-  autoAddToCatalog: true
+  autoAddToCatalog: true,
+  autoPosters: true
 };
 
 const SETTINGS_KEY = 'supplier_settings';
@@ -48,7 +51,8 @@ export function normalizeSupplierSettings(raw: any): SupplierSettings {
     defaultSize: SIZES.includes(r.defaultSize) ? r.defaultSize : DEFAULT_SUPPLIER_SETTINGS.defaultSize,
     namePrefix: String(r.namePrefix ?? '').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 20),
     packaging: String(r.packaging ?? '').trim().slice(0, 60),
-    autoAddToCatalog: typeof r.autoAddToCatalog === 'boolean' ? r.autoAddToCatalog : true
+    autoAddToCatalog: typeof r.autoAddToCatalog === 'boolean' ? r.autoAddToCatalog : true,
+    autoPosters: typeof r.autoPosters === 'boolean' ? r.autoPosters : true
   };
 }
 

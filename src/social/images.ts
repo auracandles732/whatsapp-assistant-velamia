@@ -142,6 +142,12 @@ export function toInstagramJpeg(buffer: Buffer, kind: ImageKind = 'feed'): Buffe
   return Buffer.from(jpeg.encode({ width: composed.width, height: composed.height, data: composed.data as Buffer }, JPEG_QUALITY).data);
 }
 
+/** PNG o JPG → JPG (las fotos hechas por la IA pesan ~1,5 MB en PNG; en JPG, unas 10 veces menos). */
+export function toJpeg(buffer: Buffer, quality = JPEG_QUALITY): Buffer {
+  const img = decodeImage(buffer);
+  return Buffer.from(jpeg.encode({ width: img.width, height: img.height, data: img.data as Buffer }, quality).data);
+}
+
 /** Solo se descargan fotos del almacenamiento propio (Supabase): nunca una dirección cualquiera. */
 export function isOwnStorageUrl(url: string): boolean {
   try {

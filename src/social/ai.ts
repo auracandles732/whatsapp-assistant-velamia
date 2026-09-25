@@ -131,7 +131,7 @@ export async function socialAi() {
 const reasoningFor = (model: string) => (/^(gpt-5|o\d)/.test(model) ? { reasoning_effort: 'low' as const } : {});
 
 /** Anota el consumo del agente (aparece en Consumo de IA como "Publicaciones"). */
-function track(model: string, usage: any) {
+export function track(model: string, usage: any) {
   if (!usage) return;
   void recordAiUsage({
     model,

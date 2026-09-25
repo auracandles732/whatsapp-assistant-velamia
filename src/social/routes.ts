@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction, Router } from 'express';
 import path from 'path';
 import { requireCrmSession, requireEditorRole, requireOwnerRole } from '../middleware/auth';
 import { hasAddon } from '../services/tenant';
-import { getAllProducts } from '../services/supabase';
+import { getAllProducts, updateProduct } from '../services/supabase';
 import { publishingStatus } from '../services/metaChannels';
 import { profile } from '../config/businessProfile';
 import {
@@ -17,6 +17,7 @@ import {
   addSupplierProductsToCatalog, deleteSupplierCatalog, mostUsedPackaging
 } from './suppliers';
 import { listResults } from './insights';
+import { startPosters, posterStates, postersRunning, applyPoster, clearPosterStates, resumeStuck, POSTER_COST } from './posters';
 import { publicSocialAi, saveSocialAi, testSocialAi } from './ai';
 
 /**
@@ -340,8 +341,16 @@ export function socialRouter(): Router {
   router.get('/api/social/suppliers', requireCrmSession, requirePublishing, async (_req: Request, res: Response) => {
     try {
       const [settings, data, catalog] = await Promise.all([getSupplierSettings(), listSupplierCatalogs(), getAllProducts()]);
+      // Avance de las fotos con el diseño de la empresa; si el servidor se reinició a medio camino, se retoman.
+      const posters: Record<string, unknown> = {};
+      const working: Record<string, boolean> = {};
+      for (const c of data.catalogs as any[]) {
+        posters[c.id] = await posterStates(c.id);
+        void resumeStuck(c.id);
+        working[c.id] = postersRunning(c.id);
+      }
       // Con qué empaque entran si la regla no elige uno (el más usado en su Catálogo).
-      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog) });
+      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: POSTER_COST });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
@@ -368,6 +377,12 @@ export function socialRouter(): Router {
     try {
       const product = await updateSupplierProduct(req.params.productId, req.body || {});
       if (!product) return res.status(404).json({ error: 'Modelo no encontrado' });
+      // Otro tamaño = otro precio (u otro nombre): la foto con el diseño tenía el anterior. Mientras se hace la nueva, el
+      // Catálogo muestra la foto original del PDF (nunca un precio equivocado).
+      if ((req.body?.size !== undefined || req.body?.name !== undefined) && (await posterStates(product.catalog_id))[product.id]) {
+        if (product.catalog_product_id && product.image_url) await updateProduct(product.catalog_product_id, { image_url: product.image_url });
+        await startPosters(product.catalog_id, [product.id]).catch(error => console.warn('⚠️ No se pudo rehacer la foto con el diseño:', error.message));
+      }
       res.json({ product });
     } catch (error: any) {
       res.status(400).json({ error: explain(error) });
@@ -388,9 +403,32 @@ export function socialRouter(): Router {
       // Se borra de todos lados: la lista y los productos que entraron al Catálogo desde este PDF.
       const result = await deleteSupplierCatalog(req.params.catalogId);
       if (!result.deleted) return res.status(404).json({ error: 'Catálogo no encontrado' });
+      await clearPosterStates(req.params.catalogId);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  /** Fotos con el diseño de la empresa: todas las que faltan o, con ids, las que se piden rehacer. Sigue en segundo plano. */
+  router.post('/api/social/suppliers/:catalogId/posters', requireCrmSession, requireEditorRole, requirePublishing, requireUuid('catalogId', 'Catálogo'), async (req: Request, res: Response) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter((id: string) => UUID_PATTERN.test(id)) : undefined;
+      res.json(await startPosters(req.params.catalogId, ids));
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
+    }
+  });
+
+  /** Usa un afiche que quedó "para revisar". */
+  router.post('/api/social/suppliers/:catalogId/posters/:productId/apply', requireCrmSession, requireEditorRole, requirePublishing, requireUuid('catalogId', 'Catálogo'), requireUuid('productId', 'Modelo'), async (req: Request, res: Response) => {
+    try {
+      const { products } = await listSupplierCatalogs();
+      const model = products.find(p => p.id === req.params.productId && p.catalog_id === req.params.catalogId);
+      if (!model) return res.status(404).json({ error: 'Modelo no encontrado' });
+      res.json({ poster: await applyPoster(req.params.catalogId, model) });
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
     }
   });
 

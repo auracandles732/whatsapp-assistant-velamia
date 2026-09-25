@@ -2306,6 +2306,18 @@
         .sp-tag.ok { background: #E3F6EA; color: #1E8A4A; }
         .sp-tag.warn { background: #FFF1DA; color: #B36B00; }
         .pb-card.sp-dup { border: 1.5px solid #F5C58A; }
+        .sp-posters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding: 12px 14px; border-radius: 14px; background: #FFF8EC; border: 1px solid #F3DDB3; }
+        .sp-posters .grow { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px; }
+        .sp-posters b { color: #6B4A12; font-size: 14px; }
+        .sp-posters small { color: #7A6440; font-size: 12.5px; }
+        .sp-bar { height: 8px; border-radius: 4px; background: #F3E3C4; overflow: hidden; margin-top: 4px; }
+        .sp-bar i { display: block; height: 100%; background: linear-gradient(90deg, #C48A2C, #E5B55A); transition: width .4s; }
+        .sp-tag.design { background: #FFF1DA; color: #8A5A10; }
+        .sp-tag.wait { background: #EEF0FF; color: #4F5BD5; }
+        .sp-making { opacity: .45; animation: sp-pulse 1.4s ease-in-out infinite; }
+        @keyframes sp-pulse { 50% { opacity: .8; } }
+        .sp-poster-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .sp-model a img { display: block; }
         .sp-trash { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px; border: 1px solid #F3D2CE; background: #FFF5F4; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .sp-trash:hover { background: #FDE7E4; }
         .sp-delete { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; padding: 12px 14px; border-radius: 14px; background: #FFF5F4; border: 1px solid #F3D2CE; }
@@ -9162,6 +9174,14 @@
                 }).catch(() => {});
             }, []);
 
+            // Mientras se crean fotos con el diseño de la empresa, se vuelve a leer el avance cada pocos segundos.
+            const working = !!data && Object.keys(data.posters || {}).some(id => data.postersRunning?.[id] || Object.values(data.posters[id] || {}).some(p => p.status === 'cola' || p.status === 'creando'));
+            useEffect(() => {
+                if (!working) return;
+                const timer = setInterval(load, 8000);
+                return () => clearInterval(timer);
+            }, [working]);
+
             const s = settings || data?.settings;
             const pricesReady = s && ['pequena', 'mediana', 'grande'].every(k => Number(s.sizePrices[k]) > 0);
             const setPrice = (size, value) => setSettings({ ...s, sizePrices: { ...s.sizePrices, [size]: value } });
@@ -9196,7 +9216,16 @@
                         r.catalog = part.catalog;
                         ['total', 'added', 'estimated', 'withoutPrice'].forEach(k => { r[k] += part[k]; });
                     }
-                    setNotice(`✅ ${r.total} modelos leídos del PDF${r.added ? ` · ${r.added} agregados al Catálogo en ${r.catalog.name}` : ''}${r.estimated ? ` · ${r.estimated} con tamaño estimado (${SIZE_LABELS[s.defaultSize]}): revísalos abajo` : ''}${r.withoutPrice ? ` · ${r.withoutPrice} sin precio (completa la regla de precios)` : ''}.`);
+                    let posters = '';
+                    if (s.autoPosters && r.added) {
+                        try {
+                            const p = await api(`/api/social/suppliers/${r.catalog.id}/posters`, { method: 'POST', body: '{}' });
+                            posters = ` · 🎨 creando ${p.queued} fotos con tu diseño (tarda cerca de un minuto cada 3)`;
+                        } catch (e) {
+                            posters = ` · no se pudieron crear las fotos con tu diseño: ${e.message}`;
+                        }
+                    }
+                    setNotice(`✅ ${r.total} modelos leídos del PDF${r.added ? ` · ${r.added} agregados al Catálogo en ${r.catalog.name}` : ''}${r.estimated ? ` · ${r.estimated} con tamaño estimado (${SIZE_LABELS[s.defaultSize]}): revísalos abajo` : ''}${r.withoutPrice ? ` · ${r.withoutPrice} sin precio (completa la regla de precios)` : ''}${posters}.`);
                     setPdf(null);
                     setPdfName('');
                     setOpenCatalog(r.catalog.id);
@@ -9213,6 +9242,8 @@
                 try {
                     const updated = (await api('/api/social/suppliers/products/' + product.id, { method: 'PATCH', body: JSON.stringify(changes) })).product;
                     setData(d => ({ ...d, products: d.products.map(p => (p.id === updated.id ? updated : p)) }));
+                    // Si tenía foto con el diseño, se rehace con el precio nuevo: se muestra el avance.
+                    if (data.posters?.[product.catalog_id]?.[product.id]) load();
                 } catch (e) {
                     setError(e.message);
                 }
@@ -9228,6 +9259,29 @@
                     setError(e.message);
                 } finally {
                     setBusy('');
+                }
+            }
+
+            // Fotos con el diseño de la empresa: todas las que faltan o, con ids, las que se piden rehacer.
+            async function makePosters(catalog, ids) {
+                setBusy('posters');
+                setError('');
+                try {
+                    const r = await api(`/api/social/suppliers/${catalog.id}/posters`, { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) });
+                    setNotice(r.queued ? `🎨 Creando ${r.queued} foto(s) con tu diseño. Puedes seguir usando el CRM: se ven aquí a medida que salen.` : 'Todas las fotos ya tienen tu diseño.');
+                    load();
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+            async function applyPoster(catalog, model) {
+                try {
+                    await api(`/api/social/suppliers/${catalog.id}/posters/${model.id}/apply`, { method: 'POST', body: '{}' });
+                    load();
+                } catch (e) {
+                    setError(e.message);
                 }
             }
 
@@ -9296,6 +9350,10 @@
                                     <input type="checkbox" checked={s.autoAddToCatalog} disabled={!canConfigure} onChange={e => setSettings({ ...s, autoAddToCatalog: e.target.checked })} />
                                     <span><b>Agregar al Catálogo automáticamente</b><small>Cada modelo del PDF entra al Catálogo apenas lo subes.</small></span>
                                 </label>
+                                <label className="pb-toggle" style={{ marginTop: 4 }}>
+                                    <input type="checkbox" checked={s.autoPosters !== false} disabled={!canConfigure} onChange={e => setSettings({ ...s, autoPosters: e.target.checked })} />
+                                    <span><b>Crear las fotos con mi diseño</b><small>La IA arma cada foto con el estilo de tus fotos del Catálogo (nombre, precio y "pedidos bajo reserva"), revisa que el nombre y el precio estén bien y la pone en el Catálogo. ≈ ${(data.posterCost || 0.08).toFixed(2)} por foto con la clave de Cerebro IA.</small></span>
+                                </label>
                                 {canConfigure && <button type="button" className="pb-btn main sm" style={{ marginTop: 10 }} disabled={busy === 'settings'} onClick={saveSettings}><PlatIcon name="save" size={16} color="#fff" /> {busy === 'settings' ? 'Guardando…' : 'Guardar regla'}</button>}
                             </div>
                             <div className="sp-box">
@@ -9331,13 +9389,21 @@
                         const isOpen = openCatalog === catalog.id;
                         const inCatalog = models.length - pending.length;
                         const dup = repeated(catalog);
+                        // Fotos con el diseño de la empresa.
+                        const posters = data.posters?.[catalog.id] || {};
+                        const stateOf = p => posters[p.id]?.status || '';
+                        const withDesign = models.filter(p => stateOf(p) === 'lista').length;
+                        const toReview = models.filter(p => stateOf(p) === 'revisar').length;
+                        const inQueue = models.filter(p => ['cola', 'creando'].includes(stateOf(p))).length;
+                        const missing = models.filter(p => p.status === 'en_catalogo' && !['lista', 'cola', 'creando', 'revisar'].includes(stateOf(p))).length;
+                        const creating = inQueue > 0 || !!data.postersRunning?.[catalog.id];
                         return (
                             <section key={catalog.id} className={'pb-card' + (dup ? ' sp-dup' : '')}>
                                 <div className="pb-card-h" style={{ cursor: 'pointer' }} onClick={() => setOpenCatalog(isOpen ? null : catalog.id)}>
                                     <div className="pb-tile"><PlatIcon name="layers" size={22} color="#4F5BD5" /></div>
                                     <div className="grow">
                                         <h2>{catalog.name}{dup && <span className="sp-tag warn" style={{ marginLeft: 8, verticalAlign: 'middle' }}>Repetido</span>}</h2>
-                                        <p>{models.length} modelos · {inCatalog} en el Catálogo{estimated ? ` · ${estimated} con tamaño estimado` : ''} · {catalog.file_name} · subido el {new Date(catalog.created_at).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                                        <p>{models.length} modelos · {inCatalog} en el Catálogo{withDesign ? ` · 🎨 ${withDesign} con tu diseño` : ''}{estimated ? ` · ${estimated} con tamaño estimado` : ''} · {catalog.file_name} · subido el {new Date(catalog.created_at).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
                                     {canEdit && (
                                         <button type="button" className="sp-trash" title="Borrar este catálogo" aria-label={'Borrar el catálogo ' + catalog.name}
@@ -9372,6 +9438,16 @@
                                                 </div>
                                             </div>
                                         )}
+                                        {inCatalog > 0 && (
+                                            <div className="sp-posters">
+                                                <div className="grow">
+                                                    <b>🎨 Fotos con tu diseño: {withDesign} de {inCatalog}</b>
+                                                    <small>{creating ? `Creando… faltan ${inQueue} (cerca de un minuto cada 3). Puedes salir de esta pantalla.` : toReview ? `${toReview} para revisar: la IA vio algo mal escrito; míralas abajo.` : missing ? 'La IA arma cada foto con el estilo de tus fotos del Catálogo y revisa el nombre y el precio.' : 'Todas listas: ya son las fotos del Catálogo.'}</small>
+                                                    {creating && <div className="sp-bar"><i style={{ width: Math.round(100 * (withDesign + toReview) / Math.max(1, withDesign + toReview + inQueue)) + '%' }} /></div>}
+                                                </div>
+                                                {canEdit && missing > 0 && !creating && <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => makePosters(catalog)}>🎨 Crear {missing} {missing === 1 ? 'foto' : 'fotos'} con mi diseño (≈ ${(missing * (data.posterCost || 0.08)).toFixed(2)})</button>}
+                                            </div>
+                                        )}
                                         {canEdit && pending.length > 0 && (
                                             <div className="pb-actions" style={{ marginBottom: 12 }}>
                                                 <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => addToCatalog(pending.map(p => p.id))}>Agregar los {pending.length} que faltan al Catálogo</button>
@@ -9380,7 +9456,9 @@
                                         <div className="sp-models">
                                             {models.map(p => (
                                                 <div key={p.id} className={'sp-model' + (p.size_estimated ? ' est' : '')}>
-                                                    {p.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : <div className="noimg"><PlatIcon name="image" size={26} color="#9AA3C7" /></div>}
+                                                    {posters[p.id]?.url && ['lista', 'revisar'].includes(stateOf(p))
+                                                        ? <a href={posters[p.id].url} target="_blank" rel="noopener noreferrer" title="Ver la foto en grande"><img src={posters[p.id].url} alt="" loading="lazy" /></a>
+                                                        : p.image_url ? <img src={p.image_url} alt="" loading="lazy" className={stateOf(p) === 'creando' ? 'sp-making' : ''} /> : <div className="noimg"><PlatIcon name="image" size={26} color="#9AA3C7" /></div>}
                                                     <b title={p.supplier_name}>{p.name}</b>
                                                     <small>{p.supplier_name}{p.supplier_price ? ` · proveedor $${Number(p.supplier_price).toFixed(2).replace(/\.00$/, '')}` : ''} · pág. {p.page}</small>
                                                     <div className="sp-size">
@@ -9393,6 +9471,16 @@
                                                     {p.status === 'en_catalogo'
                                                         ? <span className="sp-tag ok">En el Catálogo</span>
                                                         : canEdit && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => addToCatalog([p.id])}>Agregar al Catálogo</button>}
+                                                    {stateOf(p) === 'lista' && <span className="sp-tag design">🎨 Con tu diseño</span>}
+                                                    {stateOf(p) === 'creando' && <span className="sp-tag wait">Creando foto…</span>}
+                                                    {stateOf(p) === 'cola' && <span className="sp-tag wait">En fila</span>}
+                                                    {['revisar', 'error'].includes(stateOf(p)) && <span className="sp-tag warn" title={posters[p.id].detail}>{stateOf(p) === 'revisar' ? 'Revisar: ' : 'No se pudo: '}{posters[p.id].detail}</span>}
+                                                    {canEdit && !creating && ['revisar', 'error', 'lista'].includes(stateOf(p)) && (
+                                                        <div className="sp-poster-actions">
+                                                            {stateOf(p) === 'revisar' && <button type="button" className="pb-btn sm" onClick={() => applyPoster(catalog, p)}>Usar igual</button>}
+                                                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => makePosters(catalog, [p.id])}>{stateOf(p) === 'error' ? 'Reintentar' : 'Rehacer'}</button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
