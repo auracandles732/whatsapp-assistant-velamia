@@ -686,7 +686,7 @@ app.get('/api/conversations/:id/export', requireCrmSession, requireUuidParam, re
 
 /** Enlaces públicos de la política de privacidad y las condiciones de venta de la empresa en curso. */
 app.get('/api/legal-links', requireCrmSession, (req: Request, res: Response) => {
-  const base = (process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  const base = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
   const tenant = currentTenant();
   const prefix = tenant ? `${base}/legal/${tenant.businessId}` : base;
   res.json({ privacy: `${prefix}/privacidad`, terms: `${prefix}/condiciones` });

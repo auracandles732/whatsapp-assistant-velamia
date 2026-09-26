@@ -738,7 +738,8 @@ async function ingestMessage(message: any, value: any) {
 
 /** Enlace a la política de privacidad del negocio ('' si no se puede armar: sin la dirección pública del servidor). */
 export function privacyUrl(): string {
-  const base = (process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+  // PUBLIC_URL: el dominio propio de la empresa (por ejemplo https://asistente.velamia.ec), si lo configuró en Render.
+  const base = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
   if (!base) return '';
   const tenant = currentTenant();
   return `${base}${tenant ? `/legal/${tenant.businessId}/privacidad` : '/privacidad'}`;
