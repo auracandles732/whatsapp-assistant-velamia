@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from '../services/metaChannels';
 import { instagramReadyUrl, ImageKind } from './images';
-import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts, expireDrafts, pendingDrafts, localParts, localDay } from './posts';
-import { planUpcomingPosts, proposePlan, lastPlanReport } from './planner';
-import { profile } from '../config/businessProfile';
+import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts, expireDrafts } from './posts';
+import { planUpcomingPosts } from './planner';
 import { getPublishingTenants } from '../services/supabase';
 import { runWithTenant } from '../services/tenant';
 
@@ -246,26 +245,12 @@ const LATE_LIMIT_MS = 6 * 60 * 60 * 1000;
 const CHECK_EVERY_MS = 5 * 60 * 1000;
 const PLAN_EVERY_MS = 60 * 60 * 1000;
 
-/**
- * ¿Toca mandarle a la dueña la planificación para aprobar? Diario: cada día desde las 18:00 (la de mañana). Semanal: los
- * sábados desde las 10:00 (la semana siguiente). En ambos, también si en los próximos 2 días falta contenido y no se le
- * mandó nada en las últimas 20 horas (así no se queda un día vacío por esperar al sábado). Sin efectos, para probarla.
- */
-export function reportDue(mode: string, now: Date, timeZone: string, lastAt: string | null, gapSoon: boolean): boolean {
-  if (mode !== 'semanal' && mode !== 'diario') return false;
-  const p = localParts(now, timeZone);
-  const hoursSince = lastAt ? (now.getTime() - new Date(lastAt).getTime()) / 3_600_000 : Infinity;
-  const sameDay = !!lastAt && localDay(lastAt, timeZone) === localDay(now, timeZone);
-  if (gapSoon && hoursSince >= 20) return true;
-  if (mode === 'diario') return p.hour >= 18 && !sameDay;
-  return p.weekday === 6 && p.hour >= 10 && hoursSince >= 36;
-}
-
 async function runForCurrent(now: Date, plan: boolean) {
   let published = 0;
   const settings = await getSavedSettings();
   const mode = settings?.planMode || 'manual';
-  // Solo en automático lo que quedó "por revisar" sale solo; con aprobación espera tu visto bueno.
+  // Solo en automático lo que quedó "por revisar" sale solo; con aprobación espera a que la dueña la acepte en el CRM
+  // (la planificación se arma cuando ella aplasta el botón: no se le mandan mensajes).
   await scheduleDrafts(mode === 'automatico');
   const expired = await expireDrafts(now);
   if (expired) console.log(`📣 ${expired} publicación(es) por aprobar pasaron su hora sin aprobarse: no salieron`);
@@ -287,18 +272,6 @@ async function runForCurrent(now: Date, plan: boolean) {
     if (mode === 'automatico') {
       const created = await planUpcomingPosts(now, 7, settings);
       if (created.length) console.log(`📣 ${created.length} publicación(es) programadas por la IA`);
-    } else if (mode === 'semanal' || mode === 'diario') {
-      const tz = profile().business.timezone;
-      const [report, drafts] = await Promise.all([lastPlanReport(), pendingDrafts(now)]);
-      // Si ya hay una propuesta esperando aprobación, no se manda otra encima.
-      const soon = new Date(now.getTime() + 2 * 86_400_000).toISOString();
-      const gapSoon = drafts.every(d => d.scheduled_at > soon);
-      if (drafts.length === 0 || gapSoon) {
-        if (reportDue(mode, now, tz, report?.at || null, drafts.length === 0)) {
-          const result = await proposePlan(now, settings);
-          if (result.created) console.log(`📣 Planificación para aprobar: ${result.created} tanda(s) · reporte ${result.sent ? 'enviado' : 'no se pudo enviar'}`);
-        }
-      }
     }
   }
   return published;

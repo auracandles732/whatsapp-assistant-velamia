@@ -1,5 +1,4 @@
 import { getAllProducts, getConfig, setConfig } from '../services/supabase';
-import { sendOwnerReport } from '../services/notifications';
 import { profile } from '../config/businessProfile';
 import { currentBrain, PostFormat, PlannedPost } from './brain';
 import {
@@ -164,7 +163,7 @@ export async function schedulePlan(all: Omit<PlanDraft, 'items' | 'format' | 're
 
 const REPORT_KEY = 'social_plan_report';
 
-/** Lo que se le mandó a la dueña para aprobar: resumen, tareas y el porqué de cada tanda. */
+/** La última planificación que armó el agente para aprobar: resumen, tareas y el porqué de cada tanda. */
 export interface PlanReport { at: string; mode: string; summary: string; tasks: string[]; reasons: Record<string, string> }
 
 export async function lastPlanReport(): Promise<PlanReport | null> {
@@ -176,45 +175,17 @@ export async function lastPlanReport(): Promise<PlanReport | null> {
   }
 }
 
-const WEEK = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-
-/** El reporte para WhatsApp: qué sale cada día, a qué hora y por qué, y dónde aprobarlo. Sin efectos, para probarlo. */
-export function planReportText(posts: Pick<SocialPost, 'id' | 'scheduled_at' | 'theme' | 'products' | 'media' | 'channels'>[], summary: string, reasons: Record<string, string>, timeZone: string, crmUrl = ''): string {
-  const byDay = new Map<string, string[]>();
-  let photos = 0;
-  for (const post of posts) {
-    const p = localParts(new Date(post.scheduled_at), timeZone);
-    const key = `*${WEEK[p.weekday]} ${p.day} ${MONTHS[p.month - 1]}*`;
-    const n = (post.media && post.media.length) || post.products.length;
-    photos += n;
-    const where = post.channels.every(isStoryChannel) ? 'historias' : 'publicación';
-    const why = String(reasons[post.id] || '').trim();
-    const line = `• ${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')} ${post.theme} · ${n} foto${n === 1 ? '' : 's'} en ${where}${why ? ` — ${why.slice(0, 70)}` : ''}`;
-    byDay.set(key, [...(byDay.get(key) || []), line]);
-  }
-  return [
-    '📅 *Planificación de contenido para aprobar*',
-    `${posts.length} tanda${posts.length === 1 ? '' : 's'} · ${photos} fotos`,
-    '',
-    summary ? `🧠 ${summary}` : '',
-    '',
-    ...[...byDay.entries()].flatMap(([day, lines]) => [day, ...lines, '']),
-    `✅ Revísala y apruébala${crmUrl ? ` aquí: ${crmUrl}` : ' en el CRM → Publicaciones'}`,
-    'Puedes cambiar o quitar cualquier tanda. Si no la apruebas, no se publica nada.'
-  ].filter((line, i, all) => line !== '' || (all[i - 1] !== '' && i > 0)).join('\n');
-}
-
 /**
- * Arma la planificación (las tandas que faltan para la meta de cada día), la guarda "por aprobar" y le manda el reporte
- * a la dueña. Nada sale hasta que ella la aprueba. Con replace se descarta la propuesta anterior sin aprobar.
+ * Arma la planificación (las tandas que faltan para la meta de cada día) y la guarda "por aprobar": la dueña la revisa en
+ * el CRM (o en el PDF) y la acepta o la rechaza. Nada sale hasta que la acepta. Con replace se descarta la propuesta
+ * anterior sin aprobar. No manda mensajes.
  */
-export async function proposePlan(now = new Date(), settingsParam?: PublishingSettings, options: { days?: number; replace?: boolean; request?: string } = {}): Promise<{ created: number; sent: boolean; summary: string }> {
+export async function proposePlan(now = new Date(), settingsParam?: PublishingSettings, options: { days?: number; replace?: boolean; request?: string } = {}): Promise<{ created: number; summary: string }> {
   const settings = settingsParam || (await getSavedSettings()) || DEFAULT_SETTINGS;
   if (options.replace) for (const draft of await pendingDrafts(now)) await deletePost(draft.id);
   const days = options.days || (settings.planMode === 'diario' ? 2 : 8);
   const proposal = await draftUpcomingPosts(now, days, settings, String(options.request || '').slice(0, 600));
-  if (proposal.drafts.length === 0) return { created: 0, sent: false, summary: proposal.summary };
+  if (proposal.drafts.length === 0) return { created: 0, summary: proposal.summary };
   const withMedia = proposal.drafts.some(d => d.media.length > 0);
   const posts = await insertPosts(proposal.drafts.map(d => ({
     scheduled_at: d.scheduled_at, status: 'draft' as const, channels: d.channels, caption: d.caption, products: d.products,
@@ -225,10 +196,7 @@ export async function proposePlan(now = new Date(), settingsParam?: PublishingSe
   const previous = options.replace ? null : await lastPlanReport();
   const report: PlanReport = { at: now.toISOString(), mode: settings.planMode, summary: proposal.summary, tasks: proposal.tasks, reasons: { ...(previous?.reasons || {}), ...reasons } };
   await setConfig(REPORT_KEY, JSON.stringify(report));
-  const crmUrl = process.env.RENDER_EXTERNAL_URL ? `${process.env.RENDER_EXTERNAL_URL}/crm/#/publicaciones` : '';
-  const text = planReportText(posts, proposal.summary, reasons, profile().business.timezone, crmUrl);
-  const sent = await sendOwnerReport('📅 Tu planificación de contenido está lista para aprobar', `${posts.length} tandas: revísalas en el CRM → Publicaciones`, text);
-  return { created: posts.length, sent, summary: proposal.summary };
+  return { created: posts.length, summary: proposal.summary };
 }
 
 /** Lo que espera aprobación, con el porqué de cada tanda. */
@@ -245,6 +213,17 @@ export async function approvePlan(ids?: string[], now = new Date()): Promise<num
     if (await updatePost(post.id, { status: 'approved', error: null }, ['draft'])) approved++;
   }
   return approved;
+}
+
+/** Rechaza la planificación (toda o las tandas indicadas): se descarta y no se publica nada de eso. */
+export async function rejectPlan(ids?: string[], now = new Date()): Promise<number> {
+  let rejected = 0;
+  for (const post of await pendingDrafts(now)) {
+    if (ids && !ids.includes(post.id)) continue;
+    await deletePost(post.id);
+    rejected++;
+  }
+  return rejected;
 }
 
 /**

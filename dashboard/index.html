@@ -2461,6 +2461,22 @@
         .ap-row .pl-info b { white-space: normal; }
         .ap-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
         .ap-actions select { height: 32px; border-radius: 10px; border: 1px solid #DCE2F5; background: #fff; font-size: 13px; padding: 0 8px; color: #2A3766; }
+        .ap-decision { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; padding: 14px 16px; border-radius: 16px; border: 2px solid #4F5BD5; background: #F7F8FF; margin-bottom: 12px; }
+        .ap-decision-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .ap-decision-t b { font-size: 16px; color: #141C3A; }
+        .ap-decision-t span { font-size: 13.5px; color: #4A5578; }
+        .ap-decision-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+        .ap-toggle { background: none; border: 0; padding: 6px 0; font: inherit; font-size: 14.5px; font-weight: 700; color: #4F5BD5; cursor: pointer; }
+        .ap-box { position: relative; background: #fff; border-radius: 22px; width: min(520px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 26px 24px 18px; text-align: center; box-shadow: 0 24px 60px rgba(20, 28, 58, 0.3); align-self: center; }
+        .ap-box .pb-close { position: absolute; top: 12px; right: 12px; }
+        .ap-box-ic { font-size: 40px; line-height: 1; }
+        .ap-box h3 { margin: 10px 0 4px; font-size: 21px; font-weight: 800; color: #141C3A; }
+        .ap-box-stats { margin: 0 0 12px; font-weight: 700; color: #4F5BD5; }
+        .ap-box-sum { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: #F3F4FF; color: #2A3766; font-size: 14px; line-height: 1.45; text-align: left; }
+        .ap-box .ap-decision-btns { justify-content: center; margin: 12px 0 6px; }
+        .ap-box .ap-decision-btns .pb-btn { flex: 1 1 140px; justify-content: center; }
+        .ap-later { background: none; border: 0; font: inherit; font-size: 13px; color: #6B7390; cursor: pointer; padding: 8px; text-decoration: underline; }
+        @media (max-width: 767px) { .ap-decision-btns { width: 100%; } .ap-decision-btns .pb-btn { flex: 1 1 100%; justify-content: center; } .ap-box { margin: 16px; } }
         .pl-summary { padding: 12px 14px; border-radius: 14px; background: #F3F4FF; border: 1px solid #DADFFB; color: #2A3766; font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
         .pl-list { display: flex; flex-direction: column; gap: 8px; }
         .pl-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #E8ECF6; border-radius: 14px; background: #fff; }
@@ -8460,17 +8476,20 @@
         const postNets = post => ({ ig: post.channels.some(c => c.startsWith('instagram')), fb: post.channels.some(c => c.startsWith('facebook')) });
         // Cómo trabaja el agente (igual que PlanMode en el servidor).
         const PLAN_MODE_OPTIONS = [
-            ['semanal', 'Semanal: me manda la planificación de la semana y yo la apruebo'],
-            ['diario', 'Diario: cada tarde me manda la de mañana y yo la apruebo'],
+            ['semanal', 'Con mi aprobación: aplasto el botón, reviso el PDF y acepto o rechazo'],
             ['automatico', 'Automático: publica solo, sin preguntarme'],
             ['manual', 'Manual: no hace nada solo, yo pido la planificación']
         ];
+        const APPROVAL_HELP = 'Aplasta "Generar planificación": el agente arma los próximos días, te descarga un PDF con las fotos, la hora y el porqué de cada tanda, y tú la aceptas o la rechazas. Si no la aceptas, no se publica nada. No te manda mensajes.';
         const PLAN_MODE_HELP = {
-            semanal: 'Los sábados te llega por WhatsApp la planificación de la semana siguiente, explicada día por día. La revisas aquí, cambias o quitas lo que quieras y la apruebas. Si no la apruebas, no se publica nada.',
-            diario: 'Cada día desde las 18:00 te llega por WhatsApp la planificación de mañana. La revisas aquí y la apruebas. Si no la apruebas, no se publica nada.',
+            semanal: APPROVAL_HELP,
+            diario: APPROVAL_HELP,
             automatico: 'El agente completa cada día y publica solo, sin preguntarte.',
             manual: 'El agente no hace nada solo: pide una planificación cuando quieras.'
         };
+        // "diario" ya no se elige (ahora se elige cuántos días al aplastar el botón): se muestra como "con mi aprobación".
+        const planModeOf = s => { const m = s.planMode || (s.autoPlan ? 'automatico' : 'manual'); return m === 'diario' ? 'semanal' : m; };
+        const PLAN_DAYS = [[8, 'La próxima semana'], [2, 'Hoy y mañana'], [15, 'Las próximas 2 semanas']];
         function hourOptions(current) {
             const list = [];
             for (let h = 5; h <= 23; h++) for (const m of ['00', '30']) list.push(`${String(h).padStart(2, '0')}:${m}`);
@@ -8916,11 +8935,11 @@
                             <>
                                 <div className="pb-select">
                                     <PbIcon name="bolt" size={18} color="#3A4570" />
-                                    <select value={s.planMode || (s.autoPlan ? 'automatico' : 'manual')} disabled={!canConfigure} onChange={e => setS({ planMode: e.target.value })} aria-label="Cómo trabaja el agente">
+                                    <select value={planModeOf(s)} disabled={!canConfigure} onChange={e => setS({ planMode: e.target.value })} aria-label="Cómo trabaja el agente">
                                         {PLAN_MODE_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                                     </select>
                                 </div>
-                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>{PLAN_MODE_HELP[s.planMode || (s.autoPlan ? 'automatico' : 'manual')]} Siempre: temporada primero (Halloween ahora, Navidad desde noviembre) y las demás categorías se turnan.</p>
+                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>{PLAN_MODE_HELP[planModeOf(s)]} Siempre: temporada primero (Halloween ahora, Navidad desde noviembre) y las demás categorías se turnan.</p>
                             </>
                         ))}
                     </div>
@@ -9053,17 +9072,61 @@
             );
         }
 
+        /** Descarga un archivo del servidor (con la sesión) y lo guarda en el equipo. */
+        async function downloadFromApi(path, fallbackName) {
+            const businessId = getCurrentBusinessId();
+            const res = await fetch(`${API_URL}${path}`, {
+                headers: { 'Authorization': `Bearer ${getToken()}`, ...(businessId ? { 'X-Business-Id': businessId } : {}) }
+            });
+            if (res.status === 401) {
+                setToken(null);
+                onSessionExpired();
+                throw new Error('Sesión expirada, vuelve a entrar');
+            }
+            if (!res.ok) {
+                let message = `Error ${res.status}`;
+                try { message = (await res.json()).error || message; } catch {}
+                throw new Error(message);
+            }
+            const name = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1] || fallbackName;
+            const url = URL.createObjectURL(await res.blob());
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        }
+
         /**
-         * La planificación que armó el agente para aprobar: día por día, cada tanda con sus fotos, a qué hora sale, dónde y por
-         * qué. Se puede cambiar (otras fotos u otra categoría) o quitar cada tanda, y aprobar todo de una vez.
+         * La planificación para aprobar: se arma cuando la dueña aplasta el botón, se descarga en PDF (día por día, con las
+         * fotos, la hora y el porqué) y sale un recuadro para aceptarla o rechazarla. Tanda por tanda se puede cambiar o quitar.
          */
         function PbApproval({ canEdit, planMode, onChanged }) {
             const [data, setData] = useState(null);
             const [busy, setBusy] = useState('');
             const [msg, setMsg] = useState(null);
             const [request, setRequest] = useState('');
+            const [days, setDays] = useState(planMode === 'diario' ? 2 : 8);
+            const [box, setBox] = useState(false);
+            const [downloaded, setDownloaded] = useState(false);
+            const [detail, setDetail] = useState(false);
+            const generate = useRef(null);
             const load = () => api('/api/posts/plan/pending').then(setData).catch(e => setMsg({ ok: false, text: e.message }));
             useEffect(() => { load(); }, []);
+            // El botón "Generar planificación" de arriba de la pantalla.
+            useEffect(() => {
+                const onGenerate = () => generate.current && generate.current();
+                window.addEventListener('pb-generar-plan', onGenerate);
+                return () => window.removeEventListener('pb-generar-plan', onGenerate);
+            }, []);
+            useEffect(() => {
+                if (!box) return;
+                const onKey = e => { if (e.key === 'Escape') setBox(false); };
+                document.addEventListener('keydown', onKey);
+                return () => document.removeEventListener('keydown', onKey);
+            }, [box]);
             if (!data) return null;
             const posts = data.posts || [];
             const run = async (label, fn) => {
@@ -9072,19 +9135,46 @@
                 try { await fn(); } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(''); }
             };
             const refresh = async () => { await load(); onChanged && onChanged(); };
-            const approveAll = () => run('approve', async () => {
+            const pdf = () => downloadFromApi('/api/posts/plan/pdf', 'planificacion.pdf');
+            const downloadPdf = () => run('pdf', pdf);
+            const accept = () => run('approve', async () => {
                 const r = await api('/api/posts/plan/approve', { method: 'POST', body: '{}' });
-                setMsg({ ok: true, text: `✅ Aprobada: ${r.approved} tanda(s) programadas. Saldrán solas a su hora.` });
+                setBox(false);
+                setMsg({ ok: true, text: `✅ Planificación aceptada: ${r.approved} tanda(s) programadas. Saldrán solas a su hora.` });
                 await refresh();
             });
-            const propose = replace => run('propose', async () => {
-                const r = await api('/api/posts/plan/propose', { method: 'POST', body: JSON.stringify({ replace, request }) });
-                setMsg(r.created
-                    ? { ok: true, text: `📅 Planificación lista: ${r.created} tanda(s)${r.sent ? '. También te la mandé por WhatsApp' : ''}.` }
-                    : { ok: true, text: 'No hay nada que proponer: los próximos días ya tienen su contenido.' });
+            const reject = () => {
+                if (!confirm('¿Rechazar la planificación? No se publicará nada de esto (lo que ya tenías programado no se toca).')) return;
+                run('reject', async () => {
+                    const r = await api('/api/posts/plan/reject', { method: 'POST', body: '{}' });
+                    setBox(false);
+                    setMsg({ ok: true, text: `Planificación rechazada: se descartaron ${r.rejected} tanda(s) y no se publicará nada de eso. Si quieres, pide otra.` });
+                    await refresh();
+                });
+            };
+            // El recuadro sale de una vez ("Armando tu planificación…") y se completa cuando está lista.
+            const propose = () => run('propose', async () => {
+                setDownloaded(false);
+                setBox(true);
+                let r;
+                try {
+                    r = await api('/api/posts/plan/propose', { method: 'POST', body: JSON.stringify({ replace: posts.length > 0, request, days }) });
+                } catch (e) {
+                    setBox(false);
+                    throw e;
+                }
                 setRequest('');
                 await refresh();
+                if (!r.created) {
+                    setBox(false);
+                    setMsg({ ok: true, text: 'No hay nada que planificar: esos días ya tienen su contenido.' });
+                    return;
+                }
+                setBusy('pdf');
+                try { await pdf(); setDownloaded(true); } catch (e) { setMsg({ ok: false, text: 'La planificación está lista, pero el PDF no se pudo descargar: ' + e.message }); }
             });
+            // Si ya hay una esperando respuesta se muestra esa (para aceptarla o rechazarla); si no, se arma una nueva.
+            generate.current = () => { if (busy) return; if (posts.length) { setDownloaded(false); setBox(true); } else propose(); };
             const swap = (post, category) => run('swap:' + post.id, async () => {
                 await api(`/api/posts/${post.id}/swap`, { method: 'POST', body: JSON.stringify({ category }) });
                 await refresh();
@@ -9095,12 +9185,28 @@
             };
             const byDay = {};
             posts.forEach(p => { (byDay[dayOf(p.scheduled_at)] = byDay[dayOf(p.scheduled_at)] || []).push(p); });
+            const dayKeys = Object.keys(byDay);
             const photos = posts.reduce((n, p) => n + postItems(p).length, 0);
+            const dayName = key => `${DAY_SHORT[weekdayOf(key)]} ${dayParts(key).d} de ${MONTH_LONG[dayParts(key).m - 1]}`;
+            const range = dayKeys.length ? (dayKeys.length === 1 ? dayName(dayKeys[0]) : `del ${dayName(dayKeys[0])} al ${dayName(dayKeys[dayKeys.length - 1])}`) : '';
+            const stats = `${posts.length} tanda${posts.length === 1 ? '' : 's'} · ${photos} foto${photos === 1 ? '' : 's'} · ${range}`;
+            const decision = (
+                <div className="ap-decision-btns">
+                    <button type="button" className="pb-btn" disabled={!!busy} onClick={downloadPdf}>📄 {busy === 'pdf' ? 'Preparando el PDF…' : 'Descargar PDF'}</button>
+                    {canEdit && <button type="button" className="pb-btn main" disabled={!!busy} onClick={accept}>✅ {busy === 'approve' ? 'Aceptando…' : 'Aceptar'}</button>}
+                    {canEdit && <button type="button" className="pb-btn danger" disabled={!!busy} onClick={reject}>✖ {busy === 'reject' ? 'Rechazando…' : 'Rechazar'}</button>}
+                </div>
+            );
             const ask = canEdit && (
                 <div className="pl-ask">
-                    <textarea maxLength={600} value={request} onChange={e => setRequest(e.target.value)} placeholder="¿Algo especial? (opcional) Ej: esta semana más bautizos y el sábado baby shower" />
+                    <textarea id="pl-request" maxLength={600} value={request} onChange={e => setRequest(e.target.value)} placeholder="¿Algo especial? (opcional) Ej: esta semana más bautizos y el sábado baby shower" />
                     <div className="pl-ask-row">
-                        <button type="button" className="pb-btn main" disabled={!!busy} onClick={() => propose(posts.length > 0)}>📅 {busy === 'propose' ? 'Armando la planificación…' : posts.length ? 'Rehacer la propuesta' : 'Pedir la planificación ahora'}</button>
+                        <label>Planificar
+                            <select value={days} disabled={!!busy} onChange={e => setDays(Number(e.target.value))}>
+                                {PLAN_DAYS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                            </select>
+                        </label>
+                        <button type="button" className="pb-btn main" disabled={!!busy} onClick={propose}>📅 {busy === 'propose' ? 'Armando la planificación…' : posts.length ? 'Rehacer la planificación' : 'Generar planificación'}</button>
                     </div>
                 </div>
             );
@@ -9109,8 +9215,8 @@
                     <div className="pb-card-h">
                         <div className="pb-tile"><PlatIcon name="calendar" size={22} color="#4F5BD5" /></div>
                         <div className="grow">
-                            <h2>📋 Planificación para aprobar</h2>
-                            <p>{posts.length ? `${posts.length} tanda(s) · ${photos} fotos. Revisa, cambia o quita lo que quieras y apruébala. Si no la apruebas, no se publica nada.` : PLAN_MODE_HELP[planMode]}</p>
+                            <h2>📋 Planificación de contenido</h2>
+                            <p>{posts.length ? 'Tienes una planificación esperando tu respuesta. Descarga el PDF para verla con las fotos y acéptala o recházala.' : PLAN_MODE_HELP[planMode]}</p>
                         </div>
                     </div>
                     {posts.length === 0 ? (
@@ -9120,10 +9226,15 @@
                         </>
                     ) : (
                         <>
+                            <div className="ap-decision">
+                                <div className="ap-decision-t"><b>Planificación por aprobar</b><span>{stats}</span></div>
+                                {decision}
+                            </div>
                             {data.summary && <div className="pl-summary">🧠 {data.summary}</div>}
-                            {Object.entries(byDay).map(([day, list]) => (
+                            <button type="button" className="ap-toggle" aria-expanded={detail} onClick={() => setDetail(!detail)}>{detail ? '▾' : '▸'} Ver o cambiar tanda por tanda ({posts.length})</button>
+                            {detail && Object.entries(byDay).map(([day, list]) => (
                                 <div className="ap-day" key={day}>
-                                    <b>{DAY_SHORT[weekdayOf(day)]} {dayParts(day).d} de {MONTH_LONG[dayParts(day).m - 1]}</b>
+                                    <b>{dayName(day)}</b>
                                     <div className="pl-list">
                                         {list.map(post => {
                                             const items = postItems(post);
@@ -9156,15 +9267,33 @@
                                 </div>
                             ))}
                             {data.tasks?.length > 0 && <div className="pl-tasks" style={{ marginTop: 12 }}><b>✅ Para ti</b><ul>{data.tasks.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
-                            {canEdit && (
-                                <div className="pb-actions" style={{ marginTop: 14 }}>
-                                    <button type="button" className="pb-btn main" disabled={!!busy} onClick={approveAll}>✅ {busy === 'approve' ? 'Aprobando…' : `Aprobar toda la planificación (${posts.length})`}</button>
-                                </div>
-                            )}
-                            {ask}
+                            <div style={{ marginTop: 14 }}>{ask}</div>
                         </>
                     )}
                     {msg && <div className={'pb-notice' + (msg.ok ? ' ok' : '')} style={msg.ok ? { marginTop: 10 } : { marginTop: 10, background: '#FDECEC', color: '#B42318' }}>{msg.text}</div>}
+                    {box && busy === 'propose' && (
+                        <div className="pb-modal-bg">
+                            <div className="ap-box" role="dialog" aria-modal="true" aria-label="Armando tu planificación">
+                                <div className="ap-box-ic">⏳</div>
+                                <h3>Armando tu planificación…</h3>
+                                <p className="pb-muted">El agente está eligiendo las fotos de cada día y preparando el PDF. Toma unos segundos.</p>
+                            </div>
+                        </div>
+                    )}
+                    {box && busy !== 'propose' && posts.length > 0 && (
+                        <div className="pb-modal-bg" onMouseDown={e => { if (e.target === e.currentTarget) setBox(false); }}>
+                            <div className="ap-box" role="dialog" aria-modal="true" aria-label="Tu planificación está lista">
+                                <button type="button" className="pb-close" aria-label="Cerrar" onClick={() => setBox(false)}>×</button>
+                                <div className="ap-box-ic">📋</div>
+                                <h3>Tu planificación está lista</h3>
+                                <p className="ap-box-stats">{stats}</p>
+                                {data.summary && <p className="ap-box-sum">{data.summary}</p>}
+                                <p className="pb-muted">{busy === 'pdf' ? 'Preparando el PDF con las fotos…' : downloaded ? 'Te descargué el PDF con las fotos, la hora y el porqué de cada tanda. Revísalo y decide:' : 'Descarga el PDF para verla con las fotos, la hora y el porqué de cada tanda, y decide:'}</p>
+                                {decision}
+                                <button type="button" className="ap-later" onClick={() => setBox(false)}>Decidir después (no se publica nada hasta que la aceptes)</button>
+                            </div>
+                        </div>
+                    )}
                 </section>
             );
         }
@@ -10218,7 +10347,6 @@
             const [proposal, setProposal] = useState(null);
             const [planRequest, setPlanRequest] = useState('');
             // Para volver a leer la planificación por aprobar después de guardar la configuración.
-            const [approvalKey, setApprovalKey] = useState(0);
             const [planDays, setPlanDays] = useState(7);
             const cardRefs = useRef({});
 
@@ -10248,7 +10376,20 @@
                     {withActions && canEdit && (
                         <div className="pb-hero-actions">
                             <button type="button" className="pb-btn" onClick={() => setCreating({})}><PlatIcon name="plus" size={20} color="#2F3A8F" /> Nueva publicación</button>
-                            <button type="button" className="pb-btn main" onClick={() => { if (mobile && view !== 'home') setView('home'); setArea('calendario'); setTimeout(() => { document.getElementById('pb-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); document.getElementById('pl-request')?.focus({ preventScroll: true }); }, 80); }}>🧠 Pedir planificación a la IA</button>
+                            {(() => {
+                                const approval = ['semanal', 'diario'].includes((settings || data.settings || {}).planMode);
+                                return (
+                                    <button type="button" className="pb-btn main" onClick={() => {
+                                        if (mobile && view !== 'home') setView('home');
+                                        setArea('calendario');
+                                        setTimeout(() => {
+                                            document.getElementById('pb-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                            if (approval) window.dispatchEvent(new Event('pb-generar-plan'));
+                                            else document.getElementById('pl-request')?.focus({ preventScroll: true });
+                                        }, 80);
+                                    }}>{approval ? '📅 Generar planificación' : '🧠 Pedir planificación a la IA'}</button>
+                                );
+                            })()}
                         </div>
                     )}
                     <PbHeroArt className="pb-hero-art" />
@@ -10300,11 +10441,6 @@
                     setSavedMsg('✅ Guardado');
                     if (r.created) {
                         setNotice({ ok: true, text: `🤖 La IA programó ${r.created} publicación(es) para los próximos 7 días. Saldrán solas a su hora.` });
-                        await load();
-                    }
-                    if (r.report?.created) {
-                        setNotice({ ok: true, text: `📅 Te preparé la primera planificación: ${r.report.created} tanda(s)${r.report.sent ? ' (te la mandé por WhatsApp)' : ''}. Revísala arriba en "Planificación para aprobar".` });
-                        setApprovalKey(k => k + 1);
                         await load();
                     }
                 } catch (e) {
@@ -10464,7 +10600,7 @@
                     {notice && <div className={'pb-notice' + (notice.ok ? ' ok' : '')} style={notice.ok ? undefined : { background: '#FDECEC', color: '#B42318' }}>{notice.text}</div>}
                     {canEdit && (() => {
                         // Cómo está trabajando el agente (se cambia en "Cómo trabaja el agente", abajo).
-                        const mode = s.planMode || (s.autoPlan ? 'automatico' : 'manual');
+                        const mode = planModeOf(s);
                         const label = (PLAN_MODE_OPTIONS.find(([v]) => v === mode) || [])[1] || '';
                         return (
                             <div className={'pb-auto' + (mode !== 'manual' ? ' on' : '')}>
@@ -10481,7 +10617,7 @@
 
             // Con reporte (semanal o diario) se aprueba lo que propone el agente; si no, se pide la planificación a mano.
             const approvalMode = ['semanal', 'diario'].includes(s.planMode);
-            const approvalCard = <PbApproval key={approvalKey} canEdit={canEdit} planMode={s.planMode} onChanged={load} />;
+            const approvalCard = <PbApproval canEdit={canEdit} planMode={s.planMode} onChanged={load} />;
             const planningCard = canEdit || posts.length ? (
                 <PbPlanning canEdit={canEdit} proposal={proposal} setProposal={setProposal} lastPlan={data.plan} posts={posts} autoPlan={s.autoPlan}
                     busy={busy === 'plan' || busy === 'confirm' ? busy : ''} onPropose={plan} onConfirm={confirmPlan}

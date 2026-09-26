@@ -7,9 +7,10 @@ import { publishingStatus } from '../services/metaChannels';
 import { profile } from '../config/businessProfile';
 import {
   listPosts, getPost, insertPosts, updatePost, deletePost, getSavedSettings, saveSettings,
-  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, MAX_CAROUSEL, toPostProduct, fallbackCaption, PostStatus, PostChannel, PostMedia, isStoryChannel
+  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, MAX_CAROUSEL, toPostProduct, fallbackCaption, PostStatus, PostChannel, PostMedia, isStoryChannel, localDay
 } from './posts';
-import { planUpcomingPosts, draftUpcomingPosts, schedulePlan, lastPlanSummary, rewriteCaption, proposePlan, pendingPlan, approvePlan, swapPost } from './planner';
+import { planUpcomingPosts, draftUpcomingPosts, schedulePlan, lastPlanSummary, rewriteCaption, proposePlan, pendingPlan, approvePlan, rejectPlan, swapPost } from './planner';
+import { buildPlanPdf } from './planPdf';
 import { claimAndPublish } from './publisher';
 import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed, AssetInUseError } from './library';
 import {
@@ -129,14 +130,11 @@ export function socialRouter(): Router {
 
   router.put('/api/posts/settings', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
     try {
-      const before = await getSavedSettings();
       const settings = await saveSettings(req.body);
       // Al encender el modo automático la IA programa de una vez los próximos 7 días (no espera a la revisión de cada hora).
+      // Con aprobación no se arma nada solo: la planificación sale cuando la dueña aplasta el botón.
       const created = settings.planMode === 'automatico' ? await planUpcomingPosts(new Date(), 7, settings) : [];
-      // Al elegir "con reporte", la primera planificación llega de una vez (no espera al sábado ni a las 18:00).
-      const report = ['semanal', 'diario'].includes(settings.planMode) && before?.planMode !== settings.planMode
-        ? await proposePlan(new Date(), settings) : null;
-      res.json({ settings, created: created.length, report });
+      res.json({ settings, created: created.length });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -164,7 +162,34 @@ export function socialRouter(): Router {
     }
   });
 
-  /** Arma (o rehace) la planificación para aprobar ahora mismo y manda el reporte por WhatsApp. */
+  /** Rechaza la planificación: se descarta sin publicar nada (lo que ya estaba programado no se toca). */
+  router.post('/api/posts/plan/reject', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined;
+      res.json({ rejected: await rejectPlan(ids) });
+    } catch (error: any) {
+      res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  /** La planificación por aprobar en PDF: día por día, con la hora, dónde sale, por qué y las fotos de cada tanda. */
+  router.get('/api/posts/plan/pdf', requireCrmSession, requirePublishing, async (_req: Request, res: Response) => {
+    try {
+      const pending = await pendingPlan();
+      if (pending.posts.length === 0) return res.status(404).json({ error: 'No hay ninguna planificación esperando tu aprobación' });
+      const { business } = profile();
+      const pdf = await buildPlanPdf({ business: business.name, posts: pending.posts, summary: pending.summary, tasks: pending.tasks, timeZone: business.timezone, now: new Date() });
+      const first = localDay(pending.posts.map(p => p.scheduled_at).sort()[0], business.timezone);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="planificacion-${first}.pdf"`);
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(pdf);
+    } catch (error: any) {
+      res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  /** Arma (o rehace) la planificación para aprobar ahora mismo (el botón del CRM). No manda mensajes. */
   router.post('/api/posts/plan/propose', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
     try {
       const settings = (await getSavedSettings()) || DEFAULT_SETTINGS;

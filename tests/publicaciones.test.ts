@@ -399,31 +399,40 @@ test('el modo de trabajo del agente: lo guardado antes se respeta', () => {
   assert.equal(semanal.autoPlan, false, 'con reporte no publica solo');
 });
 
-test('el reporte se manda: diario desde las 18:00; semanal el sábado; y si falta contenido pronto', () => {
-  const sab10 = new Date('2026-09-26T15:30:00Z'); // sábado 10:30 en Ecuador
-  assert.equal(publisher.reportDue('semanal', sab10, TZ, '2026-09-19T15:00:00Z', false), true);
-  assert.equal(publisher.reportDue('semanal', sab10, TZ, '2026-09-26T15:00:00Z', false), false, 'ya se mandó hoy');
-  const mar = new Date('2026-09-22T15:00:00Z');
-  assert.equal(publisher.reportDue('semanal', mar, TZ, '2026-09-19T15:00:00Z', false), false, 'martes: espera al sábado');
-  assert.equal(publisher.reportDue('semanal', mar, TZ, '2026-09-19T15:00:00Z', true), true, 'pero si falta contenido en 2 días, se manda');
-  assert.equal(publisher.reportDue('diario', new Date('2026-09-22T23:30:00Z'), TZ, '2026-09-21T23:30:00Z', false), true, '18:30: el de mañana');
-  assert.equal(publisher.reportDue('diario', new Date('2026-09-22T20:00:00Z'), TZ, '2026-09-21T23:30:00Z', false), false, '15:00: todavía no');
-  assert.equal(publisher.reportDue('automatico', sab10, TZ, null, true), false);
-});
-
-test('el reporte de WhatsApp explica día por día qué sale, a qué hora y por qué', () => {
-  const planner = require('../src/social/planner') as typeof import('../src/social/planner');
-  const posts = [
-    { id: 'a', scheduled_at: '2026-09-29T17:00:00Z', theme: 'Halloween', products: [1, 2, 3, 4, 5].map(i => ({ name: `H${i}`, image_url: 'x', price: 35 })), media: [], channels: ['instagram_story', 'facebook_story'] as any },
-    { id: 'b', scheduled_at: '2026-09-29T20:00:00Z', theme: 'Bautizo', products: [1, 2, 3].map(i => ({ name: `B${i}`, image_url: 'x', price: 35 })), media: [], channels: ['instagram_story'] as any }
-  ];
-  const text = planner.planReportText(posts, 'Halloween es la temporada.', { a: 'Halloween es la temporada: sale todos los días', b: 'Bautizo no se publica desde hace 6 días' }, TZ, 'https://crm/x');
-  assert.match(text, /\*mar 29 sep\*/);
-  assert.match(text, /• 12:00 Halloween · 5 fotos en historias — Halloween es la temporada/);
-  assert.match(text, /• 15:00 Bautizo · 3 fotos en historias — Bautizo no se publica desde hace 6 días/);
-  assert.match(text, /8 fotos/);
-  assert.match(text, /https:\/\/crm\/x/);
-  assert.match(text, /no se publica nada/);
+test('la planificación sale en PDF: día por día, con la hora, dónde, el porqué y las fotos', async () => {
+  const { buildPlanPdf, pdfText } = await import('../src/social/planPdf');
+  assert.equal(pdfText('Halloween 🎃 sale ¡ya! → mañana'), 'Halloween sale ¡ya! mañana', 'sin emojis (el PDF no los puede escribir)');
+  const png = new (require('pngjs').PNG)({ width: 40, height: 40 });
+  png.data.fill(180);
+  const foto: Buffer = require('pngjs').PNG.sync.write(png);
+  const pedidas: string[] = [];
+  const loader = async (url: string) => { pedidas.push(url); return url.includes('rota') ? null : foto; };
+  const posts = Array.from({ length: 14 }, (_, i) => ({
+    id: `p${i}`, scheduled_at: new Date(Date.UTC(2026, 8, 28 + Math.floor(i / 2), 17 + (i % 2) * 3)).toISOString(),
+    theme: i % 2 ? 'Bautizo' : 'Halloween', media: [], channels: ['instagram_story', 'facebook_story'] as any,
+    products: [1, 2, 3, 4, 5].map(k => ({ name: `VELA ${i}-${k}`, image_url: k === 5 ? 'https://x/rota.png' : `https://x/${i}-${k}.png`, price: 35 })),
+    reason: i % 2 ? 'Bautizo no se publica desde hace 6 días' : 'Halloween es la temporada: sale todos los días'
+  }));
+  const pdf = await buildPlanPdf({ business: 'Velamia', posts, summary: 'Temporada primero: Halloween todos los días.', tasks: ['Sube fotos de Navidad'], timeZone: TZ, now: new Date('2026-09-26T20:00:00Z') }, loader);
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(pedidas.length, new Set(pedidas).size, 'cada foto se descarga una sola vez');
+  assert.ok(pdf.length < 1_500_000, `liviano aunque lleve 70 fotos (${pdf.length} bytes)`);
+  const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(pdf), disableFontFace: true, verbosity: 0 }).promise;
+  assert.ok(doc.numPages >= 2);
+  let all = '';
+  for (let i = 1; i <= doc.numPages; i++) all += (await (await doc.getPage(i)).getTextContent()).items.map((x: any) => x.str).join(' ') + '\n';
+  assert.match(all, /Planificación de contenido/);
+  assert.match(all, /Del lunes 28 de septiembre al domingo 4 de octubre/);
+  assert.match(all, /14\s+tandas/);
+  assert.match(all, /70\s+fotos/);
+  assert.match(all, /LUNES 28 DE SEPTIEMBRE/);
+  assert.match(all, /12:00/);
+  assert.match(all, /Halloween · 5 fotos/);
+  assert.match(all, /Historias de Instagram y Facebook/);
+  assert.match(all, /Bautizo no se publica desde hace 6 días/);
+  assert.match(all, /Sube fotos de Navidad/);
+  assert.match(all, /Página 1 de \d/);
 });
 
 test('temporada primero y las demás se turnan: no gana siempre la categoría más grande', () => {
