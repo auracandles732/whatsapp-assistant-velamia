@@ -1223,7 +1223,7 @@ export async function planTurn(params: {
   const patterns = summaryPatterns(p);
 
   const previousReplies = history
-    .filter(m => m.role === 'assistant' && !m.content.startsWith('[Foto') && !m.content.startsWith('🏦') && !m.content.startsWith(TEAM_MARK))
+    .filter(m => m.role === 'assistant' && !m.content.startsWith('[Foto') && !m.content.startsWith('🏦') && !m.content.startsWith('🔒') && !m.content.startsWith(TEAM_MARK))
     .map(m => m.content);
 
   const baseMessages = [

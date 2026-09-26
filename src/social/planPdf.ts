@@ -3,6 +3,7 @@ import { PNG } from 'pngjs';
 import jpeg from 'jpeg-js';
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from 'pdf-lib';
 import { SocialPost, localParts, localDay, isStoryChannel } from './posts';
+import { isOwnStorageUrl } from './images';
 
 /**
  * La planificación para aprobar en PDF: portada con la estrategia, y día por día cada tanda con su hora, dónde sale, por
@@ -112,7 +113,8 @@ const get = async (url: string, maxBytes: number) => {
   }
 };
 const defaultLoader: ImageLoader = async url => {
-  if (!/^https?:\/\//i.test(url)) return null;
+  // Solo fotos del almacenamiento propio: el servidor nunca descarga una dirección cualquiera.
+  if (!isOwnStorageUrl(url)) return null;
   const small = smallImageUrl(url);
   return (small && await get(small, 2 * 1024 * 1024)) || get(url, 3 * 1024 * 1024);
 };

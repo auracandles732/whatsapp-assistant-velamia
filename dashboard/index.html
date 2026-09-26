@@ -4282,6 +4282,46 @@
             );
         }
 
+        /** Enlaces públicos a la política de privacidad y a las condiciones de venta de la empresa. */
+        function LegalLinks() {
+            const [links, setLinks] = useState(null);
+            useEffect(() => { api('/api/legal-links').then(setLinks).catch(() => setLinks({})); }, []);
+            if (!links || !links.privacy) return null;
+            return (
+                <div className="form-field wide">
+                    <label>Tus páginas legales (públicas)</label>
+                    <small className="field-hint">
+                        Política de privacidad: <a href={links.privacy} target="_blank" rel="noopener noreferrer">{links.privacy}</a><br />
+                        Condiciones de venta: <a href={links.terms} target="_blank" rel="noopener noreferrer">{links.terms}</a><br />
+                        Ponlas en la descripción de tu WhatsApp Business, Instagram y Facebook. Se arman con los datos de tu perfil: guarda los cambios para verlas actualizadas.
+                    </small>
+                </div>
+            );
+        }
+
+        const AUDIT_LABELS = { chat_borrado: '🗑️ Chat borrado', datos_exportados: '📥 Datos descargados', borrado_por_plazo: '⏳ Borrado por plazo', pedido_sobre_datos: '🔒 Pedido de un cliente sobre sus datos' };
+
+        /** Registro de acciones sensibles sobre datos personales (se muestra a pedido). */
+        function AuditLog() {
+            const [open, setOpen] = useState(false);
+            const [entries, setEntries] = useState(null);
+            useEffect(() => { if (open && !entries) api('/api/audit').then(r => setEntries(r.entries || [])).catch(() => setEntries([])); }, [open]);
+            return (
+                <div style={{ marginTop: 14 }}>
+                    <button type="button" className="btn-link" style={{ whiteSpace: 'normal', textAlign: 'left' }} onClick={() => setOpen(!open)}>{open ? '▾' : '▸'} Registro de seguridad (acciones sobre datos de clientes)</button>
+                    {open && (entries === null ? <p className="hint">Cargando…</p> : entries.length === 0 ? <p className="hint">Todavía no hay acciones registradas.</p> : (
+                        <div style={{ maxHeight: 260, overflow: 'auto', marginTop: 8, fontSize: 13, lineHeight: 1.5 }}>
+                            {entries.map((e, i) => (
+                                <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid #EEF1F8' }}>
+                                    <b>{AUDIT_LABELS[e.action] || e.action}</b> · {formatDateTime(e.at)} · {e.by}<br /><span style={{ color: '#4A5578' }}>{e.detail}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
         function BusinessProfileForm({ onSaved, extras = [], legacy = false, readOnly = false, canTest = true, mobile = false }) {
             const [form, setForm] = useState(null);
             const [presets, setPresets] = useState([]);
@@ -4293,7 +4333,7 @@
             const [mSection, setMSection] = useState(null);
             const [mLast, setMLast] = useState('general');
             const rootRef = useRef(null);
-            const sectionIds = ['general', 'ventas', 'pagos', 'fechas', 'envios', 'seguimientos', 'empaques', 'avisos', ...extras.map(x => x.id)];
+            const sectionIds = ['general', 'ventas', 'pagos', 'fechas', 'envios', 'seguimientos', 'empaques', 'avisos', 'privacidad', ...extras.map(x => x.id)];
             const sectionKey = sectionIds.join(',');
 
             const loadReadiness = () => api('/api/me/readiness').then(setReadiness).catch(() => {});
@@ -4426,6 +4466,7 @@
                 { id: 'seguimientos', icon: 'bell', label: 'Seguimientos' },
                 { id: 'empaques', icon: 'box', label: 'Empaques' },
                 { id: 'avisos', icon: 'sparkle', label: 'Avisos y estilo' },
+                { id: 'privacidad', icon: 'key', label: 'Privacidad y datos' },
                 ...extras.map(x => ({ id: x.id, icon: x.icon, label: x.label }))
             ];
 
@@ -4597,6 +4638,26 @@
                             {check('style.humanPersona', 'Presentarse como una persona del equipo (nunca decir que es un asistente virtual)')}
                         </div>
                     </CfgCard>
+                ),
+                privacidad: (
+                    <CfgCard id="privacidad" icon="key" title="Privacidad y datos" subtitle="Lo que pide la Ley Orgánica de Protección de Datos Personales">
+                        <div className="profile-grid">
+                            {text('privacy.legalName', 'Responsable de los datos (razón social o tu nombre)', 'Ej: VELAMIA S.A.S. o tu nombre completo', 'Sale en la política de privacidad. Vacío = el nombre del negocio', true)}
+                            {text('privacy.ruc', 'RUC', 'Ej: 0912345678001')}
+                            {text('privacy.email', 'Correo para temas de datos personales', 'Ej: datos@tunegocio.com')}
+                            {text('privacy.address', 'Dirección', 'Ej: Av. Principal y calle 2, Guayaquil', '', true)}
+                            {check('privacy.firstReplyNotice', 'En la primera respuesta a cada cliente nuevo, enviar el enlace a la política de privacidad (deber de informar)')}
+                            <div className="form-field wide">
+                                <label>Borrar solos los chats sin pedidos que llevan sin mensajes…</label>
+                                <select value={form.privacy?.retentionMonths ?? 0} onChange={e => set('privacy.retentionMonths', Number(e.target.value))}>
+                                    {[[0, 'Nunca (se borran a mano)'], [6, '6 meses'], [12, '1 año'], [24, '2 años (recomendado)'], [36, '3 años'], [60, '5 años']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                                </select>
+                                <small className="field-hint">Plazo de conservación de la ley. Los chats con pedidos no se borran (sirven para la facturación). Se borran con sus fotos y audios y no se puede deshacer.</small>
+                            </div>
+                            <LegalLinks />
+                        </div>
+                        {!readOnly && <AuditLog />}
+                    </CfgCard>
                 )
             };
 
@@ -4617,11 +4678,12 @@
                     { id: 'seguimientos', icon: 'bell', label: 'Seguimientos', sub: 'Mensajes a clientes que no responden' },
                     { id: 'empaques', icon: 'box', label: 'Empaques', sub: 'Presentación de tus productos' },
                     { id: 'avisos', icon: 'sparkle', label: 'Avisos y estilo', sub: 'Tus avisos y cómo habla el asistente' },
+                    { id: 'privacidad', icon: 'key', label: 'Privacidad y datos', sub: 'Ley de Protección de Datos Personales' },
                     ...extras.map(x => ({ id: x.id, icon: x.icon, label: x.label, sub: x.sub || x.subtitle }))
                 ];
                 const titles = {
                     ventas: 'Cómo vendes', pagos: 'Pagos', fechas: 'Fechas de entrega', envios: 'Envíos',
-                    seguimientos: 'Seguimientos automáticos', empaques: 'Empaques', avisos: 'Avisos y estilo'
+                    seguimientos: 'Seguimientos automáticos', empaques: 'Empaques', avisos: 'Avisos y estilo', privacidad: 'Privacidad y datos'
                 };
                 const open = id => { setMSection(id); setMLast(id); window.scrollTo(0, 0); };
                 const logoView = form.branding.logoUrl || legacy ? <img src={form.branding.logoUrl || 'logo.png'} alt="Logo" /> : <Avatar name={form.business.name} size={64} />;
@@ -7252,6 +7314,16 @@
                 setActiveTab('conversaciones');
             }
 
+            // Derecho de acceso y portabilidad: todos los datos de la clienta en un archivo.
+            async function exportChat() {
+                if (!currentConv) return;
+                try {
+                    await downloadFromApi(`/api/conversations/${currentConv.id}/export`, 'datos-cliente.json');
+                } catch (err) {
+                    alert('No se pudieron descargar los datos: ' + err.message);
+                }
+            }
+
             async function deleteChat() {
                 if (!currentConv) return;
                 const name = contactName(currentConv);
@@ -7761,6 +7833,7 @@
                                     canEdit && { label: isClosedConv(conv) ? 'Reabrir chat' : 'Cerrar chat', onClick: toggleClosed },
                                     canEdit && summary && summary.phase2 && { label: noteMode ? 'Volver a escribir mensajes' : 'Escribir nota interna', onClick: () => setNoteMode(!noteMode) },
                                     canEdit && !showQuick && { label: 'Mostrar acciones rápidas', onClick: () => toggleQuick(true) },
+                                    canConfigure && { label: 'Descargar datos del cliente', onClick: exportChat },
                                     canConfigure && { label: deletingChat ? 'Eliminando...' : 'Eliminar chat', danger: true, onClick: deleteChat }
                                 ]} />
                             </div>
@@ -8182,6 +8255,11 @@
                                                         <PlatIcon name={botPausedInChat ? 'play' : 'pause'} size={18} color="#4F5BD5" /> <span className="lbl-hide">{botPausedInChat ? 'Reactivar bot' : 'Pausar bot'}</span>
                                                     </button>
                                                 </>
+                                            )}
+                                            {canConfigure && (
+                                                <button type="button" className="nx-icon-btn" onClick={exportChat} title="Descargar todos los datos de este cliente (si te los pide)">
+                                                    <PlatIcon name="doc" size={18} color="#4F5BD5" /> <span className="lbl-hide">Datos</span>
+                                                </button>
                                             )}
                                             {canConfigure && (
                                                 <button type="button" className="nx-icon-btn danger" onClick={deleteChat} disabled={deletingChat}>

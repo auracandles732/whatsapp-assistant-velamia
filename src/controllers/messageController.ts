@@ -33,7 +33,8 @@ import {
   setConversationTags
 } from '../db';
 import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
-import { maskPhone } from '../services/privacy';
+import { maskPhone, privacyRequest } from '../services/privacy';
+import { audit } from '../services/audit';
 import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG } from '../services/followups';
 import {
   sendTextMessage,
@@ -735,6 +736,22 @@ async function ingestMessage(message: any, value: any) {
   }
 }
 
+/** Enlace a la política de privacidad del negocio ('' si no se puede armar: sin la dirección pública del servidor). */
+export function privacyUrl(): string {
+  const base = (process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+  if (!base) return '';
+  const tenant = currentTenant();
+  return `${base}${tenant ? `/legal/${tenant.businessId}/privacidad` : '/privacidad'}`;
+}
+
+/** Aviso de privacidad en la primera respuesta (se puede apagar en Configuración → Privacidad). Nunca lanza error. */
+async function sendPrivacyNotice(conversationId: string, phoneNumber: string) {
+  const url = privacyUrl();
+  if (!profile().privacy.firstReplyNotice || !url) return;
+  await sendAndSaveText(conversationId, phoneNumber, `🔒 Cuidamos tus datos personales. Aquí puedes ver cómo: ${url}`)
+    .catch((error: any) => console.warn('⚠️ No se pudo enviar el aviso de privacidad:', error.message));
+}
+
 /** Responde en un solo turno a todos los mensajes que la clienta envió seguidos. */
 async function respondToBatch(batch: PendingBatch) {
   const { conversationId, phoneNumber, customerName, items } = batch;
@@ -747,6 +764,23 @@ async function respondToBatch(batch: PendingBatch) {
     // Se revisa al responder: la dueña pudo escribir desde el CRM durante la espera.
     if (await isBotPaused(conversationId)) {
       console.log('⏸️ Bot pausado en este chat - lo atiende una persona');
+      return;
+    }
+
+    // Pide ver, copiar o borrar sus datos, o que no le escriban más (Ley Orgánica de Protección de Datos Personales):
+    // se le confirma, deja de recibir seguimientos y, si es sobre sus datos, se avisa a la dueña (plazo: 15 días).
+    const privacy = privacyRequest(items.map(i => i.aiContent).join('\n'));
+    if (privacy) {
+      const detail = items.map(i => toAiText({ sender: 'customer', type: i.messageType, content: i.storedContent })).join('\n');
+      await recordFollowUp(conversationId, 'opt_out', privacy === 'datos' ? 'Pidió ver o borrar sus datos personales' : 'Pidió que no le escriban más');
+      if (privacy === 'datos') {
+        await notifyOwner({ conversationId, customerPhone: phoneNumber, customerName, event: 'privacy_request', detail });
+        await audit('pedido_sobre_datos', `${customerName} (${maskPhone(phoneNumber)}): ${detail.slice(0, 200)}`, 'cliente');
+      }
+      console.log(`🔒 ${maskPhone(phoneNumber)} pidió ${privacy === 'datos' ? 'ejercer sus derechos sobre sus datos' : 'no recibir más mensajes'}`);
+      await sendAndSaveText(conversationId, phoneNumber, privacy === 'datos'
+        ? 'Recibimos tu solicitud sobre tus datos personales 🔒 La atenderemos en un plazo máximo de 15 días y te responderemos por este mismo chat.'
+        : profile().followUps.optOutMessage);
       return;
     }
 
@@ -949,6 +983,8 @@ async function respondToBatch(batch: PendingBatch) {
         && await voiceNotesEnabled().catch(() => false)
         && await sendAndSaveVoiceNote(conversationId, phoneNumber, plan.reply);
       if (!voiceSent) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
+      // Primera respuesta a una clienta nueva: el enlace a la política de privacidad (deber de informar, LOPDP).
+      if (!history.some((m: any) => m.sender === 'bot' || m.sender === 'human')) await sendPrivacyNotice(conversationId, phoneNumber);
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.

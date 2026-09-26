@@ -3,7 +3,7 @@ import { getOwnerPhone, logNotification } from './supabase';
 import { profile } from '../config/businessProfile';
 import { contactLabel } from './metaChannels';
 
-export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'new_quotation' | 'order_updated' | 'bot_error' | 'bank_details_missing' | 'owner_question' | 'urgent_date' | 'custom_design_request' | 'custom_design_new' | 'not_customer';
+export type OwnerEvent = 'card_payment' | 'payment_proof' | 'complaint' | 'new_order' | 'new_quotation' | 'order_updated' | 'bot_error' | 'bank_details_missing' | 'owner_question' | 'urgent_date' | 'custom_design_request' | 'custom_design_new' | 'not_customer' | 'privacy_request';
 
 const EVENT_LABELS: Record<OwnerEvent, string> = {
   urgent_date: '📅 Entrega muy cerca o fecha ya pasada, revísalo',
@@ -18,7 +18,8 @@ const EVENT_LABELS: Record<OwnerEvent, string> = {
   bot_error: '🤖 El bot no pudo responder, responde tú desde el CRM',
   custom_design_request: '🎨 Diseño personalizado listo para cotizar, responde tú con el precio',
   custom_design_new: '🎨 Nueva idea de diseño personalizado, échale un vistazo (el asistente sigue atendiendo)',
-  not_customer: '📦 Te escribe alguien que no es cliente (proveedor, courier u otro). El asistente dejó de responder ese chat: respóndele tú'
+  not_customer: '📦 Te escribe alguien que no es cliente (proveedor, courier u otro). El asistente dejó de responder ese chat: respóndele tú',
+  privacy_request: '🔒 Pidió ver, copiar o borrar sus datos personales: respóndele en máximo 15 días (Ley de Protección de Datos). En el CRM puedes descargar o borrar sus datos'
 };
 
 // Plantilla aprobada por Meta (nombre en el perfil del negocio): llega aunque la dueña no haya escrito al bot en 24 horas.

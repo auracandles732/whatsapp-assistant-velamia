@@ -66,7 +66,10 @@ import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } 
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
 import { socialRouter, startSocialAgent } from './social';
 import { currentAiProblem } from './services/aiStatus';
-import { voiceStatus, setVoiceNotesEnabled, textToMp3, textToVoice, speechToVoice, describeVoiceError } from './services/elevenlabs';
+import { voiceStatus, setVoiceNotesEnabled, voiceNotesEnabled, textToMp3, textToVoice, speechToVoice, describeVoiceError } from './services/elevenlabs';
+import { privacyPolicyHtml, salesTermsHtml } from './services/legalPages';
+import { audit, listAudit } from './services/audit';
+import { startRetention } from './services/retention';
 import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
@@ -96,6 +99,9 @@ import {
   setConversationStatus,
   addConversationNote,
   deleteConversationNote,
+  getQuotationsByConversation,
+  getOrdersByConversation,
+  getConversationNotes,
   addConversationTask,
   setConversationTaskDone,
   deleteConversationTask
@@ -340,6 +346,29 @@ app.use(socialRouter());
 // ---------- Supervisor de los chats: aprendizajes para aprobar y reporte diario ----------
 
 app.use(supervisorRouter());
+
+// ---------- Páginas legales (públicas): política de privacidad y condiciones de venta ----------
+// VELAMIA en /privacidad y /condiciones; cada empresa en /legal/<id>/privacidad y /legal/<id>/condiciones.
+
+async function legalPage(res: Response, businessId: string | null, kind: 'privacidad' | 'condiciones') {
+  try {
+    const tenant = businessId ? await loadTenant(businessId) : undefined;
+    if (businessId && !tenant) return res.status(404).send('Empresa no encontrada');
+    const html = await runWithTenant(tenant || undefined, async () => kind === 'privacidad'
+      ? privacyPolicyHtml(profile(), { voiceNotes: !tenant && !!process.env.ELEVENLABS_API_KEY && await voiceNotesEnabled().catch(() => false) })
+      : salesTermsHtml(profile()));
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.type('html').send(html);
+  } catch (error: any) {
+    res.status(500).send('No se pudo mostrar la página');
+  }
+}
+app.get('/privacidad', (_req: Request, res: Response) => { void legalPage(res, null, 'privacidad'); });
+app.get('/condiciones', (_req: Request, res: Response) => { void legalPage(res, null, 'condiciones'); });
+app.get('/legal/:businessId/:kind(privacidad|condiciones)', (req: Request, res: Response) => {
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.businessId)) return res.status(404).send('Empresa no encontrada');
+  void legalPage(res, req.params.businessId, req.params.kind as 'privacidad' | 'condiciones');
+});
 
 // ---------- Salud ----------
 
@@ -609,11 +638,63 @@ app.delete('/api/conversations/:id', requireCrmSession, requireUuidParam, requir
     }
 
     console.log(`🗑️ Chat ${maskPhone(conv.phone_number)} eliminado (${filesRemoved} archivo(s))`);
+    void audit('chat_borrado', `${conv.customer_name || 'Cliente'} (${maskPhone(conv.phone_number)}): chat, cotizaciones, pedidos y ${filesRemoved} archivo(s)`, whoDid(req));
     res.json({ success: true, filesRemoved });
   } catch (error: any) {
     console.error('Error eliminando chat:', error.message);
     res.status(500).json({ error: error.message });
   }
+});
+
+/** Quién hizo la acción, para el registro de seguridad. */
+function whoDid(req: Request): string {
+  const session = getCrmSession(req);
+  return session ? `${session.role}${session.userId ? ` ${String(session.userId).slice(0, 8)}` : ''}` : 'desconocido';
+}
+
+/**
+ * Todos los datos de una clienta en un archivo (derechos de acceso y portabilidad de la Ley Orgánica de Protección de
+ * Datos Personales): contacto, mensajes, cotizaciones, pedidos, notas y etiquetas.
+ */
+app.get('/api/conversations/:id/export', requireCrmSession, requireUuidParam, requireOwnerRole, async (req: Request, res: Response) => {
+  try {
+    const conv = await getConversationById(req.params.id);
+    if (!conv) return res.status(404).json({ error: 'Conversación no encontrada' });
+    const [messages, quotations, orders, notes] = await Promise.all([
+      getMessages(conv.id, 10000),
+      getQuotationsByConversation(conv.id).catch(() => []),
+      getOrdersByConversation(conv.id).catch(() => []),
+      getConversationNotes(conv.id).catch(() => null)
+    ]);
+    const data = {
+      generado: new Date().toISOString(),
+      responsable: profile().privacy.legalName || profile().business.name,
+      cliente: { nombre: conv.customer_name || '', contacto: conv.phone_number, primer_contacto: conv.created_at, ultimo_mensaje: conv.last_message_time, etiquetas: conv.tags || [] },
+      mensajes: messages.map((m: any) => ({ fecha: m.timestamp, de: m.sender === 'customer' ? 'cliente' : m.sender === 'human' ? 'equipo' : 'asistente', tipo: m.type, contenido: m.content })),
+      cotizaciones: quotations,
+      pedidos: orders,
+      notas: notes || []
+    };
+    void audit('datos_exportados', `${conv.customer_name || 'Cliente'} (${maskPhone(conv.phone_number)})`, whoDid(req));
+    res.setHeader('Content-Disposition', `attachment; filename="datos-cliente-${String(conv.phone_number).replace(/\D/g, '').slice(-4) || 'chat'}.json"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('application/json').send(JSON.stringify(data, null, 2));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Enlaces públicos de la política de privacidad y las condiciones de venta de la empresa en curso. */
+app.get('/api/legal-links', requireCrmSession, (req: Request, res: Response) => {
+  const base = (process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  const tenant = currentTenant();
+  const prefix = tenant ? `${base}/legal/${tenant.businessId}` : base;
+  res.json({ privacy: `${prefix}/privacidad`, terms: `${prefix}/condiciones` });
+});
+
+/** Registro de seguridad: acciones sensibles sobre datos personales (lo más nuevo primero). */
+app.get('/api/audit', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
+  res.json({ entries: (await listAudit()).reverse().slice(0, 200) });
 });
 
 /** Pausa el bot en una conversación. Sin "minutes" queda pausado hasta reactivarlo. */
@@ -1941,6 +2022,7 @@ async function start() {
   startFollowUpScheduler();
   startSocialAgent();
   startSupervisor();
+  startRetention();
   startPhotoNudgeScheduler();
   startHealthCheck();
   // Con la página de Facebook configurada, se suscribe sola a la App al arrancar (repetirlo no hace daño).

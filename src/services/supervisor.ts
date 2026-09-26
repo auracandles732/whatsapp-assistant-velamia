@@ -641,8 +641,11 @@ export async function buildDayReport(day: string, now = new Date()): Promise<Day
     }
   }
   await setConfig(reportKey(day), JSON.stringify(report));
-  const days = [...new Set([day, ...(await listReportDays())])].sort().reverse().slice(0, 60);
+  const all = [...new Set([day, ...(await listReportDays())])].sort().reverse();
+  const days = all.slice(0, 60);
   await setConfig(REPORTS_KEY, JSON.stringify(days));
+  // Plazo de conservación: los reportes de hace más de 60 días (traen nombres de clientes) se borran.
+  for (const old of all.slice(60)) await setConfig(reportKey(old), '').catch(() => {});
   return report;
 }
 
@@ -721,7 +724,8 @@ registerStaffTopic('sv:report:', async topic => {
 // Los botones "Aprobar" y "Descartar" de cada aprendizaje.
 registerStaffReplies(async inbound => {
   const match = /^sv:(ok|no):([0-9a-f-]{36})$/i.exec(inbound.replyId);
-  if (!match) return false;
+  // Solo la dueña decide qué aprende el asistente.
+  if (!match || !inbound.isOwner) return false;
   try {
     await decideLesson(match[2], { status: match[1] === 'ok' ? 'approved' : 'discarded' });
     await sendTextMessage(inbound.phone, match[1] === 'ok' ? '✅ Aprobado: el asistente ya lo usa cuando aplique.' : 'Descartado: el asistente no lo usará.');
