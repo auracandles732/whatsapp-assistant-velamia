@@ -560,15 +560,15 @@ ${backgroundLayer(st.bg, st.lights, input.background)}<rect width="${SIZE}" heig
 </svg>`;
 }
 
-/** El afiche listo, en JPG de 1080×1080. */
-export function renderPoster(input: TemplateInput): Buffer {
+/** El afiche listo, en JPG de 1080×1080 (o más chico, para las vistas previas del CRM). */
+export function renderPoster(input: TemplateInput, width = SIZE, quality = 92): Buffer {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { Resvg } = require('@resvg/resvg-js');
   const resvg = new Resvg(posterSvg(input), {
-    fitTo: { mode: 'width', value: SIZE },
+    fitTo: { mode: 'width', value: width },
     font: { fontFiles: FONT_FILES.filter(f => fs.existsSync(f)), loadSystemFonts: false, defaultFontFamily: 'Montserrat' }
   });
   const rendered = resvg.render();
   const png = PNG.sync.read(rendered.asPng());
-  return Buffer.from(jpeg.encode({ width: png.width, height: png.height, data: png.data }, 92).data);
+  return Buffer.from(jpeg.encode({ width: png.width, height: png.height, data: png.data }, quality).data);
 }

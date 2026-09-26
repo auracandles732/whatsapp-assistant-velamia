@@ -18,7 +18,7 @@ import {
   addSupplierProductsToCatalog, deleteSupplierCatalog, mostUsedPackaging, moveSupplierCatalog
 } from './suppliers';
 import { listResults } from './insights';
-import { startPosters, posterStates, postersRunning, applyPoster, keepModel, clearPosterStates, resumeStuck, POSTER_COST } from './posters';
+import { startPosters, posterStates, postersRunning, applyPoster, keepModel, clearPosterStates, resumeStuck, POSTER_COST, catalogTemplate, setCatalogTemplate, templatePreview } from './posters';
 import { templateName, TEMPLATE_NAMES } from './template';
 import { publicSocialAi, saveSocialAi, testSocialAi, socialAi } from './ai';
 
@@ -446,10 +446,35 @@ export function socialRouter(): Router {
       // Con qué empaque entran si la regla no elige uno (el más usado en su Catálogo).
       const categories = [...new Set((catalog as any[]).map(p => String(p.category || '').trim()).filter(Boolean))].sort();
       // Con qué plantilla salen las fotos de cada catálogo ("PLANTILLA HALLOWEEN"): así no hay que adivinar.
-      const templates = Object.fromEntries((data.catalogs as any[]).map(c => [c.id, templateName(String(c.name || ''))]));
-      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: settings.posterMode === 'ia' ? POSTER_COST : 0, categories, templates, templateNames: TEMPLATE_NAMES.map(n => `PLANTILLA ${n}`) });
+      // templateChoice: la que eligió la empresa ('' = automática); templateAuto: la que le toca por su categoría.
+      const templateChoice: Record<string, string> = {};
+      for (const c of data.catalogs as any[]) templateChoice[c.id] = await catalogTemplate(c.id);
+      const templateAuto = Object.fromEntries((data.catalogs as any[]).map(c => [c.id, templateName(String(c.name || ''))]));
+      const templates = Object.fromEntries((data.catalogs as any[]).map(c => [c.id, templateChoice[c.id] ? `PLANTILLA ${templateChoice[c.id]}` : templateAuto[c.id]]));
+      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: settings.posterMode === 'ia' ? POSTER_COST : 0, categories, templates, templateChoice, templateAuto, templateList: TEMPLATE_NAMES, templateNames: TEMPLATE_NAMES.map(n => `PLANTILLA ${n}`) });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  /** Vista previa de una plantilla ("NAVIDAD"), con un modelo de proveedor de la empresa. */
+  router.get('/api/social/suppliers/template-preview', requireCrmSession, requirePublishing, async (req: Request, res: Response) => {
+    try {
+      const jpg = await templatePreview(String(req.query.name || ''));
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'private, max-age=600');
+      res.send(jpg);
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
+    }
+  });
+
+  /** Elige con qué plantilla salen las fotos de un catálogo ('' = automática, según su categoría). */
+  router.put('/api/social/suppliers/:catalogId/template', requireCrmSession, requireEditorRole, requirePublishing, requireUuid('catalogId', 'Catálogo'), async (req: Request, res: Response) => {
+    try {
+      res.json({ template: await setCatalogTemplate(req.params.catalogId, req.body?.template) });
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
     }
   });
 
@@ -470,6 +495,8 @@ export function socialRouter(): Router {
       const settings = await getSupplierSettings();
       const review = settings.posterMode !== 'ia' || await hasSocialAi();
       const result = await importSupplierCatalog(req.body || {}, review);
+      // La plantilla elegida al subir el PDF se guarda antes de empezar las fotos.
+      if (req.body?.template !== undefined && result.catalog?.id) await setCatalogTemplate(result.catalog.id, req.body.template);
       if (review && result.ids.length) {
         await startPosters(result.catalog.id, { ids: result.ids, posters: settings.autoPosters });
       }

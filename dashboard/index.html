@@ -2322,6 +2322,17 @@
         .sp-match { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px; border-radius: 10px; background: #F3F4FF; font-size: 12.5px; color: #2A3766; }
         .sp-match img { width: 40px !important; height: 40px; aspect-ratio: auto !important; object-fit: cover; border-radius: 8px; }
         .sp-move { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; font-size: 13.5px; color: #3A4570; }
+        .sp-move select { border: 1px solid #DCE2F5; border-radius: 10px; padding: 8px 10px; font: inherit; background: #fff; max-width: 100%; }
+        .sp-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-top: 14px; }
+        .sp-tpl { margin: 0; border: 1px solid #E3E7F3; border-radius: 14px; overflow: hidden; background: #fff; }
+        .sp-tpl-img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: #F3F4FF; }
+        .sp-tpl-wait { display: flex; align-items: center; justify-content: center; color: #6B7390; font-size: 13px; }
+        .sp-tpl figcaption { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 2px; }
+        .sp-tpl figcaption b { font-size: 13px; color: #141C3A; }
+        .sp-tpl figcaption small { font-size: 12px; color: #6B7390; }
+        .sp-tpl-mini { width: 120px; height: 120px; border-radius: 12px; border: 1px solid #E3E7F3; object-fit: cover; margin-top: 6px; background: #F3F4FF; }
+        .sp-tpl-row .sp-tpl-mini { width: 56px; height: 56px; margin: 0; border-radius: 10px; }
+        @media (max-width: 767px) { .sp-tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
         .sp-move input { flex: 1; min-width: 160px; max-width: 280px; border: 1px solid #DCE2F5; border-radius: 10px; padding: 8px 10px; font: inherit; }
         .sp-name small { display: block; margin-top: 4px; }
         .sp-posters .pb-btn, .sp-match .pb-btn, .sp-move .pb-btn { white-space: normal; max-width: 100%; }
@@ -9073,7 +9084,8 @@
         }
 
         /** Descarga un archivo del servidor (con la sesión) y lo guarda en el equipo. */
-        async function downloadFromApi(path, fallbackName) {
+        /** Un archivo del servidor (con la sesión): el PDF de la planificación, las vistas previas de las plantillas. */
+        async function apiFile(path) {
             const businessId = getCurrentBusinessId();
             const res = await fetch(`${API_URL}${path}`, {
                 headers: { 'Authorization': `Bearer ${getToken()}`, ...(businessId ? { 'X-Business-Id': businessId } : {}) }
@@ -9088,8 +9100,13 @@
                 try { message = (await res.json()).error || message; } catch {}
                 throw new Error(message);
             }
-            const name = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1] || fallbackName;
-            const url = URL.createObjectURL(await res.blob());
+            return { blob: await res.blob(), disposition: res.headers.get('Content-Disposition') || '' };
+        }
+
+        async function downloadFromApi(path, fallbackName) {
+            const { blob, disposition } = await apiFile(path);
+            const name = (/filename="([^"]+)"/.exec(disposition) || [])[1] || fallbackName;
+            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = name;
@@ -9684,6 +9701,47 @@
             );
         }
 
+        /** Cómo se ve una plantilla ("NAVIDAD"), con uno de tus modelos de proveedor. */
+        function TemplatePreview({ name, className }) {
+            const [url, setUrl] = useState('');
+            const [failed, setFailed] = useState(false);
+            useEffect(() => {
+                let alive = true;
+                let objectUrl = '';
+                setUrl('');
+                setFailed(false);
+                apiFile('/api/social/suppliers/template-preview?name=' + encodeURIComponent(name))
+                    .then(({ blob }) => { if (!alive) return; objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); })
+                    .catch(() => { if (alive) setFailed(true); });
+                return () => { alive = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+            }, [name]);
+            return url
+                ? <img className={className} src={url} alt={'PLANTILLA ' + name} />
+                : <div className={className + ' sp-tpl-wait'}>{failed ? 'Sin vista previa' : 'Cargando…'}</div>;
+        }
+
+        /** Todas las plantillas, con su vista previa y en qué catálogos se usan. */
+        function TemplateGallery({ data, onClose }) {
+            return (
+                <PbModal title="🎨 Tus plantillas" onClose={onClose}>
+                    <div className="pb-modal-b single">
+                        <p className="pb-muted" style={{ margin: 0 }}>Así salen las fotos con cada plantilla (con uno de tus modelos de ejemplo). Cada categoría usa la suya sola; si quieres otra, elígela al subir el PDF o en el catálogo, en "Plantilla".</p>
+                        <div className="sp-tpl-grid">
+                            {(data.templateList || []).map(name => {
+                                const used = (data.catalogs || []).filter(c => data.templates?.[c.id] === 'PLANTILLA ' + name).map(c => c.name);
+                                return (
+                                    <figure key={name} className="sp-tpl">
+                                        <TemplatePreview name={name} className="sp-tpl-img" />
+                                        <figcaption><b>PLANTILLA {name}</b><small>{used.length ? 'En uso: ' + used.join(', ') : 'Sin usar por ahora'}</small></figcaption>
+                                    </figure>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </PbModal>
+            );
+        }
+
         function SupplierCatalogs({ canEdit, canConfigure }) {
             const [data, setData] = useState(null);
             const [settings, setSettings] = useState(null);
@@ -9698,6 +9756,9 @@
             const [deleting, setDeleting] = useState(null);
             // Visor de fotos: { catalogId, index }.
             const [viewer, setViewer] = useState(null);
+            // Plantillas: la galería y la elegida para el PDF que se va a subir ('' = la de su categoría).
+            const [showTemplates, setShowTemplates] = useState(false);
+            const [pdfTemplate, setPdfTemplate] = useState('');
 
             const load = () => api('/api/social/suppliers').then(r => {
                 setData(r);
@@ -9751,7 +9812,7 @@
                     const r = { total: 0, added: 0, estimated: 0, withoutPrice: 0, catalog: null, review: false };
                     for (let i = 0; i < read.products.length; i += 12) {
                         setNotice(`💾 Guardando modelos ${i + 1}-${Math.min(i + 12, read.products.length)} de ${read.products.length}${s.autoAddToCatalog ? ' y agregándolos al Catálogo' : ''}…`);
-                        const part = await api('/api/social/suppliers', { method: 'POST', body: JSON.stringify({ catalogId: r.catalog?.id, name: pdfName, fileName: pdf.name, pages: read.pages, products: read.products.slice(i, i + 12) }) });
+                        const part = await api('/api/social/suppliers', { method: 'POST', body: JSON.stringify({ catalogId: r.catalog?.id, name: pdfName, fileName: pdf.name, pages: read.pages, products: read.products.slice(i, i + 12), template: pdfTemplate }) });
                         r.catalog = part.catalog;
                         ['total', 'added', 'estimated', 'withoutPrice'].forEach(k => { r[k] += part[k]; });
                         r.review = !!part.review;
@@ -9761,6 +9822,7 @@
                     setNotice(`✅ ${r.total} modelos leídos del PDF${r.added ? ` · ${r.added} agregados al Catálogo en ${r.catalog.name}` : ''}${r.estimated ? ` · ${r.estimated} con tamaño estimado (${SIZE_LABELS[s.defaultSize]}): revísalos abajo` : ''}${r.withoutPrice ? ` · ${r.withoutPrice} sin precio (completa la regla de precios)` : ''}${posters}.`);
                     setPdf(null);
                     setPdfName('');
+                    setPdfTemplate('');
                     setOpenCatalog(r.catalog.id);
                     load();
                 } catch (e) {
@@ -9797,6 +9859,28 @@
 
             // Fotos con el diseño de la empresa (todas las que faltan o, con ids, las que se piden rehacer). Sin posters, solo
             // se revisa cuáles ya tienes en el Catálogo. Antes de cada foto, igual se revisa.
+            async function changeTemplate(catalog, template, models) {
+                setBusy('template');
+                setError('');
+                try {
+                    await api(`/api/social/suppliers/${catalog.id}/template`, { method: 'PUT', body: JSON.stringify({ template }) });
+                    await load();
+                    const states = data.posters?.[catalog.id] || {};
+                    const redo = models.filter(p => ['lista', 'revisar', 'error'].includes(states[p.id]?.status || ''));
+                    const label = template ? 'PLANTILLA ' + template : (data.templateAuto?.[catalog.id] || 'la plantilla de su categoría');
+                    setBusy('');
+                    if (redo.length && confirm(`Listo: ${catalog.name} usará la ${label}. ¿Rehago ya sus ${redo.length} fotos con esta plantilla? (gratis; mientras tanto cada modelo mantiene su foto actual)`)) {
+                        await makePosters(catalog, redo.map(p => p.id));
+                    } else {
+                        setNotice(`🎨 ${catalog.name} usará la ${label} en las fotos nuevas${redo.length ? '. Para cambiar las que ya están hechas usa "Rehacer todas"' : ''}.`);
+                    }
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy(b => (b === 'template' ? '' : b));
+                }
+            }
+
             async function makePosters(catalog, ids, posters = true) {
                 setBusy('posters');
                 setError('');
@@ -9931,9 +10015,12 @@
                                         <option value="ia">La IA dibuja copiando tus fotos (puede variar, ≈ $0.08 por foto)</option>
                                     </select>
                                     <small className="pb-muted">{(s.posterMode || 'plantilla') === 'plantilla'
-                                        ? `Cada categoría sale con su plantilla, copiada de tus afiches: ${(data.templateNames || []).join(', ')}. La categoría que no tenga una propia sale con la PLANTILLA GENERAL. El nombre y el precio salen exactos y la vela, tal cual la foto del PDF.`
+                                        ? 'Cada categoría sale con su plantilla, copiada de tus afiches (la que no tenga una propia sale con la PLANTILLA GENERAL). Puedes elegir otra al subir el PDF o en cada catálogo. El nombre y el precio salen exactos y la vela, tal cual la foto del PDF.'
                                         : 'La IA copia el diseño de tus fotos del Catálogo y una revisión comprueba el nombre, el precio y la vela. Puede cambiar detalles del diseño.'}</small>
                                 </label>
+                                {(s.posterMode || 'plantilla') === 'plantilla' && (
+                                    <button type="button" className="pb-btn sm" style={{ marginTop: 8 }} onClick={() => setShowTemplates(true)}>🎨 Ver mis plantillas ({(data.templateList || []).length})</button>
+                                )}
                                 {s.posterMode === 'ia' && <DesignPicker selected={s.designProductIds || []} disabled={!canConfigure} excludeIds={new Set(data.products.map(p => p.catalog_product_id).filter(Boolean))}
                                     onSave={ids => { const next = { ...s, designProductIds: ids }; setSettings(next); saveSettings(next); }} />}
                                 {s.posterMode === 'ia' && <label className="sp-name" style={{ marginTop: 10 }}>
@@ -9961,6 +10048,17 @@
                                                 <small className="pb-muted">Elige una que ya tienes (por ejemplo {(data.categories || [])[0] || 'NAVIDAD'}) o escribe una nueva.</small>
                                             </label>
                                         )}
+                                        {pdf && (s.posterMode || 'plantilla') === 'plantilla' && (
+                                            <label className="sp-name"><span>🎨 Plantilla de las fotos</span>
+                                                <select value={pdfTemplate} onChange={e => setPdfTemplate(e.target.value)}>
+                                                    <option value="">Automática: la de su categoría</option>
+                                                    {(data.templateList || []).map(n => <option key={n} value={n}>PLANTILLA {n}</option>)}
+                                                </select>
+                                                {pdfTemplate
+                                                    ? <TemplatePreview name={pdfTemplate} className="sp-tpl-mini" />
+                                                    : <small className="pb-muted">Sale con la plantilla de la categoría que escribiste. <a href="#" onClick={e => { e.preventDefault(); setShowTemplates(true); }}>Ver las plantillas</a></small>}
+                                            </label>
+                                        )}
                                         {pdf && !pricesReady && s.autoAddToCatalog && <div className="pb-muted" style={{ color: '#B36B00' }}>Primero guarda los 3 precios de la regla: sin precio los modelos no pueden entrar al Catálogo.</div>}
                                         {alreadyUploaded && <div className="pb-muted" style={{ color: '#B42318' }}>Este PDF ya está subido (catálogo {alreadyUploaded.name}): subirlo otra vez repetiría los productos. Si quieres cambiarlo, primero borra el anterior.</div>}
                                         <button type="button" className="pb-btn main" disabled={!pdf || !pdfName.trim() || !!busy || !!alreadyUploaded} onClick={importPdf}>
@@ -9972,6 +10070,7 @@
                         </div>
                     </section>
 
+                    {showTemplates && <TemplateGallery data={data} onClose={() => setShowTemplates(false)} />}
                     {data.catalogs.map(catalog => {
                         const models = data.products.filter(p => p.catalog_id === catalog.id);
                         const estimated = models.filter(p => p.size_estimated).length;
@@ -10017,10 +10116,21 @@
                                             </>
                                         ) : (
                                             <>
-                                                <span>Categoría en el Catálogo: <b>{catalog.name}</b>{(data.settings?.posterMode || 'plantilla') === 'plantilla' && data.templates?.[catalog.id] && <> · 🎨 <b>{data.templates[catalog.id]}</b></>}</span>
+                                                <span>Categoría en el Catálogo: <b>{catalog.name}</b></span>
                                                 {canEdit && <button type="button" className="pb-btn sm" onClick={() => setMoving({ id: catalog.id, name: catalog.name })}>Cambiar categoría</button>}
                                             </>
                                         )}
+                                    </div>
+                                )}
+                                {isOpen && (data.settings?.posterMode || 'plantilla') === 'plantilla' && (
+                                    <div className="sp-move sp-tpl-row">
+                                        <TemplatePreview name={(data.templates?.[catalog.id] || 'PLANTILLA GENERAL').replace(/^PLANTILLA /, '')} className="sp-tpl-mini" />
+                                        <span>🎨 Plantilla:</span>
+                                        <select value={data.templateChoice?.[catalog.id] || ''} disabled={!canEdit || !!busy} onChange={e => changeTemplate(catalog, e.target.value, models)} aria-label={'Plantilla de las fotos de ' + catalog.name}>
+                                            <option value="">Automática ({data.templateAuto?.[catalog.id] || 'según la categoría'})</option>
+                                            {(data.templateList || []).map(n => <option key={n} value={n}>PLANTILLA {n}</option>)}
+                                        </select>
+                                        <button type="button" className="pb-btn sm" onClick={() => setShowTemplates(true)}>Ver plantillas</button>
                                     </div>
                                 )}
                                 {deleting === catalog.id && (

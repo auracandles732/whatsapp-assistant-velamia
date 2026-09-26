@@ -133,3 +133,12 @@ test('la plantilla general no dice "para <categoría>" en la cinta', () => {
   assert.match(svg, /PARA TU EVENTO/);
   assert.ok(!/PARA VELAS VARIAS/.test(svg));
 });
+
+test('se puede elegir la plantilla de un catálogo (solo las que existen) y ver su vista previa chica', async () => {
+  const { setCatalogTemplate } = await import('../src/social/posters');
+  await assert.rejects(setCatalogTemplate('00000000-0000-4000-8000-000000000001', 'OTRA COSA'), /no existe/);
+  const jpg = renderPoster({ product: photo([255, 255, 255], [120, 60, 20]).png, texts: posterTexts('VELA RENO', 35, 'BAUTIZO', 'docena'), category: 'BAUTIZO' }, 420, 85);
+  const img = jpeg.decode(jpg);
+  assert.equal(img.width, 420);
+  assert.equal(img.height, 420);
+});

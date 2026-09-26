@@ -3,10 +3,10 @@ import { getAllProducts, getConfig, setConfig, updateProduct, supabase, tenantOp
 import { uploadBufferToStorage } from '../services/storage';
 import { profile } from '../config/businessProfile';
 import { socialAi, track, isStopError } from './ai';
-import { renderPoster } from './template';
+import { renderPoster, TEMPLATE_NAMES, templateName } from './template';
 import { productKey } from '../services/openai';
 import { toJpeg, toJpegMax, isOwnStorageUrl } from './images';
-import { getSupplierSettings, getSupplierProduct, SupplierProduct, SupplierSettings, addSupplierProductsToCatalog, discardAsDuplicate } from './suppliers';
+import { getSupplierSettings, getSupplierProduct, SupplierProduct, SupplierSettings, addSupplierProductsToCatalog, discardAsDuplicate, listSupplierCatalogs } from './suppliers';
 
 /**
  * Lo que pasa con cada modelo de un PDF de proveedor, en segundo plano:
@@ -87,6 +87,70 @@ async function setState(catalogId: string, productId: string, state: Partial<Omi
 export async function clearPosterStates(catalogId: string) {
   memory.delete(scope(catalogId));
   await setConfig(stateKey(catalogId), '{}').catch(() => {});
+  await setConfig(templateKey(catalogId), '').catch(() => {});
+}
+
+// ---------- Plantilla elegida por catálogo ----------
+
+const templateKey = (catalogId: string) => `supplier_template_${catalogId}`;
+
+/** La plantilla que eligió la empresa para un catálogo ("NAVIDAD"); '' = la que le toca por su categoría. */
+export async function catalogTemplate(catalogId: string): Promise<string> {
+  try {
+    const value = String((await getConfig(templateKey(catalogId))) || '').trim();
+    return TEMPLATE_NAMES.includes(value) ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Elige la plantilla de un catálogo ('' = automática, según su categoría). Vale para las fotos que se hagan desde ahora. */
+export async function setCatalogTemplate(catalogId: string, name: unknown): Promise<string> {
+  const value = String(name || '').trim().toUpperCase();
+  const valid = TEMPLATE_NAMES.includes(value) ? value : '';
+  if (value && !valid) throw new Error('Esa plantilla no existe');
+  await setConfig(templateKey(catalogId), valid);
+  return valid;
+}
+
+/** Vela dibujada, para mostrar las plantillas cuando todavía no hay ningún modelo de proveedor. */
+function sampleCandle(): Buffer {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Resvg } = require('@resvg/resvg-js');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="600" height="600" fill="#fff"/>'
+    + '<ellipse cx="300" cy="522" rx="150" ry="24" fill="#EDE6DC"/><rect x="170" y="232" width="260" height="290" rx="30" fill="#F2E6D3"/>'
+    + '<ellipse cx="300" cy="234" rx="130" ry="24" fill="#FBF5EC"/><rect x="296" y="172" width="8" height="60" rx="3" fill="#3B2F26"/>'
+    + '<path d="M300 92 C332 136 332 166 300 182 C268 166 268 136 300 92 Z" fill="#F6A623"/><path d="M300 126 C315 149 315 163 300 171 C285 163 285 149 300 126 Z" fill="#FFE08A"/></svg>';
+  return new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng();
+}
+
+const PREVIEWS = new Map<string, Buffer>();
+
+/**
+ * Cómo se ve una plantilla, con uno de los modelos de proveedor de la empresa (de esa misma categoría si hay) y su precio
+ * de la regla. Se arma chica y se guarda un rato: abrir la galería otra vez es instantáneo.
+ */
+export async function templatePreview(name: string): Promise<Buffer> {
+  if (!TEMPLATE_NAMES.includes(name)) throw new Error('Esa plantilla no existe');
+  const [{ catalogs, products }, settings] = await Promise.all([listSupplierCatalogs(), getSupplierSettings()]);
+  const withPhoto = (products as SupplierProduct[]).filter(p => p.image_url && p.status !== 'descartado');
+  const sameCategory = new Set((catalogs as any[]).filter(c => templateName(String(c.name || '')) === `PLANTILLA ${name}`).map(c => c.id));
+  const model = withPhoto.find(p => sameCategory.has(p.catalog_id)) || withPhoto[0] || null;
+  const size = model?.size || 'mediana';
+  const price = settings.sizePrices[size] || settings.sizePrices.mediana || 35;
+  const key = [name, model?.image_url || '-', model?.name || '-', price, settings.unitPrices?.[size] || 0, profile().business.name].join('|');
+  const cached = PREVIEWS.get(key);
+  if (cached) return cached;
+  const photo = model ? await download(model.image_url).catch(() => null) : null;
+  const jpg = renderPoster({
+    product: photo || sampleCandle(),
+    texts: posterTexts(model?.name || 'VELA DE EJEMPLO', price, name, undefined, {}, settings.unitPrices?.[size] || 0),
+    category: name,
+    brand: profile().business.name
+  }, 420, 85);
+  PREVIEWS.set(key, jpg);
+  if (PREVIEWS.size > 80) PREVIEWS.delete(PREVIEWS.keys().next().value!);
+  return jpg;
 }
 
 // ---------- Textos del afiche ----------
@@ -659,6 +723,8 @@ async function runQueue(catalogId: string) {
     const category = String(catalog.name || '');
     const settings = await getSupplierSettings();
     const templateMode = settings.posterMode !== 'ia';
+    // Con la plantilla, la que eligió la empresa para este catálogo manda sobre la de su categoría.
+    const look = (templateMode && await catalogTemplate(catalogId)) || category;
     // Con qué comparar: el Catálogo al empezar, sin lo que vino de este PDF; y las fotos de referencia, solo si hacen falta.
     const { data: own } = await supabase.from('supplier_products').select('catalog_product_id').eq('catalog_id', catalogId).filter('business_id', tenantOp(), tenantValue());
     const fromThisPdf = new Set(((own || []) as any[]).map(r => r.catalog_product_id).filter(Boolean));
@@ -732,7 +798,7 @@ async function runQueue(catalogId: string) {
           if (!(price > 0)) { await setState(catalogId, model.id, { status: 'error', detail: 'Falta el precio de su tamaño en la regla' }); continue; }
           const unitPrice = settings.unitPrices?.[model.size] || 0;
           if (templateMode) {
-            await makeFromTemplate(catalogId, { model, texts: posterTexts(model.name, price, category, undefined, {}, unitPrice), occasion: occasionOf(category), price, unitPrice }, category);
+            await makeFromTemplate(catalogId, { model, texts: posterTexts(model.name, price, look, undefined, {}, unitPrice), occasion: occasionOf(look), price, unitPrice }, look);
             continue;
           }
           const ref = await references();
