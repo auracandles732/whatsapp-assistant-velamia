@@ -28,6 +28,8 @@ const FONT_FILES = ['Montserrat-Black.ttf', 'Montserrat-ExtraBold.ttf', 'Montser
 export type Family = 'dorado' | 'minimal' | 'tierno';
 
 export interface CategoryStyle {
+  /** Nombre con el que se reconoce la plantilla: "NAVIDAD" → "PLANTILLA NAVIDAD". */
+  name: string;
   family: Family;
   /** Fondo (arriba → abajo) y luces difuminadas. */
   bg: [string, string];
@@ -54,25 +56,31 @@ const plainText = (s: string) => String(s || '').normalize('NFD').replace(/\p{Di
  */
 export function styleFor(category: string): CategoryStyle {
   const c = plainText(category);
-  const tierno = (accent: string, accentDark: string, second: string, bg: [string, string], lights: string[], symbol: CategoryStyle['symbol'] = 'heart'): CategoryStyle =>
-    ({ family: 'tierno', bg, lights, accent, accentDark, second, ink: second, symbol, subtitle: '' });
-  const minimal = (subtitle: string, symbol: CategoryStyle['symbol']): CategoryStyle =>
-    ({ family: 'minimal', bg: ['#FAF7F3', '#EDE4D9'], lights: ['#FFFFFF', '#EADBC4', '#F4ECE1', '#E2CFA9'], accent: '#B08A4E', accentDark: '#8A6630', second: '#3B2F26', ink: '#3B2F26', symbol, subtitle });
-  if (/navid|christmas|noel/.test(c)) return { ...minimal('', 'snowflake'), family: 'dorado' };
-  if (/bautiz|confirmaci/.test(c)) return minimal('Un detalle que ilumina su día especial', 'cross');
-  if (/boda|matrimon|aniversar|compromis/.test(c)) return minimal('Un detalle que ilumina su amor', 'heart');
-  if (/misa/.test(c)) return tierno('#B8914F', '#8E6A30', '#3E2412', ['#FCF8F1', '#EFE3CF'], ['#FFFFFF', '#F1E2C2', '#E7D3A6', '#FFF8EA'], 'cross');
-  if (/comuni|primera/.test(c)) return tierno('#B57A26', '#8A5A17', '#3E2412', ['#FCF7EF', '#F0DFC6'], ['#FFFFFF', '#F3DFB8', '#EBCB8E', '#FFF6E6'], 'cross');
-  if (/gradu/.test(c)) return tierno('#C93A63', '#8E1F40', '#3A0F1E', ['#FCF3EE', '#F1D8C8'], ['#FFFFFF', '#F7C6CF', '#F2D6A8', '#FBE3E6'], 'star');
-  if (/quince/.test(c)) return tierno('#E07087', '#B83F5B', '#9E2548', ['#FFF6F5', '#F9DCE0'], ['#FFFFFF', '#F8C3CF', '#FBE0E5', '#F4B2C2'], 'heart');
-  if (/revelaci|genero|sexo/.test(c)) return tierno('#DD8F98', '#B8646F', '#4F9DBF', ['#FFF8F5', '#F2E7EC'], ['#FFFFFF', '#F7CDD3', '#CFE6F2', '#FBE4E8'], 'heart');
-  if (/baby|bebe/.test(c)) return tierno('#5E7FA0', '#41607F', '#C49A4E', ['#F7F9FC', '#E1E9F1'], ['#FFFFFF', '#CFDDEA', '#F1E3C4', '#E7EEF6'], 'heart');
-  if (/hallow|difunt|terror/.test(c)) return tierno('#E8650F', '#A8440A', '#3A1A0A', ['#FDF3E6', '#F1D2AA'], ['#FFFFFF', '#FFC98A', '#F6A95B', '#FFE5C2'], 'star');
-  if (/personaje|animad|infantil/.test(c)) return tierno('#D2637E', '#A63D58', '#8E1127', ['#FFF7F7', '#F9DFE5'], ['#FFFFFF', '#F8C6D2', '#FBE3E8', '#F2B3C3'], 'heart');
-  if (/cumple|fiesta/.test(c)) return tierno('#3F8CC4', '#28679A', '#1D4E7A', ['#FBF8F2', '#E2EDF6'], ['#FFFFFF', '#CFE3F2', '#F6E7C8', '#E6F1FA'], 'star');
-  if (/animal/.test(c)) return tierno('#6F7FC9', '#4C5AA3', '#2E2F5E', ['#F7F8FD', '#DFE4F6'], ['#FFFFFF', '#D6DCF4', '#EEF1FB', '#C9D2F0'], 'heart');
-  return { ...minimal('', 'sparkle'), family: 'dorado' };
+  const tierno = (name: string, accent: string, accentDark: string, second: string, bg: [string, string], lights: string[], symbol: CategoryStyle['symbol'] = 'heart'): CategoryStyle =>
+    ({ name, family: 'tierno', bg, lights, accent, accentDark, second, ink: second, symbol, subtitle: '' });
+  const minimal = (name: string, subtitle: string, symbol: CategoryStyle['symbol']): CategoryStyle =>
+    ({ name, family: 'minimal', bg: ['#FAF7F3', '#EDE4D9'], lights: ['#FFFFFF', '#EADBC4', '#F4ECE1', '#E2CFA9'], accent: '#B08A4E', accentDark: '#8A6630', second: '#3B2F26', ink: '#3B2F26', symbol, subtitle });
+  if (/navid|christmas|noel/.test(c)) return { ...minimal('NAVIDAD', '', 'snowflake'), family: 'dorado' };
+  if (/bautiz|confirmaci/.test(c)) return minimal('BAUTIZO', 'Un detalle que ilumina su día especial', 'cross');
+  if (/boda|matrimon|aniversar|compromis/.test(c)) return minimal('MATRIMONIO', 'Un detalle que ilumina su amor', 'heart');
+  if (/misa/.test(c)) return tierno('MISA', '#B8914F', '#8E6A30', '#3E2412', ['#FCF8F1', '#EFE3CF'], ['#FFFFFF', '#F1E2C2', '#E7D3A6', '#FFF8EA'], 'cross');
+  if (/comuni|primera/.test(c)) return tierno('COMUNIÓN', '#B57A26', '#8A5A17', '#3E2412', ['#FCF7EF', '#F0DFC6'], ['#FFFFFF', '#F3DFB8', '#EBCB8E', '#FFF6E6'], 'cross');
+  if (/gradu/.test(c)) return tierno('GRADUACIÓN', '#C93A63', '#8E1F40', '#3A0F1E', ['#FCF3EE', '#F1D8C8'], ['#FFFFFF', '#F7C6CF', '#F2D6A8', '#FBE3E6'], 'star');
+  if (/quince/.test(c)) return tierno('QUINCEAÑERA', '#E07087', '#B83F5B', '#9E2548', ['#FFF6F5', '#F9DCE0'], ['#FFFFFF', '#F8C3CF', '#FBE0E5', '#F4B2C2'], 'heart');
+  if (/revelaci|genero|sexo/.test(c)) return tierno('REVELACIÓN DE GÉNERO', '#DD8F98', '#B8646F', '#4F9DBF', ['#FFF8F5', '#F2E7EC'], ['#FFFFFF', '#F7CDD3', '#CFE6F2', '#FBE4E8'], 'heart');
+  if (/baby|bebe/.test(c)) return tierno('BABY SHOWER', '#5E7FA0', '#41607F', '#C49A4E', ['#F7F9FC', '#E1E9F1'], ['#FFFFFF', '#CFDDEA', '#F1E3C4', '#E7EEF6'], 'heart');
+  if (/hallow|difunt|terror/.test(c)) return tierno('HALLOWEEN', '#E8650F', '#A8440A', '#3A1A0A', ['#FDF3E6', '#F1D2AA'], ['#FFFFFF', '#FFC98A', '#F6A95B', '#FFE5C2'], 'star');
+  if (/personaje|animad|infantil/.test(c)) return tierno('PERSONAJES ANIMADOS', '#D2637E', '#A63D58', '#8E1127', ['#FFF7F7', '#F9DFE5'], ['#FFFFFF', '#F8C6D2', '#FBE3E8', '#F2B3C3'], 'heart');
+  if (/cumple|fiesta/.test(c)) return tierno('CUMPLEAÑOS', '#3F8CC4', '#28679A', '#1D4E7A', ['#FBF8F2', '#E2EDF6'], ['#FFFFFF', '#CFE3F2', '#F6E7C8', '#E6F1FA'], 'star');
+  if (/animal/.test(c)) return tierno('ANIMALES', '#6F7FC9', '#4C5AA3', '#2E2F5E', ['#F7F8FD', '#DFE4F6'], ['#FFFFFF', '#D6DCF4', '#EEF1FB', '#C9D2F0'], 'heart');
+  return { ...minimal('GENERAL', '', 'sparkle'), family: 'dorado' };
 }
+
+/** Todas las plantillas que existen, por su nombre (para mostrarlas en el CRM). */
+export const TEMPLATE_NAMES = ['NAVIDAD', 'BAUTIZO', 'MATRIMONIO', 'MISA', 'COMUNIÓN', 'GRADUACIÓN', 'QUINCEAÑERA', 'REVELACIÓN DE GÉNERO', 'BABY SHOWER', 'HALLOWEEN', 'PERSONAJES ANIMADOS', 'CUMPLEAÑOS', 'ANIMALES', 'GENERAL'];
+
+/** Con qué plantilla sale una categoría: "MOLDES NAVIDAD" → "PLANTILLA NAVIDAD"; lo que no se reconoce, "PLANTILLA GENERAL". */
+export const templateName = (category: string) => `PLANTILLA ${styleFor(category).name}`;
 
 // ---------- Familia "dorado": paleta por ocasión ----------
 
@@ -335,7 +343,9 @@ function doradoSvg(input: TemplateInput): string {
 
   const title = fitLines(t.title.replace(/\s+[-–—]\s+/g, ' '), W, 250, 132, 3, 900);
   const lh = title.size * 0.98;
-  const ribbonFit = fitLines(t.ribbon, 400, 72, 34, 2, 800, 1.1);
+  // La plantilla general no es de una ocasión: la cinta no dice "para <categoría>" sino "para tu evento".
+  const ribbonText = styleFor(input.category).name === 'GENERAL' ? 'UN DETALLE ESPECIAL PARA TU EVENTO' : t.ribbon;
+  const ribbonFit = fitLines(ribbonText, 400, 72, 34, 2, 800, 1.1);
   const ribbonH = Math.max(64, ribbonFit.lines.length * ribbonFit.size * 1.1 + 18);
   const priceH = t.unitPrice > 0 ? 262 : 232;
   const featuresH = Math.min(3, t.features.length) * 96;

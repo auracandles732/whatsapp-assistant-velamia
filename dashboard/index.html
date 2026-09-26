@@ -9683,7 +9683,7 @@
                                         <option value="ia">La IA dibuja copiando tus fotos (puede variar, ≈ $0.08 por foto)</option>
                                     </select>
                                     <small className="pb-muted">{(s.posterMode || 'plantilla') === 'plantilla'
-                                        ? 'Cada categoría con su diseño, como tus afiches: Navidad en dorado; Bautizo y Matrimonio minimalistas; Misa, Comunión, Graduación, Cumpleaños, Halloween y las demás en estilo tierno, cada una con sus colores. El nombre y el precio salen exactos y la vela, tal cual la foto del PDF.'
+                                        ? `Cada categoría sale con su plantilla, copiada de tus afiches: ${(data.templateNames || []).join(', ')}. La categoría que no tenga una propia sale con la PLANTILLA GENERAL. El nombre y el precio salen exactos y la vela, tal cual la foto del PDF.`
                                         : 'La IA copia el diseño de tus fotos del Catálogo y una revisión comprueba el nombre, el precio y la vela. Puede cambiar detalles del diseño.'}</small>
                                 </label>
                                 {s.posterMode === 'ia' && <DesignPicker selected={s.designProductIds || []} disabled={!canConfigure} excludeIds={new Set(data.products.map(p => p.catalog_product_id).filter(Boolean))}
@@ -9769,7 +9769,7 @@
                                             </>
                                         ) : (
                                             <>
-                                                <span>Categoría en el Catálogo: <b>{catalog.name}</b></span>
+                                                <span>Categoría en el Catálogo: <b>{catalog.name}</b>{(data.settings?.posterMode || 'plantilla') === 'plantilla' && data.templates?.[catalog.id] && <> · 🎨 <b>{data.templates[catalog.id]}</b></>}</span>
                                                 {canEdit && <button type="button" className="pb-btn sm" onClick={() => setMoving({ id: catalog.id, name: catalog.name })}>Cambiar categoría</button>}
                                             </>
                                         )}

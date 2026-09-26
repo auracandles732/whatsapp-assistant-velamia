@@ -118,3 +118,18 @@ test('sin IA, lo repetido se reconoce por el nombre (sin contar lo que vino del 
   assert.equal(sameNameInCatalog({ name: 'VELA RENO' }, catalog, new Set(['a'])), null);
   assert.equal(sameNameInCatalog({ name: 'VELA GNOMO' }, catalog, new Set()), null);
 });
+
+test('cada plantilla se reconoce por su categoría ("PLANTILLA NAVIDAD")', async () => {
+  const { templateName } = await import('../src/social/template');
+  assert.equal(templateName('NAVIDAD'), 'PLANTILLA NAVIDAD');
+  assert.equal(templateName('MOLDES NAVIDAD'), 'PLANTILLA NAVIDAD');
+  assert.equal(templateName('Baby shower'), 'PLANTILLA BABY SHOWER');
+  assert.equal(templateName('COMUNIÓN'), 'PLANTILLA COMUNIÓN');
+  assert.equal(templateName('VELAS VARIAS'), 'PLANTILLA GENERAL');
+});
+
+test('la plantilla general no dice "para <categoría>" en la cinta', () => {
+  const svg = posterSvg({ product: photo([255, 255, 255], [120, 60, 20]).png, texts: posterTexts('VELA RENO', 35, 'VELAS VARIAS', 'docena'), category: 'VELAS VARIAS' });
+  assert.match(svg, /PARA TU EVENTO/);
+  assert.ok(!/PARA VELAS VARIAS/.test(svg));
+});

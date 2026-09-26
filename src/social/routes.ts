@@ -18,6 +18,7 @@ import {
 } from './suppliers';
 import { listResults } from './insights';
 import { startPosters, posterStates, postersRunning, applyPoster, keepModel, clearPosterStates, resumeStuck, POSTER_COST } from './posters';
+import { templateName, TEMPLATE_NAMES } from './template';
 import { publicSocialAi, saveSocialAi, testSocialAi, socialAi } from './ai';
 
 /** ¿El agente tiene su propia clave de OpenAI? (sin ella, los modelos de un PDF entran al Catálogo sin revisar). */
@@ -374,7 +375,9 @@ export function socialRouter(): Router {
       }
       // Con qué empaque entran si la regla no elige uno (el más usado en su Catálogo).
       const categories = [...new Set((catalog as any[]).map(p => String(p.category || '').trim()).filter(Boolean))].sort();
-      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: settings.posterMode === 'ia' ? POSTER_COST : 0, categories });
+      // Con qué plantilla salen las fotos de cada catálogo ("PLANTILLA HALLOWEEN"): así no hay que adivinar.
+      const templates = Object.fromEntries((data.catalogs as any[]).map(c => [c.id, templateName(String(c.name || ''))]));
+      res.json({ settings, ...data, autoPackaging: mostUsedPackaging(catalog), posters, postersRunning: working, posterCost: settings.posterMode === 'ia' ? POSTER_COST : 0, categories, templates, templateNames: TEMPLATE_NAMES.map(n => `PLANTILLA ${n}`) });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
