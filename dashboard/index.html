@@ -2463,6 +2463,36 @@
         .pl-ask-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
         .pl-ask-row label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #3A4570; font-weight: 600; }
         .pl-ask-row select { border: 1px solid #DCE2F5; border-radius: 10px; padding: 8px 10px; font: inherit; background: #fff; }
+        .sv-lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+        .sv-lesson { border: 1px solid #E3E7F3; border-radius: 16px; padding: 14px 16px; background: #fff; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: #1E2A4A; line-height: 1.45; }
+        .sv-lesson.pending { border-color: #C9CFF5; background: #F9FAFF; }
+        .sv-when b, .sv-then b { display: block; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: #6B7390; margin-bottom: 2px; }
+        .sv-then { color: #141C3A; font-weight: 600; }
+        .sv-evidence { font-size: 13px; color: #4A5578; font-style: italic; background: #F3F4FF; border-radius: 10px; padding: 8px 10px; }
+        .sv-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: #6B7390; }
+        .sv-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .sv-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; font-weight: 700; color: #4F5BD5; cursor: pointer; text-decoration: underline; }
+        .sv-form { display: flex; flex-direction: column; gap: 10px; }
+        .sv-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: #3A4570; }
+        .sv-form input[type=text], .sv-form textarea { border: 1px solid #DCE2F5; border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; font-weight: 400; color: #1E2A4A; background: #fff; resize: vertical; }
+        .sv-form .sv-check { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
+        .sv-report-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+        .sv-report-bar select { border: 1px solid #DCE2F5; border-radius: 10px; padding: 8px 10px; font: inherit; background: #fff; }
+        .sv-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .sv-kpis div { border: 1px solid #E3E7F3; border-radius: 14px; padding: 10px 12px; background: #F9FAFF; display: flex; flex-direction: column; }
+        .sv-kpis b { font-size: 24px; color: #4F5BD5; }
+        .sv-kpis small { font-size: 12.5px; color: #6B7390; }
+        .sv-kpis .warn { background: #FFF6E6; border-color: #F5D9A8; }
+        .sv-kpis .warn b { color: #B36B00; }
+        .sv-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+        .sv-chip { font-size: 12.5px; padding: 5px 10px; border-radius: 999px; background: #EEF1FF; color: #2F3A8F; font-weight: 600; }
+        .sv-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; font-size: 14px; }
+        .sv-item { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid #E8ECF6; border-radius: 12px; }
+        .sv-item.col { flex-direction: column; align-items: flex-start; gap: 4px; }
+        .sv-item small { color: #4A5578; }
+        .sv-tag { font-size: 11.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: #FDECEC; color: #B42318; }
+        .sv-foot { display: block; margin-top: 6px; }
+        @media (max-width: 767px) { .sv-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .sv-lessons { grid-template-columns: minmax(0, 1fr); } .sv-item { flex-direction: column; align-items: flex-start; } }
         .pl-tasks { margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; background: #F2FAF5; border: 1px solid #CDEBD8; color: #2E4A3A; font-size: 14px; }
         .pl-tasks ul { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; }
         @media (max-width: 767px) { .pl-ask-row .pb-btn { flex: 1 1 100%; justify-content: center; } }
@@ -5456,7 +5486,7 @@
         // Secciones que ocupan el segundo lugar de la barra de abajo cuando están abiertas.
         const MX_SECTIONS = {
             cotizaciones: ['doc', 'Cotizaciones'], catalogo: ['box', 'Catálogo'], estadisticas: ['chart', 'Estadísticas'],
-            publicaciones: ['image', 'Publicaciones'], configuracion: ['gear', 'Configuración'], consumo: ['chart', 'Consumo'], claves: ['key', 'Claves']
+            publicaciones: ['image', 'Publicaciones'], supervisor: ['bulb', 'Supervisor'], configuracion: ['gear', 'Configuración'], consumo: ['chart', 'Consumo'], claves: ['key', 'Claves']
         };
         const MX_QUOTE_STATUS = { pending: 'Pendiente', sent: 'Enviada', accepted: 'Aprobada', expired: 'Vencida' };
 
@@ -6666,7 +6696,7 @@
         }
 
         // La sección abierta queda en la dirección (#/cotizaciones, #/conversaciones/<chat>…): al recargar se vuelve ahí.
-        const APP_TABS = ['conversaciones', 'estadisticas', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'configuracion', 'consumo', 'claves'];
+        const APP_TABS = ['conversaciones', 'estadisticas', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'supervisor', 'configuracion', 'consumo', 'claves'];
         function readRoute() {
             const [tab, id] = decodeURIComponent(window.location.hash || '').replace(/^#\/?/, '').split('/');
             return { tab: APP_TABS.includes(tab) ? tab : 'conversaciones', id: /^[0-9a-f-]{36}$/i.test(id || '') ? id : '' };
@@ -7945,6 +7975,7 @@
                     ['catalogo', 'box', 'Catálogo'],
                     ['estadisticas', 'chart', 'Estadísticas'],
                     ['publicaciones', 'image', 'Publicaciones'],
+                    ['supervisor', 'bulb', 'Supervisor'],
                     ['configuracion', 'gear', 'Configuración'],
                     ['consumo', 'chart', 'Consumo de IA'],
                     session && session.role === 'owner' && !session.business?.legacy && ['claves', 'key', 'Claves']
@@ -7964,6 +7995,7 @@
                             {activeTab === 'estadisticas' && statsView()}
                             {activeTab === 'catalogo' && <CatalogMobile products={products} biz={biz} legacy={!!session?.business?.legacy} reload={loadProducts} readOnly={!canEdit} conversations={conversations} focus={catalogFocus} onFocusDone={() => goTab('conversaciones')} />}
                             {activeTab === 'publicaciones' && <PostsView canEdit={canEdit} canConfigure={canConfigure} isAdmin={isAdmin} />}
+                            {activeTab === 'supervisor' && <SupervisorView canConfigure={canConfigure} openChat={openChatFromQuotation} />}
                             {activeTab === 'cotizaciones' && <QuotesMobile quotations={quotations} products={products} conversations={conversations} biz={biz} canEdit={canEdit} filter={quoteFilter} setFilter={setQuoteFilter} openId={mxQuoteId} setOpenId={setMxQuoteId} reload={loadQuotations} openChat={id => { setMxQuoteId(null); openChatFromQuotation(id); }} onCompose={setComposer} />}
                             {activeTab === 'pedidos' && (
                                 <div className="mx-page">
@@ -8020,6 +8052,7 @@
                                 <div className={'nx-tab' + (activeTab === 'pedidos' ? ' active' : '')} onClick={() => setActiveTab('pedidos')}><PlatIcon name="bag" size={19} /><span className="lbl">Pedidos</span></div>
                                 <div className={'nx-tab' + (activeTab === 'catalogo' ? ' active' : '')} onClick={() => setActiveTab('catalogo')}><PlatIcon name="box" size={19} /><span className="lbl">Catálogo</span></div>
                                 <div className={'nx-tab' + (activeTab === 'publicaciones' ? ' active' : '')} onClick={() => setActiveTab('publicaciones')}><PlatIcon name="image" size={19} /><span className="lbl">Publicaciones</span></div>
+                                <div className={'nx-tab' + (activeTab === 'supervisor' ? ' active' : '')} onClick={() => setActiveTab('supervisor')}><PlatIcon name="bulb" size={19} /><span className="lbl">Supervisor</span></div>
                                 <div className={'nx-tab' + (activeTab === 'configuracion' ? ' active' : '')} onClick={() => setActiveTab('configuracion')}><PlatIcon name="gear" size={19} /><span className="lbl">Configuración</span></div>
                                 <div className={'nx-tab' + (activeTab === 'consumo' ? ' active' : '')} onClick={() => setActiveTab('consumo')}><PlatIcon name="chart" size={19} /><span className="lbl">Consumo</span></div>
                             </div>
@@ -8332,6 +8365,8 @@
                             <BusinessProfileForm legacy={!!session?.business?.legacy} readOnly={!canConfigure} canTest={canEdit} onSaved={profileSaved} extras={configExtras} />
                         </div>
                         )}
+
+                        {activeTab === 'supervisor' && <SupervisorView canConfigure={canConfigure} openChat={openChatFromQuotation} />}
 
                         {activeTab === 'consumo' && (
                         <ConsumptionView />
@@ -11030,6 +11065,233 @@
                         <button type="button" className="btn-save-prompt" disabled title="Se activa cuando TikTok apruebe los permisos">Conectar con TikTok</button>
                     </div>
                 </>
+            );
+        }
+
+        const PROBLEM_LABELS = { respuesta_incorrecta: 'Respuesta incorrecta', venta_perdida: 'Venta que se cayó', no_respondio_la_pregunta: 'No respondió lo que preguntaron', repetitivo: 'Se repitió', otro: 'Otro' };
+        const LESSON_SOURCES = { pausa: 'De un chat que atendiste tú', reporte: 'Del reporte diario', manual: 'Lo escribiste tú' };
+        const svDay = (day, today) => {
+            const [y, m, d] = day.split('-').map(Number);
+            const text = new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('es-EC', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' });
+            return day === today ? `Hoy, ${text}` : text.charAt(0).toUpperCase() + text.slice(1);
+        };
+
+        /**
+         * Supervisor de los chats: lo que aprendió de cómo respondió el equipo (para aprobar, editar o descartar), lo que el
+         * asistente ya sabe y el reporte de cada día. Nada llega al asistente sin la aprobación de la dueña.
+         */
+        function SupervisorView({ canConfigure, openChat }) {
+            const [data, setData] = useState(null);
+            const [report, setReport] = useState(null);
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            const [busy, setBusy] = useState('');
+            const [editing, setEditing] = useState(null);
+            const [adding, setAdding] = useState(null);
+            const [showApproved, setShowApproved] = useState(false);
+            const load = () => api('/api/supervisor').then(r => {
+                setData(r);
+                setReport(prev => (prev && r.days.includes(prev.day) ? prev : r.report));
+                setError('');
+            }).catch(e => setError(e.message));
+            useEffect(() => { load(); }, []);
+            if (!data) return error ? <div className="pb"><div className="pb-err">{error}</div></div> : <NexlyLoading text="Cargando el supervisor…" />;
+
+            const run = async (label, fn) => {
+                setBusy(label);
+                setError('');
+                setNotice('');
+                try { await fn(); } catch (e) { setError(e.message); } finally { setBusy(''); }
+            };
+            const decide = (lesson, status, extra = {}) => run('l:' + lesson.id, async () => {
+                await api(`/api/supervisor/lessons/${lesson.id}`, { method: 'PUT', body: JSON.stringify({ status, ...extra }) });
+                setEditing(null);
+                await load();
+                setNotice(status === 'approved' ? '✅ Aprobado: el asistente ya lo usa cuando aplique.' : status === 'discarded' ? 'Descartado: el asistente no lo usará.' : '✅ Guardado.');
+            });
+            const saveEdit = (lesson, approve) => decide(lesson, approve ? 'approved' : undefined, { situation: editing.situation, answer: editing.answer, always: editing.always });
+            const remove = lesson => {
+                if (!confirm('¿Quitar este aprendizaje? El asistente deja de usarlo.')) return;
+                run('l:' + lesson.id, async () => { await api(`/api/supervisor/lessons/${lesson.id}`, { method: 'DELETE' }); await load(); setNotice('Quitado: el asistente ya no lo usa.'); });
+            };
+            const add = () => run('add', async () => {
+                await api('/api/supervisor/lessons', { method: 'POST', body: JSON.stringify(adding) });
+                setAdding(null);
+                await load();
+                setNotice('✅ Listo: el asistente ya lo sabe.');
+            });
+            const review = () => run('review', async () => {
+                const r = await api('/api/supervisor/review', { method: 'POST', body: '{}' });
+                await load();
+                setNotice(r.created ? `🧠 ${r.created} aprendizaje(s) nuevo(s) para aprobar.`
+                    : r.reviewed ? `Revisé ${r.reviewed} chat(s) donde escribiste tú: no encontré nada nuevo que aprender.`
+                        : 'No hay chats nuevos donde hayas escrito tú (se revisan cuando el chat lleva 2 horas tranquilo).');
+            });
+            const makeReport = () => run('report', async () => {
+                const r = await api('/api/supervisor/reports', { method: 'POST', body: JSON.stringify({ day: 'hoy' }) });
+                setReport(r.report);
+                await load();
+            });
+            const openReport = day => run('open', async () => { setReport((await api(`/api/supervisor/reports/${day}`)).report); });
+
+            const editForm = (value, set) => (
+                <div className="sv-form">
+                    <label><span>Cuando…</span><input type="text" maxLength={140} value={value.situation} placeholder="Ej: El cliente pide factura con RUC" onChange={e => set({ ...value, situation: e.target.value })} /></label>
+                    <label><span>El asistente debe…</span><textarea rows={3} maxLength={400} value={value.answer} placeholder="Ej: Pedir razón social, RUC y correo, y confirmar que la factura se envía con el pedido" onChange={e => set({ ...value, answer: e.target.value })} /></label>
+                    <label className="sv-check"><input type="checkbox" checked={!!value.always} onChange={e => set({ ...value, always: e.target.checked })} /> Tenerlo presente siempre (es una regla general del negocio)</label>
+                </div>
+            );
+            const lessonCard = (lesson, pending) => {
+                const isEditing = editing?.id === lesson.id;
+                const mine = busy === 'l:' + lesson.id;
+                return (
+                    <div className={'sv-lesson' + (pending ? ' pending' : '')} key={lesson.id}>
+                        {isEditing ? (
+                            <>
+                                {editForm(editing, setEditing)}
+                                <div className="sv-actions">
+                                    <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => saveEdit(lesson, pending)}>{mine ? 'Guardando…' : pending ? '✅ Guardar y aprobar' : 'Guardar'}</button>
+                                    <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setEditing(null)}>Cancelar</button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="sv-when"><b>Cuando</b>{lesson.situation}</div>
+                                <div className="sv-then"><b>El asistente debe</b>{lesson.answer}</div>
+                                {lesson.evidence && <div className="sv-evidence">“{lesson.evidence}”</div>}
+                                <div className="sv-meta">
+                                    <span>{LESSON_SOURCES[lesson.source] || ''}{lesson.customer ? ` · ${lesson.customer}` : ''}{lesson.always ? ' · 📌 siempre' : ''}</span>
+                                    {lesson.conversationId && openChat && <button type="button" className="sv-link" onClick={() => openChat(lesson.conversationId)}>Ver chat</button>}
+                                </div>
+                                {canConfigure && (
+                                    <div className="sv-actions">
+                                        {pending && <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={() => decide(lesson, 'approved')}>{mine ? 'Aprobando…' : '✅ Aprobar'}</button>}
+                                        <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setEditing({ id: lesson.id, situation: lesson.situation, answer: lesson.answer, always: lesson.always })}>✏️ Editar</button>
+                                        {pending
+                                            ? <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={() => decide(lesson, 'discarded')}>✖ Descartar</button>
+                                            : <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={() => remove(lesson)}>Quitar</button>}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                );
+            };
+
+            const r = report;
+            const labels = data.handoffLabels || {};
+            const handoffs = r ? Object.entries(r.metrics.handoffs || {}) : [];
+            return (
+                <div className="pb sv">
+                    <div className="pb-hero">
+                        <div className="pb-hero-ic"><PlatIcon name="bulb" size={30} color="#fff" /></div>
+                        <div className="pb-hero-tt">
+                            <h1>Supervisor</h1>
+                            <p>Revisa tus chats y aprende de cómo resuelves tú lo que el asistente no supo. Cada mañana te deja un reporte del día anterior. Nada llega al asistente sin tu aprobación.</p>
+                        </div>
+                        {canConfigure && (
+                            <div className="pb-hero-actions">
+                                <button type="button" className="pb-btn" disabled={!!busy} onClick={review}>🧠 {busy === 'review' ? 'Revisando…' : 'Buscar aprendizajes ahora'}</button>
+                            </div>
+                        )}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {notice && <div className="pb-notice ok">{notice}</div>}
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="bulb" size={22} color="#4F5BD5" /></div>
+                            <div className="grow">
+                                <h2>🧠 Por aprobar ({data.pending.length})</h2>
+                                <p>Lo que aprendió de los chats que atendiste tú y del reporte. Apruébalo (o corrígelo) para que el asistente lo use; si no sirve, descártalo.</p>
+                            </div>
+                        </div>
+                        {data.pending.length === 0
+                            ? <div className="pb-muted">No hay nada por aprobar. Cuando respondas tú un chat (después de una alerta o tomándolo), el supervisor lo revisa unas 2 horas después y te propone aquí lo que el asistente debería aprender.</div>
+                            : <div className="sv-lessons">{data.pending.map(l => lessonCard(l, true))}</div>}
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="check" size={22} /></div>
+                            <div className="grow">
+                                <h2>✅ Lo que el asistente ya aprendió ({data.approved.length})</h2>
+                                <p>El asistente usa cada uno solo cuando el mensaje del cliente se parece (o siempre, si lo marcaste así).</p>
+                            </div>
+                            {data.approved.length > 0 && <button type="button" className="pb-btn sm" onClick={() => setShowApproved(!showApproved)}>{showApproved ? 'Ocultar' : 'Ver todo'}</button>}
+                        </div>
+                        {showApproved && <div className="sv-lessons">{data.approved.map(l => lessonCard(l, false))}</div>}
+                        {canConfigure && (adding ? (
+                            <div className="sv-lesson">
+                                {editForm(adding, setAdding)}
+                                <div className="sv-actions">
+                                    <button type="button" className="pb-btn main sm" disabled={!!busy} onClick={add}>{busy === 'add' ? 'Guardando…' : 'Enseñárselo'}</button>
+                                    <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setAdding(null)}>Cancelar</button>
+                                </div>
+                            </div>
+                        ) : <button type="button" className="pb-btn sm" style={{ marginTop: showApproved ? 12 : 0 }} onClick={() => setAdding({ situation: '', answer: '', always: false })}>➕ Enseñarle algo yo misma</button>)}
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="chart" size={22} color="#4F5BD5" /></div>
+                            <div className="grow">
+                                <h2>📊 Reporte diario</h2>
+                                <p>Cada mañana revisa los chats del día anterior: clientes sin respuesta, respuestas equivocadas y ventas que se cayeron.</p>
+                            </div>
+                        </div>
+                        <div className="sv-report-bar">
+                            {data.days.length > 0 && (
+                                <select value={r?.day || ''} disabled={!!busy} onChange={e => openReport(e.target.value)} aria-label="Día del reporte">
+                                    {!r && <option value="">Elige un día</option>}
+                                    {data.days.map(d => <option key={d} value={d}>{svDay(d, data.today)}</option>)}
+                                </select>
+                            )}
+                            {canConfigure && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={makeReport}>{busy === 'report' ? 'Revisando los chats de hoy…' : '🔄 Revisar hoy ahora'}</button>}
+                        </div>
+                        {!r ? <div className="pb-muted">Todavía no hay reportes. El primero sale mañana temprano, o aplasta "Revisar hoy ahora".</div> : (
+                            <>
+                                <div className="sv-kpis">
+                                    <div><b>{r.metrics.chats}</b><small>chats</small></div>
+                                    <div className={r.metrics.unanswered.length ? 'warn' : ''}><b>{r.metrics.unanswered.length}</b><small>sin respuesta</small></div>
+                                    <div><b>{handoffs.reduce((n, [, v]) => n + v, 0)}</b><small>avisos para ti</small></div>
+                                    <div><b>{r.metrics.quotations}</b><small>cotizaciones</small></div>
+                                    <div><b>{r.metrics.orders}</b><small>pedidos</small></div>
+                                </div>
+                                {r.aiError && <div className="pb-notice">⚠️ {r.aiError}</div>}
+                                {r.summary && <div className="pl-summary">🧑‍🏫 {r.summary}</div>}
+                                {r.recommendations?.length > 0 && <div className="pl-tasks"><b>✅ Qué mejorar</b><ul>{r.recommendations.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
+                                {handoffs.length > 0 && <div className="sv-chips">{handoffs.map(([k, n]) => <span key={k} className="sv-chip">{labels[k] || k}: {n}</span>)}</div>}
+                                {r.metrics.unanswered.length > 0 && (
+                                    <div className="sv-list">
+                                        <b>💬 Clientes que quedaron sin respuesta</b>
+                                        {r.metrics.unanswered.map(u => (
+                                            <div key={u.conversationId} className="sv-item">
+                                                <span>{u.customer} · escribió {formatDateTime(u.since)}</span>
+                                                {openChat && <button type="button" className="sv-link" onClick={() => openChat(u.conversationId)}>Ver chat</button>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {r.problems.length > 0 && (
+                                    <div className="sv-list">
+                                        <b>🔎 Lo que encontró el supervisor</b>
+                                        {r.problems.map((p, i) => (
+                                            <div key={i} className="sv-item col">
+                                                <div><span className="sv-tag">{PROBLEM_LABELS[p.type] || 'Otro'}</span> <b>{p.customer}</b></div>
+                                                <div>{p.detail}</div>
+                                                {p.suggestion && <small>💡 {p.suggestion}</small>}
+                                                {openChat && <button type="button" className="sv-link" onClick={() => openChat(p.conversationId)}>Ver chat</button>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {!r.aiError && r.problems.length === 0 && r.metrics.chats > 0 && <div className="pb-muted">No encontró problemas en los chats de ese día. 👌</div>}
+                                <small className="pb-muted sv-foot">Revisó {r.reviewedChats} de {r.metrics.chats} chats · hecho el {formatDateTime(r.createdAt)}{r.lessonsCreated ? ` · ${r.lessonsCreated} aprendizaje(s) nuevo(s) arriba para aprobar` : ''} · gasto del supervisor hoy: US${Number(data.spentToday || 0).toFixed(2)} de US${Number(data.dailyBudget || 0).toFixed(2)}</small>
+                            </>
+                        )}
+                    </section>
+                </div>
             );
         }
 

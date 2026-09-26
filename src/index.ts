@@ -86,6 +86,8 @@ import {
 } from './middleware/auth';
 import { sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
+import { startSupervisor } from './services/supervisor';
+import { supervisorRouter } from './services/supervisorRoutes';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
 import {
@@ -334,6 +336,10 @@ app.get('/api/meta/status', requireCrmSession, async (_req: Request, res: Respon
 const ADDONS = ['publicaciones'];
 
 app.use(socialRouter());
+
+// ---------- Supervisor de los chats: aprendizajes para aprobar y reporte diario ----------
+
+app.use(supervisorRouter());
 
 // ---------- Salud ----------
 
@@ -1934,6 +1940,7 @@ async function start() {
   keepAwake();
   startFollowUpScheduler();
   startSocialAgent();
+  startSupervisor();
   startPhotoNudgeScheduler();
   startHealthCheck();
   // Con la página de Facebook configurada, se suscribe sola a la App al arrancar (repetirlo no hace daño).

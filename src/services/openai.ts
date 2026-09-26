@@ -45,6 +45,30 @@ function track(purpose: string, model: string, response: any) {
   });
 }
 
+/**
+ * Una consulta con respuesta en JSON (esquema estricto), con la clave y el modelo del negocio. La usan tareas internas
+ * como el supervisor de los chats; su consumo queda anotado con su propio propósito.
+ */
+export async function askJson<T>(params: {
+  purpose: string; system: string; user: string; schemaName: string; schema: Record<string, unknown>; maxTokens?: number; profile?: BusinessProfile;
+}): Promise<T> {
+  const p = params.profile || profile();
+  const client = getOpenAIClient(p);
+  const model = getOpenAIModel(p);
+  const response = await client.chat.completions.create({
+    model,
+    ...reasoningFor(model),
+    max_completion_tokens: params.maxTokens || 4000,
+    response_format: { type: 'json_schema', json_schema: { name: params.schemaName, strict: true, schema: params.schema } },
+    messages: [
+      { role: 'system', content: withoutBrokenChars(params.system) },
+      { role: 'user', content: withoutBrokenChars(params.user) }
+    ]
+  });
+  track(params.purpose, model, response);
+  return JSON.parse(response.choices[0]?.message?.content || '{}');
+}
+
 /** Marca con la que la IA lee los mensajes que escribió una persona del equipo (el cliente nunca la ve). */
 export const TEAM_MARK = '[Mensaje del equipo] ';
 
@@ -1174,12 +1198,14 @@ export async function planTurn(params: {
   pendingCustomDesigns?: string[];
   /** Resumen del último pedido del chat con su estado, para responder "¿cómo va mi pedido?". */
   lastOrder?: string;
+  /** Aprendizajes aprobados por la dueña que aplican a este mensaje (supervisor de los chats). */
+  learnedLessons?: string;
   /** Perfil del negocio; si no viene, usa el global. */
   profile?: BusinessProfile;
 }): Promise<TurnPlan> {
   const {
     history, userMessage, catalog, customPrompt, sentProducts, bankDetailsSent = false, pendingProducts = [], recentEmojis = [],
-    pendingOwnerQuestions = [], cardChosen: cardChosenBefore = false, pendingCustomDesigns = [], lastOrder = '', profile: profileParam
+    pendingOwnerQuestions = [], cardChosen: cardChosenBefore = false, pendingCustomDesigns = [], lastOrder = '', learnedLessons = '', profile: profileParam
   } = params;
   const p = profileParam || profile();
   const pay = p.payments;
@@ -1212,6 +1238,7 @@ export async function planTurn(params: {
           : '')
         + `\nDISEÑOS FUERA DEL CATÁLOGO YA ENVIADOS A LA DUEÑA: ${pendingCustomDesigns.length ? pendingCustomDesigns.join(' | ') : 'ninguno'}`
         + `\nÚLTIMO PEDIDO DE ESTE CLIENTE: ${lastOrder || 'no tiene pedidos registrados'}`
+        + (learnedLessons ? `\n${learnedLessons}` : '')
         + (history.some(m => m.role === 'assistant' && m.content.startsWith(TEAM_MARK))
           ? `\nATENCIÓN DEL EQUIPO: los mensajes marcados "${TEAM_MARK.trim()}" los escribió una persona del equipo y el cliente los recibió como tuyos. Retoma la conversación desde ahí: usa lo que dijeron o prometieron, no repitas preguntas ni datos que ya se dieron y no los contradigas. Nunca escribas esa marca.`
           : '')

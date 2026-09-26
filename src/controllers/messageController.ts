@@ -64,6 +64,7 @@ import { productsNamedWithPrice, withOppositeGender, afterPhotosQuestion, needsP
 import { textToVoice, voiceNotesEnabled } from '../services/elevenlabs';
 import { downloadSocialMedia, socialProfileName, wasSentByUs, isSocialAddress } from '../services/metaChannels';
 import { voiceNoteFits } from '../services/voiceNotes';
+import { lessonsForTurn } from '../services/supervisor';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -778,12 +779,17 @@ async function respondToBatch(batch: PendingBatch) {
       ? (pendingPhotos.get(conversationId) || []).filter(n => !sentProducts.includes(n))
       : [];
 
+    // Lo que aprobó la dueña para situaciones parecidas (supervisor): con lo que escribe ahora y su mensaje anterior.
+    const lastCustomer = [...history].reverse().find((m: any) => m.sender === 'customer');
+    const learnedLessons = await lessonsForTurn(`${aiContent}\n${lastCustomer ? toAiText(lastCustomer) : ''}`)
+      .catch((error: any) => { console.warn('⚠️ No se pudieron leer los aprendizajes:', error.message); return ''; });
+
     let plan: TurnPlan;
     try {
       plan = await planTurn({
         history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts,
         recentEmojis: recentBotEmojis(history), pendingOwnerQuestions, cardChosen, pendingCustomDesigns,
-        lastOrder: describeOrder(orders[0])
+        lastOrder: describeOrder(orders[0]), learnedLessons
       });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
