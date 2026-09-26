@@ -28,6 +28,58 @@ test('marketing responde con botones o escribiendo: 1 = por día, 2 = semanal, a
   assert.equal(readMarketingReply('', 'mejor mañana', false), 'skip');
   assert.equal(readMarketingReply('', 'sí', false), null, 'un "sí" sin nada que aprobar no se adivina');
   assert.equal(readMarketingReply('', 'hola', false), null);
+  assert.equal(readMarketingReply('', 'Gracias', true), null, '"gracias" solo no aprueba nada');
+  assert.equal(readMarketingReply('', 'De acuerdo', true), 'ok');
+  assert.equal(readMarketingReply('', 'Sí, pero sin Halloween', true), null, 'con algo más, es un pedido de cambio');
+  assert.equal(readMarketingReply('mk:cambiar', '✏️ Cambiar algo', true), 'change');
+  assert.equal(readMarketingReply('', 'Cambiar', true), 'change');
+  assert.equal(readMarketingReply('', 'más bautizos y sin halloween', true), null, 'un pedido: se rehace con eso');
+});
+
+test('la pregunta sale a las 22:00: en la noche se planifica desde mañana; en la mañana, desde hoy', async () => {
+  const { planStart, questionText } = await import('../src/social/marketingChat');
+  const { normalizeSettings } = await import('../src/social/posts');
+  assert.equal(normalizeSettings({}).marketingHour, 22, 'por defecto a las 10 de la noche');
+  assert.equal(normalizeSettings({ marketingHour: 7 }).marketingHour, 7);
+  assert.equal(normalizeSettings({ marketingHour: 3 }).marketingHour, 22, 'fuera de rango vuelve a las 22:00');
+  const noche = planStart(new Date('2026-09-27T03:05:00Z'), TZ); // sábado 26, 22:05 en Ecuador
+  assert.equal(noche.tomorrow, true);
+  assert.equal(noche.from.toISOString(), '2026-09-27T05:00:00.000Z', 'desde el domingo 27 a las 00:00');
+  const manana = planStart(new Date('2026-09-27T13:00:00Z'), TZ); // domingo 27, 8:00
+  assert.equal(manana.tomorrow, false, 'si responde en la mañana, se planifica ese mismo día');
+  assert.match(questionText(true), /armo lo que sale mañana/);
+  assert.match(questionText(false), /armo lo que sale hoy/);
+});
+
+test('lo que pide marketing además de elegir se usa para planificar', async () => {
+  const { extraRequest } = await import('../src/social/marketingChat');
+  assert.equal(extraRequest('2, más bautizos y sin Halloween'), 'más bautizos y sin Halloween');
+  assert.equal(extraRequest('1'), '');
+  assert.equal(extraRequest('Semanal'), '');
+  assert.equal(extraRequest('por día: el sábado baby shower'), 'el sábado baby shower');
+});
+
+test('sin la IA, el pedido escrito también se cumple: más de lo pedido y nada de lo que no', async () => {
+  const { readRequest, pickProducts } = await import('../src/social/posts');
+  const cats = ['BAUTIZO', 'HALLOWEEN', 'NAVIDAD', 'ANIMALES', 'PERSONAJES ANIMADOS', 'BABY SHOWER', 'MISA'];
+  assert.deepEqual(readRequest('más bautizos y sin Halloween', cats), { prefer: ['BAUTIZO'], exclude: ['HALLOWEEN'] });
+  assert.deepEqual(readRequest('menos navidad, más animales', cats), { prefer: ['ANIMALES'], exclude: ['NAVIDAD'] }, '"animales" no es "personajes animados"');
+  assert.deepEqual(readRequest('el sábado baby shower y misas', cats), { prefer: ['BABY SHOWER', 'MISA'], exclude: [] });
+  assert.deepEqual(readRequest('navideñas no', cats).prefer, ['NAVIDAD']);
+  assert.deepEqual(readRequest('hola', cats), { prefer: [], exclude: [] });
+
+  const catalog = cats.flatMap(cat => Array.from({ length: 6 }, (_, i) => ({ name: `${cat} ${i}`, category: cat, price: 35, image_url: `https://x/${cat}${i}.png` })));
+  const picks = pickProducts(catalog, [], 4, [3, 3, 3, 3], 10, { slotDays: ['d1', 'd1', 'd2', 'd2'], prefer: ['BAUTIZO'], exclude: ['HALLOWEEN'] });
+  assert.ok(!picks.some(p => p.theme === 'Halloween'), 'sin Halloween aunque sea temporada');
+  assert.equal(picks.filter(p => p.theme === 'Bautizo').length, 2, 'Bautizo cada día, sin repetirse el mismo día');
+  assert.equal(picks[0].theme, 'Bautizo');
+});
+
+test('el resumen dice qué se entendió del pedido (o que sin IA no se pudo)', async () => {
+  const { requestNote } = await import('../src/social/brain');
+  assert.equal(requestNote('más bautizos, sin halloween', { prefer: ['BAUTIZO'], exclude: ['HALLOWEEN'] }), 'Según tu pedido: más Bautizo y sin Halloween.');
+  assert.match(requestNote('que se vea más elegante', { prefer: [], exclude: [] }), /No pude aplicar tu pedido/);
+  assert.equal(requestNote('', { prefer: [], exclude: [] }), '');
 });
 
 test('el resumen de la planificación para WhatsApp va día por día con hora, formato y porqué', () => {

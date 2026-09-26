@@ -79,6 +79,11 @@ export interface PublishingSettings {
    */
   marketingPhone: string;
   /**
+   * Hora local (5 a 23) de la pregunta diaria a marketing. Por defecto a las 22:00: en la noche se planifica el día
+   * siguiente (si responde en la mañana, se planifica ese mismo día).
+   */
+  marketingHour: number;
+  /**
    * Publicaciones por día: 0 = decide la IA (cuántas, a qué hora, de qué y en qué formato, hasta MAX_POSTS_PER_DAY
    * más historias); de 1 a 3 = fijas, a la hora elegida y cada 3 horas antes.
    */
@@ -101,6 +106,7 @@ export const DEFAULT_SETTINGS: PublishingSettings = {
   planMode: 'manual',
   autoPlan: false,
   marketingPhone: '',
+  marketingHour: 22,
   postsPerDay: 0,
   autoApprove: true,
   notes: ''
@@ -126,6 +132,7 @@ export function normalizeSettings(raw: any): PublishingSettings {
     planMode: PLAN_MODES.includes(r.planMode) ? r.planMode : r.autoPlan === true ? 'automatico' : 'manual',
     autoPlan: PLAN_MODES.includes(r.planMode) ? r.planMode === 'automatico' : r.autoPlan === true,
     marketingPhone: typeof r.marketingPhone === 'string' ? r.marketingPhone.replace(/[^\d+]/g, '').slice(0, 20) : '',
+    marketingHour: Number.isInteger(Number(r.marketingHour)) && Number(r.marketingHour) >= 5 && Number(r.marketingHour) <= 23 ? Number(r.marketingHour) : DEFAULT_SETTINGS.marketingHour,
     postsPerDay: Number.isFinite(perDay) && perDay >= 0 && perDay <= MAX_POSTS_PER_DAY ? perDay : DEFAULT_SETTINGS.postsPerDay,
     autoApprove: true,
     notes: typeof r.notes === 'string' ? r.notes.trim().slice(0, 1000) : ''
@@ -305,6 +312,50 @@ export interface PickOptions {
   slotDays?: string[];
   /** Categorías que no se deben elegir (ya usadas ese día por otra tanda). */
   avoid?: string[];
+  /** Categorías que se pidieron ("más bautizos"): van primero, sin repetirse el mismo día. */
+  prefer?: string[];
+  /** Categorías que se pidió no publicar ("sin Halloween"), aunque sean de temporada. */
+  exclude?: string[];
+}
+
+const NEGATIONS = new Set(['sin', 'no', 'menos', 'quita', 'quitar', 'quitale', 'saca', 'sacar', 'nada', 'elimina', 'eliminar', 'excepto', 'evita', 'evitar', 'ni']);
+const CATEGORY_FILLER = new Set(['vela', 'velas', 'molde', 'moldes', 'para', 'de', 'del', 'la', 'las', 'los', 'el', 'y']);
+
+/**
+ * Lo que se entiende de un pedido escrito sin la IA: las categorías que se nombran, y si se piden ("más bautizos",
+ * "baby shower el sábado") o no ("sin Halloween", "menos Navidad"). Cada palabra se asocia a la categoría con la que
+ * más se parece ("animales" no es "personajes animados").
+ */
+export function readRequest(request: string, categories: string[]): { prefer: string[]; exclude: string[] } {
+  const tokens = plain(request).replace(/[^a-z0-9ñ\s]+/g, ' ').split(/\s+/).filter(Boolean);
+  const words = categories.map(cat => ({ cat, words: plain(cat).split(/\s+/).filter(w => w.length >= 4 && !CATEGORY_FILLER.has(w)) }));
+  const common = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return i; };
+  const prefer: string[] = [];
+  const exclude: string[] = [];
+  const matched = tokens.map(token => {
+    if (token.length < 4 || CATEGORY_FILLER.has(token)) return null;
+    let best: { cat: string; score: number } | null = null;
+    for (const { cat, words: list } of words) {
+      for (const w of list) {
+        const n = common(token, w);
+        const ok = n >= Math.min(5, w.length) && n >= 4;
+        if (ok && (!best || n > best.score)) best = { cat, score: n };
+      }
+    }
+    return best?.cat || null;
+  });
+  matched.forEach((cat, i) => {
+    if (!cat) return;
+    // "sin" o "menos" niegan lo que sigue hasta un "más", un "y" u otra categoría ("menos navidad, más animales").
+    let negated = false;
+    for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+      if (NEGATIONS.has(tokens[j])) { negated = true; break; }
+      if (matched[j] || ['mas', 'solo', 'pero', 'y', 'con', 'si'].includes(tokens[j])) break;
+    }
+    const list = negated ? exclude : prefer;
+    if (!list.includes(cat)) list.push(cat);
+  });
+  return { prefer: prefer.filter(c => !exclude.includes(c)), exclude };
 }
 
 export function pickProducts(catalog: CatalogItem[], recent: string[], slots: number, perPost: number | number[], month: number, options: PickOptions = {}): { theme: string; products: CatalogItem[] }[] {
@@ -328,6 +379,8 @@ export function pickProducts(catalog: CatalogItem[], recent: string[], slots: nu
   const recentCats = (options.recentCategories || []).map(plain);
   const catAge = (cat: string) => { const i = recentCats.indexOf(plain(cat)); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
   const avoid = new Set((options.avoid || []).map(plain));
+  const prefer = new Set((options.prefer || []).map(plain));
+  const exclude = new Set((options.exclude || []).map(plain));
   let previous = '';
   for (let i = 0; i < slots; i++) {
     const day = options.slotDays?.[i] || '';
@@ -335,8 +388,9 @@ export function pickProducts(catalog: CatalogItem[], recent: string[], slots: nu
     const all = [...byCategory.entries()]
       .map(([cat, items]) => ({ cat, items: items.filter(c => !used.has(productKey(c.name))).sort((a, b) => age(b) - age(a)) }))
       .filter(x => x.items.length > 0);
-    const fresh = all.filter(x => !avoid.has(plain(x.cat)) && !(day && usedToday.has(plain(x.cat))));
-    const available = fresh.length ? fresh : all;
+    const allowed = all.filter(x => !exclude.has(plain(x.cat)));
+    const fresh = allowed.filter(x => !avoid.has(plain(x.cat)) && !(day && usedToday.has(plain(x.cat))));
+    const available = fresh.length ? fresh : allowed.length ? allowed : all;
     if (available.length === 0) break;
     const want = Array.isArray(perPost) ? perPost[i] || 1 : perPost;
     // La temporada puede salir una publicación sí y otra no; el resto de categorías se turnan antes de repetirse.
@@ -345,6 +399,7 @@ export function pickProducts(catalog: CatalogItem[], recent: string[], slots: nu
     const fills = (x: { items: CatalogItem[] }) => Number(x.items.length >= Math.min(want, 3));
     available.sort((a, b) =>
       fills(b) - fills(a)
+      || Number(prefer.has(plain(b.cat))) - Number(prefer.has(plain(a.cat)))
       || Number(a.cat === previous) - Number(b.cat === previous)
       || weight(a.cat) - weight(b.cat)
       || Number(isSeasonal(b.cat, month)) - Number(isSeasonal(a.cat, month))

@@ -1,7 +1,7 @@
 import { BusinessProfile } from '../config/businessProfile';
 import { productKey } from '../services/openai';
 import { writeCaptions, CaptionRequest, planWithAi, AiAssignment, AiPlanRequest } from './ai';
-import { pickProducts, CatalogItem, PublishingSettings, LibraryItem, isSeasonal, plain, titleCase, localParts, DaySlot } from './posts';
+import { pickProducts, readRequest, CatalogItem, PublishingSettings, LibraryItem, isSeasonal, plain, titleCase, localParts, DaySlot } from './posts';
 
 /**
  * El "cerebro" del agente de redes: decide QUÉ mostrar en cada tanda y escribe los textos. Cuántas fotos, cuándo y dónde
@@ -87,18 +87,31 @@ export function ruleReason(theme: string, month: number, recentThemes: { day: st
   return days <= 0 ? `Se turna con las demás categorías` : `${theme} no se publica desde hace ${days} día${days === 1 ? '' : 's'}`;
 }
 
+/** Qué se entendió del pedido, para el resumen ("Según tu pedido: más Bautizo y sin Halloween."). */
+export function requestNote(request: string, wish: { prefer: string[]; exclude: string[] }): string {
+  if (!String(request || '').trim()) return '';
+  const parts = [wish.prefer.length && `más ${wish.prefer.map(titleCase).join(', ')}`, wish.exclude.length && `sin ${wish.exclude.map(titleCase).join(', ')}`].filter(Boolean);
+  return parts.length
+    ? `Según tu pedido: ${parts.join(' y ')}.`
+    : `No pude aplicar tu pedido ("${String(request).trim().slice(0, 80)}"): sin la IA solo entiendo categorías, por ejemplo "más Bautizo" o "sin Halloween".`;
+}
+
 export const ruleBrain: SocialBrain = {
   name: 'reglas',
-  async plan({ slots, catalog, recent, recentThemes, settings, month, now, timeZone }) {
-    const picks = pickProducts(catalog, recent, slots.length, slots.map(s => s.count), month, { recentCategories: recentCategoriesOf(recentThemes), slotDays: slots.map(s => s.day) });
+  async plan({ slots, catalog, recent, recentThemes, settings, month, now, timeZone, request = '' }) {
+    // El pedido escrito ("más bautizos, sin Halloween") también vale sin la IA: se reconocen las categorías que nombra.
+    const categories = [...new Set(catalog.filter(c => c.image_url).map(c => String(c.category || '').trim()).filter(Boolean))];
+    const wish = readRequest(request, categories);
+    const picks = pickProducts(catalog, recent, slots.length, slots.map(s => s.count), month, { recentCategories: recentCategoriesOf(recentThemes), slotDays: slots.map(s => s.day), prefer: wish.prefer, exclude: wish.exclude });
     const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const asked = new Set(wish.prefer.map(plain));
     const posts = picks.map((pick, i) => ({
       ...pick,
       at: slots[i].at,
       format: formatOf(slots[i], pick.products.length),
-      reason: ruleReason(pick.theme, month, recentThemes, today)
+      reason: asked.has(plain(pick.theme)) ? `Pediste más ${pick.theme}` : ruleReason(pick.theme, month, recentThemes, today)
     }));
-    return { posts, summary: planSummary(posts, settings, month) };
+    return { posts, summary: [requestNote(request, wish), planSummary(posts, settings, month)].filter(Boolean).join(' ') };
   },
   write
 };

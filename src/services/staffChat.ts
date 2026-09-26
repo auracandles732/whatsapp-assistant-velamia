@@ -41,8 +41,9 @@ export function registerStaffReplies(handler: ReplyHandler) {
   handlers.push(handler);
 }
 
-// Menos de 24 horas, con margen: un mensaje que sale justo al cerrarse la ventana lo rechazaría WhatsApp.
-const WINDOW_MS = 23 * 60 * 60 * 1000;
+// Casi 24 horas: la pregunta de cada mañana suele caer justo antes de que se cumpla el día desde la respuesta de ayer.
+// Si WhatsApp igual la rechaza por la ventana, se usa la plantilla (ver notifyStaff).
+const WINDOW_MS = 24 * 60 * 60 * 1000 - 2 * 60 * 1000;
 const OUTBOX_DAYS = 3;
 const inboundKey = (phone: string) => `staff_last_inbound_${normalizePhone(phone)}`;
 const outboxKey = (phone: string) => `staff_outbox_${normalizePhone(phone)}`;

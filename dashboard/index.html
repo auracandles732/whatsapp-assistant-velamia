@@ -8526,7 +8526,7 @@
             ['automatico', 'Automático: publica solo, sin preguntarme'],
             ['manual', 'Manual: no hace nada solo, yo pido la planificación']
         ];
-        const APPROVAL_HELP = 'Cada día desde las 9:00 el agente le pregunta por WhatsApp a marketing si planifica por día o por semana, le manda el resumen y el PDF con las fotos, y la aprueban o rechazan ahí mismo con un botón. También puedes aplastar "Generar planificación" aquí. Si no se aprueba, no se publica nada.';
+        const APPROVAL_HELP = 'Cada noche a las 22:00 (o a la hora que elijas) el agente le pregunta por WhatsApp a marketing si planifica por día o por semana, le manda el resumen y el PDF con las fotos, y la aprueban, piden cambios o la rechazan ahí mismo. También puedes aplastar "Generar planificación" aquí. Si no se aprueba, no se publica nada.';
         const PLAN_MODE_HELP = {
             semanal: APPROVAL_HELP,
             diario: APPROVAL_HELP,
@@ -8993,8 +8993,17 @@
                                             onChange={e => setS({ marketingPhone: e.target.value })}
                                             style={{ border: '1px solid #DCE2F5', borderRadius: 10, padding: '9px 11px', font: 'inherit', maxWidth: 260 }} />
                                         <small className="pb-muted">{s.marketingPhone
-                                            ? 'A este número le llega cada día la pregunta (1 = por día, 2 = semanal) y la planificación para aprobar con botones. Ese número no habla con el bot de ventas.'
+                                            ? 'A este número le llega cada día la pregunta (1 = por día, 2 = semanal) y la planificación para aprobar con botones; también puede pedir cambios escribiendo, por ejemplo "más bautizos, sin Halloween". Ese número no habla con el bot de ventas.'
                                             : 'Sin número, la planificación solo se aprueba aquí en el CRM.'}</small>
+                                        {s.marketingPhone && (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 14, color: '#2A3766' }}>
+                                                Le pregunta cada día a las
+                                                <select value={s.marketingHour || 22} disabled={!canConfigure} onChange={e => setS({ marketingHour: Number(e.target.value) })} aria-label="Hora de la pregunta diaria a marketing"
+                                                    style={{ border: '1px solid #DCE2F5', borderRadius: 10, padding: '7px 9px', font: 'inherit', background: '#fff' }}>
+                                                    {[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].map(h => <option key={h} value={h}>{String(h).padStart(2, '0')}:00{h >= 15 ? ' (planifica desde mañana)' : ''}</option>)}
+                                                </select>
+                                            </span>
+                                        )}
                                     </label>
                                 )}
                             </>
