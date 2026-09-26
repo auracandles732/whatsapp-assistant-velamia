@@ -74,6 +74,11 @@ export interface PublishingSettings {
   /** Se deriva de planMode ("automático"): se conserva para lo que ya lo leía. */
   autoPlan: boolean;
   /**
+   * WhatsApp del departamento de marketing: cada día le pregunta si planifica por día o por semana y le manda la
+   * planificación para aprobar ahí mismo. Vacío = solo en el CRM.
+   */
+  marketingPhone: string;
+  /**
    * Publicaciones por día: 0 = decide la IA (cuántas, a qué hora, de qué y en qué formato, hasta MAX_POSTS_PER_DAY
    * más historias); de 1 a 3 = fijas, a la hora elegida y cada 3 horas antes.
    */
@@ -95,6 +100,7 @@ export const DEFAULT_SETTINGS: PublishingSettings = {
   photosPerDay: 10,
   planMode: 'manual',
   autoPlan: false,
+  marketingPhone: '',
   postsPerDay: 0,
   autoApprove: true,
   notes: ''
@@ -119,6 +125,7 @@ export function normalizeSettings(raw: any): PublishingSettings {
     // Lo guardado antes de los modos: automático encendido = "automatico"; apagado = "manual".
     planMode: PLAN_MODES.includes(r.planMode) ? r.planMode : r.autoPlan === true ? 'automatico' : 'manual',
     autoPlan: PLAN_MODES.includes(r.planMode) ? r.planMode === 'automatico' : r.autoPlan === true,
+    marketingPhone: typeof r.marketingPhone === 'string' ? r.marketingPhone.replace(/[^\d+]/g, '').slice(0, 20) : '',
     postsPerDay: Number.isFinite(perDay) && perDay >= 0 && perDay <= MAX_POSTS_PER_DAY ? perDay : DEFAULT_SETTINGS.postsPerDay,
     autoApprove: true,
     notes: typeof r.notes === 'string' ? r.notes.trim().slice(0, 1000) : ''

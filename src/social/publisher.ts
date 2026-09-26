@@ -3,6 +3,7 @@ import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES }
 import { instagramReadyUrl, ImageKind } from './images';
 import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts, expireDrafts } from './posts';
 import { planUpcomingPosts } from './planner';
+import { marketingTick } from './marketingChat';
 import { getPublishingTenants } from '../services/supabase';
 import { runWithTenant } from '../services/tenant';
 
@@ -272,6 +273,9 @@ async function runForCurrent(now: Date, plan: boolean) {
     if (mode === 'automatico') {
       const created = await planUpcomingPosts(now, 7, settings);
       if (created.length) console.log(`📣 ${created.length} publicación(es) programadas por la IA`);
+    } else {
+      // Con aprobación: la pregunta diaria a marketing por WhatsApp (o el recordatorio de lo que espera respuesta).
+      await marketingTick(now, settings).catch(error => console.error('❌ Planificación por WhatsApp:', error.message));
     }
   }
   return published;

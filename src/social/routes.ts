@@ -11,6 +11,8 @@ import {
 } from './posts';
 import { planUpcomingPosts, draftUpcomingPosts, schedulePlan, lastPlanSummary, rewriteCaption, proposePlan, pendingPlan, approvePlan, rejectPlan, swapPost } from './planner';
 import { buildPlanPdf } from './planPdf';
+import { sendPlanToMarketing, markPlanDecision } from './marketingChat';
+import { forgetStaffPhones } from '../services/staffChat';
 import { claimAndPublish } from './publisher';
 import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed, AssetInUseError } from './library';
 import {
@@ -131,6 +133,7 @@ export function socialRouter(): Router {
   router.put('/api/posts/settings', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
     try {
       const settings = await saveSettings(req.body);
+      forgetStaffPhones();
       // Al encender el modo automático la IA programa de una vez los próximos 7 días (no espera a la revisión de cada hora).
       // Con aprobación no se arma nada solo: la planificación sale cuando la dueña aplasta el botón.
       const created = settings.planMode === 'automatico' ? await planUpcomingPosts(new Date(), 7, settings) : [];
@@ -156,7 +159,9 @@ export function socialRouter(): Router {
   router.post('/api/posts/plan/approve', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
     try {
       const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined;
-      res.json({ approved: await approvePlan(ids) });
+      const approved = await approvePlan(ids);
+      if (approved && !ids) void markPlanDecision('ok').catch(() => {});
+      res.json({ approved });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
@@ -166,7 +171,9 @@ export function socialRouter(): Router {
   router.post('/api/posts/plan/reject', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
     try {
       const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined;
-      res.json({ rejected: await rejectPlan(ids) });
+      const rejected = await rejectPlan(ids);
+      if (!ids) void markPlanDecision('no').catch(() => {});
+      res.json({ rejected });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }
@@ -189,12 +196,15 @@ export function socialRouter(): Router {
     }
   });
 
-  /** Arma (o rehace) la planificación para aprobar ahora mismo (el botón del CRM). No manda mensajes. */
+  /** Arma (o rehace) la planificación para aprobar ahora mismo (el botón del CRM) y se la manda a marketing por WhatsApp. */
   router.post('/api/posts/plan/propose', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
     try {
       const settings = (await getSavedSettings()) || DEFAULT_SETTINGS;
       const days = [2, 8, 15].includes(Number(req.body?.days)) ? Number(req.body.days) : undefined;
-      res.json(await proposePlan(new Date(), settings, { days, replace: req.body?.replace === true, request: String(req.body?.request || '') }));
+      const result = await proposePlan(new Date(), settings, { days, replace: req.body?.replace === true, request: String(req.body?.request || '') });
+      // También le llega a marketing por WhatsApp para aprobarla ahí (si tiene su número).
+      if (result.created) void sendPlanToMarketing(days && days <= 2 ? 'dia' : days ? 'semana' : undefined).catch(error => console.error('❌ Planificación a marketing:', error.message));
+      res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: explain(error) });
     }

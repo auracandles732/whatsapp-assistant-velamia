@@ -65,6 +65,9 @@ import { textToVoice, voiceNotesEnabled } from '../services/elevenlabs';
 import { downloadSocialMedia, socialProfileName, wasSentByUs, isSocialAddress } from '../services/metaChannels';
 import { voiceNoteFits } from '../services/voiceNotes';
 import { lessonsForTurn } from '../services/supervisor';
+import { handleStaffInbound } from '../services/staffChat';
+// Registra las respuestas de marketing a la planificación por WhatsApp.
+import '../social/marketingChat';
 
 // Suficiente para recordar modelo, cantidad y fecha aunque en medio se hayan enviado varias fotos.
 const HISTORY_LIMIT = 30;
@@ -657,6 +660,9 @@ async function ingestMessage(message: any, value: any) {
     }
 
     console.log(`📱 Mensaje recibido de ${maskPhone(phoneNumber)} (${messageType})`);
+
+    // La dueña o marketing respondiendo al supervisor o a la planificación (botones de aprobar): no es una clienta.
+    if (await handleStaffInbound(message).catch((error: any) => { console.error('❌ Mensaje del equipo:', error.message); return false; })) return;
 
     const content = await readIncomingContent(message);
     if (!content) {

@@ -8,6 +8,8 @@ import { askJson } from './openai';
 import { currentTenant, runWithTenant } from './tenant';
 import { profile } from '../config/businessProfile';
 import { localParts, zonedTime } from '../social/posts';
+import { sendTextMessage } from './whatsapp';
+import { registerStaffTopic, registerStaffReplies, notifyStaff, ownerPhone, StaffMessage } from './staffChat';
 
 /**
  * Supervisor de los chats. Aprende de lo que respondió el equipo cuando el bot pasó el chat a una persona y cada día
@@ -650,6 +652,92 @@ function explainAi(error: any): string {
   return `No se pudo revisar con IA: ${message.slice(0, 160)}`;
 }
 
+// ---------- Por WhatsApp a la dueña ----------
+
+const NOTIFIED_KEY = 'supervisor_notified';
+const SOURCE_TEXT: Record<LessonSource, string> = { pausa: 'de un chat que atendiste tú', reporte: 'del reporte diario', manual: 'escrito por ti' };
+const WEEK_LONG = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS_LONG = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function longDay(day: string): string {
+  const [y, m, d] = day.split('-').map(Number);
+  return `${WEEK_LONG[new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay()]} ${d} de ${MONTHS_LONG[m - 1]}`;
+}
+
+/** Un aprendizaje con sus botones para aprobarlo o descartarlo desde WhatsApp. */
+export function lessonMessage(l: Lesson): StaffMessage {
+  return {
+    kind: 'buttons',
+    text: `🧠 *Aprendizaje por aprobar*\n\n*Cuando:* ${l.situation}\n*El asistente debe:* ${l.answer}${l.evidence ? `\n\n_“${l.evidence}”_` : ''}\n\n(${SOURCE_TEXT[l.source]}${l.customer ? ` · ${l.customer}` : ''}${l.always ? ' · 📌 siempre' : ''})`,
+    buttons: [{ id: `sv:ok:${l.id}`, title: '✅ Aprobar' }, { id: `sv:no:${l.id}`, title: '✖ Descartar' }]
+  };
+}
+
+/** El reporte del día en un mensaje de WhatsApp (el detalle queda en el CRM). Sin efectos, para probarlo. */
+export function reportText(r: DayReport, pendingLessons = 0): string {
+  const m = r.metrics;
+  const alerts = Object.values(m.handoffs || {}).reduce((n, v) => n + v, 0);
+  const names = m.unanswered.map(u => u.customer);
+  const lines = [
+    `📊 *Reporte del supervisor · ${longDay(r.day)}*`,
+    '',
+    `💬 ${m.chats} chats · ${m.unanswered.length} sin respuesta · ${alerts} avisos para ti · ${m.quotations} cotizaciones · ${m.orders} pedidos`,
+    r.summary ? `\n🧑‍🏫 ${r.summary}` : '',
+    r.recommendations.length ? `\n✅ *Qué mejorar*\n${r.recommendations.map(x => `• ${x}`).join('\n')}` : '',
+    names.length ? `\n💬 *Quedaron sin respuesta:* ${names.slice(0, 6).join(', ')}${names.length > 6 ? ` y ${names.length - 6} más` : ''}` : '',
+    r.problems.length ? `\n🔎 *Lo que encontró*\n${r.problems.slice(0, 5).map(p => `• ${p.customer}: ${p.detail}`).join('\n')}${r.problems.length > 5 ? `\n• y ${r.problems.length - 5} más` : ''}` : '',
+    r.aiError ? `\n⚠️ ${r.aiError}` : '',
+    pendingLessons ? `\n🧠 Tienes ${pendingLessons} aprendizaje${pendingLessons === 1 ? '' : 's'} por aprobar.` : '',
+    '',
+    'Detalle y chats en el CRM → Supervisor.'
+  ];
+  return lines.filter((line, i) => line !== '' || i === 1 || i === lines.length - 2).join('\n').slice(0, 3900);
+}
+
+/** Los aprendizajes por aprobar que todavía no se le mandaron por WhatsApp (se marcan como enviados). */
+async function newLessonMessages(): Promise<StaffMessage[]> {
+  const pending = (await listLessons()).filter(l => l.status === 'pending');
+  const notified = new Set<string>(await readJson<string[]>(NOTIFIED_KEY, []));
+  const fresh = pending.filter(l => !notified.has(l.id));
+  if (fresh.length === 0) return [];
+  const shown = fresh.slice(-5);
+  const keep = new Set(pending.map(l => l.id));
+  await setConfig(NOTIFIED_KEY, JSON.stringify([...[...notified].filter(id => keep.has(id)), ...shown.map(l => l.id)]));
+  return [
+    { kind: 'text', text: `🧑‍🏫 El supervisor aprendió ${shown.length === 1 ? 'algo' : `${shown.length} cosas`} de tus chats. Apruébalo para que el asistente lo use; si no sirve, descártalo:` },
+    ...shown.map(lessonMessage),
+    ...(pending.length > shown.length ? [{ kind: 'text' as const, text: `En total tienes ${pending.length} por aprobar en el CRM → Supervisor.` }] : [])
+  ];
+}
+
+registerStaffTopic('sv:lessons', () => newLessonMessages());
+registerStaffTopic('sv:report:', async topic => {
+  const report = await getReport(topic.slice('sv:report:'.length));
+  if (!report) return [];
+  const pending = (await listLessons()).filter(l => l.status === 'pending').length;
+  return [{ kind: 'text', text: reportText(report, pending) }, ...(await newLessonMessages())];
+});
+
+// Los botones "Aprobar" y "Descartar" de cada aprendizaje.
+registerStaffReplies(async inbound => {
+  const match = /^sv:(ok|no):([0-9a-f-]{36})$/i.exec(inbound.replyId);
+  if (!match) return false;
+  try {
+    await decideLesson(match[2], { status: match[1] === 'ok' ? 'approved' : 'discarded' });
+    await sendTextMessage(inbound.phone, match[1] === 'ok' ? '✅ Aprobado: el asistente ya lo usa cuando aplique.' : 'Descartado: el asistente no lo usará.');
+  } catch (error) {
+    if (!(error instanceof LessonNotFound)) throw error;
+    await sendTextMessage(inbound.phone, 'Ese aprendizaje ya no existe (quizás lo quitaste en el CRM).');
+  }
+  return true;
+});
+
+async function tellOwner(topic: string, title: string, detail: string) {
+  const phone = await ownerPhone();
+  if (!phone) return;
+  await notifyStaff(phone, topic, { title, who: 'Supervisor de chats', hint: 'Responde este mensaje para verlo y aprobarlo', detail });
+}
+
 // ---------- Revisión automática ----------
 
 const lastReview = new Map<string, number>();
@@ -662,7 +750,10 @@ async function tickForCurrent(now: Date) {
       if (!(error instanceof BudgetReached)) console.error('❌ Supervisor (aprendizajes):', error.message);
       return null;
     });
-    if (result?.created) console.log(`🧑‍🏫 Supervisor: ${result.created} aprendizaje(s) nuevo(s) por aprobar`);
+    if (result?.created) {
+      console.log(`🧑‍🏫 Supervisor: ${result.created} aprendizaje(s) nuevo(s) por aprobar`);
+      await tellOwner('sv:lessons', '🧠 El supervisor tiene aprendizajes para aprobar', `${result.created} nuevo(s) de los chats que atendiste`);
+    }
   }
   const tz = profile().business.timezone;
   if (localParts(now, tz).hour < REPORT_HOUR) return;
@@ -673,6 +764,10 @@ async function tickForCurrent(now: Date) {
   if (existing && !retry) return;
   const report = await buildDayReport(yesterday, now);
   console.log(`🧑‍🏫 Supervisor: reporte del ${yesterday} listo (${report.metrics.chats} chats, ${report.problems.length} problemas)`);
+  // Se avisa la primera vez y cuando un reintento por fin pudo revisar con IA.
+  if (!retry || !report.aiError) {
+    await tellOwner(`sv:report:${yesterday}`, '📊 Tu reporte del día está listo', `${report.metrics.chats} chats · ${report.metrics.unanswered.length} sin respuesta · ${report.problems.length} cosas por mejorar`);
+  }
 }
 
 let running = false;

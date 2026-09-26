@@ -97,6 +97,31 @@ export function sendImageMessage(phoneNumber: string, imageUrl: string, caption?
 }
 
 /**
+ * Mensaje con hasta 3 botones de respuesta (el id vuelve en la respuesta). Solo llega dentro de las 24 horas desde el
+ * último mensaje de esa persona.
+ */
+export function sendButtonsMessage(phoneNumber: string, body: string, buttons: { id: string; title: string }[]) {
+  return postMessage({
+    to: normalizePhone(phoneNumber),
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: [...body].slice(0, 1024).join('') },
+      action: { buttons: buttons.slice(0, 3).map(b => ({ type: 'reply', reply: { id: b.id.slice(0, 256), title: [...b.title].slice(0, 20).join('') } })) }
+    }
+  }, 'Mensaje con botones');
+}
+
+/** Archivo (por ejemplo un PDF) desde una dirección pública. */
+export function sendDocumentMessage(phoneNumber: string, url: string, filename: string, caption?: string) {
+  return postMessage({
+    to: normalizePhone(phoneNumber),
+    type: 'document',
+    document: { link: url, filename, ...(caption && { caption: caption.slice(0, 1024) }) }
+  }, 'Documento');
+}
+
+/**
  * Plantilla aprobada por Meta: única forma de escribirle a alguien que no escribió
  * en las últimas 24 horas. bodyParams llena las variables {{1}}, {{2}}... del cuerpo.
  */

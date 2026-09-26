@@ -8526,7 +8526,7 @@
             ['automatico', 'Automático: publica solo, sin preguntarme'],
             ['manual', 'Manual: no hace nada solo, yo pido la planificación']
         ];
-        const APPROVAL_HELP = 'Aplasta "Generar planificación": el agente arma los próximos días, te descarga un PDF con las fotos, la hora y el porqué de cada tanda, y tú la aceptas o la rechazas. Si no la aceptas, no se publica nada. No te manda mensajes.';
+        const APPROVAL_HELP = 'Cada día desde las 9:00 el agente le pregunta por WhatsApp a marketing si planifica por día o por semana, le manda el resumen y el PDF con las fotos, y la aprueban o rechazan ahí mismo con un botón. También puedes aplastar "Generar planificación" aquí. Si no se aprueba, no se publica nada.';
         const PLAN_MODE_HELP = {
             semanal: APPROVAL_HELP,
             diario: APPROVAL_HELP,
@@ -8986,6 +8986,17 @@
                                     </select>
                                 </div>
                                 <p className="pb-muted" style={{ margin: '6px 0 0' }}>{PLAN_MODE_HELP[planModeOf(s)]} Siempre: temporada primero (Halloween ahora, Navidad desde noviembre) y las demás categorías se turnan.</p>
+                                {planModeOf(s) === 'semanal' && (
+                                    <label className="pb-field" style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        <b style={{ fontSize: 14, color: '#2A3766' }}>📱 WhatsApp de marketing</b>
+                                        <input type="tel" inputMode="tel" maxLength={20} placeholder="Ej: 0991234567" value={s.marketingPhone || ''} disabled={!canConfigure}
+                                            onChange={e => setS({ marketingPhone: e.target.value })}
+                                            style={{ border: '1px solid #DCE2F5', borderRadius: 10, padding: '9px 11px', font: 'inherit', maxWidth: 260 }} />
+                                        <small className="pb-muted">{s.marketingPhone
+                                            ? 'A este número le llega cada día la pregunta (1 = por día, 2 = semanal) y la planificación para aprobar con botones. Ese número no habla con el bot de ventas.'
+                                            : 'Sin número, la planificación solo se aprueba aquí en el CRM.'}</small>
+                                    </label>
+                                )}
                             </>
                         ))}
                     </div>
@@ -9155,7 +9166,7 @@
          * La planificación para aprobar: se arma cuando la dueña aplasta el botón, se descarga en PDF (día por día, con las
          * fotos, la hora y el porqué) y sale un recuadro para aceptarla o rechazarla. Tanda por tanda se puede cambiar o quitar.
          */
-        function PbApproval({ canEdit, planMode, onChanged }) {
+        function PbApproval({ canEdit, planMode, marketingPhone, onChanged }) {
             const [data, setData] = useState(null);
             const [busy, setBusy] = useState('');
             const [msg, setMsg] = useState(null);
@@ -9340,7 +9351,7 @@
                                 <h3>Tu planificación está lista</h3>
                                 <p className="ap-box-stats">{stats}</p>
                                 {data.summary && <p className="ap-box-sum">{data.summary}</p>}
-                                <p className="pb-muted">{busy === 'pdf' ? 'Preparando el PDF con las fotos…' : downloaded ? 'Te descargué el PDF con las fotos, la hora y el porqué de cada tanda. Revísalo y decide:' : 'Descarga el PDF para verla con las fotos, la hora y el porqué de cada tanda, y decide:'}</p>
+                                <p className="pb-muted">{marketingPhone ? '📱 También le llega a marketing por WhatsApp para aprobarla ahí. ' : ''}{busy === 'pdf' ? 'Preparando el PDF con las fotos…' : downloaded ? 'Te descargué el PDF con las fotos, la hora y el porqué de cada tanda. Revísalo y decide:' : 'Descarga el PDF para verla con las fotos, la hora y el porqué de cada tanda, y decide:'}</p>
                                 {decision}
                                 <button type="button" className="ap-later" onClick={() => setBox(false)}>Decidir después (no se publica nada hasta que la aceptes)</button>
                             </div>
@@ -10762,7 +10773,7 @@
 
             // Con reporte (semanal o diario) se aprueba lo que propone el agente; si no, se pide la planificación a mano.
             const approvalMode = ['semanal', 'diario'].includes(s.planMode);
-            const approvalCard = <PbApproval canEdit={canEdit} planMode={s.planMode} onChanged={load} />;
+            const approvalCard = <PbApproval canEdit={canEdit} planMode={s.planMode} marketingPhone={s.marketingPhone} onChanged={load} />;
             const planningCard = canEdit || posts.length ? (
                 <PbPlanning canEdit={canEdit} proposal={proposal} setProposal={setProposal} lastPlan={data.plan} posts={posts} autoPlan={s.autoPlan}
                     busy={busy === 'plan' || busy === 'confirm' ? busy : ''} onPropose={plan} onConfirm={confirmPlan}
@@ -11187,7 +11198,7 @@
                         <div className="pb-hero-ic"><PlatIcon name="bulb" size={30} color="#fff" /></div>
                         <div className="pb-hero-tt">
                             <h1>Supervisor</h1>
-                            <p>Revisa tus chats y aprende de cómo resuelves tú lo que el asistente no supo. Cada mañana te deja un reporte del día anterior. Nada llega al asistente sin tu aprobación.</p>
+                            <p>Revisa tus chats y aprende de cómo resuelves tú lo que el asistente no supo. Cada mañana te deja un reporte del día anterior. Los aprendizajes nuevos y el reporte también te llegan por WhatsApp (al número de alertas) para aprobarlos ahí con un botón. Nada llega al asistente sin tu aprobación.</p>
                         </div>
                         {canConfigure && (
                             <div className="pb-hero-actions">
