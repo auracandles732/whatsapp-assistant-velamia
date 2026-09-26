@@ -587,7 +587,7 @@ async function makeOne(catalogId: string, job: Job, refs: References) {
 async function makeFromTemplate(catalogId: string, job: Job, category: string) {
   const { model, texts } = job;
   try {
-    const poster = renderPoster({ product: await download(model.image_url), texts, category });
+    const poster = renderPoster({ product: await download(model.image_url), texts, category, brand: profile().business.name });
     const current = await getSupplierProduct(model.id);
     if (!current) {
       await setState(catalogId, model.id, { status: 'error', detail: 'El modelo ya no existe' });

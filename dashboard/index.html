@@ -9683,7 +9683,7 @@
                                         <option value="ia">La IA dibuja copiando tus fotos (puede variar, ≈ $0.08 por foto)</option>
                                     </select>
                                     <small className="pb-muted">{(s.posterMode || 'plantilla') === 'plantilla'
-                                        ? 'Título dorado, cinta, precio, tres íconos y franja de "Pedidos bajo reserva", con los colores de cada ocasión (Navidad, Halloween, Baby shower, Bautizo…). El nombre y el precio salen exactos y la vela, tal cual la foto del PDF.'
+                                        ? 'Cada categoría con su diseño, como tus afiches: Navidad en dorado; Bautizo y Matrimonio minimalistas; Misa, Comunión, Graduación, Cumpleaños, Halloween y las demás en estilo tierno, cada una con sus colores. El nombre y el precio salen exactos y la vela, tal cual la foto del PDF.'
                                         : 'La IA copia el diseño de tus fotos del Catálogo y una revisión comprueba el nombre, el precio y la vela. Puede cambiar detalles del diseño.'}</small>
                                 </label>
                                 {s.posterMode === 'ia' && <DesignPicker selected={s.designProductIds || []} disabled={!canConfigure} excludeIds={new Set(data.products.map(p => p.catalog_product_id).filter(Boolean))}

@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
 import jpeg from 'jpeg-js';
-import { themeFor, fitLines, whiteBackground, trimWhite, posterSvg, renderPoster } from '../src/social/template';
+import { themeFor, styleFor, fitLines, fitTitle, whiteBackground, trimWhite, posterSvg, renderPoster } from '../src/social/template';
 import { posterTexts, sameNameInCatalog } from '../src/social/posters';
 import { normalizeSupplierSettings } from '../src/social/suppliers';
 
@@ -52,17 +52,55 @@ test('la foto con fondo blanco se reconoce y se recorta al tamaño de la vela', 
   assert.equal(whiteBackground(photo([200, 190, 180], [120, 60, 20]).raw), false, 'fondo beige: va en recuadro');
 });
 
-test('el afiche lleva el nombre, el precio, la unidad y la franja exactos, sin textos inventados', () => {
-  const texts = posterTexts('Vela Calabaza - Fantasma 1', 30, 'HALLOWEEN', 'docena');
-  const svg = posterSvg({ product: photo([255, 255, 255], [240, 120, 30]).png, texts, category: 'HALLOWEEN' });
-  assert.match(svg, />\$30</);
+test('cada categoría tiene su familia de afiche, como los de la empresa', () => {
+  assert.equal(styleFor('NAVIDAD').family, 'dorado');
+  assert.equal(styleFor('MOLDES NAVIDAD').family, 'dorado');
+  assert.equal(styleFor('BAUTIZO').family, 'minimal');
+  assert.equal(styleFor('MATRIMONIO').family, 'minimal');
+  for (const c of ['MISA', 'COMUNIÓN', 'GRADUACIÓN', 'CUMPLEAÑOS', 'HALLOWEEN', 'QUINCEAÑERA', 'REVELACION DE GENERO', 'BABY SHOWER', 'ANIMALES', 'PERSONAJES ANIMADOS']) {
+    assert.equal(styleFor(c).family, 'tierno', c);
+  }
+  assert.notEqual(styleFor('HALLOWEEN').accent, styleFor('GRADUACIÓN').accent, 'cada una con sus colores');
+  assert.equal(styleFor('OTRA COSA').family, 'dorado');
+});
+
+test('el título lleva VELA en su línea y nunca deja un número suelto', () => {
+  assert.deepEqual(fitTitle('VELA DIVINO NIÑO', 500, 360, 128).lines, ['VELA', 'DIVINO', 'NIÑO']);
+  assert.ok(!fitTitle('VELA CALABAZA 1', 500, 360, 128).lines.includes('1'));
+  assert.deepEqual(fitTitle('OSITO EN FRASCO', 500, 360, 128).lines.join(' '), 'OSITO EN FRASCO');
+});
+
+test('dorado (Navidad): nombre, precio, unidad, cinta y franja exactos', () => {
+  const texts = posterTexts('Vela Reno - Navidad', 35, 'NAVIDAD', 'docena');
+  const svg = posterSvg({ product: photo([255, 255, 255], [240, 120, 30]).png, texts, category: 'NAVIDAD' });
+  assert.ok(svg.includes('>$35<'));
   assert.match(svg, />DOCENA</);
   assert.match(svg, />PEDIDOS BAJO RESERVA</);
   assert.match(svg, /UN DETALLE ESPECIAL/);
-  assert.ok(!/ - FANTASMA|>- /.test(svg), 'sin guiones sueltos en el título');
+  assert.ok(!/>- /.test(svg), 'sin guiones sueltos en el título');
   assert.ok(svg.includes('mix-blend-mode:multiply'), 'la vela se funde sobre el halo (no se recorta)');
   const conSigno = posterSvg({ product: photo([255, 255, 255], [240, 120, 30]).png, texts: posterTexts('VELA R&B <1>', 30, 'X'), category: 'X' });
   assert.ok(conSigno.includes('R&amp;B &lt;1&gt;'), 'los signos se escapan');
+});
+
+test('tierno (Misa): VELA y el nombre en dos colores, precio, unidad y la marca en la franja', () => {
+  const st = styleFor('MISA');
+  const svg = posterSvg({ product: photo([255, 255, 255], [200, 160, 60]).png, texts: posterTexts('VELA DIVINO NIÑO', 38, 'MISA', 'docena'), category: 'MISA', brand: 'Velamia' });
+  assert.ok(svg.includes(`fill="${st.accent}" stroke="#fff" stroke-width="5" paint-order="stroke">VELA<`), 'VELA en el color principal');
+  assert.ok(svg.includes(`fill="${st.second}" stroke="#fff" stroke-width="5" paint-order="stroke">DIVINO<`), 'la siguiente línea en el segundo color');
+  assert.match(svg, />38</);
+  assert.match(svg, />DOCENA</);
+  assert.match(svg, />VELAMIA</);
+  assert.match(svg, /Pequeños detalles/);
+});
+
+test('minimalista (Bautizo): VELA fino, nombre en dorado, frase, precio en bloque y fila de íconos', () => {
+  const svg = posterSvg({ product: photo([255, 255, 255], [240, 230, 220]).png, texts: posterTexts('VELA DE ANGELITO', 35, 'BAUTIZO', 'docena'), category: 'BAUTIZO' });
+  assert.match(svg, /letter-spacing="10">VELA</);
+  assert.match(svg, />DE ANGELITO</);
+  assert.match(svg, /Un detalle que ilumina/);
+  assert.ok(svg.includes('>$35<'));
+  assert.match(svg, />DISEÑO</);
 });
 
 test('el afiche sale en JPG de 1080×1080 en menos de unos segundos', () => {
