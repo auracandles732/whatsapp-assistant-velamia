@@ -30,6 +30,42 @@ function toTemplateParam(value: string): string {
 }
 
 /**
+ * Reporte largo para la dueña (la planificación de contenido): primero el texto completo, que llega si ella le escribió
+ * al número en las últimas 24 horas; si no, el aviso con plantilla (siempre llega) para que lo abra en el CRM.
+ * Nunca lanza error. Devuelve si llegó algo.
+ */
+export async function sendOwnerReport(title: string, shortDetail: string, fullText: string): Promise<boolean> {
+  try {
+    const ownerPhone = await getOwnerPhone();
+    if (!ownerPhone) {
+      console.log('⚠️ Número de la dueña no configurado, no se envió el reporte');
+      return false;
+    }
+    let sent = false;
+    // El aviso con plantilla siempre llega (aunque no haya escrito en 24 h); el texto completo, solo dentro de las 24 h.
+    const { alerts, business } = profile();
+    if (alerts.template) {
+      try {
+        await sendTemplateMessage(ownerPhone, alerts.template, ALERT_TEMPLATE_LANGUAGE, [title, `Agente de redes de ${business.name}`, 'CRM → Publicaciones', shortDetail].map(toTemplateParam));
+        sent = true;
+      } catch (templateError: any) {
+        console.warn('⚠️ Plantilla de aviso no disponible para el reporte:', templateError.response?.data?.error?.message || templateError.message);
+      }
+    }
+    try {
+      await sendTextMessage(ownerPhone, fullText.slice(0, 4000));
+      sent = true;
+    } catch (textError: any) {
+      console.warn('⚠️ No se pudo mandar el reporte completo por texto:', textError.response?.data?.error?.message || textError.message);
+    }
+    return sent;
+  } catch (error: any) {
+    console.error('❌ No se pudo mandar el reporte a la dueña:', error.response?.data?.error?.message || error.message);
+    return false;
+  }
+}
+
+/**
  * Avisa a la dueña por WhatsApp. Nunca lanza error: un aviso fallido no debe
  * interrumpir la atención al cliente. Si la plantilla no está disponible (en revisión
  * o rechazada) se intenta con texto libre, que solo llega dentro de las 24 horas.

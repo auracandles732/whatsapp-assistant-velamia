@@ -2455,6 +2455,12 @@
         .pl-tasks { margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; background: #F2FAF5; border: 1px solid #CDEBD8; color: #2E4A3A; font-size: 14px; }
         .pl-tasks ul { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; }
         @media (max-width: 767px) { .pl-ask-row .pb-btn { flex: 1 1 100%; justify-content: center; } }
+        .ap-day { margin-top: 14px; }
+        .ap-day > b { display: block; margin-bottom: 8px; font-size: 15px; color: #2A3766; }
+        .ap-row { align-items: flex-start; }
+        .ap-row .pl-info b { white-space: normal; }
+        .ap-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+        .ap-actions select { height: 32px; border-radius: 10px; border: 1px solid #DCE2F5; background: #fff; font-size: 13px; padding: 0 8px; color: #2A3766; }
         .pl-summary { padding: 12px 14px; border-radius: 14px; background: #F3F4FF; border: 1px solid #DADFFB; color: #2A3766; font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
         .pl-list { display: flex; flex-direction: column; gap: 8px; }
         .pl-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #E8ECF6; border-radius: 14px; background: #fff; }
@@ -8372,9 +8378,9 @@
         }
 
         // ---------- Publicaciones en redes (servicio adicional) ----------
-        const POST_CHANNEL_NAMES = { instagram_feed: 'Instagram', instagram_story: 'Historia de Instagram', facebook: 'Facebook' };
+        const POST_CHANNEL_NAMES = { instagram_story: 'Historias de Instagram', facebook_story: 'Historias de Facebook', instagram_feed: 'Publicación en Instagram', facebook: 'Publicación en Facebook' };
         const POST_STATUS = {
-            draft: 'Programada', approved: 'Programada', publishing: 'Publicando…', published: 'Publicada',
+            draft: 'Por aprobar', approved: 'Programada', publishing: 'Publicando…', published: 'Publicada',
             partial: 'Publicada en parte', failed: 'No se publicó', cancelled: 'Descartada'
         };
         const EDITABLE_POST = ['draft', 'approved', 'failed'];
@@ -8387,7 +8393,6 @@
         const MAX_CAROUSEL = 10;
         // 0 = decide la IA (hasta 3 al día y algunas historias); igual que MAX_POSTS_PER_DAY en el servidor.
         // Quién elige qué mostrar en cada tanda (postsPerDay: 0 = la IA; 1 = reglas, sin gastar IA).
-        const CHOOSER_OPTIONS = [[0, 'La IA (temporada, variedad y tus instrucciones)'], [1, 'Reglas automáticas (no gasta IA)']];
         const PHOTOS_PER_DAY_OPTIONS = [2, 4, 6, 8, 10, 12, 15, 20, 25, 30];
         // Igual que setTimes en el servidor: n tandas, la última cerca de la hora elegida, cada 3 horas, de 8:00 a 21:30.
         function setTimesOf(hour, n) {
@@ -8396,7 +8401,6 @@
             const step = n > 1 ? Math.min(180, Math.floor((1290 - start) / (n - 1))) : 0;
             return Array.from({ length: n }, (_, i) => { const t = start + step * i; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); });
         }
-        const PHOTO_OPTIONS = [[1, '1 foto'], [3, 'Hasta 3 fotos'], [5, 'Hasta 5 fotos'], [7, 'Hasta 7 fotos'], [MAX_CAROUSEL, 'Hasta 10 fotos (máximo de Instagram)']];
 
         // Día y hora en la zona del negocio (no en la de la computadora): la hora que se ve es la hora a la que sale.
         function tzParts(date) {
@@ -8453,7 +8457,20 @@
             }
         }
         const niceName = name => { const t = String(name || '').toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); };
-        const postNets = post => ({ ig: post.channels.some(c => c.startsWith('instagram')), fb: post.channels.includes('facebook') });
+        const postNets = post => ({ ig: post.channels.some(c => c.startsWith('instagram')), fb: post.channels.some(c => c.startsWith('facebook')) });
+        // Cómo trabaja el agente (igual que PlanMode en el servidor).
+        const PLAN_MODE_OPTIONS = [
+            ['semanal', 'Semanal: me manda la planificación de la semana y yo la apruebo'],
+            ['diario', 'Diario: cada tarde me manda la de mañana y yo la apruebo'],
+            ['automatico', 'Automático: publica solo, sin preguntarme'],
+            ['manual', 'Manual: no hace nada solo, yo pido la planificación']
+        ];
+        const PLAN_MODE_HELP = {
+            semanal: 'Los sábados te llega por WhatsApp la planificación de la semana siguiente, explicada día por día. La revisas aquí, cambias o quitas lo que quieras y la apruebas. Si no la apruebas, no se publica nada.',
+            diario: 'Cada día desde las 18:00 te llega por WhatsApp la planificación de mañana. La revisas aquí y la apruebas. Si no la apruebas, no se publica nada.',
+            automatico: 'El agente completa cada día y publica solo, sin preguntarte.',
+            manual: 'El agente no hace nada solo: pide una planificación cuando quieras.'
+        };
         function hourOptions(current) {
             const list = [];
             for (let h = 5; h <= 23; h++) for (const m of ['00', '30']) list.push(`${String(h).padStart(2, '0')}:${m}`);
@@ -8600,7 +8617,7 @@
                     {Object.keys(POST_CHANNEL_NAMES).map(c => (
                         <button key={c} type="button" className={'pb-netchip' + (channels.includes(c) ? ' on' : '')} disabled={disabled}
                             onClick={() => setChannels(channels.includes(c) ? channels.filter(x => x !== c) : [...channels, c])}>
-                            <PbNetLogo net={c === 'facebook' ? 'facebook' : 'instagram'} size={18} />
+                            <PbNetLogo net={c.startsWith('facebook') ? 'facebook' : 'instagram'} size={18} />
                             {POST_CHANNEL_NAMES[c]}{channels.includes(c) ? ' ✓' : ''}
                         </button>
                     ))}
@@ -8835,7 +8852,7 @@
         }
 
         // Días, hora, redes, automatización e indicaciones: cuatro paneles (en el celular, uno debajo del otro y plegables).
-        function PbSettings({ s, setS, canConfigure, mobile, onSave, onAuto, saving, savedMsg }) {
+        function PbSettings({ s, setS, canConfigure, mobile, onSave, saving, savedMsg }) {
             const [open, setOpen] = useState({ prog: true, redes: true, auto: true, notas: true });
             const panel = (id, icon, title, body) => {
                 const shown = !mobile || open[id];
@@ -8876,48 +8893,34 @@
                                     </select>
                                 </div>
                                 {(() => {
-                                    const perSet = Math.max(1, s.photosPerPost || 1);
+                                    const perSet = Math.max(1, s.photosPerPost || 5);
                                     const sets = Math.min(6, Math.ceil((s.photosPerDay || 10) / perSet));
-                                    return <p className="pb-muted" style={{ margin: '6px 0 0' }}>Cada día marcado se completan <b>{s.photosPerDay || 10} fotos</b>, contando lo que ya programaste tú (nunca se toca). Van en {sets} tanda(s) de hasta {perSet} foto(s), a las {setTimesOf(s.hour, sets).join(', ')} (si esa hora está ocupada, se corre). Cada tanda es de una sola categoría.</p>;
+                                    return <p className="pb-muted" style={{ margin: '6px 0 0' }}>Cada día se completan <b>{s.photosPerDay || 10} fotos</b> (lo que ya programaste cuenta y nunca se toca), en tandas de {perSet} a las {setTimesOf(s.hour, sets).join(', ')}.</p>;
                                 })()}
                                 <div className="pb-tz"><PbIcon name="globe" size={20} color="#3A4570" /><div>Zona horaria<b>{tzCity()}{tzOffset() ? ` (${tzOffset()})` : ''}</b></div></div>
                             </>
                         ))}
-                        {panel('redes', <PbIcon name="link" size={22} color="#4F5BD5" />, 'Canales y contenido', (
+                        {panel('redes', <PbIcon name="link" size={22} color="#4F5BD5" />, 'Dónde publicar', (
                             <>
-                                <div className="pb-label"><PbIcon name="link" size={14} color="#3A4570" /> Dónde publicar</div>
                                 {Object.keys(POST_CHANNEL_NAMES).map(c => (
                                     <label key={c} className="pb-check">
                                         <input type="checkbox" checked={s.channels.includes(c)} disabled={!canConfigure} onChange={() => setS({ channels: toggleIn(s.channels, c) })} />
-                                        <PbNetLogo net={c === 'facebook' ? 'facebook' : 'instagram'} size={20} />
+                                        <PbNetLogo net={c.startsWith('facebook') ? 'facebook' : 'instagram'} size={20} />
                                         {POST_CHANNEL_NAMES[c]}
                                     </label>
                                 ))}
-                                <div className="pb-label"><PlatIcon name="image" size={14} color="#3A4570" /> Fotos por tanda</div>
-                                <div className="pb-select">
-                                    <PlatIcon name="image" size={18} color="#3A4570" />
-                                    <select value={s.photosPerPost} disabled={!canConfigure} onChange={e => setS({ photosPerPost: Number(e.target.value) })} aria-label="Fotos por tanda">
-                                        {PHOTO_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
-                                    </select>
-                                </div>
-                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>En publicaciones van como carrusel; en historias, cada foto sale como una historia, una detrás de otra.</p>
-                                <div className="pb-label">Quién elige qué mostrar</div>
-                                <div className="pb-select">
-                                    <PbIcon name="bolt" size={18} color="#3A4570" />
-                                    <select value={s.postsPerDay ? 1 : 0} disabled={!canConfigure} onChange={e => setS({ postsPerDay: Number(e.target.value) })} aria-label="Quién elige qué mostrar">
-                                        {CHOOSER_OPTIONS.map(([n, label]) => <option key={n} value={n}>{label}</option>)}
-                                    </select>
-                                </div>
-                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>Si en la Biblioteca hay videos o fotos de esos productos, se suman al carrusel (máximo {MAX_CAROUSEL} entre fotos y videos).</p>
+                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>En historias cada foto sale como una historia, una detrás de otra. Las publicaciones van como carrusel.</p>
                             </>
                         ))}
-                        {panel('auto', <PbIcon name="bolt" size={22} color="#4F5BD5" />, 'Automatización', (
+                        {panel('auto', <PbIcon name="bolt" size={22} color="#4F5BD5" />, 'Cómo trabaja el agente', (
                             <>
-                                <label className="pb-toggle">
-                                    <input type="checkbox" checked={s.autoPlan} disabled={!canConfigure || saving} onChange={e => onAuto(e.target.checked)} />
-                                    <span><b>Modo automático</b><small>{s.autoPlan ? `Activado: cada día marcado se completa solo hasta ${s.photosPerDay || 10} fotos (sumando lo tuyo), con las fotos y precios de tu catálogo, y sale a su hora.` : `Actívalo y cada día marcado se completa solo hasta ${s.photosPerDay || 10} fotos con tu catálogo.`}</small></span>
-                                </label>
-                                <p className="pb-muted" style={{ margin: '4px 0 0' }}>Todo lo que programes (tú o la IA) se publica solo a su hora: no hace falta aprobarlo.</p>
+                                <div className="pb-select">
+                                    <PbIcon name="bolt" size={18} color="#3A4570" />
+                                    <select value={s.planMode || (s.autoPlan ? 'automatico' : 'manual')} disabled={!canConfigure} onChange={e => setS({ planMode: e.target.value })} aria-label="Cómo trabaja el agente">
+                                        {PLAN_MODE_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                                    </select>
+                                </div>
+                                <p className="pb-muted" style={{ margin: '6px 0 0' }}>{PLAN_MODE_HELP[s.planMode || (s.autoPlan ? 'automatico' : 'manual')]} Siempre: temporada primero (Halloween ahora, Navidad desde noviembre) y las demás categorías se turnan.</p>
                             </>
                         ))}
                     </div>
@@ -9046,6 +9049,122 @@
                             <p className="pb-muted" style={{ margin: '10px 0 0' }}>{autoPlan ? '🤖 Modo automático: la IA programa sola los días libres y cada publicación sale a su hora.' : 'Modo automático apagado: solo sale lo que programes tú (o lo que aceptes de la propuesta).'}</p>
                         </>
                     )}
+                </section>
+            );
+        }
+
+        /**
+         * La planificación que armó el agente para aprobar: día por día, cada tanda con sus fotos, a qué hora sale, dónde y por
+         * qué. Se puede cambiar (otras fotos u otra categoría) o quitar cada tanda, y aprobar todo de una vez.
+         */
+        function PbApproval({ canEdit, planMode, onChanged }) {
+            const [data, setData] = useState(null);
+            const [busy, setBusy] = useState('');
+            const [msg, setMsg] = useState(null);
+            const [request, setRequest] = useState('');
+            const load = () => api('/api/posts/plan/pending').then(setData).catch(e => setMsg({ ok: false, text: e.message }));
+            useEffect(() => { load(); }, []);
+            if (!data) return null;
+            const posts = data.posts || [];
+            const run = async (label, fn) => {
+                setBusy(label);
+                setMsg(null);
+                try { await fn(); } catch (e) { setMsg({ ok: false, text: e.message }); } finally { setBusy(''); }
+            };
+            const refresh = async () => { await load(); onChanged && onChanged(); };
+            const approveAll = () => run('approve', async () => {
+                const r = await api('/api/posts/plan/approve', { method: 'POST', body: '{}' });
+                setMsg({ ok: true, text: `✅ Aprobada: ${r.approved} tanda(s) programadas. Saldrán solas a su hora.` });
+                await refresh();
+            });
+            const propose = replace => run('propose', async () => {
+                const r = await api('/api/posts/plan/propose', { method: 'POST', body: JSON.stringify({ replace, request }) });
+                setMsg(r.created
+                    ? { ok: true, text: `📅 Planificación lista: ${r.created} tanda(s)${r.sent ? '. También te la mandé por WhatsApp' : ''}.` }
+                    : { ok: true, text: 'No hay nada que proponer: los próximos días ya tienen su contenido.' });
+                setRequest('');
+                await refresh();
+            });
+            const swap = (post, category) => run('swap:' + post.id, async () => {
+                await api(`/api/posts/${post.id}/swap`, { method: 'POST', body: JSON.stringify({ category }) });
+                await refresh();
+            });
+            const remove = post => {
+                if (!confirm('¿Quitar esta tanda de la planificación?')) return;
+                run('del:' + post.id, async () => { await api(`/api/posts/${post.id}`, { method: 'DELETE' }); await refresh(); });
+            };
+            const byDay = {};
+            posts.forEach(p => { (byDay[dayOf(p.scheduled_at)] = byDay[dayOf(p.scheduled_at)] || []).push(p); });
+            const photos = posts.reduce((n, p) => n + postItems(p).length, 0);
+            const ask = canEdit && (
+                <div className="pl-ask">
+                    <textarea maxLength={600} value={request} onChange={e => setRequest(e.target.value)} placeholder="¿Algo especial? (opcional) Ej: esta semana más bautizos y el sábado baby shower" />
+                    <div className="pl-ask-row">
+                        <button type="button" className="pb-btn main" disabled={!!busy} onClick={() => propose(posts.length > 0)}>📅 {busy === 'propose' ? 'Armando la planificación…' : posts.length ? 'Rehacer la propuesta' : 'Pedir la planificación ahora'}</button>
+                    </div>
+                </div>
+            );
+            return (
+                <section className="pb-card pl-card" id="pb-plan">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="calendar" size={22} color="#4F5BD5" /></div>
+                        <div className="grow">
+                            <h2>📋 Planificación para aprobar</h2>
+                            <p>{posts.length ? `${posts.length} tanda(s) · ${photos} fotos. Revisa, cambia o quita lo que quieras y apruébala. Si no la apruebas, no se publica nada.` : PLAN_MODE_HELP[planMode]}</p>
+                        </div>
+                    </div>
+                    {posts.length === 0 ? (
+                        <>
+                            <div className="pb-muted" style={{ marginBottom: 10 }}>No hay nada esperando tu aprobación.</div>
+                            {ask}
+                        </>
+                    ) : (
+                        <>
+                            {data.summary && <div className="pl-summary">🧠 {data.summary}</div>}
+                            {Object.entries(byDay).map(([day, list]) => (
+                                <div className="ap-day" key={day}>
+                                    <b>{DAY_SHORT[weekdayOf(day)]} {dayParts(day).d} de {MONTH_LONG[dayParts(day).m - 1]}</b>
+                                    <div className="pl-list">
+                                        {list.map(post => {
+                                            const items = postItems(post);
+                                            const n = postNets(post);
+                                            return (
+                                                <div className="pl-row ap-row" key={post.id}>
+                                                    <div className="pl-when"><b>{timeOf(post.scheduled_at)}</b>{post.channels.every(c => c.endsWith('_story')) ? 'Historias' : 'Publicación'}</div>
+                                                    <div className="pl-thumbs">
+                                                        {items.slice(0, 5).map((item, i) => <PbMediaThumb key={i} item={item} />)}
+                                                        {items.length > 5 && <span>+{items.length - 5}</span>}
+                                                    </div>
+                                                    <div className="pl-info">
+                                                        <div className="pl-tags"><b>{post.theme} · {items.length} foto{items.length === 1 ? '' : 's'}</b>{n.ig && <PbNetLogo net="instagram" size={16} />}{n.fb && <PbNetLogo net="facebook" size={16} />}</div>
+                                                        {post.reason && <small>{post.reason}</small>}
+                                                        {canEdit && (
+                                                            <div className="ap-actions">
+                                                                <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => swap(post, '')}>{busy === 'swap:' + post.id ? 'Cambiando…' : '🔄 Otras fotos'}</button>
+                                                                <select value="" disabled={!!busy} onChange={e => e.target.value && swap(post, e.target.value)} aria-label="Cambiar la categoría de esta tanda">
+                                                                    <option value="">Cambiar categoría…</option>
+                                                                    {(data.categories || []).map(c => <option key={c} value={c}>{niceName(c)}</option>)}
+                                                                </select>
+                                                                <button type="button" className="pb-btn sm danger" disabled={!!busy} onClick={() => remove(post)}>Quitar</button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                            {data.tasks?.length > 0 && <div className="pl-tasks" style={{ marginTop: 12 }}><b>✅ Para ti</b><ul>{data.tasks.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
+                            {canEdit && (
+                                <div className="pb-actions" style={{ marginTop: 14 }}>
+                                    <button type="button" className="pb-btn main" disabled={!!busy} onClick={approveAll}>✅ {busy === 'approve' ? 'Aprobando…' : `Aprobar toda la planificación (${posts.length})`}</button>
+                                </div>
+                            )}
+                            {ask}
+                        </>
+                    )}
+                    {msg && <div className={'pb-notice' + (msg.ok ? ' ok' : '')} style={msg.ok ? { marginTop: 10 } : { marginTop: 10, background: '#FDECEC', color: '#B42318' }}>{msg.text}</div>}
                 </section>
             );
         }
@@ -10098,6 +10217,8 @@
             // Propuesta de la IA para los próximos 7 días (sin guardar hasta que se programe).
             const [proposal, setProposal] = useState(null);
             const [planRequest, setPlanRequest] = useState('');
+            // Para volver a leer la planificación por aprobar después de guardar la configuración.
+            const [approvalKey, setApprovalKey] = useState(0);
             const [planDays, setPlanDays] = useState(7);
             const cardRefs = useRef({});
 
@@ -10181,19 +10302,16 @@
                         setNotice({ ok: true, text: `🤖 La IA programó ${r.created} publicación(es) para los próximos 7 días. Saldrán solas a su hora.` });
                         await load();
                     }
+                    if (r.report?.created) {
+                        setNotice({ ok: true, text: `📅 Te preparé la primera planificación: ${r.report.created} tanda(s)${r.report.sent ? ' (te la mandé por WhatsApp)' : ''}. Revísala arriba en "Planificación para aprobar".` });
+                        setApprovalKey(k => k + 1);
+                        await load();
+                    }
                 } catch (e) {
                     alert('No se pudo guardar: ' + e.message);
                 } finally {
                     setBusy('');
                 }
-            }
-
-            // El modo automático se guarda al tocarlo: al encenderlo la IA programa de una vez la semana.
-            function setAuto(on) {
-                const next = { ...s, autoPlan: on };
-                if (on && !next.days.length) return alert('Elige al menos un día de publicación');
-                setSettings(next);
-                saveSettings(next).then(() => { if (!on) setNotice({ ok: true, text: 'Modo automático apagado: solo sale lo que programes tú.' }); });
             }
 
             // La IA propone la semana (nada se guarda): se revisa en "Planificación del agente".
@@ -10344,19 +10462,26 @@
             const notices = (
                 <>
                     {notice && <div className={'pb-notice' + (notice.ok ? ' ok' : '')} style={notice.ok ? undefined : { background: '#FDECEC', color: '#B42318' }}>{notice.text}</div>}
-                    {canEdit && (
-                        <div className={'pb-auto' + (s.autoPlan ? ' on' : '')}>
-                            <span className="ic"><PlatIcon name="robot" size={24} color={s.autoPlan ? '#fff' : '#4F5BD5'} /></span>
-                            <div className="tt">
-                                <b>{s.autoPlan ? 'Modo automático activado' : 'Modo automático con IA'}</b>
-                                <small>{s.autoPlan ? 'La IA elige los productos, escribe los textos y publica sola en tus días y horas.' : canConfigure ? 'Actívalo y la IA prepara y publica sola tus publicaciones cada semana.' : 'Solo el dueño puede activarlo.'}</small>
+                    {canEdit && (() => {
+                        // Cómo está trabajando el agente (se cambia en "Cómo trabaja el agente", abajo).
+                        const mode = s.planMode || (s.autoPlan ? 'automatico' : 'manual');
+                        const label = (PLAN_MODE_OPTIONS.find(([v]) => v === mode) || [])[1] || '';
+                        return (
+                            <div className={'pb-auto' + (mode !== 'manual' ? ' on' : '')}>
+                                <span className="ic"><PlatIcon name="robot" size={24} color={mode !== 'manual' ? '#fff' : '#4F5BD5'} /></span>
+                                <div className="tt">
+                                    <b>{label.split(':')[0]}</b>
+                                    <small>{PLAN_MODE_HELP[mode]}</small>
+                                </div>
                             </div>
-                            {canConfigure && <label className="pb-toggle" aria-label="Modo automático con IA"><input type="checkbox" checked={!!s.autoPlan} disabled={busy === 'settings'} onChange={e => setAuto(e.target.checked)} /></label>}
-                        </div>
-                    )}
+                        );
+                    })()}
                 </>
             );
 
+            // Con reporte (semanal o diario) se aprueba lo que propone el agente; si no, se pide la planificación a mano.
+            const approvalMode = ['semanal', 'diario'].includes(s.planMode);
+            const approvalCard = <PbApproval key={approvalKey} canEdit={canEdit} planMode={s.planMode} onChanged={load} />;
             const planningCard = canEdit || posts.length ? (
                 <PbPlanning canEdit={canEdit} proposal={proposal} setProposal={setProposal} lastPlan={data.plan} posts={posts} autoPlan={s.autoPlan}
                     busy={busy === 'plan' || busy === 'confirm' ? busy : ''} onPropose={plan} onConfirm={confirmPlan}
@@ -10470,7 +10595,7 @@
                                 <div className="pb-tile"><PlatIcon name="gear" size={22} color="#4F5BD5" /></div>
                                 <div><h2>Cómo publicar</h2><p>Configura la programación y preferencias del asistente.</p></div>
                             </div>
-                            <PbSettings s={s} setS={setS} canConfigure={canConfigure} mobile onSave={() => saveSettings()} onAuto={setAuto} saving={busy === 'settings'} savedMsg={savedMsg} />
+                            <PbSettings s={s} setS={setS} canConfigure={canConfigure} mobile onSave={() => saveSettings()} saving={busy === 'settings'} savedMsg={savedMsg} />
                         </div>
                     );
                 }
@@ -10478,7 +10603,7 @@
                 return (
                     <div className="pb">
                         {hero(true)}
-                        {planningCard}
+                        {approvalMode ? approvalCard : planningCard}
                         {notices}
                         {channelsCard}
                         <button type="button" className="pb-navcard" onClick={() => goTo('posts')}>
@@ -10516,7 +10641,7 @@
                 <div className="pb">
                     {hero(true)}
                     <PbAreaTabs area={area} setArea={setArea} />
-                    {planningCard}
+                    {approvalMode ? approvalCard : planningCard}
                     {notices}
                     {channelsCard}
 
@@ -10580,7 +10705,7 @@
                             <div className="pb-tile"><PlatIcon name="gear" size={22} color="#4F5BD5" /></div>
                             <div className="grow"><h2>Cómo publicar</h2><p>{data.settingsSaved ? 'Configura la programación y preferencias del asistente.' : 'Guárdalo para que el asistente prepare la semana solo.'}</p></div>
                         </div>
-                        <PbSettings s={s} setS={setS} canConfigure={canConfigure} onSave={() => saveSettings()} onAuto={setAuto} saving={busy === 'settings'} savedMsg={savedMsg} />
+                        <PbSettings s={s} setS={setS} canConfigure={canConfigure} onSave={() => saveSettings()} saving={busy === 'settings'} savedMsg={savedMsg} />
                     </section>
                     {modals}
                 </div>

@@ -59,27 +59,46 @@ const write = (posts: CaptionRequest[], profile: BusinessProfile) => writeCaptio
 /** Historias para las tandas de historias; en publicaciones, carrusel si lleva más de una foto. */
 export const formatOf = (slot: DaySlot, photos: number): PostFormat => (slot.kind === 'story' ? 'historia' : photos > 1 ? 'carrusel' : 'foto');
 
-/** Qué se planificó, en palabras simples: fotos por día y cómo se reparten. */
-export function planSummary(posts: PlannedPost[], settings: PublishingSettings): string {
+/** Qué se planificó, en palabras simples: fotos por día, dónde y la temporada. */
+export function planSummary(posts: PlannedPost[], settings: PublishingSettings, month = new Date().getMonth() + 1): string {
   if (posts.length === 0) return 'No hay nada que agregar.';
   const photos = posts.reduce((sum, p) => sum + p.products.length, 0);
   const stories = posts.filter(p => p.format === 'historia').length;
   const days = new Set(posts.map(p => p.at.toISOString().slice(0, 10))).size;
-  const parts = [`${posts.length - stories} publicación(es)`, `${stories} tanda(s) de historias`].filter(x => !x.startsWith('0 '));
-  return `Se agregan ${photos} fotos en ${days} día(s) (${parts.join(' y ')}) para llegar a ${settings.photosPerDay} fotos por día, contando lo que ya tenías programado. Cada tanda es de una sola categoría.`;
+  const where = [settings.channels.includes('instagram_story') && 'Instagram', settings.channels.includes('facebook_story') && 'Facebook'].filter(Boolean).join(' y ');
+  const parts = [`${posts.length - stories} publicación(es)`, `${stories} tanda(s) de historias${where ? ` en ${where}` : ''}`].filter(x => !x.startsWith('0 '));
+  const season = [...new Set(posts.map(p => p.theme).filter(t => isSeasonal(t, month)))];
+  return [
+    `Te propongo ${photos} fotos en ${days} día(s): ${parts.join(' y ')}, para llegar a ${settings.photosPerDay} fotos por día (lo que ya tenías programado cuenta).`,
+    season.length ? `${season.join(' y ')} es la temporada: sale todos los días.` : '',
+    'Las demás categorías se turnan empezando por las que hace más tiempo no salen, sin repetir la misma el mismo día. Cada tanda es de una sola categoría.'
+  ].filter(Boolean).join(' ');
+}
+
+/** Categorías publicadas últimamente, de la más nueva a la más vieja (de los temas recientes). */
+const recentCategoriesOf = (recentThemes: { day: string; theme: string }[]) => recentThemes.map(r => r.theme);
+
+/** Por qué va esa categoría, dicho simple: la temporada o cuánto hace que no sale. */
+export function ruleReason(theme: string, month: number, recentThemes: { day: string; theme: string }[], today: string): string {
+  if (isSeasonal(theme, month)) return `${theme} es la temporada: sale todos los días`;
+  const last = recentThemes.find(r => plain(r.theme) === plain(theme));
+  if (!last) return `${theme} todavía no se ha publicado`;
+  const days = Math.max(0, Math.round((new Date(today + 'T12:00:00Z').getTime() - new Date(last.day + 'T12:00:00Z').getTime()) / 86_400_000));
+  return days <= 0 ? `Se turna con las demás categorías` : `${theme} no se publica desde hace ${days} día${days === 1 ? '' : 's'}`;
 }
 
 export const ruleBrain: SocialBrain = {
   name: 'reglas',
-  async plan({ slots, catalog, recent, settings, month }) {
-    const picks = pickProducts(catalog, recent, slots.length, slots.map(s => s.count), month);
+  async plan({ slots, catalog, recent, recentThemes, settings, month, now, timeZone }) {
+    const picks = pickProducts(catalog, recent, slots.length, slots.map(s => s.count), month, { recentCategories: recentCategoriesOf(recentThemes), slotDays: slots.map(s => s.day) });
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
     const posts = picks.map((pick, i) => ({
       ...pick,
       at: slots[i].at,
       format: formatOf(slots[i], pick.products.length),
-      reason: isSeasonal(pick.products[0]?.category || '', month) ? 'Es temporada: sale primero' : 'Lo que hace más tiempo no se publica'
+      reason: ruleReason(pick.theme, month, recentThemes, today)
     }));
-    return { posts, summary: planSummary(posts, settings) };
+    return { posts, summary: planSummary(posts, settings, month) };
   },
   write
 };
@@ -127,19 +146,25 @@ export function resolveAiPlan(assignments: AiAssignment[], input: PlanInput): Pl
   }
   const used = new Set<string>();
   const out: PlannedPost[] = [];
+  const perDay = new Map<string, Set<string>>();
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: input.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(input.now);
   slots.forEach((slot, i) => {
+    const usedToday = perDay.get(slot.day) || new Set<string>();
     const chosen = assignments.find(a => Number(a.n) === i + 1);
-    const group = chosen ? groups.get(plain(chosen.categoria)) : undefined;
+    // La misma categoría dos veces el mismo día no: esa tanda se elige con reglas.
+    const group = chosen && !usedToday.has(plain(chosen.categoria)) ? groups.get(plain(chosen.categoria)) : undefined;
     let theme = group ? titleCase(group.name) : '';
     let products = group ? group.items.filter(c => !used.has(productKey(c.name))).sort((a, b) => age(b) - age(a)).slice(0, slot.count) : [];
     let reason = String(chosen?.motivo || '').trim().slice(0, 240);
     if (products.length === 0) {
-      const [pick] = pickProducts(catalog.filter(c => !used.has(productKey(c.name))), recent, 1, slot.count, month);
+      const [pick] = pickProducts(catalog.filter(c => !used.has(productKey(c.name))), recent, 1, slot.count, month, { recentCategories: recentCategoriesOf(input.recentThemes), avoid: [...usedToday] });
       if (!pick) return;
       theme = pick.theme;
       products = pick.products;
-      reason = isSeasonal(products[0]?.category || '', month) ? 'Es temporada' : 'Lo que hace más tiempo no se publica';
+      reason = ruleReason(theme, month, input.recentThemes, today);
     }
+    usedToday.add(plain(theme));
+    perDay.set(slot.day, usedToday);
     products.forEach(p => used.add(productKey(p.name)));
     out.push({ theme, products, at: slot.at, format: formatOf(slot, products.length), reason });
   });
@@ -152,13 +177,13 @@ export const aiBrain: SocialBrain = {
     try {
       const plan = await planWithAi(aiPlanRequest(input), input.profile);
       const posts = resolveAiPlan(plan.asignaciones, input);
-      if (posts.length) return { posts, summary: [plan.resumen, planSummary(posts, input.settings)].filter(Boolean).join(' '), tasks: plan.tareas };
+      if (posts.length) return { posts, summary: [plan.resumen, planSummary(posts, input.settings, input.month)].filter(Boolean).join(' '), tasks: plan.tareas };
       console.warn('⚠️ La planificación de la IA no trajo publicaciones válidas; se usan las reglas');
     } catch (error: any) {
       console.warn('⚠️ La IA no pudo planificar; se usan las reglas:', error.message);
     }
     const fallback = await ruleBrain.plan(input);
-    return { ...fallback, summary: `La IA no respondió, así que se eligió con reglas. ${fallback.summary}` };
+    return fallback;
   },
   write
 };

@@ -7,9 +7,9 @@ import { publishingStatus } from '../services/metaChannels';
 import { profile } from '../config/businessProfile';
 import {
   listPosts, getPost, insertPosts, updatePost, deletePost, getSavedSettings, saveSettings,
-  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, MAX_CAROUSEL, toPostProduct, fallbackCaption, PostStatus, PostChannel, PostMedia
+  DEFAULT_SETTINGS, EDITABLE_STATUSES, POST_CHANNELS, MAX_CAROUSEL, toPostProduct, fallbackCaption, PostStatus, PostChannel, PostMedia, isStoryChannel
 } from './posts';
-import { planUpcomingPosts, draftUpcomingPosts, schedulePlan, lastPlanSummary, rewriteCaption } from './planner';
+import { planUpcomingPosts, draftUpcomingPosts, schedulePlan, lastPlanSummary, rewriteCaption, proposePlan, pendingPlan, approvePlan, swapPost } from './planner';
 import { claimAndPublish } from './publisher';
 import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed, AssetInUseError } from './library';
 import {
@@ -129,12 +129,57 @@ export function socialRouter(): Router {
 
   router.put('/api/posts/settings', requireCrmSession, requireOwnerRole, requirePublishing, async (req: Request, res: Response) => {
     try {
+      const before = await getSavedSettings();
       const settings = await saveSettings(req.body);
       // Al encender el modo automático la IA programa de una vez los próximos 7 días (no espera a la revisión de cada hora).
-      const created = settings.autoPlan ? await planUpcomingPosts(new Date(), 7, settings) : [];
-      res.json({ settings, created: created.length });
+      const created = settings.planMode === 'automatico' ? await planUpcomingPosts(new Date(), 7, settings) : [];
+      // Al elegir "con reporte", la primera planificación llega de una vez (no espera al sábado ni a las 18:00).
+      const report = ['semanal', 'diario'].includes(settings.planMode) && before?.planMode !== settings.planMode
+        ? await proposePlan(new Date(), settings) : null;
+      res.json({ settings, created: created.length, report });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ---------- Planificación para aprobar ----------
+
+  router.get('/api/posts/plan/pending', requireCrmSession, requirePublishing, async (_req: Request, res: Response) => {
+    try {
+      const pending = await pendingPlan();
+      const catalog = await getAllProducts();
+      const categories = [...new Set((catalog as any[]).filter(p => p.image_url).map(p => String(p.category || '').trim()).filter(Boolean))].sort();
+      res.json({ ...pending, categories });
+    } catch (error: any) {
+      res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  router.post('/api/posts/plan/approve', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined;
+      res.json({ approved: await approvePlan(ids) });
+    } catch (error: any) {
+      res.status(500).json({ error: explain(error) });
+    }
+  });
+
+  /** Arma (o rehace) la planificación para aprobar ahora mismo y manda el reporte por WhatsApp. */
+  router.post('/api/posts/plan/propose', requireCrmSession, requireEditorRole, requirePublishing, async (req: Request, res: Response) => {
+    try {
+      const settings = (await getSavedSettings()) || DEFAULT_SETTINGS;
+      const days = [2, 8, 15].includes(Number(req.body?.days)) ? Number(req.body.days) : undefined;
+      res.json(await proposePlan(new Date(), settings, { days, replace: req.body?.replace === true, request: String(req.body?.request || '') }));
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
+    }
+  });
+
+  router.post('/api/posts/:postId/swap', requireCrmSession, requireEditorRole, requirePublishing, requirePostId, async (req: Request, res: Response) => {
+    try {
+      res.json({ post: await swapPost(req.params.postId, String(req.body?.category || '')) });
+    } catch (error: any) {
+      res.status(400).json({ error: explain(error) });
     }
   });
 
@@ -175,7 +220,7 @@ export function socialRouter(): Router {
         const channels = cleanChannels(d?.channels);
         const caption = String(d?.caption || '').trim();
         if (caption.length > CAPTION_LIMIT) throw new Error(`Un texto pasa de ${CAPTION_LIMIT} caracteres`);
-        if (!caption && channels.some(c => c !== 'instagram_story')) throw new Error('A una publicación le falta el texto');
+        if (!caption && channels.some(c => !isStoryChannel(c))) throw new Error('A una publicación le falta el texto');
         const { products, media } = await mixedItems(Array.isArray(d?.items) ? d.items : []);
         if (products.length === 0 && media.length === 0) throw new Error('A una publicación le faltan las fotos');
         drafts.push({ scheduled_at: when.toISOString(), channels, caption, products, media, theme: String(d?.theme || '').trim().slice(0, 80) || 'Nuestros productos' });
@@ -250,7 +295,7 @@ export function socialRouter(): Router {
       }
       const final = { ...post, ...changes };
       if (final.status === 'approved') {
-        if (!final.caption && final.channels.some((c: PostChannel) => c !== 'instagram_story')) return res.status(400).json({ error: 'Escribe el texto de la publicación' });
+        if (!final.caption && final.channels.some((c: PostChannel) => !isStoryChannel(c))) return res.status(400).json({ error: 'Escribe el texto de la publicación' });
         // Programar algo con hora pasada lo publicaría de golpe: para eso está "Publicar ahora".
         if (new Date(final.scheduled_at).getTime() < Date.now()) return res.status(400).json({ error: 'La hora ya pasó: elige otra o usa "Publicar ahora"' });
         changes.error = null;
@@ -267,7 +312,7 @@ export function socialRouter(): Router {
     try {
       const post = await getPost(req.params.postId);
       if (!post) return res.status(404).json({ error: 'Publicación no encontrada' });
-      if (!post.caption.trim() && post.channels.some(c => c !== 'instagram_story')) return res.status(400).json({ error: 'Escribe el texto antes de publicar' });
+      if (!post.caption.trim() && post.channels.some(c => !isStoryChannel(c))) return res.status(400).json({ error: 'Escribe el texto antes de publicar' });
       const done = await claimAndPublish(post, EDITABLE_STATUSES);
       if (!done) return res.status(409).json({ error: 'Esta publicación ya se está publicando o ya salió' });
       res.json({ post: done });

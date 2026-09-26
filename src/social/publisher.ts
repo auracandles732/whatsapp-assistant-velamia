@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from '../services/metaChannels';
 import { instagramReadyUrl, ImageKind } from './images';
-import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts } from './posts';
-import { planUpcomingPosts } from './planner';
+import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts, expireDrafts, pendingDrafts, localParts, localDay } from './posts';
+import { planUpcomingPosts, proposePlan, lastPlanReport } from './planner';
+import { profile } from '../config/businessProfile';
 import { getPublishingTenants } from '../services/supabase';
 import { runWithTenant } from '../services/tenant';
 
@@ -110,6 +111,36 @@ export function facebookItems(items: PostMedia[]): PostMedia[] {
   return photos.length ? photos : items.slice(0, 1);
 }
 
+/**
+ * Historias de la página de Facebook: cada foto (armada en 9:16) sale como una historia; los videos, con la subida por
+ * partes que pide Facebook. Si una falla después de que otras salieron, se deja como publicada.
+ */
+async function facebookStory(conn: PublishingConnection, post: SocialPost, { prepareImage }: PublishOptions): Promise<ChannelResult> {
+  const params = { access_token: conn.pageToken };
+  let first: ChannelResult | null = null;
+  const items = mediaOf(post);
+  for (const [i, item] of items.entries()) {
+    try {
+      let id: string;
+      if (item.type === 'video') {
+        const { data: start } = await graph.post(`${GRAPH_API}/${conn.pageId}/video_stories`, { upload_phase: 'start' }, { params });
+        await graph.post(String(start.upload_url), null, { headers: { Authorization: `OAuth ${conn.pageToken}`, file_url: item.url } });
+        const { data: done } = await graph.post(`${GRAPH_API}/${conn.pageId}/video_stories`, { upload_phase: 'finish', video_id: start.video_id }, { params });
+        id = String(done.post_id || start.video_id);
+      } else {
+        const { data: photo } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: await prepareImage(item.url, 'story'), published: false }, { params });
+        const { data: story } = await graph.post(`${GRAPH_API}/${conn.pageId}/photo_stories`, { photo_id: photo.id }, { params });
+        id = String(story.post_id || photo.id);
+      }
+      first = first || { id, permalink: `https://www.facebook.com/${id}` };
+    } catch (error: any) {
+      if (!first) throw error;
+      console.warn(`⚠️ Historia de Facebook ${i + 1} de ${items.length} no salió: ${metaError(error)}`);
+    }
+  }
+  return first!;
+}
+
 /** Página de Facebook: una o varias fotos originales o, si solo lleva videos, un video. */
 async function facebookPage(conn: PublishingConnection, post: SocialPost): Promise<ChannelResult> {
   const params = { access_token: conn.pageToken };
@@ -153,12 +184,14 @@ export async function publishToChannels(conn: PublishingConnection, scopes: stri
       continue;
     }
     try {
-      if (channel !== 'facebook' && !conn.instagramId) throw new Error('La página no tiene una cuenta de Instagram profesional conectada.');
-      const needed = channel === 'facebook' ? PUBLISH_SCOPES.facebook : PUBLISH_SCOPES.instagram;
+      const onFacebook = channel === 'facebook' || channel === 'facebook_story';
+      if (!onFacebook && !conn.instagramId) throw new Error('La página no tiene una cuenta de Instagram profesional conectada.');
+      const needed = onFacebook ? PUBLISH_SCOPES.facebook : PUBLISH_SCOPES.instagram;
       if (!scopes.includes(needed)) throw new Error(`Falta el permiso ${needed}: vuelve a conectar con Facebook y acéptalo.`);
       results[channel] = channel === 'instagram_feed' ? await instagramFeed(conn, post, options)
         : channel === 'instagram_story' ? await instagramStory(conn, post, options)
-          : await facebookPage(conn, post);
+          : channel === 'facebook_story' ? await facebookStory(conn, post, options)
+            : await facebookPage(conn, post);
     } catch (error: any) {
       results[channel] = { error: metaError(error) };
     }
@@ -191,7 +224,7 @@ export async function publishNow(post: SocialPost): Promise<PublishOutcome> {
   return publishToChannels(conn, scopes, post, { waitMs: READY_WAIT_MS, prepareImage: instagramReadyUrl });
 }
 
-export const CHANNEL_NAMES: Record<PostChannel, string> = { instagram_feed: 'Instagram', instagram_story: 'Historia de Instagram', facebook: 'Facebook' };
+export const CHANNEL_NAMES: Record<PostChannel, string> = { instagram_feed: 'Instagram', instagram_story: 'Historia de Instagram', facebook: 'Facebook', facebook_story: 'Historia de Facebook' };
 
 /** Publica una publicación reservándola antes: si dos revisiones coinciden, solo una la publica. */
 export async function claimAndPublish(post: SocialPost, from: PostStatus[] = ['approved']): Promise<SocialPost | null> {
@@ -213,10 +246,29 @@ const LATE_LIMIT_MS = 6 * 60 * 60 * 1000;
 const CHECK_EVERY_MS = 5 * 60 * 1000;
 const PLAN_EVERY_MS = 60 * 60 * 1000;
 
+/**
+ * ¿Toca mandarle a la dueña la planificación para aprobar? Diario: cada día desde las 18:00 (la de mañana). Semanal: los
+ * sábados desde las 10:00 (la semana siguiente). En ambos, también si en los próximos 2 días falta contenido y no se le
+ * mandó nada en las últimas 20 horas (así no se queda un día vacío por esperar al sábado). Sin efectos, para probarla.
+ */
+export function reportDue(mode: string, now: Date, timeZone: string, lastAt: string | null, gapSoon: boolean): boolean {
+  if (mode !== 'semanal' && mode !== 'diario') return false;
+  const p = localParts(now, timeZone);
+  const hoursSince = lastAt ? (now.getTime() - new Date(lastAt).getTime()) / 3_600_000 : Infinity;
+  const sameDay = !!lastAt && localDay(lastAt, timeZone) === localDay(now, timeZone);
+  if (gapSoon && hoursSince >= 20) return true;
+  if (mode === 'diario') return p.hour >= 18 && !sameDay;
+  return p.weekday === 6 && p.hour >= 10 && hoursSince >= 36;
+}
+
 async function runForCurrent(now: Date, plan: boolean) {
   let published = 0;
-  // Lo que quedó "por revisar" de antes: ahora todo lo programado sale solo.
-  await scheduleDrafts();
+  const settings = await getSavedSettings();
+  const mode = settings?.planMode || 'manual';
+  // Solo en automático lo que quedó "por revisar" sale solo; con aprobación espera tu visto bueno.
+  await scheduleDrafts(mode === 'automatico');
+  const expired = await expireDrafts(now);
+  if (expired) console.log(`📣 ${expired} publicación(es) por aprobar pasaron su hora sin aprobarse: no salieron`);
   for (const post of await stuckPosts(new Date(now.getTime() - 30 * 60 * 1000))) {
     await updatePost(post.id, { status: 'failed', error: 'Se interrumpió mientras se publicaba. Revisa en tus redes si salió y vuelve a intentarlo si hace falta.' }, ['publishing']);
   }
@@ -231,11 +283,22 @@ async function runForCurrent(now: Date, plan: boolean) {
       console.log(`📣 Publicación ${done.status === 'published' ? 'publicada' : done.status}: ${done.theme}${done.error ? ` (${done.error})` : ''}`);
     }
   }
-  if (plan) {
-    const settings = await getSavedSettings();
-    if (settings?.autoPlan) {
+  if (plan && settings) {
+    if (mode === 'automatico') {
       const created = await planUpcomingPosts(now, 7, settings);
       if (created.length) console.log(`📣 ${created.length} publicación(es) programadas por la IA`);
+    } else if (mode === 'semanal' || mode === 'diario') {
+      const tz = profile().business.timezone;
+      const [report, drafts] = await Promise.all([lastPlanReport(), pendingDrafts(now)]);
+      // Si ya hay una propuesta esperando aprobación, no se manda otra encima.
+      const soon = new Date(now.getTime() + 2 * 86_400_000).toISOString();
+      const gapSoon = drafts.every(d => d.scheduled_at > soon);
+      if (drafts.length === 0 || gapSoon) {
+        if (reportDue(mode, now, tz, report?.at || null, drafts.length === 0)) {
+          const result = await proposePlan(now, settings);
+          if (result.created) console.log(`📣 Planificación para aprobar: ${result.created} tanda(s) · reporte ${result.sent ? 'enviado' : 'no se pudo enviar'}`);
+        }
+      }
     }
   }
   return published;

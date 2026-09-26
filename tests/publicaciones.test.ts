@@ -173,7 +173,7 @@ test('la IA solo elige la categoría de cada tanda: una categoría por tanda y p
 
 test('con reglas también se llena cada tanda con una sola categoría', async () => {
   const brain = require('../src/social/brain') as typeof import('../src/social/brain');
-  const settings = socialPosts.normalizeSettings({ days: [2], hour: '19:00', channels: ['instagram_story'], photosPerDay: 4, photosPerPost: 2 });
+  const settings = socialPosts.normalizeSettings({ days: [2], hour: '19:00', channels: ['instagram_story'], photosPerDay: 6, photosPerPost: 3 });
   const now = new Date('2026-09-21T15:00:00Z');
   const slots = socialPosts.daySlots(settings, ['2026-09-22'], [], now, TZ);
   const plan = await brain.ruleBrain.plan({ slots, catalog: catalogo, recent: [], recentThemes: [], library: [], settings, month: 9, now, timeZone: TZ, profile: VELAMIA_PROFILE });
@@ -359,4 +359,82 @@ test('reintentar sin conexión no borra lo que ya salió (si no, se publicaría 
   const nueva: any = post(1, ['instagram_feed']);
   const fallida = await publisher.publishNow(nueva);
   assert.deepEqual(publisher.withEarlierResults(nueva, fallida), fallida, 'sin nada publicado antes, no cambia');
+});
+
+// ---------- Planificación para aprobar (26-sep) ----------
+
+test('nunca tandas sueltas de 1 o 2 fotos para completar el día', () => {
+  const settings = socialPosts.normalizeSettings({ days: [2], hour: '15:00', channels: ['instagram_story'], photosPerPost: 5, photosPerDay: 10 });
+  const now = new Date('2026-09-21T12:00:00Z');
+  assert.deepEqual(socialPosts.daySlots(settings, ['2026-09-22'], [{ day: '2026-09-22', minutes: 12 * 60, photos: 9 }], now, TZ), [], 'faltaba 1: no se agrega nada');
+  const siete = socialPosts.daySlots(settings, ['2026-09-22'], [{ day: '2026-09-22', minutes: 12 * 60, photos: 3 }], now, TZ);
+  assert.ok(siete.every(s => s.count >= 3), JSON.stringify(siete.map(s => s.count)));
+});
+
+test('historias de Instagram y de Facebook: la tanda va a las dos', () => {
+  const settings = socialPosts.normalizeSettings({ days: [2], hour: '15:00', channels: ['instagram_story', 'facebook_story'], photosPerDay: 5, photosPerPost: 5 });
+  assert.deepEqual(settings.channels, ['instagram_story', 'facebook_story']);
+  const slots = socialPosts.daySlots(settings, ['2026-09-22'], [], new Date('2026-09-21T12:00:00Z'), TZ);
+  assert.equal(slots.length, 1);
+  assert.equal(slots[0].kind, 'story');
+  assert.ok(socialPosts.isStoryChannel('facebook_story'));
+});
+
+test('historias de Facebook: cada foto se sube sin publicar y sale como historia de la página', async () => {
+  calls.length = 0;
+  const r = await publisher.publishToChannels(conexion, ['pages_manage_posts'], post(2, ['facebook_story']), listo);
+  assert.equal(r.status, 'published');
+  const fotos = calls.filter(c => c.url.endsWith('/pagina/photos'));
+  assert.equal(fotos.length, 2);
+  assert.ok(fotos.every(f => f.body.published === false));
+  assert.equal(fotos[0].body.url, 'https://x/1.png.jpg', 'la foto armada en 9:16');
+  assert.equal(calls.filter(c => c.url.endsWith('/pagina/photo_stories')).length, 2);
+});
+
+test('el modo de trabajo del agente: lo guardado antes se respeta', () => {
+  assert.equal(socialPosts.normalizeSettings({ autoPlan: true }).planMode, 'automatico');
+  assert.equal(socialPosts.normalizeSettings({ autoPlan: false }).planMode, 'manual');
+  const semanal = socialPosts.normalizeSettings({ planMode: 'semanal', autoPlan: true });
+  assert.equal(semanal.planMode, 'semanal');
+  assert.equal(semanal.autoPlan, false, 'con reporte no publica solo');
+});
+
+test('el reporte se manda: diario desde las 18:00; semanal el sábado; y si falta contenido pronto', () => {
+  const sab10 = new Date('2026-09-26T15:30:00Z'); // sábado 10:30 en Ecuador
+  assert.equal(publisher.reportDue('semanal', sab10, TZ, '2026-09-19T15:00:00Z', false), true);
+  assert.equal(publisher.reportDue('semanal', sab10, TZ, '2026-09-26T15:00:00Z', false), false, 'ya se mandó hoy');
+  const mar = new Date('2026-09-22T15:00:00Z');
+  assert.equal(publisher.reportDue('semanal', mar, TZ, '2026-09-19T15:00:00Z', false), false, 'martes: espera al sábado');
+  assert.equal(publisher.reportDue('semanal', mar, TZ, '2026-09-19T15:00:00Z', true), true, 'pero si falta contenido en 2 días, se manda');
+  assert.equal(publisher.reportDue('diario', new Date('2026-09-22T23:30:00Z'), TZ, '2026-09-21T23:30:00Z', false), true, '18:30: el de mañana');
+  assert.equal(publisher.reportDue('diario', new Date('2026-09-22T20:00:00Z'), TZ, '2026-09-21T23:30:00Z', false), false, '15:00: todavía no');
+  assert.equal(publisher.reportDue('automatico', sab10, TZ, null, true), false);
+});
+
+test('el reporte de WhatsApp explica día por día qué sale, a qué hora y por qué', () => {
+  const planner = require('../src/social/planner') as typeof import('../src/social/planner');
+  const posts = [
+    { id: 'a', scheduled_at: '2026-09-29T17:00:00Z', theme: 'Halloween', products: [1, 2, 3, 4, 5].map(i => ({ name: `H${i}`, image_url: 'x', price: 35 })), media: [], channels: ['instagram_story', 'facebook_story'] as any },
+    { id: 'b', scheduled_at: '2026-09-29T20:00:00Z', theme: 'Bautizo', products: [1, 2, 3].map(i => ({ name: `B${i}`, image_url: 'x', price: 35 })), media: [], channels: ['instagram_story'] as any }
+  ];
+  const text = planner.planReportText(posts, 'Halloween es la temporada.', { a: 'Halloween es la temporada: sale todos los días', b: 'Bautizo no se publica desde hace 6 días' }, TZ, 'https://crm/x');
+  assert.match(text, /\*mar 29 sep\*/);
+  assert.match(text, /• 12:00 Halloween · 5 fotos en historias — Halloween es la temporada/);
+  assert.match(text, /• 15:00 Bautizo · 3 fotos en historias — Bautizo no se publica desde hace 6 días/);
+  assert.match(text, /8 fotos/);
+  assert.match(text, /https:\/\/crm\/x/);
+  assert.match(text, /no se publica nada/);
+});
+
+test('temporada primero y las demás se turnan: no gana siempre la categoría más grande', () => {
+  const muchos = [
+    ...Array.from({ length: 30 }, (_, i) => ({ name: `ANIMAL ${i}`, category: 'ANIMALES', price: 38, image_url: `https://x/a${i}.png` })),
+    ...Array.from({ length: 6 }, (_, i) => ({ name: `HALLOW ${i}`, category: 'HALLOWEEN', price: 35, image_url: `https://x/h${i}.png` })),
+    ...Array.from({ length: 6 }, (_, i) => ({ name: `BAUT ${i}`, category: 'BAUTIZO', price: 35, image_url: `https://x/b${i}.png` }))
+  ];
+  const picks = socialPosts.pickProducts(muchos, [], 4, [3, 3, 3, 3], 10, { recentCategories: ['Animales'], slotDays: ['d1', 'd1', 'd2', 'd2'] });
+  assert.equal(picks[0].theme, 'Halloween', 'en octubre, Halloween primero');
+  assert.notEqual(picks[1].theme, 'Halloween', 'no dos veces el mismo día');
+  assert.equal(picks[1].theme, 'Bautizo', 'Animales salió hace poco: espera su turno');
+  assert.equal(picks[2].theme, 'Halloween');
 });

@@ -7,8 +7,17 @@ import { BusinessProfile, profile } from '../config/businessProfile';
  * automático, la IA las prepara cada semana) y se publican solas a la hora elegida (socialPublisher), sin aprobaciones.
  */
 
-export type PostChannel = 'instagram_feed' | 'instagram_story' | 'facebook';
-export const POST_CHANNELS: PostChannel[] = ['instagram_feed', 'instagram_story', 'facebook'];
+export type PostChannel = 'instagram_feed' | 'instagram_story' | 'facebook' | 'facebook_story';
+export const POST_CHANNELS: PostChannel[] = ['instagram_feed', 'instagram_story', 'facebook', 'facebook_story'];
+/** Historias (Instagram o Facebook): no llevan texto y cada foto sale como una historia. */
+export const isStoryChannel = (c: string) => c === 'instagram_story' || c === 'facebook_story';
+
+/**
+ * Cómo trabaja el agente: 'semanal' / 'diario' = arma la planificación, te la manda por WhatsApp y no publica nada
+ * hasta que la apruebas; 'automatico' = publica solo; 'manual' = no hace nada solo (tú pides la planificación).
+ */
+export type PlanMode = 'semanal' | 'diario' | 'automatico' | 'manual';
+export const PLAN_MODES: PlanMode[] = ['semanal', 'diario', 'automatico', 'manual'];
 export type PostStatus = 'draft' | 'approved' | 'publishing' | 'published' | 'partial' | 'failed' | 'cancelled';
 
 /** Estados en los que la empresa todavía puede cambiar la publicación. */
@@ -30,6 +39,8 @@ export const MAX_STORIES_PER_DAY = 2;
 export const MAX_PHOTOS_PER_DAY = 30;
 /** Tandas por día como máximo: más que eso satura a los seguidores. */
 export const MAX_SETS_PER_DAY = 6;
+/** Fotos por tanda como mínimo (salvo que la meta del día sea menor). */
+export const MIN_SET = 3;
 
 export interface SocialPost {
   id: string;
@@ -58,7 +69,9 @@ export interface PublishingSettings {
    * en tandas de una sola categoría: publicaciones y/o historias según los canales elegidos.
    */
   photosPerDay: number;
-  /** Modo automático: la IA elige los productos, escribe el texto y programa cada semana sola. */
+  /** Cómo trabaja el agente (reporte para aprobar, automático o manual). */
+  planMode: PlanMode;
+  /** Se deriva de planMode ("automático"): se conserva para lo que ya lo leía. */
   autoPlan: boolean;
   /**
    * Publicaciones por día: 0 = decide la IA (cuántas, a qué hora, de qué y en qué formato, hasta MAX_POSTS_PER_DAY
@@ -80,6 +93,7 @@ export const DEFAULT_SETTINGS: PublishingSettings = {
   channels: ['instagram_feed', 'facebook'],
   photosPerPost: 5,
   photosPerDay: 10,
+  planMode: 'manual',
   autoPlan: false,
   postsPerDay: 0,
   autoApprove: true,
@@ -102,7 +116,9 @@ export function normalizeSettings(raw: any): PublishingSettings {
     channels: channels.length ? channels : DEFAULT_SETTINGS.channels,
     photosPerPost: Number.isFinite(photos) ? Math.min(MAX_CAROUSEL, Math.max(1, photos)) : DEFAULT_SETTINGS.photosPerPost,
     photosPerDay: Number.isFinite(photosDay) && photosDay >= 1 ? Math.min(MAX_PHOTOS_PER_DAY, photosDay) : DEFAULT_SETTINGS.photosPerDay,
-    autoPlan: typeof r.autoPlan === 'boolean' ? r.autoPlan : DEFAULT_SETTINGS.autoPlan,
+    // Lo guardado antes de los modos: automático encendido = "automatico"; apagado = "manual".
+    planMode: PLAN_MODES.includes(r.planMode) ? r.planMode : r.autoPlan === true ? 'automatico' : 'manual',
+    autoPlan: PLAN_MODES.includes(r.planMode) ? r.planMode === 'automatico' : r.autoPlan === true,
     postsPerDay: Number.isFinite(perDay) && perDay >= 0 && perDay <= MAX_POSTS_PER_DAY ? perDay : DEFAULT_SETTINGS.postsPerDay,
     autoApprove: true,
     notes: typeof r.notes === 'string' ? r.notes.trim().slice(0, 1000) : ''
@@ -219,16 +235,18 @@ export function setTimes(hour: string, n: number): number[] {
  * Nunca a menos de una hora de otra publicación de ese día, ni en el pasado.
  */
 export function daySlots(settings: PublishingSettings, days: string[], used: DayUse[], now: Date, timeZone: string): DaySlot[] {
-  const storiesOn = settings.channels.includes('instagram_story');
-  const feedOn = settings.channels.some(c => c !== 'instagram_story');
+  const storiesOn = settings.channels.some(isStoryChannel);
+  const feedOn = settings.channels.some(c => !isStoryChannel(c));
   if (!storiesOn && !feedOn) return [];
   const size = Math.min(MAX_CAROUSEL, Math.max(1, settings.photosPerPost));
+  // Nunca tandas de 1 o 2 fotos para "completar": se ven sueltas (caso real: Halloween 4 a las 12:00 y 1 a las 16:00).
+  const least = Math.min(MIN_SET, settings.photosPerDay);
   const slots: DaySlot[] = [];
   for (const day of days) {
     const today = used.filter(u => u.day === day);
     const missing = settings.photosPerDay - today.reduce((sum, u) => sum + u.photos, 0);
-    if (missing <= 0) continue;
-    const n = Math.min(MAX_SETS_PER_DAY, Math.ceil(missing / size));
+    if (missing < least) continue;
+    const n = Math.max(1, Math.min(MAX_SETS_PER_DAY, Math.ceil(missing / size), Math.floor(missing / least)));
     const counts = Array.from({ length: n }, (_, i) => Math.min(MAX_CAROUSEL, Math.floor(missing / n) + (i < missing % n ? 1 : 0)));
     const taken = today.map(u => u.minutes);
     const [y, m, d] = day.split('-').map(Number);
@@ -255,7 +273,7 @@ export interface CatalogItem { name: string; category?: string | null; image_url
 
 // Temporadas: sus categorías salen primero cuando se acerca la fecha. Palabras sin tildes, en minúsculas.
 const SEASONS: { months: number[]; words: string[] }[] = [
-  { months: [10, 11, 12], words: ['navidad', 'navideno', 'christmas'] },
+  { months: [11, 12], words: ['navidad', 'navideno', 'christmas'] },
   { months: [1, 2], words: ['amor', 'valentin', 'enamorad'] },
   { months: [4, 5], words: ['madre', 'mama'] },
   { months: [5, 6, 7], words: ['graduacion', 'grado', 'padre', 'papa'] },
@@ -273,7 +291,16 @@ export const titleCase = (text: string) => plain(text).length ? text.charAt(0).t
  * variando la categoría de una publicación a otra y dando prioridad a la temporada (Navidad en noviembre, etc.).
  * `recent` son los nombres ya publicados, del más nuevo al más viejo.
  */
-export function pickProducts(catalog: CatalogItem[], recent: string[], slots: number, perPost: number | number[], month: number): { theme: string; products: CatalogItem[] }[] {
+export interface PickOptions {
+  /** Categorías publicadas últimamente, de la más nueva a la más vieja (para turnarlas). */
+  recentCategories?: string[];
+  /** Día de cada tanda ("AAAA-MM-DD"): la misma categoría no se repite el mismo día. */
+  slotDays?: string[];
+  /** Categorías que no se deben elegir (ya usadas ese día por otra tanda). */
+  avoid?: string[];
+}
+
+export function pickProducts(catalog: CatalogItem[], recent: string[], slots: number, perPost: number | number[], month: number, options: PickOptions = {}): { theme: string; products: CatalogItem[] }[] {
   const withPhoto = catalog.filter(c => c.image_url && Number(c.price) >= 0);
   if (withPhoto.length === 0 || slots <= 0) return [];
   const lastSeen = new Map<string, number>();
@@ -289,11 +316,20 @@ export function pickProducts(catalog: CatalogItem[], recent: string[], slots: nu
   const used = new Set<string>();
   const timesUsed = new Map<string, number>();
   const picks: { theme: string; products: CatalogItem[] }[] = [];
+  const byDay = new Map<string, Set<string>>();
+  // Cuánto hace que salió cada categoría (más alto = hace más o nunca): así se turnan y no gana siempre la más grande.
+  const recentCats = (options.recentCategories || []).map(plain);
+  const catAge = (cat: string) => { const i = recentCats.indexOf(plain(cat)); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
+  const avoid = new Set((options.avoid || []).map(plain));
   let previous = '';
   for (let i = 0; i < slots; i++) {
-    const available = [...byCategory.entries()]
+    const day = options.slotDays?.[i] || '';
+    const usedToday = byDay.get(day) || new Set<string>();
+    const all = [...byCategory.entries()]
       .map(([cat, items]) => ({ cat, items: items.filter(c => !used.has(productKey(c.name))).sort((a, b) => age(b) - age(a)) }))
       .filter(x => x.items.length > 0);
+    const fresh = all.filter(x => !avoid.has(plain(x.cat)) && !(day && usedToday.has(plain(x.cat))));
+    const available = fresh.length ? fresh : all;
     if (available.length === 0) break;
     const want = Array.isArray(perPost) ? perPost[i] || 1 : perPost;
     // La temporada puede salir una publicación sí y otra no; el resto de categorías se turnan antes de repetirse.
@@ -305,12 +341,15 @@ export function pickProducts(catalog: CatalogItem[], recent: string[], slots: nu
       || Number(a.cat === previous) - Number(b.cat === previous)
       || weight(a.cat) - weight(b.cat)
       || Number(isSeasonal(b.cat, month)) - Number(isSeasonal(a.cat, month))
+      || catAge(b.cat) - catAge(a.cat)
       || age(b.items[0]) - age(a.items[0])
       || b.items.length - a.items.length);
     const chosen = available[0];
     const products = chosen.items.slice(0, want);
     products.forEach(p => used.add(productKey(p.name)));
     timesUsed.set(chosen.cat, (timesUsed.get(chosen.cat) || 0) + 1);
+    usedToday.add(plain(chosen.cat));
+    byDay.set(day, usedToday);
     picks.push({ theme: titleCase(chosen.cat), products });
     previous = chosen.cat;
   }
@@ -403,11 +442,13 @@ export async function updatePost(id: string, changes: Partial<SocialPost>, onlyI
 }
 
 /** Lo que quedó "por revisar" (antes había que aprobar cada publicación) pasa a programado. */
-export async function scheduleDrafts(): Promise<void> {
-  const { error } = await supabase.from(POSTS).update({ status: 'approved', updated_at: new Date().toISOString() })
-    .filter('business_id', tenantOp(), tenantValue())
-    .eq('status', 'draft');
-  if (error) throw new Error(`Error programando publicaciones: ${error.message}`);
+export async function scheduleDrafts(convert = true): Promise<void> {
+  if (convert) {
+    const { error } = await supabase.from(POSTS).update({ status: 'approved', updated_at: new Date().toISOString() })
+      .filter('business_id', tenantOp(), tenantValue())
+      .eq('status', 'draft');
+    if (error) throw new Error(`Error programando publicaciones: ${error.message}`);
+  }
   // Las "descartadas" de antes ya no sirven: se borran para que su día se pueda volver a llenar.
   const { error: purgeError } = await supabase.from(POSTS).delete()
     .filter('business_id', tenantOp(), tenantValue())
@@ -429,6 +470,25 @@ export async function postsBetween(fromIso: string, toIso: string): Promise<Soci
 export function postFingerprint(post: { scheduled_at: string; channels: string[]; caption: string; products?: { image_url: string }[]; media?: { url: string }[] }): string {
   const items = (post.media && post.media.length ? post.media.map(m => m.url) : (post.products || []).map(p => p.image_url)).join(',');
   return [new Date(post.scheduled_at).toISOString(), [...post.channels].sort().join(','), post.caption.trim(), items].join('|');
+}
+
+/** Lo que esperaba aprobación y ya pasó su hora: no se publica (queda como "no se publicó" para reprogramarlo). */
+export async function expireDrafts(now: Date): Promise<number> {
+  const { data, error } = await supabase.from(POSTS).update({ status: 'failed', error: 'No se aprobó a tiempo: no se publicó. Elige otra hora si la quieres.', updated_at: now.toISOString() })
+    .filter('business_id', tenantOp(), tenantValue())
+    .eq('status', 'draft').lt('scheduled_at', now.toISOString()).select('id');
+  if (error) throw new Error(`Error revisando publicaciones por aprobar: ${error.message}`);
+  return (data || []).length;
+}
+
+/** Publicaciones por aprobar que todavía no pasan su hora. */
+export async function pendingDrafts(now = new Date()): Promise<SocialPost[]> {
+  const { data, error } = await supabase.from(POSTS).select('*')
+    .filter('business_id', tenantOp(), tenantValue())
+    .eq('status', 'draft').gte('scheduled_at', now.toISOString())
+    .order('scheduled_at', { ascending: true });
+  if (error) throw new Error(`Error leyendo publicaciones por aprobar: ${error.message}`);
+  return (data || []) as SocialPost[];
 }
 
 /** Publicaciones programadas cuya hora ya llegó. */

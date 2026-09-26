@@ -103,7 +103,7 @@ export async function collectMetricsForCurrent(now = new Date()) {
   let problem = '';
   for (const post of (data || []) as SocialPost[]) {
     for (const [channel, result] of Object.entries(post.results || {}) as [PostChannel, any][]) {
-      if (!result?.id || result.error) continue;
+      if (!result?.id || result.error || channel === 'facebook_story') continue;
       const story = channel === 'instagram_story';
       if (story && post.published_at && now.getTime() - new Date(post.published_at).getTime() > STORY_HOURS * 3_600_000) continue;
       try {

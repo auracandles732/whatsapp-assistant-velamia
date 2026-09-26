@@ -286,9 +286,9 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
   const rules = [
     `Eres quien maneja las redes sociales de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. El día, la hora, el lugar (publicación o historias) y la cantidad de fotos de cada tanda ya están decididos: tú eliges QUÉ categoría mostrar en cada una.`,
     '- Devuelve una "asignacion" por cada tanda de la lista, con su mismo "n".',
-    '- Piensa en vender: fechas y temporadas cercanas (Halloween, Día de los Difuntos, Navidad, San Valentín, Día de la Madre, graduaciones…), variedad y lo que menos se ha publicado. No repitas la misma categoría dos veces seguidas el mismo día.',
+    '- Temporada primero: en septiembre y octubre, Halloween en una tanda cada día; desde noviembre, Navidad en una tanda cada día. Las demás tandas, las categorías que hace más tiempo no salen (mira "recientes"). Nunca la misma categoría dos veces el mismo día.',
     '- Una sola categoría por tanda, de la lista y escrita exactamente igual. Elige una que tenga al menos tantos productos como fotos lleva la tanda (si no hay, la que más tenga).',
-    '- "motivo": una frase corta y sencilla para la dueña explicando por qué esa categoría en esa tanda.',
+    '- "motivo": una frase corta y sencilla para la dueña explicando por qué esa categoría en esa tanda (por ejemplo "Halloween es la temporada" o "Bautizo no sale desde hace 5 días").',
     '- "resumen": una o dos frases con la estrategia, en palabras simples.',
     '- "tareas": de 0 a 5 cosas concretas que la dueña puede hacer esta semana para que las redes funcionen mejor (por ejemplo "graba un video corto del proceso de la vela de Papá Noel para el reel del jueves" o "toma una foto de un pedido listo para entregar"). Nada que no ayude.',
     prompt.trim() ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas):\n${prompt.trim()}` : '',
