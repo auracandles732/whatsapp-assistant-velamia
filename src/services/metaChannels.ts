@@ -301,7 +301,7 @@ export async function socialStatus(): Promise<Record<string, string>> {
     const missing = REQUIRED_SCOPES.filter(s => !info.scopes.includes(s));
     complete = missing.length === 0 && !!creds.instagramId;
     value = {
-      estado: missing.length ? 'conectado, pero faltan permisos' : 'conectado',
+      estado: !creds.instagramId ? 'conectado, pero sin Instagram' : missing.length ? 'conectado, pero faltan permisos' : 'conectado',
       origen: stored.creds ? 'botón Conectar con Facebook del CRM' : 'variables de Render',
       instagram: creds.instagramId ? `conectado (${creds.instagramId})` : 'sin Instagram: a la clave le falta permiso o la página no tiene Instagram profesional',
       clave_vence: info.expiresAt === 0 ? 'nunca' : new Date(info.expiresAt * 1000).toISOString().slice(0, 10),

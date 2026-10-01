@@ -16,7 +16,8 @@ import {
   sendPrivateReply,
   replyToCommentPublicly,
   postText,
-  wasSentByUs
+  wasSentByUs,
+  pageCredentials
 } from '../services/metaChannels';
 import { handleSocialMessage, handleSocialEcho } from './messageController';
 import { planTurn } from '../services/openai';
@@ -32,7 +33,8 @@ export async function handleSocialWebhook(data: any): Promise<void> {
   for (const entry of data?.entry || []) {
     const channel = await channelForAccount(object, String(entry?.id || ''));
     if (!channel) {
-      console.warn(`⚠️ Aviso de ${object} para una cuenta que no está conectada (${entry?.id}): se ignora`);
+      const creds = await pageCredentials();
+      console.warn(`⚠️ Aviso de ${object} para una cuenta que no está conectada (llegó ${entry?.id}; conectadas: página ${creds?.pageId || '—'}, Instagram ${creds?.instagramId || '—'}): se ignora`);
       continue;
     }
     for (const event of entry.messaging || []) {
