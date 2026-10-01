@@ -119,5 +119,24 @@ Mientras la app no tenga el acceso avanzado, los pasos 3 a 5 se graban con una c
 
 ## 5. Acceso para el revisor
 
-Meta pide un usuario y contraseña para entrar al CRM y probar. Pendiente de definir: debe ser un acceso que no deje
-ver los chats de clientas reales ni permita reconectar la página de VELAMIA.
+El revisor entra a una **empresa de demostración** (sin chats ni datos de clientas reales), con un usuario Dueño creado
+solo para él: ahí puede conectar su propia página de prueba, publicar y ver resultados sin tocar la conexión de
+VELAMIA. Los mensajes los prueba escribiéndole a la página de VELAMIA, y el recorrido completo va en el video.
+
+Texto para "Proporciona las instrucciones para acceder a la app":
+
+> VELAMIA Platform is the CRM that our own business (VELAMIA, Ecuador) uses to answer customers on Messenger, Instagram and WhatsApp and to publish our own posts. It is used by our team, not by the general public.
+>
+> HOW TO ACCESS
+> 1. Open https://asistente.velamia.shop/crm/
+> 2. Sign in with the test credentials provided in the access-code field below. They open a demo business that contains no real customer data.
+> 3. Open the "Publicaciones" tab. In the "Canales conectados" card click "Administrar conexión". This starts Facebook Login: choose a Facebook Page and its linked Instagram professional account and accept the permissions. The card then shows the connected Page and Instagram account (public_profile, pages_show_list, business_management, pages_read_engagement, pages_manage_metadata, instagram_basic).
+> 4. In "Publicaciones", create a post with a photo and a caption and publish it to Instagram and to the Facebook Page (instagram_content_publish, pages_manage_posts).
+> 5. In "Publicaciones → Resultados" the CRM shows likes, comments and reach of the published posts (instagram_manage_insights, read_insights, pages_read_user_content).
+>
+> MESSAGING (pages_messaging, instagram_manage_messages, instagram_manage_comments, whatsapp_business_messaging, whatsapp_business_management)
+> The inbox is connected to our own Page, Instagram account and WhatsApp number. Those conversations contain our customers' personal data, so they are not available in the demo business. To test messaging:
+> 1. Open https://m.me/1044219295441808 and send a message in Spanish, for example "Hola, quiero información de precios".
+> 2. The Page replies within one to two minutes.
+> 3. The same works by sending a direct message to @velamia.ec on Instagram.
+> The attached screen recording shows the complete flow inside the CRM inbox: incoming Messenger, Instagram and WhatsApp messages, the replies sent from the CRM, and the reply to an Instagram comment.
