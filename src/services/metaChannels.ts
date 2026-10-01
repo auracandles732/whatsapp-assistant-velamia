@@ -375,6 +375,21 @@ export async function socialDiagnosis(now = Date.now()): Promise<Record<string, 
     })
     .catch(failed);
   value.chats_instagram = await lastChat('instagram');
+  // Dónde ve Meta los chats de Instagram (bandeja, solicitudes, otros, no deseado) y los últimos mensajes del más reciente.
+  for (const folder of ['inbox', 'pending', 'other', 'spam']) {
+    value[`instagram_carpeta_${folder}`] = await ask(`${creds.pageId}/conversations`, { platform: 'instagram', folder, fields: 'updated_time', limit: 50 })
+      .then(d => {
+        const times: string[] = (d?.data || []).map((c: any) => String(c.updated_time || '')).filter(Boolean).sort();
+        return times.length ? `${times.length} chat(s); último movimiento ${ago(times[times.length - 1])}` : 'vacía';
+      })
+      .catch(failed);
+  }
+  value.instagram_ultimos_mensajes = await ask(`${creds.pageId}/conversations`, { platform: 'instagram', fields: 'messages.limit(4){created_time,from}', limit: 1 })
+    .then(d => ((d?.data?.[0]?.messages?.data || []) as any[])
+      .map(m => `${String(m.from?.id) === creds.instagramId ? 'VELAMIA' : 'cliente'} ${ago(m.created_time)}`).join(' | ') || 'ninguno')
+    .catch(failed);
+  value.instagram_cuenta = await ask(creds.instagramId, { fields: 'followers_count,media_count' })
+    .then(d => `${d.followers_count} seguidores, ${d.media_count} publicaciones`).catch(failed);
   value.chats_facebook = await lastChat('messenger');
   value.avisos_de_la_app = await (async () => {
     const appId = await metaAppId();
