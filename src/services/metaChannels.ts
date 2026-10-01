@@ -3,6 +3,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { currentTenant, encryptSecret, decryptSecret, VELAMIA_ID } from './tenant';
 import { maskPhone } from './privacy';
 import { getConfig, setConfig } from './supabase';
+import { noteSocialOutcome } from './webhookTrace';
 
 /**
  * Instagram y Messenger (Facebook). Los chats se guardan igual que los de WhatsApp, pero en lugar del número llevan
@@ -169,6 +170,8 @@ async function postToPage(payload: Record<string, any>, label: string, to: strin
     return data as { recipient_id?: string; message_id?: string };
   } catch (error: any) {
     console.error(`Error enviando ${label}:`, error.response?.data || error.message);
+    const e = error.response?.data?.error;
+    noteSocialOutcome(`${label} rechazado por Meta: (#${e?.code ?? '?'}${e?.error_subcode ? `/${e.error_subcode}` : ''}) ${String(e?.message || error.message).slice(0, 200)}`);
     throw error;
   }
 }

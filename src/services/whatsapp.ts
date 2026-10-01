@@ -159,9 +159,13 @@ export function describeWhatsAppError(error: any): string {
   }
   if (code === 131026) return 'WhatsApp no pudo entregar el mensaje: el número no está disponible en WhatsApp.';
   // Instagram y Messenger: fuera de las 24 horas desde el último mensaje de la clienta no se le puede escribir.
-  if (code === 10 || error.response?.data?.error?.error_subcode === 2018278 || code === 551) {
+  // El código 10 también es "la App no tiene permiso": solo se explica como las 24 horas cuando Meta lo dice.
+  const metaMessage = String(error.response?.data?.error?.message || '');
+  const outsideWindow = error.response?.data?.error?.error_subcode === 2018278 || /outside (of )?(the )?allowed window/i.test(metaMessage);
+  if (outsideWindow || code === 551) {
     return 'Pasaron más de 24 horas desde el último mensaje de la clienta y Meta no permite escribirle por Instagram o Messenger hasta que ella vuelva a escribir.';
   }
+  if (code === 10) return `Meta no permitió enviar el mensaje: ${metaMessage}`;
   if (error.message?.startsWith('Las notas de voz por ahora')) return error.message;
   return error.response?.data?.error?.message || error.message;
 }
