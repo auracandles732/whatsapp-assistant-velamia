@@ -74,6 +74,7 @@ import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
+import { noteWebhook, webhookTrace } from './services/webhookTrace';
 import { subscribePage, isSocialAddress, socialStatus, connectUrl, createConnectState, readConnectState, completeConnection, publishingStatus } from './services/metaChannels';
 import {
   requireCrmSession,
@@ -246,6 +247,7 @@ app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
   // Meta exige respuesta en pocos segundos; transcribir audio o analizar fotos tarda más,
   // así que se confirma primero y el procesamiento sigue en segundo plano.
   res.status(200).send('EVENT_RECEIVED');
+  noteWebhook(data?.object);
 
   // Instagram y la página de Facebook llegan por la misma dirección, con su propio formato.
   if (data?.object === 'page' || data?.object === 'instagram') {
@@ -379,7 +381,9 @@ app.get('/health', async (_req: Request, res: Response) => {
     // Solo indica si la configuración existe, nunca su valor.
     followups: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? 'activo' : 'falta WHATSAPP_BUSINESS_ACCOUNT_ID',
     // Público: solo el estado. Permisos, cuenta y vencimiento se ven en el CRM (/api/meta/status, con sesión).
-    instagram_messenger: (await socialStatus().catch(() => ({ estado: 'no se pudo revisar' }))).estado
+    instagram_messenger: (await socialStatus().catch(() => ({ estado: 'no se pudo revisar' }))).estado,
+    // Cuántos avisos mandó Meta por canal desde que arrancó el servidor: solo cantidades y horas.
+    avisos_meta: webhookTrace()
   });
 });
 

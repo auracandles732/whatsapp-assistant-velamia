@@ -20,6 +20,7 @@ import {
   pageCredentials
 } from '../services/metaChannels';
 import { handleSocialMessage, handleSocialEcho } from './messageController';
+import { noteSocialOutcome } from '../services/webhookTrace';
 import { planTurn } from '../services/openai';
 import { notifyOwner } from '../services/notifications';
 import { profile } from '../config/businessProfile';
@@ -35,12 +36,15 @@ export async function handleSocialWebhook(data: any): Promise<void> {
     if (!channel) {
       const creds = await pageCredentials();
       console.warn(`⚠️ Aviso de ${object} para una cuenta que no está conectada (llegó ${entry?.id}; conectadas: página ${creds?.pageId || '—'}, Instagram ${creds?.instagramId || '—'}): se ignora`);
+      noteSocialOutcome(`${object === 'page' ? 'Facebook' : 'Instagram'}: de una cuenta que no es la conectada, se ignoró`);
       continue;
     }
     const events = messagingEvents(entry);
-    const fields = (entry.changes || []).map((c: any) => String(c?.field || '?')).join(', ');
+    const fields = (entry.changes || []).map((c: any) => String(c?.field || '?').replace(/\W/g, '')).join(', ');
     const standby = (entry.standby || []).length;
-    console.log(`📥 Aviso de ${channelName(channel)}: ${events.length} mensaje(s)${standby ? ` (${standby} en espera: otra aplicación tiene el control del chat)` : ''}${fields ? `, cambios: ${fields}` : ''}`);
+    const summary = `${channelName(channel)}: ${events.length} mensaje(s)${standby ? ` (${standby} en espera: otra aplicación tiene el control del chat)` : ''}${fields ? `, cambios: ${fields}` : ''}`;
+    console.log(`📥 Aviso de ${summary}`);
+    noteSocialOutcome(summary);
     for (const event of events) {
       handleMessagingEvent(channel, event).catch(error => console.error(`Error procesando mensaje de ${channelName(channel)}:`, error));
     }

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { runWithTenant, VELAMIA_ID } from '../services/tenant';
+import { noteRejectedWebhook } from '../services/webhookTrace';
 
 const CRM_PASSWORD = process.env.CRM_PASSWORD || '';
 // Cada app de Meta firma sus webhooks con su propio secreto. Si alguna empresa usa otra app,
@@ -209,6 +210,7 @@ export function verifyWebhookSignature(req: Request, res: Response, next: NextFu
 
   const valid = APP_SECRETS.some(secret => safeCompare(signature, 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex')));
   if (!valid) {
+    noteRejectedWebhook();
     console.warn('🚫 Webhook rechazado: firma inválida');
     return res.status(401).send('Firma inválida');
   }
