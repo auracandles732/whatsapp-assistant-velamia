@@ -388,6 +388,27 @@ export async function socialDiagnosis(now = Date.now()): Promise<Record<string, 
     .then(d => ((d?.data?.[0]?.messages?.data || []) as any[])
       .map(m => `${String(m.from?.id) === creds.instagramId ? 'VELAMIA' : 'cliente'} ${ago(m.created_time)}`).join(' | ') || 'ninguno')
     .catch(failed);
+  // Qué clave es cada una (quién la emitió y cuándo) y si la de Render, la anterior a conectar con el botón, ve más chats.
+  const describe = (token: string) => graph.get(`${GRAPH_API}/debug_token`, { params: { input_token: token, access_token: token } })
+    .then(r => {
+      const d = r.data?.data || {};
+      return `tipo ${d.type || '?'}, de la app ${d.application || '?'}, emitida ${d.issued_at ? ago(new Date(d.issued_at * 1000).toISOString()) : 'sin fecha'}, ${d.is_valid === false ? 'NO válida' : 'válida'}`;
+    })
+    .catch(failed);
+  value.clave_en_uso = `${(await storedCredentials()).creds ? 'la del botón del CRM' : 'la de Render'}: ${await describe(creds.pageToken)}`;
+  const envPage = (process.env.META_PAGE_ID || '').trim();
+  const envToken = (process.env.META_PAGE_TOKEN || '').trim();
+  if (envPage && envToken) {
+    const envPageToken = await graph.get(`${GRAPH_API}/${envPage}`, { params: { fields: 'access_token', access_token: envToken } })
+      .then(r => String(r.data?.access_token || envToken)).catch(() => envToken);
+    value.clave_de_render = envPageToken === creds.pageToken ? 'es la misma que la clave en uso' : await describe(envToken);
+    value.chats_instagram_con_clave_de_render = await graph.get(`${GRAPH_API}/${envPage}/conversations`, { params: { platform: 'instagram', fields: 'updated_time', limit: 50, access_token: envPageToken } })
+      .then(r => {
+        const times: string[] = (r.data?.data || []).map((c: any) => String(c.updated_time || '')).filter(Boolean).sort();
+        return times.length ? `${times.length} chat(s); último movimiento ${ago(times[times.length - 1])}` : 'ninguno';
+      })
+      .catch(failed);
+  }
   value.instagram_cuenta = await ask(creds.instagramId, { fields: 'followers_count,media_count' })
     .then(d => `${d.followers_count} seguidores, ${d.media_count} publicaciones`).catch(failed);
   value.chats_facebook = await lastChat('messenger');
