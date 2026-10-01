@@ -75,7 +75,7 @@ import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
 import { noteWebhook, webhookTrace } from './services/webhookTrace';
-import { subscribePage, isSocialAddress, socialStatus, connectUrl, createConnectState, readConnectState, completeConnection, publishingStatus } from './services/metaChannels';
+import { subscribePage, isSocialAddress, socialStatus, socialDiagnosis, connectUrl, createConnectState, readConnectState, completeConnection, publishingStatus } from './services/metaChannels';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -385,6 +385,11 @@ app.get('/health', async (_req: Request, res: Response) => {
     // Cuántos avisos mandó Meta por canal desde que arrancó el servidor: solo cantidades y horas.
     avisos_meta: webhookTrace()
   });
+});
+
+// Revisión de Instagram y Facebook contra Meta. Pública pero sin datos de clientes ni claves, y con respuesta guardada 2 minutos.
+app.get('/health/redes', async (_req: Request, res: Response) => {
+  res.json({ avisos_meta: webhookTrace(), meta: await socialDiagnosis().catch(error => ({ error: String(error?.message || error) })) });
 });
 
 // ---------- Acceso al CRM ----------

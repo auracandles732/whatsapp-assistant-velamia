@@ -326,6 +326,63 @@ export async function subscribePage(): Promise<string> {
     : `Página ${creds.pageId} suscrita; no tiene una cuenta de Instagram profesional conectada`;
 }
 
+let diagnosisCache: { at: number; value: Record<string, string> } | null = null;
+
+/**
+ * Por qué no llegan los mensajes: lo que Meta responde sobre la cuenta enlazada, la suscripción de la página y de la
+ * App, el permiso de mensajes y la última actividad de los chats. Sin nombres ni identificadores de clientes.
+ */
+export async function socialDiagnosis(now = Date.now()): Promise<Record<string, string>> {
+  if (diagnosisCache && now - diagnosisCache.at < 2 * 60 * 1000) return diagnosisCache.value;
+  const creds = await pageCredentials();
+  if (!creds) return { estado: 'Instagram y Facebook no están conectados' };
+  const failed = (error: any) => `Meta respondió: ${metaError(error)}`;
+  const ask = (path: string, params: Record<string, any> = {}) =>
+    graph.get(`${GRAPH_API}/${path}`, { params: { ...params, access_token: creds.pageToken } }).then(r => r.data);
+  const ago = (iso: string) => {
+    const minutes = Math.round((now - new Date(iso).getTime()) / 60_000);
+    return minutes < 120 ? `hace ${minutes} min` : minutes < 2880 ? `hace ${Math.round(minutes / 60)} h` : `hace ${Math.round(minutes / 1440)} días`;
+  };
+  const lastChat = (platform: string) =>
+    ask(`${creds.pageId}/conversations`, { platform, fields: 'updated_time', limit: 1 })
+      .then(d => (d?.data?.[0]?.updated_time ? `Meta deja leerlos; último movimiento ${ago(d.data[0].updated_time)}` : 'Meta deja leerlos, pero no hay ninguno'))
+      .catch(failed);
+
+  const value: Record<string, string> = {};
+  value.pagina = await ask(creds.pageId, { fields: 'name,instagram_business_account{username},connected_instagram_account{username}' })
+    .then(d => `${d.name}; Instagram profesional: ${d.instagram_business_account?.username ? `@${d.instagram_business_account.username}` : 'ninguno'}; Instagram conectado a la página: ${d.connected_instagram_account?.username ? `@${d.connected_instagram_account.username}` : 'ninguno'}`)
+    .catch(failed);
+  value.instagram_que_usa_el_servidor = creds.instagramId
+    ? await ask(creds.instagramId, { fields: 'username' }).then(d => `@${d.username}`).catch(failed)
+    : 'ninguno';
+  value.apps_suscritas_a_la_pagina = await ask(`${creds.pageId}/subscribed_apps`)
+    .then(d => (d?.data || []).map((a: any) => `${a.name} (${(a.subscribed_fields || []).join(', ')})`).join(' | ') || 'ninguna')
+    .catch(failed);
+  value.permisos_sobre_esta_cuenta = await graph.get(`${GRAPH_API}/debug_token`, { params: { input_token: creds.pageToken, access_token: creds.pageToken } })
+    .then(r => {
+      const granular: { scope: string; target_ids?: string[] }[] = r.data?.data?.granular_scopes || [];
+      const covers = (scope: string, id: string) => {
+        const g = granular.find(x => x.scope === scope);
+        return !g ? 'no concedido' : !g.target_ids || g.target_ids.includes(id) ? 'sí' : 'concedido, pero para otra cuenta';
+      };
+      return `mensajes de Instagram: ${covers('instagram_manage_messages', creds.instagramId)}; mensajes de Facebook: ${covers('pages_messaging', creds.pageId)}`;
+    })
+    .catch(failed);
+  value.chats_instagram = await lastChat('instagram');
+  value.chats_facebook = await lastChat('messenger');
+  value.avisos_de_la_app = await (async () => {
+    const appId = await metaAppId();
+    const { data } = await graph.get(`${GRAPH_API}/${appId}/subscriptions`, { params: { access_token: `${appId}|${process.env.META_APP_SECRET || ''}` } });
+    return (data?.data || [])
+      .filter((s: any) => ['instagram', 'page'].includes(s.object))
+      .map((s: any) => `${s.object}: ${s.active ? 'activo' : 'INACTIVO'}, hacia ${new URL(String(s.callback_url)).host}, campos ${(s.fields || []).map((f: any) => f.name).join(', ')}`)
+      .join(' | ') || 'la App no tiene avisos de Instagram ni de página';
+  })().catch(failed);
+
+  diagnosisCache = { at: now, value };
+  return value;
+}
+
 // ---------- Conectar con Facebook desde el CRM ----------
 
 // Publicar en Instagram pide instagram_content_publish y en la página de Facebook, pages_manage_posts.
