@@ -385,6 +385,37 @@ export async function socialDiagnosis(now = Date.now()): Promise<Record<string, 
       .join(' | ') || 'la App no tiene avisos de Instagram ni de página';
   })().catch(failed);
 
+  // Una llamada por permiso: dice si la clave puede usarlo y cuenta como la "llamada de prueba" que exige la revisión de Meta.
+  const attempt = (calls: (() => Promise<any>)[]) => async () => {
+    let last = '';
+    for (const call of calls) {
+      try { await call(); return 'funciona'; } catch (error: any) { last = failed(error); }
+    }
+    return last;
+  };
+  const page = creds.pageId;
+  const ig = creds.instagramId;
+  const pageInsight = (metric: string) => () => ask(`${page}/insights`, { metric, period: 'day' });
+  const tests: Record<string, () => Promise<string>> = {
+    instagram_basic: attempt([() => ask(`${ig}/media`, { fields: 'id', limit: 1 })]),
+    instagram_manage_insights: attempt([() => ask(`${ig}/insights`, { metric: 'reach', period: 'day' })]),
+    instagram_manage_comments: attempt([async () => {
+      const media = await ask(`${ig}/media`, { fields: 'id', limit: 1 });
+      if (!media?.data?.[0]?.id) throw new Error('la cuenta no tiene publicaciones');
+      await ask(`${media.data[0].id}/comments`, { limit: 1 });
+    }]),
+    instagram_content_publish: attempt([() => ask(`${ig}/content_publishing_limit`)]),
+    pages_read_engagement: attempt([() => ask(`${page}/feed`, { fields: 'id', limit: 1 })]),
+    pages_read_user_content: attempt([
+      () => ask(`${page}/feed`, { fields: 'comments.limit(1){id,message}', limit: 5 }),
+      () => ask(`${page}/tagged`, { limit: 1 }),
+      () => ask(`${page}/ratings`, { limit: 1 })
+    ]),
+    read_insights: attempt(['page_post_engagements', 'page_views_total', 'page_impressions_unique', 'page_follows'].map(pageInsight))
+  };
+  value.permisos_de_la_clave = await tokenInfo(creds.pageToken).then(info => info.scopes.join(', ') || info.error);
+  for (const [permission, run] of Object.entries(tests)) value[`prueba_${permission}`] = await run();
+
   diagnosisCache = { at: now, value };
   return value;
 }

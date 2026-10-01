@@ -77,6 +77,18 @@ Van en inglés porque los revisores de Meta trabajan en inglés.
 
 > We use pages_read_user_content to read the comments and reactions that people leave on the posts of our own Page, so the CRM can count them in "Publicaciones → Resultados" and show our team the comments that need an answer. Only content on our own Page is read.
 
+**whatsapp_business_messaging**
+
+> We use whatsapp_business_messaging to receive the WhatsApp messages that customers send to our business phone number and to reply to them from the CRM inbox ("Conversaciones"). Our team replies from the CRM, and an automated assistant answers common questions (prices, catalog photos, delivery); a team member can pause the assistant in any chat and take over. Free-form messages are only sent inside the 24-hour customer service window; outside that window we only send approved message templates, and customers can opt out by replying "NO".
+
+**whatsapp_business_management**
+
+> We use whatsapp_business_management to subscribe the WhatsApp Business Account to the app's webhooks so incoming messages reach the CRM, to read the phone number connected to the account, and to read the approved message templates that the CRM uses for follow-up messages. We do not create or modify any other business asset.
+
+**public_profile**
+
+> We use public_profile only as part of Facebook Login, to identify the person who connects their Facebook Page to the CRM. We do not store or display profile information.
+
 ## 3. Guion del video (grabación de pantalla, sin voz, 3 a 5 minutos)
 
 Meta quiere ver el recorrido completo: cómo se conecta la cuenta y cómo se usa cada permiso. Grabar en este orden:
