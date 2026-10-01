@@ -7,7 +7,7 @@ import './entorno';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSocialAddress, contactLabel, splitForChannel, isSocialAddress } from '../src/services/metaChannels';
-import { toWhatsAppShape, commentFromChange, commentKind, publicReplyText } from '../src/controllers/socialController';
+import { toWhatsAppShape, messagingEvents, commentFromChange, commentKind, publicReplyText } from '../src/controllers/socialController';
 import { sendTemplateMessage, sendAudioMessage } from '../src/services/whatsapp';
 
 test('los contactos de Instagram y Messenger se reconocen y se muestran por su canal', () => {
@@ -61,6 +61,16 @@ test('ecos, mensajes borrados, reacciones y leídos no se contestan', () => {
   assert.equal(toWhatsAppShape('instagram', { sender: { id: '1' }, message: { mid: 'd1', is_deleted: true } }), null);
   assert.equal(toWhatsAppShape('messenger', { sender: { id: '1' }, reaction: { reaction: 'love' } }), null);
   assert.equal(toWhatsAppShape('messenger', { sender: { id: '1' }, read: { watermark: 1 } }), null);
+});
+
+test('los mensajes se leen aunque Meta los mande en espera o como cambio de campo', () => {
+  const evento = (mid: string) => ({ sender: { id: '111' }, recipient: { id: '999' }, timestamp: 1, message: { mid, text: 'hola' } });
+  assert.deepEqual(messagingEvents({ messaging: [evento('a')] }).map(e => e.message.mid), ['a']);
+  assert.deepEqual(messagingEvents({ standby: [evento('b')] }).map(e => e.message.mid), ['b']);
+  assert.deepEqual(messagingEvents({ changes: [{ field: 'messages', value: evento('c') }] }).map(e => e.message.mid), ['c']);
+  // Un comentario también llega como cambio, pero no es un mensaje privado.
+  assert.deepEqual(messagingEvents({ changes: [{ field: 'comments', value: { id: 'IC_1', text: 'info', from: { id: 'u2' } } }] }), []);
+  assert.deepEqual(messagingEvents({}), []);
 });
 
 test('solo se atienden comentarios nuevos de otras personas, no respuestas ni los propios', () => {

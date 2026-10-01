@@ -37,7 +37,11 @@ export async function handleSocialWebhook(data: any): Promise<void> {
       console.warn(`⚠️ Aviso de ${object} para una cuenta que no está conectada (llegó ${entry?.id}; conectadas: página ${creds?.pageId || '—'}, Instagram ${creds?.instagramId || '—'}): se ignora`);
       continue;
     }
-    for (const event of entry.messaging || []) {
+    const events = messagingEvents(entry);
+    const fields = (entry.changes || []).map((c: any) => String(c?.field || '?')).join(', ');
+    const standby = (entry.standby || []).length;
+    console.log(`📥 Aviso de ${channelName(channel)}: ${events.length} mensaje(s)${standby ? ` (${standby} en espera: otra aplicación tiene el control del chat)` : ''}${fields ? `, cambios: ${fields}` : ''}`);
+    for (const event of events) {
       handleMessagingEvent(channel, event).catch(error => console.error(`Error procesando mensaje de ${channelName(channel)}:`, error));
     }
     for (const change of entry.changes || []) {
@@ -48,6 +52,17 @@ export async function handleSocialWebhook(data: any): Promise<void> {
 }
 
 // ---------- Mensajes privados ----------
+
+/**
+ * Mensajes de un aviso. Meta los manda en "messaging"; en "standby" cuando otra aplicación tiene el control del chat, y
+ * en algunos casos como un cambio de campo "messages". Los tres traen la misma forma (sender, recipient, message).
+ */
+export function messagingEvents(entry: any): any[] {
+  const fromChanges = (entry?.changes || [])
+    .filter((c: any) => (c?.field === 'messages' || c?.field === 'messaging_postbacks') && c?.value?.sender?.id)
+    .map((c: any) => c.value);
+  return [...(entry?.messaging || []), ...(entry?.standby || []), ...fromChanges];
+}
 
 /**
  * Traduce un mensaje de Instagram o Messenger a la forma de los mensajes de WhatsApp, para que el resto del sistema
@@ -106,7 +121,9 @@ async function handleMessagingEvent(channel: SocialChannel, event: any) {
     return;
   }
   const shaped = toWhatsAppShape(channel, event);
-  if (shaped) await handleSocialMessage(shaped);
+  if (shaped) return handleSocialMessage(shaped);
+  const kind = Object.keys(event || {}).filter(k => !['sender', 'recipient', 'timestamp'].includes(k)).join(', ') || 'vacío';
+  console.log(`↪️  Aviso de ${channelName(channel)} sin mensaje que guardar (${kind})`);
 }
 
 // ---------- Comentarios ----------
