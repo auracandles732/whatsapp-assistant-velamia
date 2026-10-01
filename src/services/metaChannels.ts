@@ -344,8 +344,14 @@ export async function socialDiagnosis(now = Date.now()): Promise<Record<string, 
     return minutes < 120 ? `hace ${minutes} min` : minutes < 2880 ? `hace ${Math.round(minutes / 60)} h` : `hace ${Math.round(minutes / 1440)} días`;
   };
   const lastChat = (platform: string) =>
-    ask(`${creds.pageId}/conversations`, { platform, fields: 'updated_time', limit: 1 })
-      .then(d => (d?.data?.[0]?.updated_time ? `Meta deja leerlos; último movimiento ${ago(d.data[0].updated_time)}` : 'Meta deja leerlos, pero no hay ninguno'))
+    ask(`${creds.pageId}/conversations`, { platform, fields: 'updated_time', limit: 50 })
+      .then(d => {
+        // No se confía en el orden en que Meta los devuelve: se busca el más reciente.
+        const times: string[] = (d?.data || []).map((c: any) => String(c.updated_time || '')).filter(Boolean).sort();
+        if (times.length === 0) return 'Meta deja leerlos, pero no hay ninguno';
+        const today = times.filter(t => now - new Date(t).getTime() < 24 * 60 * 60 * 1000).length;
+        return `Meta deja leer ${times.length}; último movimiento ${ago(times[times.length - 1])}; con movimiento en las últimas 24 h: ${today}`;
+      })
       .catch(failed);
 
   const value: Record<string, string> = {};
