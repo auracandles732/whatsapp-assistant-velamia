@@ -425,10 +425,13 @@ export async function completeConnection(code: string, redirectUri: string) {
   });
   const pages: any[] = data?.data || [];
   if (pages.length === 0) throw new Error('No elegiste ninguna página de Facebook. Vuelve a conectar y marca tu página.');
-  // META_PAGE_ID es la página de VELAMIA: otra empresa se queda con la página que eligió.
+  // Qué página se queda: la de META_PAGE_ID (la de VELAMIA), si no la que ya estaba conectada —reconectar para sumar
+  // permisos no debe cambiarla—, si no una que tenga Instagram, y recién al final la primera de la lista.
   const tenant = currentTenant();
   const wanted = tenant ? '' : (process.env.META_PAGE_ID || '').trim();
-  const page = pages.find(p => String(p.id) === wanted) || pages[0];
+  const previous = (await storedCredentials()).creds?.pageId || '';
+  const byId = (id: string) => (id ? pages.find(p => String(p.id) === id) : undefined);
+  const page = byId(wanted) || byId(previous) || pages.find(p => p.instagram_business_account?.id) || pages[0];
 
   const record = {
     pageId: String(page.id),
