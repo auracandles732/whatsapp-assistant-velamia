@@ -161,7 +161,8 @@ export function describeWhatsAppError(error: any): string {
   // Instagram y Messenger: fuera de las 24 horas desde el último mensaje de la clienta no se le puede escribir.
   // El código 10 también es "la App no tiene permiso": solo se explica como las 24 horas cuando Meta lo dice.
   const metaMessage = String(error.response?.data?.error?.message || '');
-  const outsideWindow = error.response?.data?.error?.error_subcode === 2018278 || /outside (of )?(the )?allowed window/i.test(metaMessage);
+  // 2018278 es el subcódigo de Messenger y 2534022 el de Instagram; el texto llega traducido, por eso no basta con leerlo.
+  const outsideWindow = [2018278, 2534022].includes(error.response?.data?.error?.error_subcode) || /outside (of )?(the )?allowed window/i.test(metaMessage);
   if (outsideWindow || code === 551) {
     return 'Pasaron más de 24 horas desde el último mensaje de la clienta y Meta no permite escribirle por Instagram o Messenger hasta que ella vuelva a escribir.';
   }
