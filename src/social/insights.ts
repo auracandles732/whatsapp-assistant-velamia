@@ -106,12 +106,13 @@ async function facebookMetrics(conn: PublishingConnection, storedId: string): Pr
   m.likes = data?.reactions?.summary?.total_count ?? null;
   m.comments = data?.comments?.summary?.total_count ?? null;
   m.shares = data?.shares?.count ?? 0;
-  const values = await insights(id, ['post_impressions_unique', 'post_impressions'], conn.pageToken).catch(error => {
+  // Meta retiró post_impressions y post_impressions_unique: ahora son las vistas y las personas que vieron la publicación.
+  const values = await insights(id, ['post_total_media_view_unique', 'post_media_view'], conn.pageToken).catch(error => {
     if (isPermission(error)) throw error;
     return {} as Record<string, number | null>;
   });
-  m.reach = values.post_impressions_unique ?? null;
-  m.views = values.post_impressions ?? null;
+  m.reach = values.post_total_media_view_unique ?? null;
+  m.views = values.post_media_view ?? null;
   return m;
 }
 
