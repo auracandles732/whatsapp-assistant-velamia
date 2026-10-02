@@ -28,6 +28,22 @@ export const insightsProblem = () => problems.get(tenantKey()) || '';
 const metaError = (error: any) => String(error?.response?.data?.error?.message || error?.message || error);
 const isPermission = (error: any) => [10, 200, 190].includes(error?.response?.data?.error?.code) || /permission|insights/i.test(metaError(error));
 
+// Qué pasó en la última revisión de VELAMIA, para la revisión de redes: solo cantidades y lo que respondió Meta.
+const lastRun = { at: 0, posts: 0, saved: 0, empty: new Map<string, number>(), issues: new Map<string, number>() };
+const count = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) || 0) + 1);
+const issue = (where: string, error: any) => { if (!currentTenant()) count(lastRun.issues, `${where}: ${metaError(error).slice(0, 140)}`); };
+
+export function metricsReport(now = Date.now()) {
+  if (!lastRun.at) return { estado: 'todavía no se revisan los resultados desde que arrancó el servidor' };
+  const list = (map: Map<string, number>) => [...map].map(([text, times]) => `${text} (${times})`);
+  return {
+    revisado: `hace ${Math.round((now - lastRun.at) / 60_000)} min`,
+    publicaciones: `${lastRun.posts} con ${lastRun.saved} resultados guardados`,
+    sin_dato: list(lastRun.empty),
+    respuestas_de_meta: list(lastRun.issues)
+  };
+}
+
 /** Valor de una métrica en la respuesta de /insights (Meta la entrega en values[0].value o total_value.value). */
 function valueOf(item: any): number | null {
   const v = item?.total_value?.value ?? item?.values?.[0]?.value;
@@ -50,6 +66,7 @@ async function insights(id: string, metrics: string[], token: string, path = 'in
         Object.assign(out, await read([metric]));
       } catch (inner: any) {
         if (isPermission(inner) && /permission/i.test(metaError(inner))) throw inner;
+        issue(`métrica ${metric}`, inner);
       }
     }
     return out;
@@ -72,10 +89,19 @@ async function instagramMetrics(conn: PublishingConnection, mediaId: string, sto
   return m;
 }
 
-async function facebookMetrics(conn: PublishingConnection, id: string): Promise<Metrics> {
+/** Un video publicado en la página se guarda con el id del video; sus reacciones están en la publicación, que es "página_video". */
+export const facebookPostId = (pageId: string, id: string) => (id.includes('_') ? id : `${pageId}_${id}`);
+
+async function facebookMetrics(conn: PublishingConnection, storedId: string): Promise<Metrics> {
   const m = empty();
-  const { data } = await graph.get(`${GRAPH_API}/${id}`, {
+  const engagement = (id: string) => graph.get(`${GRAPH_API}/${id}`, {
     params: { fields: 'reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares', access_token: conn.pageToken }
+  });
+  let id = storedId;
+  const { data } = await engagement(id).catch(error => {
+    if (isPermission(error) || id === facebookPostId(conn.pageId, id)) throw error;
+    id = facebookPostId(conn.pageId, id);
+    return engagement(id);
   });
   m.likes = data?.reactions?.summary?.total_count ?? null;
   m.comments = data?.comments?.summary?.total_count ?? null;
@@ -101,6 +127,12 @@ export async function collectMetricsForCurrent(now = new Date()) {
   if (error) throw new Error(`Error leyendo publicaciones: ${error.message}`);
   let saved = 0;
   let problem = '';
+  const report = !currentTenant();
+  if (report) {
+    Object.assign(lastRun, { at: now.getTime(), posts: (data || []).length, saved: 0 });
+    lastRun.empty.clear();
+    lastRun.issues.clear();
+  }
   for (const post of (data || []) as SocialPost[]) {
     for (const [channel, result] of Object.entries(post.results || {}) as [PostChannel, any][]) {
       if (!result?.id || result.error || channel === 'facebook_story') continue;
@@ -113,7 +145,12 @@ export async function collectMetricsForCurrent(now = new Date()) {
         }, { onConflict: 'post_id,channel' });
         if (upsertError) throw new Error(upsertError.message);
         saved++;
+        if (report) {
+          lastRun.saved = saved;
+          for (const [field, value] of Object.entries(metrics)) if (value === null) count(lastRun.empty, `${channel} sin ${field}`);
+        }
       } catch (err: any) {
+        issue(channel, err);
         if (isPermission(err)) {
           problem = channel === 'facebook'
             ? 'Para ver los resultados de Facebook faltan los permisos read_insights y pages_read_user_content: agrégalos en la App de Meta, pon META_INSIGHTS=true en Render y vuelve a conectar con Facebook.'

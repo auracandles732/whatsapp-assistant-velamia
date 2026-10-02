@@ -65,6 +65,7 @@ import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/
 import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
 import { socialRouter, startSocialAgent } from './social';
+import { metricsReport } from './social/insights';
 import { currentAiProblem } from './services/aiStatus';
 import { voiceStatus, setVoiceNotesEnabled, voiceNotesEnabled, textToMp3, textToVoice, speechToVoice, describeVoiceError } from './services/elevenlabs';
 import { privacyPolicyHtml, salesTermsHtml } from './services/legalPages';
@@ -389,7 +390,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 
 // Revisión de Instagram y Facebook contra Meta. Pública pero sin datos de clientes ni claves, y con respuesta guardada 2 minutos.
 app.get('/health/redes', async (_req: Request, res: Response) => {
-  res.json({ avisos_meta: webhookTrace(), meta: await socialDiagnosis().catch(error => ({ error: String(error?.message || error) })) });
+  res.json({ avisos_meta: webhookTrace(), resultados: metricsReport(), meta: await socialDiagnosis().catch(error => ({ error: String(error?.message || error) })) });
 });
 
 // ---------- Acceso al CRM ----------
