@@ -174,6 +174,21 @@ export async function getMessageByWaId(waMessageId: string) {
   return data;
 }
 
+export const UNSENT_TEXT = '🗑️ La clienta anuló este mensaje';
+
+/**
+ * La clienta anuló el mensaje en Instagram o Messenger: se borra lo que decía y queda solo la marca. Devuelve el
+ * archivo que traía (foto, audio) para borrarlo también, o null si el mensaje no está guardado.
+ */
+export async function eraseUnsentMessage(waMessageId: string): Promise<{ mediaUrl: string } | null> {
+  const message = await getMessageByWaId(waMessageId);
+  if (!message) return null;
+  const mediaUrl = String(message.content || '').match(/^https?:\/\/\S+/)?.[0] || '';
+  const { error } = await supabase.from('messages').update({ type: 'text', content: UNSENT_TEXT }).eq('id', message.id);
+  if (error) throw new Error(`Error borrando el mensaje anulado: ${error.message}`);
+  return { mediaUrl };
+}
+
 /**
  * Los últimos N mensajes en orden cronológico. Se piden del más nuevo al más viejo:
  * con orden ascendente y límite, un chat largo mostraría los antiguos y escondería los nuevos.

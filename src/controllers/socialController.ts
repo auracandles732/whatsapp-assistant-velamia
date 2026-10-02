@@ -6,8 +6,10 @@ import {
   isMessageAlreadyProcessed,
   getConfig,
   getAllProducts,
-  pauseBot
+  pauseBot,
+  eraseUnsentMessage
 } from '../db';
+import { removeFilesByPublicUrls } from '../services/storage';
 import {
   SocialChannel,
   channelForAccount,
@@ -124,8 +126,25 @@ export function toWhatsAppShape(channel: SocialChannel, event: any): any | null 
   }
 }
 
+/**
+ * La clienta anuló un mensaje: Meta exige quitarlo de la app. Si llega antes de que el mensaje termine de guardarse
+ * (una foto tarda), se reintenta una vez.
+ */
+async function eraseUnsent(channel: SocialChannel, mid: string, retryMs = 8000) {
+  let erased = await eraseUnsentMessage(mid);
+  if (!erased && retryMs) {
+    await new Promise(resolve => setTimeout(resolve, retryMs));
+    erased = await eraseUnsentMessage(mid);
+  }
+  if (!erased) return noteSocialOutcome(`${channelName(channel)}: anularon un mensaje que no estaba guardado`);
+  if (erased.mediaUrl) await removeFilesByPublicUrls([erased.mediaUrl]).catch(error => console.warn('⚠️ No se pudo borrar el archivo del mensaje anulado:', error.message));
+  console.log(`🗑️ Mensaje anulado en ${channelName(channel)}: se quitó del CRM`);
+  noteSocialOutcome(`${channelName(channel)}: la clienta anuló un mensaje y se quitó del CRM`);
+}
+
 async function handleMessagingEvent(channel: SocialChannel, event: any) {
   const message = event?.message;
+  if (message?.is_deleted && message.mid) return eraseUnsent(channel, String(message.mid));
   if (message?.is_echo) {
     const to = socialAddress(channel, String(event?.recipient?.id || ''));
     const text = String(message.text || '').trim() || (message.attachments?.length ? `[${message.attachments[0].type} enviado desde la app]` : '');
