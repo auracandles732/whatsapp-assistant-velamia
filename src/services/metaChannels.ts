@@ -468,6 +468,20 @@ export async function socialDiagnosis(now = Date.now()): Promise<Record<string, 
     ]),
     read_insights: attempt(['page_post_engagements', 'page_views_total', 'page_impressions_unique', 'page_follows'].map(pageInsight))
   };
+  // Qué datos da Meta de una historia de la página y de su última publicación (para la pestaña Resultados).
+  const raw = (r: any) => ((r?.data || []) as any[]).map(m => `${m.name}/${m.period}=${JSON.stringify(m.values?.[0]?.value ?? m.total_value?.value ?? null)}`).join(', ') || 'Meta no devolvió ninguna métrica';
+  value.datos_de_historia_facebook = await ask(`${page}/stories`, { limit: 1 })
+    .then(async d => {
+      const story = d?.data?.[0];
+      if (!story) return 'la página no tiene historias';
+      return `campos ${Object.keys(story).join(', ')}; estado ${story.status}; datos: ${await ask(`${story.post_id}/insights`).then(raw, failed)}`;
+    })
+    .catch(failed);
+  value.datos_de_publicacion_facebook = await ask(`${page}/posts`, { fields: 'id', limit: 1 })
+    .then(async d => (d?.data?.[0]?.id
+      ? ask(`${d.data[0].id}/insights`, { metric: 'post_total_media_view_unique,post_media_view' }).then(raw, failed)
+      : 'la página no tiene publicaciones'))
+    .catch(failed);
   // Si de la última publicación de Instagram se consigue la imagen que el asistente mira al contestar un comentario.
   value.imagen_de_la_ultima_publicacion = await ask(`${ig}/media`, { fields: 'id', limit: 1 })
     .then(async d => {

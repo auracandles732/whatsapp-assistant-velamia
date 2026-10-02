@@ -10382,6 +10382,14 @@
 
         const METRIC_LABELS = [['likes', '❤', 'Me gusta'], ['comments', '💬', 'Comentarios'], ['views', '👁', 'Visualizaciones'], ['reach', '📣', 'Alcance']];
 
+        // Por qué una fila no tiene números: "aún" solo cuando todavía pueden llegar.
+        function noResultsLabel(channel, post) {
+            if (channel === 'facebook_story') return 'Las historias de Facebook no se miden';
+            const hours = (Date.now() - new Date(post.published_at || post.scheduled_at || 0).getTime()) / 3600000;
+            if (channel === 'instagram_story' && hours > 24) return 'Sin datos: la historia terminó antes de medirse';
+            return 'Aún sin datos';
+        }
+
         function SocialResults() {
             const [data, setData] = useState(null);
             const [days, setDays] = useState(30);
@@ -10423,8 +10431,8 @@
                                                         const m = post.metrics.find(x => x.channel === channel);
                                                         return (
                                                             <div key={channel} className="sr-row">
-                                                                <span className="net"><PbNetLogo net={channel === 'facebook' ? 'facebook' : 'instagram'} size={16} /> {POST_CHANNEL_NAMES[channel] || channel}</span>
-                                                                {m ? METRIC_LABELS.map(([key, icon, label]) => <span key={key} title={label}>{icon} {m[key] === null || m[key] === undefined ? '—' : Number(m[key]).toLocaleString('es-EC')}</span>) : <span className="pb-muted">Aún sin datos</span>}
+                                                                <span className="net"><PbNetLogo net={channel.startsWith('facebook') ? 'facebook' : 'instagram'} size={16} /> {POST_CHANNEL_NAMES[channel] || channel}</span>
+                                                                {m ? METRIC_LABELS.map(([key, icon, label]) => <span key={key} title={label}>{icon} {m[key] === null || m[key] === undefined ? '—' : Number(m[key]).toLocaleString('es-EC')}</span>) : <span className="pb-muted">{noResultsLabel(channel, post)}</span>}
                                                                 {post.results[channel].permalink && <a href={post.results[channel].permalink} target="_blank" rel="noopener noreferrer">Ver ↗</a>}
                                                             </div>
                                                         );
