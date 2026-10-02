@@ -2389,20 +2389,44 @@
         .sr-totals div { background: #F4F6FF; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
         .sr-totals span { font-size: 12.5px; color: #5C668F; }
         .sr-totals b { font-size: 22px; color: #141C3A; }
-        .sr-list { display: flex; flex-direction: column; gap: 10px; }
-        .sr-post { display: flex; gap: 12px; align-items: flex-start; border: 1px solid #E8ECF6; border-radius: 14px; padding: 10px; }
-        .sr-post .th { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; flex-shrink: 0; background: #F1F4FC; }
-        .sr-post .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-        .sr-post small { color: #6B7599; font-size: 12.5px; }
-        .sr-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13.5px; color: #1E2A4A; }
-        .sr-row .net { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; min-width: 150px; }
+        /* Computadora: una fila por publicación. */
+        .sr-table-wrap { border: 1px solid #E8ECF6; border-radius: 14px; overflow-x: auto; }
+        .sr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; color: #1E2A4A; }
+        .sr-table th { text-align: left; padding: 12px 14px; font-size: 13px; font-weight: 700; color: #141C3A; background: #F7F8FE; border-bottom: 1px solid #E8ECF6; white-space: nowrap; }
+        .sr-table td { padding: 12px 14px; border-bottom: 1px solid #EEF1F8; vertical-align: middle; }
+        .sr-table tr:last-child td { border-bottom: 0; }
+        .sr-who { display: flex; align-items: center; gap: 12px; }
+        .sr-table .sr-who { min-width: 190px; }
+        .sr-who .th { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; flex-shrink: 0; background: #F1F4FC; }
+        .sr-who .tx { flex: 1; min-width: 0; }
+        .sr-who b { display: block; color: #141C3A; }
+        .sr-who small { color: #6B7599; font-size: 12.5px; }
+        .sr-nets { display: inline-flex; gap: 6px; align-items: center; flex-shrink: 0; }
+        .sr-big { font-size: 18px; font-weight: 800; color: #141C3A; white-space: nowrap; }
+        .sr-inter { display: flex; flex-direction: column; gap: 6px; }
+        .sr-row { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13.5px; color: #1E2A4A; }
+        .sr-row .net { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; min-width: 96px; }
+        .sr-row .nums { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
         .sr-row a { color: #2F4BD8; font-weight: 700; text-decoration: none; }
+        .sr-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+        .sr-actions .pb-btn { padding: 7px 12px; font-size: 13px; text-decoration: none; }
+        /* Celular: una tarjeta por publicación, con el detalle por red plegado. */
+        .sr-cards { display: flex; flex-direction: column; gap: 12px; }
+        .sr-card { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid #E8ECF6; border-radius: 16px; background: #fff; box-shadow: 0 4px 14px rgba(50, 70, 160, 0.06); }
+        .sr-card-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+        .sr-card-stats div { display: flex; flex-direction: column; gap: 2px; }
+        .sr-card-stats span { font-size: 12px; color: #5C668F; }
+        .sr-card-stats b { font-size: 18px; color: #141C3A; }
+        .pb .sr-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 2px 0; border: 0; border-top: 1px solid #EEF1F8; background: none; font: inherit; font-size: 13.5px; font-weight: 700; color: #2F3A8F; cursor: pointer; }
+        .sr-toggle i { display: inline-block; font-style: normal; transition: transform 0.15s; }
+        .sr-toggle[aria-expanded="true"] i { transform: rotate(180deg); }
+        .sr-card .sr-row { padding: 8px 10px; border-radius: 12px; background: #F7F8FE; }
+        .sr-card .sr-row .net { width: 100%; }
         @media (max-width: 760px) {
             .sp-grid { grid-template-columns: minmax(0, 1fr); }
             .sr-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .sp-models { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .sl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .sr-row .net { min-width: 0; width: 100%; }
         }
         .pb-auto { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 18px; background: #fff; border: 1px solid #E1E6F4; box-shadow: 0 4px 16px rgba(50, 70, 160, 0.06); }
         .pb-auto.on { background: linear-gradient(135deg, #EEF0FF, #F5EEFF); border-color: #C9CFF7; }
@@ -10389,7 +10413,103 @@
             return 'Aún sin datos';
         }
 
+        const metricNumber = value => (value === null || value === undefined ? '—' : Number(value).toLocaleString('es-EC'));
+        const RESULT_KINDS = { instagram_story: 'Historia', facebook_story: 'Historia', instagram_feed: 'Publicación', facebook: 'Publicación' };
+
+        // Cada red donde salió la publicación, con sus números (o sin ellos si no se midió).
+        function resultRows(post) {
+            return Object.keys(post.results || {}).filter(c => post.results[c] && !post.results[c].error).map(channel => ({
+                channel,
+                net: channel.startsWith('facebook') ? 'facebook' : 'instagram',
+                link: post.results[channel].permalink,
+                m: post.metrics.find(x => x.channel === channel) || null
+            }));
+        }
+
+        // Suma de una métrica entre las redes de la publicación; raya si ninguna la tiene.
+        function resultTotal(rows, key) {
+            const values = rows.map(r => r.m && r.m[key]).filter(v => v !== null && v !== undefined && v !== false);
+            return values.length ? metricNumber(values.reduce((sum, v) => sum + Number(v), 0)) : '—';
+        }
+
+        const resultNets = rows => [...new Set(rows.map(r => r.net))];
+
+        function ResultWho({ post, nets }) {
+            return (
+                <div className="sr-who">
+                    <PbMediaThumb item={postItems(post)[0]} className="th" />
+                    <div className="tx"><b>{post.theme || 'Publicación'}</b><small>{postWhen(post.published_at || post.scheduled_at)}</small></div>
+                    {nets && <span className="sr-nets">{nets.map(net => <PbNetLogo key={net} net={net} size={22} />)}</span>}
+                </div>
+            );
+        }
+
+        function ResultRow({ row, post, long }) {
+            return (
+                <div className="sr-row">
+                    <span className="net"><PbNetLogo net={row.net} size={16} /> {long ? POST_CHANNEL_NAMES[row.channel] || row.channel : RESULT_KINDS[row.channel] || row.channel}</span>
+                    {row.m
+                        ? <span className="nums">{METRIC_LABELS.map(([key, icon, label]) => <span key={key} title={label}>{icon} {metricNumber(row.m[key])}</span>)}</span>
+                        : <span className="pb-muted">{noResultsLabel(row.channel, post)}</span>}
+                    {long && row.link && <a href={row.link} target="_blank" rel="noopener noreferrer">Ver ↗</a>}
+                </div>
+            );
+        }
+
+        function ResultsTable({ posts }) {
+            return (
+                <div className="sr-table-wrap">
+                    <table className="sr-table">
+                        <thead><tr><th>Publicación</th><th>Plataforma</th><th>Alcance</th><th>Vistas</th><th>Interacciones</th><th>Acciones</th></tr></thead>
+                        <tbody>
+                            {posts.map(post => {
+                                const rows = resultRows(post);
+                                return (
+                                    <tr key={post.id}>
+                                        <td><ResultWho post={post} /></td>
+                                        <td><span className="sr-nets">{resultNets(rows).map(net => <PbNetLogo key={net} net={net} size={26} />)}</span></td>
+                                        <td className="sr-big">{resultTotal(rows, 'reach')}</td>
+                                        <td className="sr-big">{resultTotal(rows, 'views')}</td>
+                                        <td><div className="sr-inter">{rows.map(row => <ResultRow key={row.channel} row={row} post={post} />)}</div></td>
+                                        <td>
+                                            <div className="sr-actions">
+                                                {rows.filter(row => row.link).map(row => (
+                                                    <a key={row.channel} className="pb-btn sm" href={row.link} target="_blank" rel="noopener noreferrer" title={POST_CHANNEL_NAMES[row.channel]}>
+                                                        <PbNetLogo net={row.net} size={16} /> Ver {(RESULT_KINDS[row.channel] || '').toLowerCase()}
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        }
+
+        function ResultCard({ post }) {
+            const [open, setOpen] = useState(false);
+            const rows = resultRows(post);
+            return (
+                <div className="sr-card">
+                    <ResultWho post={post} nets={resultNets(rows)} />
+                    <div className="sr-card-stats">
+                        <div><span>❤ Me gusta</span><b>{resultTotal(rows, 'likes')}</b></div>
+                        <div><span>💬 Comentarios</span><b>{resultTotal(rows, 'comments')}</b></div>
+                        <div><span>📣 Alcance</span><b>{resultTotal(rows, 'reach')}</b></div>
+                    </div>
+                    <button type="button" className="sr-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+                        {open ? 'Ocultar desglose por red' : 'Ver desglose por red'} <i>⌄</i>
+                    </button>
+                    {open && rows.map(row => <ResultRow key={row.channel} row={row} post={post} long />)}
+                </div>
+            );
+        }
+
         function SocialResults() {
+            const mobile = useMobile();
             const [data, setData] = useState(null);
             const [days, setDays] = useState(30);
             const [error, setError] = useState('');
@@ -10416,32 +10536,9 @@
                             <div className="sr-totals">
                                 {METRIC_LABELS.map(([key, icon, label]) => <div key={key}><span>{icon} {label}</span><b>{total(key).toLocaleString('es-EC')}</b></div>)}
                             </div>
-                            {data.posts.length === 0 ? <div className="pb-posts-empty">Todavía no hay publicaciones en este período.</div> : (
-                                <div className="sr-list">
-                                    {data.posts.map(post => {
-                                        const first = postItems(post)[0];
-                                        return (
-                                            <div key={post.id} className="sr-post">
-                                                <PbMediaThumb item={first} className="th" />
-                                                <div className="mid">
-                                                    <b>{post.theme || 'Publicación'}</b>
-                                                    <small>{postWhen(post.published_at || post.scheduled_at)}</small>
-                                                    {Object.keys(post.results || {}).filter(c => post.results[c] && !post.results[c].error).map(channel => {
-                                                        const m = post.metrics.find(x => x.channel === channel);
-                                                        return (
-                                                            <div key={channel} className="sr-row">
-                                                                <span className="net"><PbNetLogo net={channel.startsWith('facebook') ? 'facebook' : 'instagram'} size={16} /> {POST_CHANNEL_NAMES[channel] || channel}</span>
-                                                                {m ? METRIC_LABELS.map(([key, icon, label]) => <span key={key} title={label}>{icon} {m[key] === null || m[key] === undefined ? '—' : Number(m[key]).toLocaleString('es-EC')}</span>) : <span className="pb-muted">{noResultsLabel(channel, post)}</span>}
-                                                                {post.results[channel].permalink && <a href={post.results[channel].permalink} target="_blank" rel="noopener noreferrer">Ver ↗</a>}
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                            {data.posts.length === 0 ? <div className="pb-posts-empty">Todavía no hay publicaciones en este período.</div>
+                                : mobile ? <div className="sr-cards">{data.posts.map(post => <ResultCard key={post.id} post={post} />)}</div>
+                                : <ResultsTable posts={data.posts} />}
                         </>
                     )}
                 </section>
