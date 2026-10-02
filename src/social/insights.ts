@@ -6,7 +6,7 @@ import { SocialPost, PostChannel } from './posts';
 
 /**
  * Resultados de cada publicación por red: me gusta, comentarios, visualizaciones, alcance, guardados y compartidos.
- * Se consultan cada hora durante 14 días. Las historias de Instagram solo dan datos mientras están activas (24 h):
+ * Se consultan cada hora durante 14 días. Las historias (de Instagram y de Facebook) solo dan datos mientras están activas (24 h):
  * se guardan en cada revisión y el último dato queda como el final. Si falta un permiso de Meta, se muestra en el CRM.
  */
 
@@ -130,8 +130,6 @@ async function facebookStoryMetrics(conn: PublishingConnection, id: string): Pro
   return m;
 }
 
-const hasNumbers = (m: Metrics) => Object.values(m).some(value => typeof value === 'number' && value > 0);
-
 /** Revisa los resultados de lo publicado en los últimos 14 días de la empresa actual. */
 export async function collectMetricsForCurrent(now = new Date()) {
   const conn = await publishingConnection();
@@ -154,14 +152,13 @@ export async function collectMetricsForCurrent(now = new Date()) {
     for (const [channel, result] of Object.entries(post.results || {}) as [PostChannel, any][]) {
       if (!result?.id || result.error) continue;
       const story = channel === 'instagram_story';
+      // Terminada la historia, Meta ya no la encuentra: queda lo que se midió mientras estuvo activa.
       const ended = !!post.published_at && now.getTime() - new Date(post.published_at).getTime() > STORY_HOURS * 3_600_000;
-      if (story && ended) continue;
+      if (channel.endsWith('_story') && ended) continue;
       try {
         const metrics = channel === 'facebook' ? await facebookMetrics(conn, result.id)
           : channel === 'facebook_story' ? await facebookStoryMetrics(conn, result.id)
           : await instagramMetrics(conn, result.id, story);
-        // Una historia de Facebook ya terminada puede volver en ceros: con eso no se pisa lo medido mientras estuvo activa.
-        if (channel === 'facebook_story' && ended && !hasNumbers(metrics)) continue;
         const { error: upsertError } = await supabase.from(TABLE).upsert({
           ...tenantColumns(), post_id: post.id, channel, media_id: String(result.id), ...metrics, collected_at: now.toISOString()
         }, { onConflict: 'post_id,channel' });
