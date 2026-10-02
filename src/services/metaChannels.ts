@@ -239,15 +239,31 @@ export async function replyToCommentPublicly(channel: SocialChannel, commentId: 
   return data?.id ? String(data.id) : undefined;
 }
 
-/** Texto de la publicación comentada: le da contexto a la IA ("¿precio?" de qué modelo). */
-export async function postText(channel: SocialChannel, postId: string): Promise<string> {
+export interface PostContent { text: string; imageUrl: string; video: boolean }
+
+const POST_FIELDS: Record<SocialChannel, string> = {
+  instagram: 'caption,media_type,media_url,thumbnail_url,children{media_type,media_url,thumbnail_url}',
+  messenger: 'message,full_picture,attachments{media_type}'
+};
+
+/** De la respuesta de Meta, el texto y la imagen que se ve: en un carrusel la primera, y en un video su portada. */
+export function postContentFrom(channel: SocialChannel, data: any): PostContent {
+  if (channel === 'messenger') {
+    return { text: String(data?.message || ''), imageUrl: String(data?.full_picture || ''), video: /video/i.test(String(data?.attachments?.data?.[0]?.media_type || '')) };
+  }
+  const shown = data?.media_type === 'CAROUSEL_ALBUM' ? data?.children?.data?.[0] || {} : data || {};
+  const video = shown.media_type === 'VIDEO';
+  return { text: String(data?.caption || ''), imageUrl: String((video ? shown.thumbnail_url : shown.media_url) || ''), video };
+}
+
+/** Texto e imagen de la publicación comentada: le dan contexto a la IA ("¿precio?" de qué modelo). */
+export async function postContent(channel: SocialChannel, postId: string): Promise<PostContent> {
   try {
     const creds = await requireCredentials();
-    const field = channel === 'instagram' ? 'caption' : 'message';
-    const { data } = await graph.get(`${GRAPH_API}/${postId}`, { params: { fields: field, access_token: creds.pageToken } });
-    return String(data?.[field] || '');
+    const { data } = await graph.get(`${GRAPH_API}/${postId}`, { params: { fields: POST_FIELDS[channel], access_token: creds.pageToken } });
+    return postContentFrom(channel, data);
   } catch {
-    return '';
+    return { text: '', imageUrl: '', video: false };
   }
 }
 
@@ -452,6 +468,14 @@ export async function socialDiagnosis(now = Date.now()): Promise<Record<string, 
     ]),
     read_insights: attempt(['page_post_engagements', 'page_views_total', 'page_impressions_unique', 'page_follows'].map(pageInsight))
   };
+  // Si de la última publicación de Instagram se consigue la imagen que el asistente mira al contestar un comentario.
+  value.imagen_de_la_ultima_publicacion = await ask(`${ig}/media`, { fields: 'id', limit: 1 })
+    .then(async d => {
+      if (!d?.data?.[0]?.id) return 'la cuenta no tiene publicaciones';
+      const post = await postContent('instagram', String(d.data[0].id));
+      return `${post.video ? 'video (se mira la portada)' : 'foto'}; imagen ${post.imageUrl ? 'encontrada' : 'NO encontrada'}; texto ${post.text ? 'encontrado' : 'vacío'}`;
+    })
+    .catch(failed);
   value.permisos_de_la_clave = await tokenInfo(creds.pageToken).then(info => info.scopes.join(', ') || info.error);
   for (const [permission, run] of Object.entries(tests)) value[`prueba_${permission}`] = await run();
 

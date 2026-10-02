@@ -6,8 +6,8 @@ import './entorno';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSocialAddress, contactLabel, splitForChannel, isSocialAddress } from '../src/services/metaChannels';
-import { toWhatsAppShape, messagingEvents, commentFromChange, commentKind, publicReplyText } from '../src/controllers/socialController';
+import { parseSocialAddress, contactLabel, splitForChannel, isSocialAddress, postContentFrom } from '../src/services/metaChannels';
+import { toWhatsAppShape, messagingEvents, commentFromChange, commentKind, publicReplyText, describePost } from '../src/controllers/socialController';
 import { sendTemplateMessage, sendAudioMessage } from '../src/services/whatsapp';
 
 test('los contactos de Instagram y Messenger se reconocen y se muestran por su canal', () => {
@@ -71,6 +71,26 @@ test('los mensajes se leen aunque Meta los mande en espera o como cambio de camp
   // Un comentario también llega como cambio, pero no es un mensaje privado.
   assert.deepEqual(messagingEvents({ changes: [{ field: 'comments', value: { id: 'IC_1', text: 'info', from: { id: 'u2' } } }] }), []);
   assert.deepEqual(messagingEvents({}), []);
+});
+
+test('de la publicación comentada se toma su texto y la imagen que se ve: la primera del carrusel o la portada del video', () => {
+  assert.deepEqual(postContentFrom('instagram', { caption: 'Velas de bautizo', media_type: 'IMAGE', media_url: 'https://cdn/foto.jpg' }),
+    { text: 'Velas de bautizo', imageUrl: 'https://cdn/foto.jpg', video: false });
+  assert.deepEqual(postContentFrom('instagram', { caption: 'Reel', media_type: 'VIDEO', media_url: 'https://cdn/reel.mp4', thumbnail_url: 'https://cdn/portada.jpg' }),
+    { text: 'Reel', imageUrl: 'https://cdn/portada.jpg', video: true });
+  assert.equal(postContentFrom('instagram', { media_type: 'CAROUSEL_ALBUM', children: { data: [{ media_type: 'IMAGE', media_url: 'https://cdn/1.jpg' }, { media_type: 'IMAGE', media_url: 'https://cdn/2.jpg' }] } }).imageUrl, 'https://cdn/1.jpg');
+  assert.deepEqual(postContentFrom('messenger', { message: 'Nuevos modelos', full_picture: 'https://cdn/fb.jpg', attachments: { data: [{ media_type: 'video' }] } }),
+    { text: 'Nuevos modelos', imageUrl: 'https://cdn/fb.jpg', video: true });
+  assert.deepEqual(postContentFrom('instagram', {}), { text: '', imageUrl: '', video: false });
+});
+
+test('a la IA se le cuenta qué dice y qué muestra la publicación comentada', () => {
+  const foto = describePost('instagram', { text: 'Recuerdos de bautizo', imageUrl: 'x', video: false }, 'Cruz con flores en caja de acetato');
+  assert.match(foto, /la publicación dice: "Recuerdos de bautizo"/);
+  assert.match(foto, /la foto muestra: Cruz con flores/);
+  assert.match(describePost('instagram', { text: '', imageUrl: 'x', video: true }, 'Oso con corazón'), /la portada del video muestra: Oso/);
+  // Sin texto ni imagen leída queda solo el canal.
+  assert.equal(describePost('messenger', { text: '', imageUrl: '', video: false }, ''), 'tu publicación de Messenger');
 });
 
 test('solo se atienden comentarios nuevos de otras personas, no respuestas ni los propios', () => {

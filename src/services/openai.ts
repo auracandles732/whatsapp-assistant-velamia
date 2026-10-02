@@ -116,7 +116,18 @@ export function buildImagePrompt(p: BusinessProfile): string {
   return lines.join('\n');
 }
 
-export async function describeImage(imageUrl: string, p: BusinessProfile = profile()): Promise<string> {
+export const IMAGE_NOT_READ = '[No se pudo analizar la imagen]';
+
+/** Lo que la IA debe fijarse en la foto de una publicación del propio negocio, para saber de qué producto preguntan en un comentario. */
+export function buildPostImagePrompt(p: BusinessProfile): string {
+  return [
+    `Esta es la foto (o la portada del video) de una publicación en redes de un negocio de ${p.business.description}.`,
+    'Describe en español, en máximo 4 líneas cortas, qué producto o productos se ven, para poder reconocerlos en el catálogo: qué es, su figura o diseño, colores, empaque y cualquier texto visible (cópialo tal cual).',
+    'No inventes lo que no se ve y no describas a personas: solo los productos.'
+  ].join('\n');
+}
+
+export async function describeImage(imageUrl: string, p: BusinessProfile = profile(), prompt: string = buildImagePrompt(p)): Promise<string> {
   const client = getOpenAIClient(p);
   const ask = async (model: string) => {
     const response = await client.chat.completions.create({
@@ -127,7 +138,7 @@ export async function describeImage(imageUrl: string, p: BusinessProfile = profi
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: buildImagePrompt(p) },
+          { type: 'text', text: prompt },
           { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
         ]
       }]
@@ -150,7 +161,7 @@ export async function describeImage(imageUrl: string, p: BusinessProfile = profi
   } catch (error: any) {
     console.error('Error describiendo imagen:', error.message);
   }
-  return '[No se pudo analizar la imagen]';
+  return IMAGE_NOT_READ;
 }
 
 const money = (value: number) => `$${value.toFixed(2)}`;

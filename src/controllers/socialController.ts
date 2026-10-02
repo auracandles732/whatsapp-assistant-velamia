@@ -15,13 +15,14 @@ import {
   socialAddress,
   sendPrivateReply,
   replyToCommentPublicly,
-  postText,
+  postContent,
+  PostContent,
   wasSentByUs,
   pageCredentials
 } from '../services/metaChannels';
 import { handleSocialMessage, handleSocialEcho } from './messageController';
 import { noteSocialOutcome } from '../services/webhookTrace';
-import { planTurn } from '../services/openai';
+import { planTurn, describeImage, buildPostImagePrompt, IMAGE_NOT_READ } from '../services/openai';
 import { notifyOwner } from '../services/notifications';
 import { profile } from '../config/businessProfile';
 
@@ -280,15 +281,38 @@ async function handleComment(channel: SocialChannel, comment: IncomingComment, d
   }
 }
 
-/** Primer mensaje privado a quien comentó: lo escribe la IA como a una clienta nueva, con el texto de la publicación como contexto. */
+// Lo que se ve en cada publicación comentada: se mira una sola vez, porque la foto no cambia y cada mirada cuesta IA.
+const POST_PICTURES_KEPT = 300;
+const postPictures = new Map<string, string>();
+
+async function postPicture(postId: string, imageUrl: string): Promise<string> {
+  const known = postPictures.get(postId);
+  if (known !== undefined) return known;
+  const seen = await describeImage(imageUrl, profile(), buildPostImagePrompt(profile())).catch(() => IMAGE_NOT_READ);
+  if (seen === IMAGE_NOT_READ) return '';
+  postPictures.set(postId, seen);
+  if (postPictures.size > POST_PICTURES_KEPT) postPictures.delete(postPictures.keys().next().value as string);
+  return seen;
+}
+
+/** Cómo se le cuenta a la IA en qué publicación comentaron: su texto y lo que se ve en la foto o en la portada del video. */
+export function describePost(channel: SocialChannel, post: PostContent, picture: string): string {
+  const text = post.text ? ` (la publicación dice: "${post.text.slice(0, 300)}")` : '';
+  const seen = picture ? ` (${post.video ? 'la portada del video' : 'la foto'} muestra: ${picture.slice(0, 500)})` : '';
+  return `tu publicación de ${channelName(channel)}${text}${seen}`;
+}
+
+/** Primer mensaje privado a quien comentó: lo escribe la IA como a una clienta nueva, sabiendo qué dice y qué muestra la publicación. */
 async function privateOpening(channel: SocialChannel, comment: IncomingComment): Promise<string> {
   const fallback = `¡Hola! Vi tu comentario en ${channelName(channel)} 🤍 ¿En qué te puedo ayudar?`;
   try {
-    const [catalog, customPrompt, caption] = await Promise.all([getAllProducts(), getConfig('system_prompt'), comment.postId ? postText(channel, comment.postId) : Promise.resolve('')]);
-    const where = `tu publicación de ${channelName(channel)}${caption ? ` (la publicación dice: "${caption.slice(0, 300)}")` : ''}`;
+    const nothing: PostContent = { text: '', imageUrl: '', video: false };
+    const [catalog, customPrompt, post] = await Promise.all([getAllProducts(), getConfig('system_prompt'), comment.postId ? postContent(channel, comment.postId) : Promise.resolve(nothing)]);
+    const picture = post.imageUrl ? await postPicture(comment.postId, post.imageUrl) : '';
+    const where = describePost(channel, post, picture);
     const plan = await planTurn({
       history: [],
-      userMessage: `[El cliente comentó en ${where}: "${comment.text}". Le escribes por mensaje privado y solo puedes enviarle UN mensaje de texto, sin fotos, hasta que te conteste: salúdalo, menciona que viste su comentario y termina con una pregunta]`,
+      userMessage: `[El cliente comentó en ${where}: "${comment.text}". Le escribes por mensaje privado y solo puedes enviarle UN mensaje de texto, sin fotos, hasta que te conteste: salúdalo, menciona que viste su comentario, si lo que muestra la publicación está en el catálogo háblale de ese producto, y termina con una pregunta]`,
       catalog,
       customPrompt,
       sentProducts: []
