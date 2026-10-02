@@ -14,7 +14,7 @@ Revisado: 26 de septiembre de 2026.
 
 | Obligación | Cómo se cumple en el sistema |
 |---|---|
-| Deber de informar (art. 12 LOPDP) | Página pública **/privacidad** (y /legal/&lt;empresa&gt;/privacidad para cada empresa) armada con el perfil; el asistente manda el enlace en su primera respuesta a cada cliente nuevo (se puede apagar en Configuración → Privacidad y datos). |
+| Deber de informar (art. 12 LOPDP) | Página pública **/privacidad** (y /legal/&lt;empresa&gt;/privacidad para cada empresa) armada con el perfil. El asistente no la envía por el chat: el enlace va en la descripción de los perfiles de WhatsApp Business, Instagram y Facebook. |
 | Condiciones de venta (LODC, Comercio Electrónico) | Página pública **/condiciones** con pago, anticipo, entrega, devoluciones (art. 45 LODC) y reclamos. |
 | Derechos de los titulares (arts. 13–24) | Si la clienta pide ver o borrar sus datos, el asistente le confirma el plazo de 15 días, deja de enviarle seguimientos y avisa a la dueña. En el CRM: **Descargar datos del cliente** (acceso y portabilidad) y **Eliminar chat** (eliminación). Ver [derechos-de-los-titulares.md](derechos-de-los-titulares.md). |
 | Oposición a publicidad (Comercio Electrónico, LOPDP) | Los seguimientos se cortan si la clienta responde NO o pide que no le escriban. |

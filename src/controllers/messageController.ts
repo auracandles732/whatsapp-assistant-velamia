@@ -736,23 +736,6 @@ async function ingestMessage(message: any, value: any) {
   }
 }
 
-/** Enlace a la política de privacidad del negocio ('' si no se puede armar: sin la dirección pública del servidor). */
-export function privacyUrl(): string {
-  // PUBLIC_URL: el dominio propio de la empresa (por ejemplo https://asistente.velamia.ec), si lo configuró en Render.
-  const base = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
-  if (!base) return '';
-  const tenant = currentTenant();
-  return `${base}${tenant ? `/legal/${tenant.businessId}/privacidad` : '/privacidad'}`;
-}
-
-/** Aviso de privacidad en la primera respuesta (se puede apagar en Configuración → Privacidad). Nunca lanza error. */
-async function sendPrivacyNotice(conversationId: string, phoneNumber: string) {
-  const url = privacyUrl();
-  if (!profile().privacy.firstReplyNotice || !url) return;
-  await sendAndSaveText(conversationId, phoneNumber, `🔒 Cuidamos tus datos personales. Aquí puedes ver cómo: ${url}`)
-    .catch((error: any) => console.warn('⚠️ No se pudo enviar el aviso de privacidad:', error.message));
-}
-
 /** Responde en un solo turno a todos los mensajes que la clienta envió seguidos. */
 async function respondToBatch(batch: PendingBatch) {
   const { conversationId, phoneNumber, customerName, items } = batch;
@@ -984,8 +967,6 @@ async function respondToBatch(batch: PendingBatch) {
         && await voiceNotesEnabled().catch(() => false)
         && await sendAndSaveVoiceNote(conversationId, phoneNumber, plan.reply);
       if (!voiceSent) await sendAndSaveText(conversationId, phoneNumber, plan.reply);
-      // Primera respuesta a una clienta nueva: el enlace a la política de privacidad (deber de informar, LOPDP).
-      if (!history.some((m: any) => m.sender === 'bot' || m.sender === 'human')) await sendPrivacyNotice(conversationId, phoneNumber);
     }
 
     // Los datos bancarios se envían tal como la dueña los escribió: la IA nunca redacta números de cuenta.

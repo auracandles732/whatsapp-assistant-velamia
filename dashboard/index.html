@@ -4682,7 +4682,6 @@
                             {text('privacy.ruc', 'RUC', 'Ej: 0912345678001')}
                             {text('privacy.email', 'Correo para temas de datos personales', 'Ej: datos@tunegocio.com')}
                             {text('privacy.address', 'Dirección', 'Ej: Av. Principal y calle 2, Guayaquil', '', true)}
-                            {check('privacy.firstReplyNotice', 'En la primera respuesta a cada cliente nuevo, enviar el enlace a la política de privacidad (deber de informar)')}
                             <div className="form-field wide">
                                 <label>Borrar solos los chats sin pedidos que llevan sin mensajes…</label>
                                 <select value={form.privacy?.retentionMonths ?? 0} onChange={e => set('privacy.retentionMonths', Number(e.target.value))}>

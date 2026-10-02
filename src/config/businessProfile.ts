@@ -121,7 +121,7 @@ export interface BusinessProfile {
   };
   /**
    * Protección de datos personales (Ley Orgánica de Protección de Datos Personales de Ecuador): quién responde por los
-   * datos de las clientas, el aviso de privacidad y cuánto tiempo se guardan los chats.
+   * datos de las clientas y cuánto tiempo se guardan los chats.
    */
   privacy: {
     /** Razón social o nombre de la persona responsable de los datos. Vacío = el nombre del negocio. */
@@ -130,8 +130,6 @@ export interface BusinessProfile {
     address: string;
     /** Correo para pedir ver, corregir o borrar sus datos. */
     email: string;
-    /** El primer mensaje del asistente a cada cliente lleva el enlace a la política de privacidad (deber de informar). */
-    firstReplyNotice: boolean;
     /** Meses sin mensajes tras los que se borran los chats que no tienen pedidos; 0 = nunca se borran solos. */
     retentionMonths: number;
   };
@@ -237,7 +235,7 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     ],
     changes: []
   },
-  privacy: { legalName: '', ruc: '', address: '', email: '', firstReplyNotice: true, retentionMonths: 0 },
+  privacy: { legalName: '', ruc: '', address: '', email: '', retentionMonths: 0 },
   ai: {
     openai_api_key: process.env.OPENAI_API_KEY || '',
     model: 'gpt-5.4-mini'
@@ -302,7 +300,7 @@ export const STORE_PROFILE: BusinessProfile = {
   },
   branding: { primaryColor: '#B96B4F', logoUrl: '' },
   packaging: { enabled: false, types: [], changes: [] },
-  privacy: { legalName: '', ruc: '', address: '', email: '', firstReplyNotice: true, retentionMonths: 0 },
+  privacy: { legalName: '', ruc: '', address: '', email: '', retentionMonths: 0 },
   ai: {
     openai_api_key: process.env.OPENAI_API_KEY || '',
     model: 'gpt-5.4-mini'
@@ -483,7 +481,6 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
         ruc: text(pv.ruc, bp.ruc, 20).replace(/[^0-9]/g, '').slice(0, 13),
         address: text(pv.address, bp.address, 240),
         email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '',
-        firstReplyNotice: bool(pv.firstReplyNotice, bp.firstReplyNotice),
         retentionMonths: [0, 6, 12, 24, 36, 60].includes(Number(pv.retentionMonths)) ? Number(pv.retentionMonths) : bp.retentionMonths
       };
     })(),

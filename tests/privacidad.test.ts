@@ -42,7 +42,7 @@ test('plazo de conservación: solo los chats sin pedidos que pasaron el plazo, y
 });
 
 test('la política de privacidad dice quién responde, qué datos, para qué, con quién, cuánto tiempo y cómo ejercer los derechos', () => {
-  const p = normalizeProfile({ ...VELAMIA_PROFILE, privacy: { legalName: 'Velas <Mía> S.A.S.', ruc: '0912345678001', email: 'datos@velamia.ec', address: 'Guayaquil', firstReplyNotice: true, retentionMonths: 24 } }, VELAMIA_PROFILE);
+  const p = normalizeProfile({ ...VELAMIA_PROFILE, privacy: { legalName: 'Velas <Mía> S.A.S.', ruc: '0912345678001', email: 'datos@velamia.ec', address: 'Guayaquil', retentionMonths: 24 } }, VELAMIA_PROFILE);
   const html = privacyPolicyHtml(p);
   assert.match(html, /Velas &lt;Mía&gt; S\.A\.S\./, 'los datos del perfil se escapan');
   assert.match(html, /RUC 0912345678001/);
@@ -66,10 +66,8 @@ test('las condiciones de venta salen del perfil: pago, anticipo, entrega y devol
 });
 
 test('el perfil guarda los datos del responsable y los valida', () => {
-  const p = normalizeProfile({ privacy: { ruc: '0912345678001-x', email: 'no-es-correo', retentionMonths: 7, firstReplyNotice: false } });
+  const p = normalizeProfile({ privacy: { ruc: '0912345678001-x', email: 'no-es-correo', retentionMonths: 7 } });
   assert.equal(p.privacy.ruc, '0912345678001');
   assert.equal(p.privacy.email, '', 'un correo inválido no se guarda');
   assert.equal(p.privacy.retentionMonths, 0, 'solo plazos de la lista');
-  assert.equal(p.privacy.firstReplyNotice, false);
-  assert.equal(normalizeProfile({}).privacy.firstReplyNotice, true, 'el aviso de privacidad va encendido por defecto');
 });
