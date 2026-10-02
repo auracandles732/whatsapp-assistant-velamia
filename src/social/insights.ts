@@ -54,7 +54,10 @@ function valueOf(item: any): number | null {
 async function insights(id: string, metrics: string[], token: string, path = 'insights'): Promise<Record<string, number | null>> {
   const read = async (list: string[]) => {
     const { data } = await graph.get(`${GRAPH_API}/${id}/${path}`, { params: { metric: list.join(','), access_token: token } });
-    return Object.fromEntries((data?.data || []).map((item: any) => [item.name, valueOf(item)]));
+    // Meta puede dar la misma métrica dos veces (del día y de por vida): vale el total de por vida.
+    const out: Record<string, number | null> = {};
+    for (const item of data?.data || []) if (!(item.name in out) || item.period === 'lifetime') out[item.name] = valueOf(item);
+    return out;
   };
   try {
     return await read(metrics);
@@ -116,6 +119,19 @@ async function facebookMetrics(conn: PublishingConnection, storedId: string): Pr
   return m;
 }
 
+async function facebookStoryMetrics(conn: PublishingConnection, id: string): Promise<Metrics> {
+  const m = empty();
+  const values = await insights(id, ['story_media_view', 'story_total_media_view_unique', 'pages_fb_story_thread_lightweight_reactions', 'pages_fb_story_replies', 'pages_fb_story_shares'], conn.pageToken);
+  m.views = values.story_media_view ?? null;
+  m.reach = values.story_total_media_view_unique ?? null;
+  m.likes = values.pages_fb_story_thread_lightweight_reactions ?? null;
+  m.comments = values.pages_fb_story_replies ?? null;
+  m.shares = values.pages_fb_story_shares ?? null;
+  return m;
+}
+
+const hasNumbers = (m: Metrics) => Object.values(m).some(value => typeof value === 'number' && value > 0);
+
 /** Revisa los resultados de lo publicado en los últimos 14 días de la empresa actual. */
 export async function collectMetricsForCurrent(now = new Date()) {
   const conn = await publishingConnection();
@@ -136,11 +152,16 @@ export async function collectMetricsForCurrent(now = new Date()) {
   }
   for (const post of (data || []) as SocialPost[]) {
     for (const [channel, result] of Object.entries(post.results || {}) as [PostChannel, any][]) {
-      if (!result?.id || result.error || channel === 'facebook_story') continue;
+      if (!result?.id || result.error) continue;
       const story = channel === 'instagram_story';
-      if (story && post.published_at && now.getTime() - new Date(post.published_at).getTime() > STORY_HOURS * 3_600_000) continue;
+      const ended = !!post.published_at && now.getTime() - new Date(post.published_at).getTime() > STORY_HOURS * 3_600_000;
+      if (story && ended) continue;
       try {
-        const metrics = channel === 'facebook' ? await facebookMetrics(conn, result.id) : await instagramMetrics(conn, result.id, story);
+        const metrics = channel === 'facebook' ? await facebookMetrics(conn, result.id)
+          : channel === 'facebook_story' ? await facebookStoryMetrics(conn, result.id)
+          : await instagramMetrics(conn, result.id, story);
+        // Una historia de Facebook ya terminada puede volver en ceros: con eso no se pisa lo medido mientras estuvo activa.
+        if (channel === 'facebook_story' && ended && !hasNumbers(metrics)) continue;
         const { error: upsertError } = await supabase.from(TABLE).upsert({
           ...tenantColumns(), post_id: post.id, channel, media_id: String(result.id), ...metrics, collected_at: now.toISOString()
         }, { onConflict: 'post_id,channel' });

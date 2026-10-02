@@ -10384,9 +10384,8 @@
 
         // Por qué una fila no tiene números: "aún" solo cuando todavía pueden llegar.
         function noResultsLabel(channel, post) {
-            if (channel === 'facebook_story') return 'Las historias de Facebook no se miden';
             const hours = (Date.now() - new Date(post.published_at || post.scheduled_at || 0).getTime()) / 3600000;
-            if (channel === 'instagram_story' && hours > 24) return 'Sin datos: la historia terminó antes de medirse';
+            if (channel.endsWith('_story') && hours > 24) return 'Sin datos: la historia terminó antes de medirse';
             return 'Aún sin datos';
         }
 
