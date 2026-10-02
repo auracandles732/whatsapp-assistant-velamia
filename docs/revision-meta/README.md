@@ -83,7 +83,7 @@ Van en inglés porque los revisores de Meta trabajan en inglés.
 
 **whatsapp_business_management**
 
-> We use whatsapp_business_management to subscribe the WhatsApp Business Account to the app's webhooks so incoming messages reach the CRM, to read the phone number connected to the account, and to read the approved message templates that the CRM uses for follow-up messages. We do not create or modify any other business asset.
+> We use whatsapp_business_management to manage the message templates of our own WhatsApp Business Account from the CRM. In Configuración → "Plantillas de WhatsApp" our team sees every template with its approval status and creates new ones (name, category, body text and sample values), which are submitted to Meta for review; approved templates are the only messages the CRM sends outside the 24-hour customer service window. We also use it to subscribe our WhatsApp Business Account to the app's webhooks so incoming messages reach the CRM, and to read the phone number connected to the account.
 
 **public_profile**
 
