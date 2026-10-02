@@ -50,7 +50,14 @@ export async function handleSocialWebhook(data: any): Promise<void> {
     }
     for (const change of entry.changes || []) {
       const comment = commentFromChange(channel, change, String(entry.id));
-      if (comment) handleComment(channel, comment).catch(error => console.error(`Error respondiendo comentario de ${channelName(channel)}:`, error));
+      if (comment) {
+        handleComment(channel, comment).catch(error => {
+          console.error(`Error respondiendo comentario de ${channelName(channel)}:`, error);
+          noteSocialOutcome(`Comentario de ${channelName(channel)}: falló al atenderlo (${String(error?.response?.data?.error?.message || error?.message || error).slice(0, 160)})`);
+        });
+      } else if (change?.field === 'comments' || change?.value?.item === 'comment') {
+        noteSocialOutcome(`Comentario de ${channelName(channel)}: es de la propia cuenta o una respuesta a otro comentario, no se contesta`);
+      }
     }
   }
 }
@@ -209,19 +216,21 @@ const COMMENT_DELAY_MS = [20_000, 60_000];
 async function handleComment(channel: SocialChannel, comment: IncomingComment, delayMs = COMMENT_DELAY_MS) {
   if (inProgress.has(comment.commentId) || wasSentByUs(comment.commentId)) return;
   inProgress.add(comment.commentId);
+  // Qué se hizo con el comentario, para la revisión de redes (sin el texto ni quién lo escribió).
+  const note = (outcome: string) => noteSocialOutcome(`Comentario de ${channelName(channel)}: ${outcome}`);
   try {
-    if (await isMessageAlreadyProcessed(comment.commentId)) return;
+    if (await isMessageAlreadyProcessed(comment.commentId)) return note('ya estaba atendido');
     if ((await getConfig('bot_enabled')) === 'false') {
       console.log(`🚫 Bot desactivado: el comentario en ${channelName(channel)} queda sin respuesta automática`);
-      return;
+      return note('el bot está desactivado, queda sin respuesta automática');
     }
     const kind = commentKind(comment.text);
     console.log(`💬 Comentario en ${channelName(channel)} (${kind}): "${comment.text.slice(0, 80)}"`);
-    if (kind === 'ignore') return;
+    if (kind === 'ignore') return note('sin texto, se ignora');
     // Un reclamo siempre se atiende y se avisa, aunque la persona haya comentado hace poco.
     if (kind !== 'complaint' && commenterOnCooldown(comment.fromId)) {
       console.log('💬 Esa persona ya recibió respuesta automática hace poco: este comentario queda para el equipo');
-      return;
+      return note('esa persona ya recibió una respuesta automática en las últimas 6 horas, queda para el equipo');
     }
     markCommenterAnswered(comment.fromId);
 
@@ -229,7 +238,7 @@ async function handleComment(channel: SocialChannel, comment: IncomingComment, d
 
     if (kind === 'praise') {
       await replyToCommentPublicly(channel, comment.commentId, publicReplyText('praise', channel, comment.fromName, false));
-      return;
+      return note('no es una pregunta: solo se agradeció en público, sin mensaje privado');
     }
 
     // Primero el mensaje privado: el comentario público solo dice "te escribimos" si de verdad se pudo escribir.
@@ -238,17 +247,22 @@ async function handleComment(channel: SocialChannel, comment: IncomingComment, d
       : await privateOpening(channel, comment);
 
     let privateSent: { address: string; messageId?: string } | null = null;
+    let privateError = '';
     try {
       privateSent = await sendPrivateReply(channel, comment.commentId, privateText);
     } catch (error: any) {
-      console.error(`❌ No se pudo escribir por privado a quien comentó en ${channelName(channel)}:`, error.response?.data?.error?.message || error.message);
+      privateError = String(error.response?.data?.error?.message || error.message).slice(0, 160);
+      console.error(`❌ No se pudo escribir por privado a quien comentó en ${channelName(channel)}:`, privateError);
     }
 
     const publicText = publicReplyText(kind, channel, comment.fromName, !!privateSent);
+    let publicError = '';
     const publicId = await replyToCommentPublicly(channel, comment.commentId, publicText).catch((error: any) => {
-      console.error('❌ No se pudo responder el comentario:', error.response?.data?.error?.message || error.message);
+      publicError = String(error.response?.data?.error?.message || error.message).slice(0, 160);
+      console.error('❌ No se pudo responder el comentario:', publicError);
       return undefined;
     });
+    note(`${kind === 'complaint' ? 'reclamo' : 'pregunta'}; mensaje privado ${privateSent ? 'enviado' : `no enviado (${privateError})`}; respuesta pública ${publicId ? 'publicada' : `no publicada (${publicError})`}`);
     if (!privateSent) return;
 
     const conversation = (await getConversation(privateSent.address)) || (await createConversation(privateSent.address, comment.fromName || undefined));
