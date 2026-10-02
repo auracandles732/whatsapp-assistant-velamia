@@ -2389,6 +2389,18 @@
         .sr-totals div { background: #F4F6FF; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
         .sr-totals span { font-size: 12.5px; color: #5C668F; }
         .sr-totals b { font-size: 22px; color: #141C3A; }
+        .wt-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 14px; }
+        .wt-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid #E8ECF6; border-radius: 14px; background: #fff; }
+        .wt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+        .wt-head b { color: #141C3A; font-size: 14px; word-break: break-all; }
+        .wt-head small { color: #6B7599; font-size: 12.5px; }
+        .wt-chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+        .wt-text { font-size: 13.5px; color: #1E2A4A; white-space: pre-wrap; line-height: 1.45; }
+        .wt-form { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 14px; background: #F7F8FE; border: 1px solid #E4E8F7; }
+        .wt-form > b { font-size: 15px; color: #141C3A; }
+        .wt-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; font-weight: 600; color: #2A3766; }
+        .wt-form input, .wt-form select { padding: 11px 12px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; font: inherit; font-size: 14px; font-weight: 400; color: #1E2A4A; }
+        .wt-form .field-hint { font-weight: 400; font-size: 12px; color: #7A84AE; line-height: 1.35; }
         /* Computadora: una fila por publicación. */
         .sr-table-wrap { border: 1px solid #E8ECF6; border-radius: 14px; overflow-x: auto; }
         .sr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; color: #1E2A4A; }
@@ -7619,6 +7631,11 @@
                     subtitle: 'Mensajes y comentarios atendidos por el mismo asistente', sub: 'Conecta tus redes sociales',
                     node: <SocialConnect available={!!session?.business?.legacy || !session?.business} canConfigure={canConfigure} />
                 },
+                {
+                    id: 'plantillas', icon: 'chat', label: 'Plantillas de WhatsApp', title: 'Plantillas de WhatsApp',
+                    subtitle: 'Mensajes aprobados por Meta para escribir fuera de las 24 horas', sub: 'Crea y revisa tus plantillas',
+                    node: <WhatsAppTemplates canConfigure={canConfigure} />
+                },
                 // La voz de ElevenLabs es de VELAMIA: las demás empresas no la ven.
                 ...(session?.business?.legacy || !session?.business ? [{
                     id: 'voz', icon: 'chat', label: 'Notas de voz', title: 'Notas de voz (ElevenLabs)',
@@ -11248,6 +11265,96 @@
                     )}
                     {sample && <audio src={sample} controls autoPlay style={{ width: '100%', marginTop: 10 }} />}
                     {error && <p className="hint" style={{ color: '#B42318', marginTop: 8 }}>{error}</p>}
+                </>
+            );
+        }
+
+        const TEMPLATE_STATUS = { APPROVED: ['Aprobada', '#E6F6EC', '#1E6B3A'], PENDING: ['En revisión', '#FFF3DC', '#7A5300'], REJECTED: ['Rechazada', '#FDE7E7', '#B42318'], PAUSED: ['Pausada', '#EEF1F8', '#4B567A'], DISABLED: ['Desactivada', '#EEF1F8', '#4B567A'] };
+        const TEMPLATE_KINDS = { UTILITY: 'Servicio', MARKETING: 'Marketing', AUTHENTICATION: 'Código de acceso' };
+
+        // Plantillas de mensajes de WhatsApp del negocio: las que ya tiene en Meta y un formulario para pedir una nueva.
+        function WhatsAppTemplates({ canConfigure }) {
+            const empty = { name: '', category: 'UTILITY', body: '', examples: [] };
+            const [list, setList] = useState(null);
+            const [error, setError] = useState('');
+            const [form, setForm] = useState(empty);
+            const [busy, setBusy] = useState(false);
+            const [notice, setNotice] = useState('');
+            const [formError, setFormError] = useState('');
+            const load = () => api('/api/whatsapp/templates').then(setList).catch(e => { setList([]); setError(e.message); });
+            useEffect(() => { load(); }, []);
+
+            const variables = [...new Set(form.body.match(/\{\{\s*\d+\s*\}\}/g) || [])].length;
+            async function create() {
+                setBusy(true);
+                setFormError('');
+                setNotice('');
+                try {
+                    await api('/api/whatsapp/templates', { method: 'POST', body: JSON.stringify({ ...form, language: 'es', examples: form.examples.slice(0, variables) }) });
+                    setNotice(`Plantilla "${form.name}" enviada a Meta. Queda "En revisión" hasta que la aprueben; suele tardar unos minutos.`);
+                    setForm(empty);
+                    setError('');
+                    await load();
+                } catch (e) {
+                    setFormError(e.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            return (
+                <>
+                    <p className="hint">Una plantilla es un mensaje que Meta aprueba de antemano: es la única forma de escribirle por WhatsApp a alguien que no te ha escrito en las últimas 24 horas (por ejemplo, los seguimientos). Aquí ves las de tu cuenta y puedes pedir una nueva.</p>
+                    {!list ? <p className="hint">Consultando a Meta…</p> : (
+                        <div className="wt-list">
+                            {error && <div className="pb-notice" style={{ background: '#FFF3DC', color: '#7A5300' }}>⚠️ No se pudieron leer las plantillas: {error}</div>}
+                            {!error && list.length === 0 && <p className="hint">Tu cuenta todavía no tiene plantillas.</p>}
+                            {list.map(t => {
+                                const [label, bg, color] = TEMPLATE_STATUS[t.status] || [t.status, '#EEF1F8', '#4B567A'];
+                                return (
+                                    <div key={t.name + t.language} className="wt-item">
+                                        <div className="wt-head">
+                                            <b>{t.name}</b>
+                                            <span className="wt-chip" style={{ background: bg, color }}>{label}</span>
+                                            <small>{TEMPLATE_KINDS[t.category] || t.category} · {t.language}</small>
+                                        </div>
+                                        <div className="wt-text">{t.text || 'Sin texto'}</div>
+                                        {t.rejectedReason && <small style={{ color: '#B42318' }}>Motivo del rechazo: {t.rejectedReason}</small>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {canConfigure && (
+                        <div className="wt-form">
+                            <b>Nueva plantilla</b>
+                            <label>Nombre
+                                <input type="text" placeholder="ej: aviso_pedido_listo" value={form.name} onChange={e => setForm({ ...form, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })} />
+                                <small className="field-hint">Solo minúsculas, números y guion bajo. Es el nombre interno; la clienta no lo ve.</small>
+                            </label>
+                            <label>Tipo
+                                <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                                    <option value="UTILITY">Servicio (avisos sobre un pedido o una consulta)</option>
+                                    <option value="MARKETING">Marketing (promociones y seguimientos)</option>
+                                </select>
+                            </label>
+                            <label>Texto del mensaje
+                                <textarea className="prompt-textarea" style={{ minHeight: '110px' }} placeholder={'Hola {{1}}, tu pedido ya está listo. ¿Coordinamos la entrega?'} value={form.body} onChange={e => setForm({ ...form, body: e.target.value })}></textarea>
+                                <small className="field-hint">Para un dato que cambia en cada mensaje (como el nombre) escribe {'{{1}}'}, {'{{2}}'}… El texto no puede empezar ni terminar con uno.</small>
+                            </label>
+                            {Array.from({ length: variables }, (_, i) => (
+                                <label key={i}>Ejemplo para {'{{' + (i + 1) + '}}'}
+                                    <input type="text" placeholder={i === 0 ? 'ej: María' : 'ej: un valor de muestra'} value={form.examples[i] || ''} onChange={e => { const examples = [...form.examples]; examples[i] = e.target.value; setForm({ ...form, examples }); }} />
+                                </label>
+                            ))}
+                            {formError && <p className="hint" style={{ color: '#B42318' }}>{formError}</p>}
+                            {notice && <div className="pb-notice ok">✅ {notice}</div>}
+                            <div className="settings-actions">
+                                <span className="save-status"></span>
+                                <button type="button" className="btn-save-prompt" disabled={busy || !form.name || !form.body.trim()} onClick={create}>{busy ? 'Enviando a Meta…' : 'Enviar a Meta para aprobación'}</button>
+                            </div>
+                        </div>
+                    )}
                 </>
             );
         }

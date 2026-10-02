@@ -89,7 +89,10 @@ import {
   issueSessionToken,
   verifyWebhookSignature
 } from './middleware/auth';
-import { sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError } from './services/whatsapp';
+import {
+  sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError,
+  getMessageTemplates, summarizeTemplate, templateProblem, createMessageTemplate
+} from './services/whatsapp';
 import { startFollowUpScheduler } from './services/followups';
 import { startSupervisor } from './services/supervisor';
 import { supervisorRouter } from './services/supervisorRoutes';
@@ -281,6 +284,36 @@ app.post('/api/me/connect-social', requireCrmSession, requireOwnerRole, async (_
     res.json({ success: true, detail: await subscribePage() });
   } catch (error: any) {
     res.status(500).json({ error: error.response?.data?.error?.message || error.message });
+  }
+});
+
+// ---------- Plantillas de WhatsApp ----------
+
+// Meta explica sus rechazos en error_user_msg; el mensaje técnico queda de respaldo.
+const templateError = (error: any) => String(error.response?.data?.error?.error_user_msg || error.response?.data?.error?.message || error.message);
+
+app.get('/api/whatsapp/templates', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json((await getMessageTemplates()).map(summarizeTemplate));
+  } catch (error: any) {
+    res.status(500).json({ error: templateError(error) });
+  }
+});
+
+app.post('/api/whatsapp/templates', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+  const template = {
+    name: String(req.body?.name || '').trim(),
+    category: String(req.body?.category || ''),
+    language: String(req.body?.language || 'es'),
+    body: String(req.body?.body || '').trim(),
+    examples: (Array.isArray(req.body?.examples) ? req.body.examples : []).map((e: unknown) => String(e ?? '').trim())
+  };
+  const problem = templateProblem(template);
+  if (problem) return res.status(400).json({ error: problem });
+  try {
+    res.json(await createMessageTemplate(template));
+  } catch (error: any) {
+    res.status(500).json({ error: templateError(error) });
   }
 });
 

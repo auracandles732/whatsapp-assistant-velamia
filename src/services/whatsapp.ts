@@ -146,9 +146,62 @@ export async function getMessageTemplates(): Promise<any[]> {
 
   const response = await graph.get(`${GRAPH_API}/${waba}/message_templates`, {
     headers: authHeaders(),
-    params: { fields: 'name,status,language,components', limit: 200 }
+    params: { fields: 'name,status,language,category,components,rejected_reason', limit: 200 }
   });
   return response.data.data || [];
+}
+
+export interface TemplateSummary { name: string; status: string; language: string; category: string; text: string; rejectedReason: string }
+
+/** Lo que el CRM muestra de una plantilla: cómo está en Meta y el texto de su cuerpo. */
+export function summarizeTemplate(t: any): TemplateSummary {
+  const body = (t?.components || []).find((c: any) => c.type === 'BODY');
+  const rejected = String(t?.rejected_reason || '');
+  return {
+    name: String(t?.name || ''),
+    status: String(t?.status || ''),
+    language: String(t?.language || ''),
+    category: String(t?.category || ''),
+    text: String(body?.text || ''),
+    rejectedReason: rejected === 'NONE' ? '' : rejected
+  };
+}
+
+export interface NewTemplate { name: string; category: string; language: string; body: string; examples: string[] }
+
+export const TEMPLATE_CATEGORIES = ['UTILITY', 'MARKETING'];
+
+/** Cuántas variables ({{1}}, {{2}}…) lleva el texto; -1 si no van en orden desde el 1. */
+export function templateVariables(body: string): number {
+  const numbers = [...new Set((body.match(/\{\{\s*\d+\s*\}\}/g) || []).map(v => Number(v.replace(/\D/g, ''))))].sort((a, b) => a - b);
+  return numbers.every((n, i) => n === i + 1) ? numbers.length : -1;
+}
+
+/** Revisa una plantilla antes de enviarla a Meta: devuelve qué corregir, o '' si está bien. */
+export function templateProblem(t: NewTemplate): string {
+  if (!/^[a-z0-9_]{1,512}$/.test(t.name)) return 'El nombre solo puede llevar letras minúsculas, números y guion bajo (_), sin espacios ni tildes.';
+  if (!TEMPLATE_CATEGORIES.includes(t.category)) return 'Elige el tipo de plantilla.';
+  if (!/^[a-z]{2}(_[A-Z]{2})?$/.test(t.language)) return 'El idioma no es válido.';
+  if (!t.body) return 'Escribe el texto de la plantilla.';
+  if ([...t.body].length > 1024) return 'El texto no puede pasar de 1024 caracteres.';
+  const variables = templateVariables(t.body);
+  if (variables < 0) return 'Las variables deben ir en orden y sin saltos: {{1}}, {{2}}, {{3}}…';
+  if (/^\s*\{\{/.test(t.body) || /\}\}\s*$/.test(t.body)) return 'Meta no acepta que el texto empiece o termine con una variable: agrega alguna palabra antes o después.';
+  if (t.examples.length !== variables || t.examples.some(e => !e)) return 'Escribe un ejemplo para cada variable: Meta lo exige para aprobar la plantilla.';
+  return '';
+}
+
+/** Crea la plantilla en la cuenta de WhatsApp del negocio: Meta la revisa antes de dejar usarla. */
+export async function createMessageTemplate(t: NewTemplate): Promise<{ id: string; status: string }> {
+  const waba = credentials().wabaId;
+  if (!waba) throw new Error(currentTenant() ? `El negocio ${currentTenant()!.name} no tiene WhatsApp Business Account ID` : 'Falta la variable WHATSAPP_BUSINESS_ACCOUNT_ID');
+  const response = await graph.post(`${GRAPH_API}/${waba}/message_templates`, {
+    name: t.name,
+    category: t.category,
+    language: t.language,
+    components: [{ type: 'BODY', text: t.body, ...(t.examples.length > 0 && { example: { body_text: [t.examples] } }) }]
+  }, { headers: authHeaders() });
+  return { id: String(response.data?.id || ''), status: String(response.data?.status || 'PENDING') };
 }
 
 /** Explica en español los rechazos de WhatsApp más comunes al escribir desde el CRM. */
