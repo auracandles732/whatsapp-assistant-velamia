@@ -27,8 +27,8 @@ export const thumbUrl = (storagePath: string, id: string) => supabase.storage.fr
 /** Las miniaturas que ya existen en una carpeta de la biblioteca (nombres "<id>.jpg"). */
 export async function existingThumbs(folder: string): Promise<Set<string>> {
   const { data, error } = await supabase.storage.from(BUCKET).list(`${folder.replace(/\/$/, '')}/thumbs`, { limit: 1000 });
-  if (error) return new Set();
-  return new Set((data || []).map(f => f.name.replace(/\.jpg$/, '')));
+  if (error || !Array.isArray(data)) return new Set();
+  return new Set(data.map(f => String(f.name || '').replace(/\.jpg$/, '')));
 }
 
 function runFfmpeg(args: string[]): Promise<void> {

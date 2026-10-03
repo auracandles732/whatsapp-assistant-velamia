@@ -104,16 +104,31 @@ function previewText(m: { type: string; content: string | null }): string {
   return content.replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
-/** Último mensaje de cada chat (para la lista) y los chats que ya compraron algo. */
+/**
+ * Último mensaje de cada chat (para la lista), los chats que ya compraron algo, los que mostraron interés (el bot les
+ * mostró productos o tienen una cotización) y los mensajes sin leer de cada uno.
+ */
 export async function getListOverview() {
   const since = new Date(Date.now() - 14 * DAY).toISOString();
-  const [messages, orders, conversations] = await Promise.all([getRecentMessages(since, 4000), getOrderRefs(), getAllConversations()]);
+  const [messages, orders, conversations, quotations] = await Promise.all([
+    getRecentMessages(since, 4000), getOrderRefs(), getAllConversations(), getQuotationRefs(new Date(Date.now() - 90 * DAY).toISOString()).catch(() => [])
+  ]);
 
   const previews: Record<string, { text: string; sender: string; timestamp: string }> = {};
+  const interested = new Set<string>(quotations.map(q => q.conversation_id));
+  // Horas de los mensajes de cada clienta, agrupadas una sola vez (antes se recorrían todos los mensajes por cada chat).
+  const customerTimes = new Map<string, number[]>();
   for (const m of messages) {
+    const at = parseDbTimestamp(m.timestamp).getTime();
     const current = previews[m.conversation_id];
-    if (!current || parseDbTimestamp(m.timestamp).getTime() > parseDbTimestamp(current.timestamp).getTime()) {
+    if (!current || at > parseDbTimestamp(current.timestamp).getTime()) {
       previews[m.conversation_id] = { text: previewText(m), sender: m.sender, timestamp: m.timestamp };
+    }
+    if (m.sender === 'bot' && m.type === 'image') interested.add(m.conversation_id);
+    if (m.sender === 'customer') {
+      const list = customerTimes.get(m.conversation_id) || [];
+      list.push(at);
+      customerTimes.set(m.conversation_id, list);
     }
   }
 
@@ -122,11 +137,11 @@ export async function getListOverview() {
   for (const conv of conversations as any[]) {
     if (!('last_read_at' in conv)) break;
     const readAt = conv.last_read_at ? parseDbTimestamp(conv.last_read_at).getTime() : 0;
-    const count = messages.filter(m => m.conversation_id === conv.id && m.sender === 'customer' && parseDbTimestamp(m.timestamp).getTime() > readAt).length;
+    const count = (customerTimes.get(conv.id) || []).filter(t => t > readAt).length;
     if (count > 0) unread[conv.id] = count;
   }
 
-  return { previews, clientIds: [...new Set(orders.map(o => o.conversation_id))], unread };
+  return { previews, clientIds: [...new Set(orders.map(o => o.conversation_id))], interestedIds: [...interested], unread };
 }
 
 function shippingPlace(products: unknown): string {
