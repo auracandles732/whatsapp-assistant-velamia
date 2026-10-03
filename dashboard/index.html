@@ -3819,6 +3819,10 @@
             : 'https://whatsapp-assistant-velamia.onrender.com';
         const TOKEN_KEY = 'velamia_crm_token';
 
+        // Las revisiones periódicas (chats nuevos, mensajes, pedidos) solo corren con la pestaña a la vista: una pestaña
+        // olvidada en otra ventana no gasta servidor ni base de datos. Al volver se actualiza al instante.
+        const whenVisible = fn => () => { if (!document.hidden) fn(); };
+
         let onSessionExpired = () => {};
 
         // Algunos navegadores bloquean el almacenamiento (modo privado, restricciones):
@@ -8173,12 +8177,15 @@
                         onBrandingChange({ name: data.business.name, primaryColor: data.branding.primaryColor, logoUrl: data.branding.logoUrl, timezone: data.business.timezone });
                     })
                     .catch(err => console.error('Error cargando perfil:', err));
-                const interval = setInterval(() => {
+                const refresh = () => {
                     loadConversations();
                     loadStats();
                     loadQuotations();
-                }, 5000);
-                return () => clearInterval(interval);
+                };
+                const interval = setInterval(whenVisible(refresh), 5000);
+                const onVisible = whenVisible(refresh);
+                document.addEventListener('visibilitychange', onVisible);
+                return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
             }, []);
 
             useEffect(() => {
@@ -8188,7 +8195,7 @@
                     api('/api/crm/list-overview').then(setListOverview).catch(err => console.error('Error cargando la lista:', err));
                 };
                 load();
-                const interval = setInterval(load, 15000);
+                const interval = setInterval(whenVisible(load), 15000);
                 return () => clearInterval(interval);
             }, [activeTab]);
 
@@ -8213,7 +8220,7 @@
                     .then(data => { if (openChatId.current === id) setSummary(data); })
                     .catch(err => console.error('Error cargando resumen del cliente:', err));
                 load();
-                const interval = setInterval(load, 15000);
+                const interval = setInterval(whenVisible(load), 15000);
                 return () => clearInterval(interval);
             }, [selectedConv?.id, activeTab]);
 
@@ -8604,7 +8611,7 @@
             useEffect(() => {
                 if (activeTab !== 'pedidos') return;
                 loadOrders();
-                const interval = setInterval(loadOrders, 5000);
+                const interval = setInterval(whenVisible(loadOrders), 5000);
                 return () => clearInterval(interval);
             }, [activeTab]);
 
@@ -8708,8 +8715,11 @@
                 openChatId.current = selectedConv ? selectedConv.id : null;
                 if (selectedConv) {
                     loadMessages(selectedConv.id);
-                    const interval = setInterval(() => loadMessages(selectedConv.id), 3000);
-                    return () => clearInterval(interval);
+                    const id = selectedConv.id;
+                    const interval = setInterval(whenVisible(() => loadMessages(id)), 3000);
+                    const onVisible = whenVisible(() => loadMessages(id));
+                    document.addEventListener('visibilitychange', onVisible);
+                    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
                 }
             }, [selectedConv]);
 

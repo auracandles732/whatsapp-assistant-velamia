@@ -221,6 +221,8 @@ app.get('/crm/app.js', (_req: Request, res: Response, next: NextFunction) => {
 app.use('/crm', express.static(DASHBOARD_DIR, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache');
+    // Fondos, logos e íconos: un día en caché (antes el navegador los volvía a pedir en cada visita).
+    else if (/\.(webp|png|jpe?g|svg|ico)$/i.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   }
 }));
 app.get('/', (_req: Request, res: Response) => res.redirect('/crm/'));
@@ -572,6 +574,8 @@ app.post('/api/signup-codes', requireAdminSession, async (req: Request, res: Res
  */
 const SIGNUP_MAX_PER_HOUR = 3;
 const signupsByIp = new Map<string, number[]>();
+const badCodesByIp = new Map<string, number[]>();
+const BAD_CODES_PER_HOUR = 10;
 // Códigos que se están canjeando en este momento: dos registros simultáneos con el mismo código no pasan ambos.
 const redeemingCodes = new Set<string>();
 
@@ -587,7 +591,11 @@ app.post('/api/signup', async (req: Request, res: Response) => {
   // Solo se registra quien ya pagó su mensualidad: el código se entrega al pagar.
   const signupCode = String(req.body?.code || '');
   const codeKey = signupCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Códigos equivocados: como mucho 10 por hora desde el mismo lugar (nadie puede probar códigos a la fuerza).
+  const wrong = (badCodesByIp.get(ip) || []).filter(at => at > hourAgo);
+  if (wrong.length >= BAD_CODES_PER_HOUR) return res.status(429).json({ error: 'Demasiados intentos con códigos equivocados. Intenta en una hora.' });
   if (!codeKey || redeemingCodes.has(codeKey) || !(await isSignupCodeUsable(signupCode))) {
+    badCodesByIp.set(ip, [...wrong, Date.now()]);
     return res.status(403).json({ error: 'Necesitas un código de registro válido. Lo recibes al pagar tu mensualidad.' });
   }
   redeemingCodes.add(codeKey);
@@ -1404,6 +1412,10 @@ app.post('/api/upload-image', requireCrmSession, requireEditorRole, async (req: 
     }
 
     const buffer = Buffer.from(matches[2], 'base64');
+    // Que de verdad sea una foto (y no otro archivo con la etiqueta de foto).
+    const realPng = buffer.length > 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+    const realJpeg = buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    if (!realPng && !realJpeg) return res.status(400).json({ error: 'La foto debe ser JPG o PNG' });
     if (buffer.length > 5 * 1024 * 1024) {
       return res.status(400).json({ error: 'La foto pesa más de 5 MB; WhatsApp no la podría enviar' });
     }

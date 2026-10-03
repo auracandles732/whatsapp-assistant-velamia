@@ -51,10 +51,14 @@ async function videoFrame(url: string): Promise<Buffer> {
     const source = join(dir, 'video');
     const target = join(dir, 'cuadro.jpg');
     const { data } = await axios.get(url, { responseType: 'arraybuffer', timeout: 120_000, maxContentLength: MAX_VIDEO });
-    await writeFile(source, Buffer.from(data));
+    const video = Buffer.from(data);
+    // Solo MP4 o MOV de verdad ("ftyp" al inicio): un archivo disfrazado (por ejemplo una lista de reproducción) podría
+    // hacer que el convertidor lea otros archivos del servidor.
+    if (video.length < 12 || video.subarray(4, 8).toString('latin1') !== 'ftyp') throw new Error('El video no es MP4 ni MOV');
+    await writeFile(source, video);
     const scale = `scale='min(${SIDE},iw)':-2`;
     // Solo archivos locales: el video no puede pedirle al convertidor que abra otras direcciones.
-    const base = ['-y', '-protocol_whitelist', 'file', '-v', 'error'];
+    const base = ['-y', '-protocol_whitelist', 'file', '-v', 'error', '-f', 'mov'];
     await runFfmpeg([...base, '-ss', '0.5', '-i', source, '-frames:v', '1', '-vf', scale, '-q:v', '5', target])
       .catch(() => runFfmpeg([...base, '-i', source, '-frames:v', '1', '-vf', scale, '-q:v', '5', target]));
     return await readFile(target);
