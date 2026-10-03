@@ -23,7 +23,8 @@ const LAYOUT: Record<ImageKind, { width: number; height: number; boxW: number; b
 const MAX_DOWNLOAD = 15 * 1024 * 1024;
 const JPEG_QUALITY = 90;
 // Versión del armado: si cambia, se vuelven a preparar las fotos en lugar de usar las guardadas antes.
-const LAYOUT_VERSION = 'v2';
+// v3: las fotos del celular se enderezan según su orientación (antes salían acostadas).
+const LAYOUT_VERSION = 'v3';
 
 export interface RawImage { width: number; height: number; data: Buffer | Uint8Array }
 
@@ -37,9 +38,73 @@ export function decodeImage(buffer: Buffer): RawImage {
   }
   if (isJpeg(buffer)) {
     const img = jpeg.decode(buffer, { useTArray: true, maxMemoryUsageInMB: 512 });
-    return { width: img.width, height: img.height, data: img.data };
+    return applyOrientation({ width: img.width, height: img.height, data: img.data }, jpegOrientation(buffer));
   }
   throw new Error('La foto no es PNG ni JPG');
+}
+
+/**
+ * Orientación EXIF de un JPG (1 = normal). El celular guarda la foto vertical acostada y anota cómo girarla: la galería y
+ * el navegador la giran solos, pero al decodificarla aquí hay que hacerlo a mano o sale de lado.
+ */
+export function jpegOrientation(b: Buffer): number {
+  if (!isJpeg(b)) return 1;
+  let off = 2;
+  while (off + 4 <= b.length) {
+    if (b[off] !== 0xff) return 1;
+    const marker = b[off + 1];
+    // Fin de la imagen o comienzo de los datos de la foto: ya no hay marcas.
+    if (marker === 0xd9 || marker === 0xda) return 1;
+    const len = b.readUInt16BE(off + 2);
+    if (marker === 0xe1 && b.toString('latin1', off + 4, off + 10) === 'Exif\0\0') {
+      const tiff = off + 10;
+      if (tiff + 8 > b.length) return 1;
+      const little = b.toString('latin1', tiff, tiff + 2) === 'II';
+      const u16 = (p: number) => (little ? b.readUInt16LE(p) : b.readUInt16BE(p));
+      const u32 = (p: number) => (little ? b.readUInt32LE(p) : b.readUInt32BE(p));
+      const ifd = tiff + u32(tiff + 4);
+      if (ifd + 2 > b.length) return 1;
+      const count = u16(ifd);
+      for (let i = 0; i < count; i++) {
+        const entry = ifd + 2 + i * 12;
+        if (entry + 12 > b.length) return 1;
+        if (u16(entry) === 0x0112) {
+          const value = u16(entry + 8);
+          return value >= 1 && value <= 8 ? value : 1;
+        }
+      }
+      return 1;
+    }
+    off += 2 + len;
+  }
+  return 1;
+}
+
+/** Gira o voltea la foto según su orientación EXIF, para que quede como se ve en el celular. */
+export function applyOrientation(img: RawImage, orientation: number): RawImage {
+  if (!(orientation >= 2 && orientation <= 8)) return img;
+  const W = img.width, H = img.height;
+  const swap = orientation >= 5;
+  const width = swap ? H : W, height = swap ? W : H;
+  const out = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // Punto (x, y) de la foto derecha → punto de la foto guardada.
+      let sx: number, sy: number;
+      switch (orientation) {
+        case 2: sx = W - 1 - x; sy = y; break;
+        case 3: sx = W - 1 - x; sy = H - 1 - y; break;
+        case 4: sx = x; sy = H - 1 - y; break;
+        case 5: sx = y; sy = x; break;
+        case 6: sx = y; sy = H - 1 - x; break;
+        case 7: sx = W - 1 - y; sy = H - 1 - x; break;
+        default: sx = W - 1 - y; sy = x; break;
+      }
+      const s = (sy * W + sx) * 4, d = (y * width + x) * 4;
+      out[d] = img.data[s]; out[d + 1] = img.data[s + 1]; out[d + 2] = img.data[s + 2]; out[d + 3] = img.data[s + 3];
+    }
+  }
+  return { width, height, data: out };
 }
 
 /** Color de un punto de la foto con la transparencia mezclada en blanco. */
@@ -175,6 +240,25 @@ export function isOwnStorageUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Facebook publica la foto original: si es del celular y viene acostada (orientación EXIF), se publica una copia ya
+ * derecha. Si la foto no necesita giro (o no es JPG), se usa la original tal cual.
+ */
+export async function uprightUrl(imageUrl: string): Promise<string> {
+  if (!isOwnStorageUrl(imageUrl)) return imageUrl;
+  const tenant = currentTenant();
+  const name = `social-upright-${LAYOUT_VERSION}-${createHash('sha256').update(imageUrl).digest('hex').slice(0, 24)}.jpg`;
+  const path = `${tenant ? `${tenant.businessId}/` : ''}${name}`;
+  const publicUrl = supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+  if (await axios.head(publicUrl, { timeout: 15_000 }).then(r => r.status === 200).catch(() => false)) return publicUrl;
+  const { data } = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60_000, maxContentLength: MAX_DOWNLOAD });
+  const buffer = Buffer.from(data);
+  if (jpegOrientation(buffer) <= 1) return imageUrl;
+  const { error } = await supabase.storage.from('product-images').upload(path, toJpeg(buffer), { contentType: 'image/jpeg', upsert: true });
+  if (error) throw new Error(`No se pudo preparar la foto para Facebook: ${error.message}`);
+  return publicUrl;
 }
 
 /**

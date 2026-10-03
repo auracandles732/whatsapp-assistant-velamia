@@ -580,7 +580,7 @@ export async function stuckPosts(olderThan: Date): Promise<SocialPost[]> {
 
 export const toPostProduct = (c: CatalogItem): PostProduct => ({ name: c.name, image_url: String(c.image_url || ''), price: Number(c.price) });
 
-export interface LibraryItem { id: string; kind: 'image' | 'video'; url: string; product_name: string | null; used_count?: number }
+export interface LibraryItem { id: string; kind: 'image' | 'video'; url: string; product_name: string | null; used_count?: number; title?: string; last_used_at?: string | null }
 
 /**
  * Carrusel del modo automático: cada foto del Catálogo va seguida de los videos y fotos de la biblioteca que muestran

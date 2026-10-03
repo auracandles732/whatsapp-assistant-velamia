@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from '../services/metaChannels';
-import { instagramReadyUrl, ImageKind } from './images';
+import { instagramReadyUrl, uprightUrl, ImageKind } from './images';
 import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts, expireDrafts } from './posts';
 import { planUpcomingPosts } from './planner';
 import { marketingTick } from './marketingChat';
@@ -54,6 +54,8 @@ interface PublishOptions {
   waitMs: number;
   /** Arma cada foto para Instagram (publicación 4:5 o historia 9:16, sin recortarla) y devuelve su dirección. */
   prepareImage: (url: string, kind: ImageKind) => Promise<string>;
+  /** Foto original para Facebook, enderezada si el celular la guardó acostada (sin esto, la original). */
+  uprightImage?: (url: string) => Promise<string>;
 }
 
 /** Publicación de Instagram: una foto, un video (va como reel) o un carrusel que puede mezclar fotos y videos. */
@@ -142,7 +144,7 @@ async function facebookStory(conn: PublishingConnection, post: SocialPost, { pre
 }
 
 /** Página de Facebook: una o varias fotos originales o, si solo lleva videos, un video. */
-async function facebookPage(conn: PublishingConnection, post: SocialPost): Promise<ChannelResult> {
+async function facebookPage(conn: PublishingConnection, post: SocialPost, { uprightImage = async (url: string) => url }: PublishOptions): Promise<ChannelResult> {
   const params = { access_token: conn.pageToken };
   const link = (id: string) => `https://www.facebook.com/${id}`;
   const items = facebookItems(mediaOf(post));
@@ -154,13 +156,13 @@ async function facebookPage(conn: PublishingConnection, post: SocialPost): Promi
   }
   // Facebook acepta PNG: se usa la foto original.
   if (items.length === 1) {
-    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: items[0].url, caption: post.caption, published: true }, { params });
+    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: await uprightImage(items[0].url), caption: post.caption, published: true }, { params });
     const id = String(data.post_id || data.id);
     return { id, permalink: link(id) };
   }
   const media: string[] = [];
   for (const item of items) {
-    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: item.url, published: false }, { params });
+    const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: await uprightImage(item.url), published: false }, { params });
     media.push(String(data.id));
   }
   const { data } = await graph.post(`${GRAPH_API}/${conn.pageId}/feed`, { message: post.caption, attached_media: media.map(id => ({ media_fbid: id })) }, { params });
@@ -191,7 +193,7 @@ export async function publishToChannels(conn: PublishingConnection, scopes: stri
       results[channel] = channel === 'instagram_feed' ? await instagramFeed(conn, post, options)
         : channel === 'instagram_story' ? await instagramStory(conn, post, options)
           : channel === 'facebook_story' ? await facebookStory(conn, post, options)
-            : await facebookPage(conn, post);
+            : await facebookPage(conn, post, options);
     } catch (error: any) {
       results[channel] = { error: metaError(error) };
     }
@@ -221,7 +223,7 @@ export async function publishNow(post: SocialPost): Promise<PublishOutcome> {
   const conn = await publishingConnection();
   if (!conn) return { status: 'failed', results: {}, error: 'Facebook e Instagram no están conectados: conéctalos en Publicaciones.' };
   const scopes = (await tokenInfo(conn.pageToken)).scopes;
-  return publishToChannels(conn, scopes, post, { waitMs: READY_WAIT_MS, prepareImage: instagramReadyUrl });
+  return publishToChannels(conn, scopes, post, { waitMs: READY_WAIT_MS, prepareImage: instagramReadyUrl, uprightImage: uprightUrl });
 }
 
 export const CHANNEL_NAMES: Record<PostChannel, string> = { instagram_feed: 'Instagram', instagram_story: 'Historia de Instagram', facebook: 'Facebook', facebook_story: 'Historia de Facebook' };

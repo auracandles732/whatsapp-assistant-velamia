@@ -14,7 +14,7 @@ import { buildPlanPdf } from './planPdf';
 import { sendPlanToMarketing, markPlanDecision } from './marketingChat';
 import { forgetStaffPhones } from '../services/staffChat';
 import { claimAndPublish } from './publisher';
-import { listAssets, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed, AssetInUseError } from './library';
+import { listAssets, listAssetsWithThumbs, createUpload, registerAsset, updateAsset, deleteAsset, getAssets, markAssetsUsed, AssetInUseError } from './library';
 import {
   getSupplierSettings, saveSupplierSettings, importSupplierCatalog, listSupplierCatalogs, updateSupplierProduct,
   addSupplierProductsToCatalog, deleteSupplierCatalog, mostUsedPackaging, moveSupplierCatalog
@@ -398,7 +398,7 @@ export function socialRouter(): Router {
 
   router.get('/api/social/assets', requireCrmSession, requirePublishing, async (_req: Request, res: Response) => {
     try {
-      res.json({ assets: await listAssets() });
+      res.json({ assets: await listAssetsWithThumbs() });
     } catch (error: any) {
       res.status(500).json({ error: explain(error) });
     }

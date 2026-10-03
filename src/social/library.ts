@@ -3,6 +3,7 @@ import axios from 'axios';
 import { supabase, tenantOp, tenantValue, tenantColumns } from '../services/supabase';
 import { currentTenant } from '../services/tenant';
 import { profile } from '../config/businessProfile';
+import { existingThumbs, queueThumbs, thumbUrl, removeThumb } from './thumbs';
 
 /**
  * Biblioteca del agente de redes: fotos y videos que sube la empresa (y, más adelante, las fotos que genere la IA).
@@ -86,6 +87,7 @@ export async function registerAsset(input: { path: unknown; title?: unknown; pro
     size_bytes: num(input.size_bytes)
   }]).select().single();
   if (error) throw new Error(`Error guardando en la biblioteca: ${error.message}`);
+  queueThumbs([data as SocialAsset]);
   return data as SocialAsset;
 }
 
@@ -96,6 +98,17 @@ export async function listAssets(): Promise<SocialAsset[]> {
     .limit(300);
   if (error) throw new Error(`Error leyendo la biblioteca: ${error.message}`);
   return (data || []) as SocialAsset[];
+}
+
+/**
+ * La biblioteca con la miniatura de cada archivo (thumb_url). Las que faltan (archivos subidos antes) se hacen en segundo
+ * plano: mientras tanto el CRM muestra un recuadro y las toma en la siguiente carga.
+ */
+export async function listAssetsWithThumbs(): Promise<(SocialAsset & { thumb_url: string | null })[]> {
+  const [assets, thumbs] = await Promise.all([listAssets(), existingThumbs(folder())]);
+  const missing = assets.filter(a => !thumbs.has(a.id));
+  if (missing.length) queueThumbs(missing);
+  return assets.map(a => ({ ...a, thumb_url: thumbs.has(a.id) ? thumbUrl(a.storage_path, a.id) : null }));
 }
 
 export async function getAssets(ids: string[]): Promise<SocialAsset[]> {
@@ -152,6 +165,7 @@ export async function deleteAsset(id: string): Promise<boolean> {
   if (error) throw new Error(`Error borrando: ${error.message}`);
   const paths = (data || []).map((r: any) => String(r.storage_path)).filter(p => p.startsWith(folder()));
   if (paths.length) await supabase.storage.from(BUCKET).remove(paths);
+  for (const p of paths) await removeThumb(p, id);
   return (data || []).length > 0;
 }
 

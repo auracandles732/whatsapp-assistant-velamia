@@ -4,8 +4,10 @@ import { currentBrain, PostFormat, PlannedPost } from './brain';
 import {
   SocialPost, PublishingSettings, PostChannel, PostProduct, PostMedia, DEFAULT_SETTINGS, getSavedSettings, daySlots, photosOf,
   publishingDays, listPosts, localDay, localParts, recentActivity, insertPosts, fallbackCaption, toPostProduct, withLibraryMedia,
-  LibraryItem, postsBetween, postFingerprint, isStoryChannel, pendingDrafts, getPost, updatePost, deletePost, plain, titleCase, pickProducts
+  LibraryItem, postsBetween, postFingerprint, isStoryChannel, pendingDrafts, getPost, updatePost, deletePost, plain, titleCase, pickProducts,
+  CatalogItem, zonedTime
 } from './posts';
+import { productKey } from '../services/openai';
 import { listAssets, markAssetsUsed } from './library';
 
 /**
@@ -63,6 +65,57 @@ function buildMedia(pick: PlannedPost, library: LibraryItem[], usedAssets: Set<s
   return { products: built.products, media: built.media, items };
 }
 
+/**
+ * Videos de la biblioteca en la planificación: un reel por día de publicación con el video que menos ha salido (si ese
+ * día no lleva ya un video), a una hora libre. Si el video tiene marcado su producto, el reel habla de ese producto; si
+ * no, de la marca. Antes solo entraban los videos marcados con el nombre exacto de un producto, dentro de un carrusel,
+ * y los demás había que programarlos a mano.
+ */
+export function libraryReels(
+  planned: PlannedPost[], library: LibraryItem[], existing: Pick<SocialPost, 'scheduled_at' | 'status' | 'media'>[],
+  catalog: CatalogItem[], settings: PublishingSettings, now: Date, timeZone: string, publishDays: string[]
+): PlannedPost[] {
+  if (!settings.channels.some(c => !isStoryChannel(c))) return [];
+  const live = existing.filter(p => p.status !== 'failed' && p.status !== 'cancelled');
+  const busy = new Set(live.flatMap(p => (p.media || []).map(m => m.asset_id).filter(Boolean) as string[]));
+  const videos = library
+    .filter(a => a.kind === 'video' && !busy.has(a.id))
+    .sort((a, b) => (a.used_count || 0) - (b.used_count || 0) || String(a.last_used_at || '').localeCompare(String(b.last_used_at || '')));
+  if (videos.length === 0) return [];
+  const withVideo = new Set(live.filter(p => (p.media || []).some(m => m.type === 'video')).map(p => localDay(p.scheduled_at, timeZone)));
+  const days = [...new Set(publishDays)].filter(day => !withVideo.has(day)).sort();
+  const minutesOf = (at: Date) => { const p = localParts(at, timeZone); return p.hour * 60 + p.minute; };
+  const [hh, mm] = settings.hour.split(':').map(Number);
+  const reels: PlannedPost[] = [];
+  for (const day of days) {
+    if (videos.length === 0) break;
+    const taken = [
+      ...planned.filter(p => localDay(p.at, timeZone) === day).map(p => minutesOf(p.at)),
+      ...live.filter(p => localDay(p.scheduled_at, timeZone) === day).map(p => minutesOf(new Date(p.scheduled_at)))
+    ];
+    // Dos horas antes de la hora elegida (a las 17:00 si se publica a las 19:00), lejos de las demás tandas del día.
+    const free = (t: number) => !taken.some(x => Math.abs(x - t) < 60);
+    const candidates = [hh * 60 + mm - 120, hh * 60 + mm - 60, hh * 60 + mm + 60, hh * 60 + mm - 180, hh * 60 + mm - 240, 12 * 60, 10 * 60]
+      .filter(t => t >= 8 * 60 && t <= 22 * 60);
+    const [y, m, d] = day.split('-').map(Number);
+    const at = candidates.filter(free).map(t => zonedTime(y, m, d, Math.floor(t / 60), t % 60, timeZone))
+      .find(date => date.getTime() >= now.getTime() + 60 * 60 * 1000);
+    if (!at) continue;
+    const video = videos.shift()!;
+    const product = video.product_name ? catalog.find(c => productKey(c.name) === productKey(String(video.product_name))) : undefined;
+    const theme = product?.category ? titleCase(String(product.category)) : String(video.title || '').trim() || 'Video de la marca';
+    reels.push({
+      theme,
+      products: product ? [product] : [],
+      at,
+      format: 'reel',
+      reason: (video.used_count || 0) > 0 ? 'El video de tu biblioteca que menos ha salido' : 'Video de tu biblioteca que todavía no se publica',
+      video
+    });
+  }
+  return reels;
+}
+
 export async function draftUpcomingPosts(now = new Date(), days = 7, settingsParam?: PublishingSettings, request = ''): Promise<PlanProposal> {
   const settings = settingsParam || (await getSavedSettings()) || DEFAULT_SETTINGS;
   const p = profile();
@@ -79,17 +132,28 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
     return { day: localDay(post.scheduled_at, tz), minutes: at.hour * 60 + at.minute, photos: photosOf(post) };
   });
   const slots = daySlots(settings, allDays, used, now, tz);
-  if (slots.length === 0) return empty(`Los próximos días ya tienen sus ${settings.photosPerDay} fotos (o no queda hora libre hoy).`);
+  const full = `Los próximos días ya tienen sus ${settings.photosPerDay} fotos (o no queda hora libre hoy).`;
 
   // Sin la migración 025 no hay biblioteca: se publica solo con las fotos del Catálogo.
   const [catalog, recent, library] = await Promise.all([getAllProducts(), recentActivity(tz), listAssets().catch(() => [])]);
-  const plan = await brain.plan({
-    slots, catalog, recent: recent.names, recentThemes: recent.themes, library,
-    settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p, request
-  });
-  if (plan.posts.length === 0) return empty(plan.summary || 'No hay productos con foto para publicar.');
+  // Con las fotos del día completas igual pueden entrar los videos de la biblioteca (reels).
+  const plan = slots.length
+    ? await brain.plan({
+      slots, catalog, recent: recent.names, recentThemes: recent.themes, library,
+      settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p, request
+    })
+    : { posts: [] as PlannedPost[], summary: full, tasks: [] as string[] };
+  // Los videos de la biblioteca salen como reels (uno por día), aparte de las fotos del Catálogo.
+  const reels = libraryReels(plan.posts, library, existing, catalog, settings, now, tz, allDays);
+  if (reels.length) {
+    plan.posts.push(...reels);
+    plan.posts.sort((a, b) => a.at.getTime() - b.at.getTime());
+    plan.summary = [plan.summary, `Además, ${reels.length} reel(s) con videos de tu biblioteca (los que menos han salido).`].filter(Boolean).join(' ');
+  }
+  if (plan.posts.length === 0) return empty(slots.length ? plan.summary || 'No hay productos con foto para publicar.' : full);
 
-  const usedAssets = new Set<string>();
+  // Los videos de los reels no se repiten dentro de un carrusel de la misma planificación.
+  const usedAssets = new Set<string>(reels.map(r => r.video!.id));
   const built = plan.posts.map(pick => buildMedia(pick, library, usedAssets));
   const byAi = brain.name === 'ia';
   const channels = plan.posts.map(pick => channelsFor(pick.format, settings, byAi));
