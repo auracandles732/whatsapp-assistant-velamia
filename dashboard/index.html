@@ -3465,7 +3465,7 @@
             .nx-hero { padding: 4px 14px 12px; }
             .nx-hero .tile { width: 58px; height: 58px; }
             .nx-hero h1 { font-size: 26px; }
-            .nx-bizsw .lbl { display: none; }
+            .nx-bizsw small { display: none; }
             .dh { padding: 0 14px 14px; }
         }
 
@@ -3668,15 +3668,28 @@
 
 
         /* ---------- Configuración (diseño nuevo): menú agrupado, portada y vista previa ---------- */
-        .nx-set { grid-template-columns: 250px minmax(0, 1fr) 350px; gap: 20px; }
-        .nx-set-nav { background: #FFFDFA; border: 1px solid #ECE2D6; border-radius: 20px; padding: 14px 10px; box-shadow: 0 4px 18px rgba(80, 50, 30, 0.06); max-height: calc(100vh - 120px); overflow-y: auto; scrollbar-width: thin; }
+        /* Pantallas anchas: menú agrupado a la izquierda. Más angostas (o "versión de escritorio" en el celular): el menú
+           pasa arriba como fila de botones y la vista previa va debajo del formulario. */
+        @media (min-width: 1300px) {
+            .nx-set { grid-template-columns: 250px minmax(0, 1fr) 350px; gap: 20px; }
+            .nx-set-nav { background: #FFFDFA; border: 1px solid #ECE2D6; border-radius: 20px; padding: 14px 10px; box-shadow: 0 4px 18px rgba(80, 50, 30, 0.06); max-height: calc(100vh - 120px); overflow-y: auto; scrollbar-width: thin; }
+            .nx-set-nav button { padding: 9px 12px; font-size: 14.5px; color: #3A2A20; border: 0; font-family: inherit; }
+            .nx-set-nav button.on { background: #F8E6DB; color: #A3522F; box-shadow: inset 3px 0 0 #B5654A; }
+        }
+        @media (min-width: 1300px) and (max-width: 1439px) { .nx-set { grid-template-columns: 220px minmax(0, 1fr) 320px; } }
+        @media (max-width: 1299px) {
+            .nx-set-nav .nx-set-ttl, .nx-set-nav nav .grp { display: none; }
+            .nx-set-nav button { font-family: inherit; }
+        }
+        @media (max-width: 1100px) {
+            .nx-set { grid-template-columns: minmax(0, 1fr); }
+            .nx-set-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+        }
         .nx-set-ttl { display: flex; align-items: center; gap: 12px; padding: 4px 8px 14px; margin-bottom: 4px; border-bottom: 1px solid #F0E6DA; }
         .nx-set-ttl .ic { width: 50px; height: 50px; border-radius: 15px; background: #F8E6DB; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .nx-set-ttl b { display: block; font-size: 18px; font-weight: 800; color: #2B1C14; }
         .nx-set-ttl small { display: block; font-size: 12.5px; color: #6B5849; line-height: 1.35; margin-top: 2px; }
         .nx-set-nav .grp { padding: 14px 12px 6px; font-size: 11.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #2B1C14; }
-        .nx-set-nav button { padding: 9px 12px; font-size: 14.5px; color: #3A2A20; border: 0; font-family: inherit; }
-        .nx-set-nav button.on { background: #F8E6DB; color: #A3522F; box-shadow: inset 3px 0 0 #B5654A; }
         .nx-set-head { align-items: center; padding: 18px 20px; margin-bottom: 4px; border-radius: 20px; border: 1px solid #ECE2D6; box-shadow: 0 4px 18px rgba(80, 50, 30, 0.06);
             background: linear-gradient(90deg, rgba(255, 250, 244, 0.97) 42%, rgba(255, 250, 244, 0.6) 75%, rgba(255, 250, 244, 0.25)), url('fondo-nexly.webp') right 45% / cover no-repeat, #FFFDFA; }
         .nx-set-hic { width: 64px; height: 64px; border-radius: 18px; background: linear-gradient(160deg, #C9805E 0%, #A9573C 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 8px 18px rgba(150, 72, 42, 0.25); }
@@ -3687,7 +3700,6 @@
         .nx-biz .banner { position: relative; height: 130px; background: url('fondo-nexly.webp') center 40% / cover no-repeat, #EAD8C6; }
         .nx-biz .banner .lg { display: flex; align-items: center; justify-content: center; padding: 8px 14px; border-radius: 14px; background: rgba(255, 252, 246, 0.94); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); max-width: 70%; }
         .nx-biz .banner .lg img { max-width: 100%; max-height: 70px; object-fit: contain; }
-        @media (max-width: 1439px) { .nx-set { grid-template-columns: 220px minmax(0, 1fr) 320px; } }
 
         /* ---------- Celular (diseño nuevo): barra superior, barra de abajo y filtros ---------- */
         .mx-top.v2 { gap: 10px; padding: 10px 14px; background: rgba(250, 245, 239, 0.96); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
@@ -3804,6 +3816,28 @@
         .mxc-menu .mx-menu-item.feat { background: linear-gradient(90deg, #FBEEE6, #FFFDFA); border-color: #EFCDB9; }
         .mxc-menu .mx-menu-item.feat .ic { background: linear-gradient(160deg, #C9805E 0%, #A9573C 100%); }
         .mxc-grp { padding: 14px 6px 4px; font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #2B1C14; }
+
+        /* ---------- Pantallas medianas (tablet o "versión de escritorio" en el celular, ~760 a 1100 px) ---------- */
+        @media (max-width: 1100px) {
+            .nx-shell .nx-content { grid-template-columns: 330px minmax(0, 1fr); }
+            .cf { padding: 12px 10px 10px; margin: 10px 10px; }
+            .cf-ch { padding: 8px 7px; }
+            .cf-ch b { font-size: 12.5px; }
+            .cf-chip { font-size: 13px; padding: 9px 4px; }
+            .cf-tag { padding: 7px 10px; font-size: 12.5px; }
+            .pb { padding: 16px 16px 30px; }
+            .pb-hero { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic tt" "act act"; }
+            .pb-hero-art { display: none; }
+        }
+        @media (max-width: 1250px) {
+            .pb-week { grid-template-columns: repeat(7, minmax(150px, 1fr)); overflow-x: auto; padding-bottom: 6px; }
+        }
+
+        /* Publicaciones no se ensancha más que la pantalla (la semana se desliza dentro de su tarjeta). */
+        .pb { min-width: 0; width: 100%; }
+        .pb > *, .pb-card { min-width: 0; }
+
+        @media (max-width: 1100px) { .pc-ch .pv, .pc-ch .pv.tall { width: 70%; max-height: 130px; aspect-ratio: 4 / 5; } }
 
     </style>
 </head>
@@ -6639,15 +6673,16 @@
         }
 
         function MxNav({ tab, lastOther, onTab, onMore, moreOpen }) {
-            const pick = id => (MX_SECTIONS[id] && id !== 'estadisticas' ? id : null);
-            const second = pick(tab) || pick(lastOther) || 'publicaciones';
-            const items = [['estadisticas', 'home', 'Inicio'], ['conversaciones', 'chat', 'Conversaciones'], ['pedidos', 'bag', 'Pedidos'], [second, ...MX_SECTIONS[second]]];
+            // Las tres rayitas de arriba abren "Más opciones": abajo van accesos directos, sin repetir ese menú. El último
+            // cambia a la sección en que estás (o la última que usaste): Publicaciones, Catálogo, Configuración…
+            const pick = id => (MX_SECTIONS[id] && !['estadisticas', 'cotizaciones'].includes(id) ? id : null);
+            const last = pick(tab) || pick(lastOther) || 'publicaciones';
+            const items = [['estadisticas', 'home', 'Inicio'], ['conversaciones', 'chat', 'Conversaciones'], ['pedidos', 'bag', 'Pedidos'], ['cotizaciones', 'doc', 'Cotizaciones'], [last, ...MX_SECTIONS[last]]];
             return (
                 <nav className="mx-nav" aria-label="Secciones">
                     {items.map(([id, icon, label]) => (
                         <button key={id} type="button" className={'mx-nav-item' + (tab === id && !moreOpen ? ' on' : '')} onClick={() => onTab(id)}><PlatIcon name={icon} size={23} /><span>{label}</span></button>
                     ))}
-                    <button type="button" className={'mx-nav-item' + (moreOpen ? ' on' : '')} onClick={onMore}><MxIcon name="more" size={23} /><span>Más</span></button>
                 </nav>
             );
         }
