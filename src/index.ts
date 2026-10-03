@@ -24,6 +24,7 @@ import {
   deleteConversationCompletely,
   getAllQuotations,
   updateQuotationStatus,
+  deleteQuotation,
   getQuotationById,
   updateQuotationCustomer,
   createQuotation,
@@ -1009,6 +1010,15 @@ app.patch('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEdi
     const updated = await updateQuotationStatus(req.params.id, status);
     if (!updated) return res.status(404).json({ error: 'Cotización no encontrada' });
     res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    if (!(await deleteQuotation(req.params.id))) return res.status(404).json({ error: 'Cotización no encontrada' });
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

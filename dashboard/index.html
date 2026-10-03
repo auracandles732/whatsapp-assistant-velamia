@@ -2923,6 +2923,12 @@
         .nx-page .quote-items { color: #2A3766; font-size: 14px; }
         .nx-page .quote-items small { color: #6B7599; }
         .nx-page .quote-actions .btn-photo { padding: 10px 14px; border-radius: 10px; border: 1px solid #DCE2F5; background: #fff; color: #2563EB; font-size: 13px; font-weight: 600; }
+        .nx-page .quote-actions .btn-photo.danger { color: #D03535; border-color: #F3C9C9; }
+        .nx-page .quote-actions .btn-photo.danger:hover { background: #FFF3F3; }
+        .nx-page .quotes-toolbar .quote-new { margin-left: auto; padding: 11px 18px; border: 0; border-radius: 12px; background: linear-gradient(90deg, #4F6BF5, #8B5CF6); color: #fff; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; box-shadow: 0 8px 18px rgba(110, 100, 240, 0.28); }
+        .sc-desk { position: fixed; inset: 0; z-index: 89; background: rgba(15, 20, 45, 0.45); }
+        .sc-desk .mx-screen.mx-compose { top: 3vh; bottom: 3vh; left: 50%; right: auto; width: min(720px, 94vw); transform: translateX(-50%); border-radius: 22px; box-shadow: 0 30px 80px rgba(20, 30, 80, 0.3); padding: 16px 22px 0; }
+        .sc-desk .mx-compose .mx-bottom { position: sticky; left: auto; right: auto; bottom: 0; margin: 12px -22px 0; padding: 14px 22px; }
         .nx-page .quote-actions .btn-photo:hover { background: #F4F7FF; }
         .nx-page .empty-catalog { padding: 36px 20px; text-align: center; color: #6B7599; background: #fff; border: 1px dashed #D5DCF2; border-radius: 16px; font-size: 14px; line-height: 1.5; }
 
@@ -6316,6 +6322,20 @@
                 update(sale, 'Producto quitado: el total se volvió a calcular.');
             }
 
+            async function removeQuote() {
+                if (!confirm('¿Eliminar la cotización de ' + mxQuoteName(q) + ' por ' + mxMoney(Number(q.total_amount || 0)) + '? Se borra para siempre y no se puede deshacer.')) return;
+                setBusy(true);
+                try {
+                    await api('/api/quotations/' + q.id, { method: 'DELETE' });
+                    setOpenId(null);
+                    reload();
+                } catch (err) {
+                    setNotice({ text: 'No se pudo eliminar: ' + err.message, err: true });
+                } finally {
+                    setBusy(false);
+                }
+            }
+
             function editName() {
                 const value = prompt('Nombre de la cliente:', mxQuoteName(q));
                 if (value === null || !value.trim()) return;
@@ -6343,7 +6363,8 @@
                                 canEdit && { label: 'Enviar a otro chat (WhatsApp, Instagram o Facebook)', onClick: () => setPickChat(true) },
                                 canEdit && q.status !== 'pending' && { label: 'Volver a pendiente', onClick: () => setStatus('pending') },
                                 canEdit && q.status !== 'sent' && { label: 'Marcar como enviada', onClick: () => setStatus('sent') },
-                                canEdit && q.status !== 'expired' && { label: 'Marcar como vencida', danger: true, onClick: () => setStatus('expired') }
+                                canEdit && q.status !== 'expired' && { label: 'Marcar como vencida', danger: true, onClick: () => setStatus('expired') },
+                                canEdit && { label: 'Eliminar cotización', danger: true, onClick: () => removeQuote() }
                             ]} />}
                         </div>
                         {example && <div className="mx-example">Ejemplo: así se ve una cotización cuando el bot le da el total a una clienta (o cuando tú la creas).</div>}
@@ -7385,6 +7406,28 @@
                     alert('Error cambiando estado: ' + err.message);
                 }
             }
+
+            async function removeQuotation(q, customer) {
+                if (!confirm('¿Eliminar la cotización de ' + customer + ' por $' + Number(q.total_amount || 0).toFixed(2) + '? Se borra para siempre y no se puede deshacer.')) return false;
+                try {
+                    await api('/api/quotations/' + q.id, { method: 'DELETE' });
+                    loadQuotations();
+                    return true;
+                } catch (err) {
+                    alert('No se pudo eliminar: ' + err.message);
+                    return false;
+                }
+            }
+
+            // Computadora: al guardar el formulario de cotización o pedido se actualiza lo que muestra el CRM.
+            const finishDeskSale = result => {
+                setComposer(null);
+                loadQuotations();
+                loadStats();
+                loadConversations();
+                if (selectedConv) loadMessages(selectedConv.id);
+                if (result?.kind === 'order') loadOrders();
+            };
 
             function openChatFromQuotation(conversationId) {
                 const conv = conversations.find(c => c.id === conversationId);
@@ -8479,6 +8522,7 @@
                                         <option value="expired">Vencidas</option>
                                     </select>
                                     <span>{visible.length} cotización(es) · ${total.toFixed(2)}</span>
+                                    {canEdit && <button type="button" className="quote-new" onClick={() => setComposer({ mode: 'quote' })}>＋ Nueva cotización</button>}
                                 </div>
                                 {visible.length === 0 ? (
                                     <div className="empty-catalog"><p>Aún no hay cotizaciones. Se anotan solas cada vez que el bot le da a una clienta el valor total de su pedido, y te llega un aviso por WhatsApp 🧾</p></div>
@@ -8519,6 +8563,8 @@
                                                     <option value="expired">Vencida</option>
                                                 </select>
                                                 <button className="btn-photo" onClick={() => openChatFromQuotation(q.conversation_id)}>💬 Ver chat</button>
+                                                {canEdit && <button className="btn-photo" onClick={() => setComposer({ mode: 'edit', quotation: q })}>✏️ Editar</button>}
+                                                {canEdit && <button className="btn-photo danger" onClick={() => removeQuotation(q, customer)}>🗑️ Eliminar</button>}
                                             </div>
                                         </div>
                                     );
@@ -8526,6 +8572,11 @@
                             </div>
                             );
                         })()}
+                        {composer && (
+                            <div className="sc-desk" onMouseDown={e => { if (e.target === e.currentTarget) setComposer(null); }}>
+                                <SaleComposer {...composer} conversations={conversations} products={products} biz={biz} onClose={() => setComposer(null)} onDone={finishDeskSale} />
+                            </div>
+                        )}
                         {activeTab === 'pedidos' && ordersPage(false)}
                         {activeTab === 'configuracion' && (
                         <div className="settings-container nx-cfg-page">

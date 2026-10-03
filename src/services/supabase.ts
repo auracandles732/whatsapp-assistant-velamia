@@ -393,6 +393,19 @@ export async function updateQuotationStatus(quotationId: string, status: 'pendin
   return data;
 }
 
+/** Borra una cotización de la empresa actual. Devuelve false si no existía. */
+export async function deleteQuotation(quotationId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('quotations')
+    .delete()
+    .eq('id', quotationId)
+    .filter('business_id', tenantOp(), tenantValue())
+    .select('id');
+
+  if (error) throw new Error(`Error eliminando cotización: ${error.message}`);
+  return (data || []).length > 0;
+}
+
 // ---------- PEDIDOS ----------
 
 export async function createOrder(
