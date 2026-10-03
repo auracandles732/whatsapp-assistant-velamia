@@ -6,6 +6,23 @@ VELAMIA es la instalación original: aparece como una empresa más, con sus dato
 
 Link del CRM: `https://whatsapp-assistant-velamia.onrender.com/crm/`
 
+## 0. Conectar los canales con un botón (Configuración → Canales conectados)
+
+Cada empresa conecta sola sus canales desde **Configuración → Canales conectados**. La tarjeta de cada empresa en la
+plataforma muestra si tiene WhatsApp, Instagram y Facebook conectados.
+
+- **Instagram y Facebook:** "Conectar Instagram" o "Conectar Facebook" abre la ventana de Facebook; la empresa elige su
+  página (y el Instagram profesional enlazado) y acepta los permisos. La página queda suscrita a la App y sus mensajes
+  y comentarios le llegan a esa empresa. Una página solo puede estar en una empresa. Para clientas fuera del equipo de
+  la App hace falta que Meta apruebe el acceso avanzado de la App.
+- **WhatsApp:** "Conectar WhatsApp" abre el registro integrado de Meta (la empresa elige o crea su cuenta y su número;
+  con la casilla de coexistencia sigue usando la app WhatsApp Business del celular). Se activa con la variable
+  `META_WA_CONFIG_ID` en Render: el id de la configuración de "Inicio de sesión con Facebook para empresas" de tipo
+  WhatsApp (registro integrado), creada en la App de Meta. Para empresas que no son de la plataforma, Meta exige que la
+  App sea proveedor de tecnología y tenga aprobados `whatsapp_business_messaging` y `whatsapp_business_management`.
+  Mientras no esté activado, el botón dice "Muy pronto" y queda la opción del número nuevo con código por SMS (si
+  `NEXLY_WABA_ID` y `NEXLY_META_TOKEN` están configurados), o la carga manual de claves descrita abajo.
+
 ## 1. Qué necesita la empresa antes de empezar
 
 | Qué | Dónde se consigue | Para qué |

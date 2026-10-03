@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
-import { currentTenant, encryptSecret, decryptSecret, VELAMIA_ID } from './tenant';
+import { currentTenant, runWithTenant, encryptSecret, decryptSecret, VELAMIA_ID, TenantContext } from './tenant';
 import { maskPhone } from './privacy';
-import { getConfig, setConfig } from './supabase';
+import { getConfig, setConfig, getConfigOfAllBusinesses, loadTenant } from './supabase';
 import { noteSocialOutcome } from './webhookTrace';
 
 /**
@@ -72,9 +72,10 @@ const metaError = (error: any) => String(error?.response?.data?.error?.message |
  * página). Las demás empresas todavía no tienen estos canales: sin credenciales, nada cambia para ellas.
  */
 export async function pageCredentials(): Promise<PageCredentials | null> {
-  if (currentTenant()) return null;
   const stored = await storedCredentials();
   if (stored.creds) return stored.creds;
+  // Las variables de Render son de VELAMIA: cada empresa usa solo la página que conectó con el botón.
+  if (currentTenant()) return null;
   // Al pegar en Render es fácil que se cuele un espacio o un salto de línea.
   const pageId = (process.env.META_PAGE_ID || '').trim();
   const token = (process.env.META_PAGE_TOKEN || '').trim();
@@ -304,14 +305,17 @@ export async function downloadSocialMedia(url: string): Promise<{ buffer: Buffer
   return { buffer: Buffer.from(response.data), mimeType };
 }
 
-let statusCache: { at: number; value: Record<string, string> } | null = null;
+// Cada empresa tiene su propia conexión: lo guardado en memoria va por empresa.
+const connectionKey = () => currentTenant()?.businessId || VELAMIA_ID;
+const statusCaches = new Map<string, { at: number; value: Record<string, string> }>();
 
-/** Estado de Instagram y Messenger para /health (nunca muestra la clave): conexión, vencimiento y permisos concedidos. */
+/** Estado de Instagram y Messenger de la empresa actual (nunca muestra la clave): conexión, vencimiento y permisos. */
 export async function socialStatus(): Promise<Record<string, string>> {
-  if (currentTenant()) return { estado: 'no disponible para esta empresa' };
-  if (statusCache && Date.now() - statusCache.at < 10 * 60 * 1000) return statusCache.value;
+  const hit = statusCaches.get(connectionKey());
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.value;
   const stored = await storedCredentials();
-  if (!stored.creds && (!process.env.META_PAGE_ID || !process.env.META_PAGE_TOKEN)) return { estado: 'sin configurar' };
+  const fromRender = !currentTenant() && !!process.env.META_PAGE_ID && !!process.env.META_PAGE_TOKEN;
+  if (!stored.creds && !fromRender) return { estado: 'sin configurar' };
   const creds = await pageCredentials();
   let value: Record<string, string> = { estado: 'la clave no funciona', motivo: lastCredentialsError };
   let complete = false;
@@ -330,7 +334,7 @@ export async function socialStatus(): Promise<Record<string, string>> {
     if (missing.length) value.faltan = missing.join(', ');
   }
   // Mientras falte algo se vuelve a revisar pronto: así se ve enseguida cuando se corrige.
-  statusCache = { at: complete ? Date.now() : Date.now() - 9 * 60 * 1000, value };
+  statusCaches.set(connectionKey(), { at: complete ? Date.now() : Date.now() - 9 * 60 * 1000, value });
   return value;
 }
 
@@ -554,7 +558,7 @@ export const verifyConnectState = (state: unknown, now = Date.now()): boolean =>
 
 let cachedAppId = '';
 /** Id de la App de Meta: el de META_APP_ID o el de la clave de WhatsApp, que es de la misma App. */
-async function metaAppId(): Promise<string> {
+export async function metaAppId(): Promise<string> {
   if (process.env.META_APP_ID) return process.env.META_APP_ID.trim();
   if (cachedAppId) return cachedAppId;
   const token = process.env.WHATSAPP_TOKEN || '';
@@ -612,10 +616,19 @@ export async function completeConnection(code: string, redirectUri: string) {
     instagramUsername: String(page.instagram_business_account?.username || ''),
     connectedAt: new Date().toISOString()
   };
+  // Una página atiende a una sola empresa: si ya es de otra, sus mensajes no sabrían a cuál ir.
+  const mine = tenant?.businessId || VELAMIA_ID;
+  for (const id of [record.pageId, record.instagramId].filter(Boolean)) {
+    const owner = await socialAccountOwner(id);
+    if (owner && owner !== mine) {
+      throw new Error(`${id === record.pageId ? `La página ${record.pageName}` : `El Instagram @${record.instagramUsername}`} ya está conectado a otra empresa de la plataforma. Desconéctalo allí o elige otra página.`);
+    }
+  }
   await setConfig(STORED_KEY, encryptSecret(JSON.stringify(record)));
+  await setConfig(SOCIAL_IDS_KEY, [record.pageId, record.instagramId].filter(Boolean).join('|'));
   resetPageCredentials();
-  // Las demás empresas conectan su página para publicar; los mensajes de Instagram y Messenger siguen siendo solo de VELAMIA.
-  const subscribed = tenant ? null : await subscribePage().then(() => true).catch(error => {
+  // Con la página suscrita a la App, Meta envía al servidor sus mensajes y comentarios (los de cada empresa van a ella).
+  const subscribed = await subscribePage().then(() => true).catch(error => {
     console.error('❌ No se pudo suscribir la página a la App:', metaError(error));
     return false;
   });
@@ -681,11 +694,12 @@ export async function publishingStatus() {
   };
 }
 
-let storedCache: { at: number; value: PageCredentials | null; raw: string } | null = null;
+const storedCaches = new Map<string, { at: number; value: PageCredentials | null; raw: string }>();
 
 /** La conexión hecha desde el CRM (si existe). Se relee cada minuto para no consultar la base en cada mensaje. */
 async function storedCredentials(): Promise<{ creds: PageCredentials | null; raw: string }> {
-  if (storedCache && Date.now() - storedCache.at < 60_000) return { creds: storedCache.value, raw: storedCache.raw };
+  const hit = storedCaches.get(connectionKey());
+  if (hit && Date.now() - hit.at < 60_000) return { creds: hit.value, raw: hit.raw };
   let value: PageCredentials | null = null;
   let raw = '';
   try {
@@ -697,13 +711,75 @@ async function storedCredentials(): Promise<{ creds: PageCredentials | null; raw
   } catch (error: any) {
     console.error('❌ No se pudo leer la conexión de Facebook guardada:', error.message);
   }
-  storedCache = { at: Date.now(), value, raw };
+  storedCaches.set(connectionKey(), { at: Date.now(), value, raw });
   return { creds: value, raw };
 }
 
 export function resetPageCredentials() {
   cached = null;
-  storedCache = null;
-  statusCache = null;
+  storedCaches.clear();
+  statusCaches.clear();
   publishingCache.clear();
+  socialOwners = null;
+}
+
+// ---------- A qué empresa pertenece cada página e Instagram ----------
+
+// Junto a la conexión se guarda, sin cifrar, qué página e Instagram son: así un aviso de Meta encuentra a su empresa.
+const SOCIAL_IDS_KEY = 'meta_social_ids';
+let socialOwners: { at: number; byAccount: Map<string, string> } | null = null;
+
+/** Las páginas e Instagram de las demás empresas (VELAMIA no entra: se reconoce por su propia conexión). */
+async function socialOwnerMap(): Promise<Map<string, string>> {
+  if (socialOwners && Date.now() - socialOwners.at < 60_000) return socialOwners.byAccount;
+  const byAccount = new Map<string, string>();
+  for (const { businessId, value } of await getConfigOfAllBusinesses(SOCIAL_IDS_KEY)) {
+    for (const id of value.split('|').map(s => s.trim()).filter(Boolean)) byAccount.set(id, businessId);
+  }
+  socialOwners = { at: Date.now(), byAccount };
+  return byAccount;
+}
+
+/**
+ * Las empresas que conectaron su página cuando solo servía para publicar: se anota de quién es y se suscribe a la App,
+ * para que sus mensajes y comentarios también les lleguen. Devuelve cuántas se pusieron al día.
+ */
+export async function syncCompanySocialConnections(): Promise<number> {
+  const indexed = new Set((await getConfigOfAllBusinesses(SOCIAL_IDS_KEY)).map(row => row.businessId));
+  let synced = 0;
+  for (const { businessId } of await getConfigOfAllBusinesses(STORED_KEY)) {
+    if (indexed.has(businessId)) continue;
+    const tenant = await loadTenant(businessId);
+    if (!tenant) continue;
+    await runWithTenant(tenant, async () => {
+      const creds = (await storedCredentials()).creds;
+      if (!creds) return;
+      await setConfig(SOCIAL_IDS_KEY, [creds.pageId, creds.instagramId].filter(Boolean).join('|'));
+      await subscribePage().catch(error => console.error(`❌ ${tenant.name}: no se pudo suscribir su página a la App:`, metaError(error)));
+      synced++;
+    });
+  }
+  if (synced) socialOwners = null;
+  return synced;
+}
+
+/** Empresa dueña de una página o un Instagram: VELAMIA_ID, el id de otra empresa, o null si nadie la conectó. */
+export async function socialAccountOwner(accountId: string): Promise<string | null> {
+  if (!accountId) return null;
+  const velamia = await runWithTenant(undefined, () => pageCredentials()).catch(() => null);
+  if (velamia && (velamia.pageId === accountId || velamia.instagramId === accountId)) return VELAMIA_ID;
+  return (await socialOwnerMap()).get(accountId) || null;
+}
+
+/**
+ * De quién es un aviso de Meta (la página o el Instagram que recibió el mensaje) y por qué canal llegó. La empresa se
+ * devuelve lista para atender el aviso dentro de ella; undefined = VELAMIA.
+ */
+export async function socialRoute(object: string, accountId: string): Promise<{ tenant: TenantContext | undefined; channel: SocialChannel } | null> {
+  const owner = await socialAccountOwner(accountId);
+  if (!owner) return null;
+  const tenant = owner === VELAMIA_ID ? undefined : await loadTenant(owner);
+  if (owner !== VELAMIA_ID && !tenant) return null;
+  const channel = await runWithTenant(tenant || undefined, () => channelForAccount(object, accountId));
+  return channel ? { tenant: tenant || undefined, channel } : null;
 }

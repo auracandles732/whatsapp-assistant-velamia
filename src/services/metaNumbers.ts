@@ -54,7 +54,12 @@ export async function addNumberAndRequestCode(meta: { wabaId: string; token: str
 /** Verifica el código y deja el número registrado en la API de WhatsApp. */
 export async function verifyAndRegister(meta: { token: string }, phoneNumberId: string, code: string) {
   await graph(`${phoneNumberId}/verify_code`, meta.token, { code: code.replace(/\D/g, '') });
+  await registerNumber(meta.token, phoneNumberId);
+}
+
+/** Deja el número listo para la API de WhatsApp. */
+export async function registerNumber(token: string, phoneNumberId: string) {
   // El PIN de dos pasos no lo usa la empresa: se define uno de 6 dígitos solo para registrar el número.
   const pin = String(Math.floor(100000 + Math.random() * 900000));
-  await graph(`${phoneNumberId}/register`, meta.token, { messaging_product: 'whatsapp', pin });
+  await graph(`${phoneNumberId}/register`, token, { messaging_product: 'whatsapp', pin });
 }

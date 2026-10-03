@@ -12,16 +12,16 @@ import {
 import { removeFilesByPublicUrls } from '../services/storage';
 import {
   SocialChannel,
-  channelForAccount,
+  socialRoute,
   channelName,
   socialAddress,
   sendPrivateReply,
   replyToCommentPublicly,
   postContent,
   PostContent,
-  wasSentByUs,
-  pageCredentials
+  wasSentByUs
 } from '../services/metaChannels';
+import { currentTenant, runWithTenant } from '../services/tenant';
 import { handleSocialMessage, handleSocialEcho } from './messageController';
 import { noteSocialOutcome } from '../services/webhookTrace';
 import { planTurn, describeImage, buildPostImagePrompt, IMAGE_NOT_READ } from '../services/openai';
@@ -35,32 +35,36 @@ import { profile } from '../config/businessProfile';
 export async function handleSocialWebhook(data: any): Promise<void> {
   const object = String(data?.object || '');
   for (const entry of data?.entry || []) {
-    const channel = await channelForAccount(object, String(entry?.id || ''));
-    if (!channel) {
-      const creds = await pageCredentials();
-      console.warn(`⚠️ Aviso de ${object} para una cuenta que no está conectada (llegó ${entry?.id}; conectadas: página ${creds?.pageId || '—'}, Instagram ${creds?.instagramId || '—'}): se ignora`);
-      noteSocialOutcome(`${object === 'page' ? 'Facebook' : 'Instagram'}: de una cuenta que no es la conectada, se ignoró`);
+    // Cada página e Instagram es de una empresa: el aviso se atiende dentro de ella (su asistente, catálogo y claves).
+    const route = await socialRoute(object, String(entry?.id || ''));
+    if (!route) {
+      console.warn(`⚠️ Aviso de ${object} para una cuenta que ninguna empresa conectó (llegó ${entry?.id}): se ignora`);
+      noteSocialOutcome(`${object === 'page' ? 'Facebook' : 'Instagram'}: de una cuenta que ninguna empresa conectó, se ignoró`);
       continue;
     }
-    const events = messagingEvents(entry);
-    const fields = (entry.changes || []).map((c: any) => String(c?.field || '?').replace(/\W/g, '')).join(', ');
-    const standby = (entry.standby || []).length;
-    const summary = `${channelName(channel)}: ${events.length} mensaje(s)${standby ? ` (${standby} en espera: otra aplicación tiene el control del chat)` : ''}${fields ? `, cambios: ${fields}` : ''}`;
-    console.log(`📥 Aviso de ${summary}`);
-    noteSocialOutcome(summary);
-    for (const event of events) {
-      handleMessagingEvent(channel, event).catch(error => console.error(`Error procesando mensaje de ${channelName(channel)}:`, error));
-    }
-    for (const change of entry.changes || []) {
-      const comment = commentFromChange(channel, change, String(entry.id));
-      if (comment) {
-        handleComment(channel, comment).catch(error => {
-          console.error(`Error respondiendo comentario de ${channelName(channel)}:`, error);
-          noteSocialOutcome(`Comentario de ${channelName(channel)}: falló al atenderlo (${String(error?.response?.data?.error?.message || error?.message || error).slice(0, 160)})`);
-        });
-      } else if (change?.field === 'comments' || change?.value?.item === 'comment') {
-        noteSocialOutcome(`Comentario de ${channelName(channel)}: es de la propia cuenta o una respuesta a otro comentario, no se contesta`);
-      }
+    runWithTenant(route.tenant, () => handleEntry(route.channel, entry));
+  }
+}
+
+function handleEntry(channel: SocialChannel, entry: any) {
+  const events = messagingEvents(entry);
+  const fields = (entry.changes || []).map((c: any) => String(c?.field || '?').replace(/\W/g, '')).join(', ');
+  const standby = (entry.standby || []).length;
+  const summary = `${channelName(channel)}: ${events.length} mensaje(s)${standby ? ` (${standby} en espera: otra aplicación tiene el control del chat)` : ''}${fields ? `, cambios: ${fields}` : ''}`;
+  console.log(`📥 Aviso de ${summary}${currentTenant() ? ` (${currentTenant()!.name})` : ''}`);
+  noteSocialOutcome(summary);
+  for (const event of events) {
+    handleMessagingEvent(channel, event).catch(error => console.error(`Error procesando mensaje de ${channelName(channel)}:`, error));
+  }
+  for (const change of entry.changes || []) {
+    const comment = commentFromChange(channel, change, String(entry.id));
+    if (comment) {
+      handleComment(channel, comment).catch(error => {
+        console.error(`Error respondiendo comentario de ${channelName(channel)}:`, error);
+        noteSocialOutcome(`Comentario de ${channelName(channel)}: falló al atenderlo (${String(error?.response?.data?.error?.message || error?.message || error).slice(0, 160)})`);
+      });
+    } else if (change?.field === 'comments' || change?.value?.item === 'comment') {
+      noteSocialOutcome(`Comentario de ${channelName(channel)}: es de la propia cuenta o una respuesta a otro comentario, no se contesta`);
     }
   }
 }

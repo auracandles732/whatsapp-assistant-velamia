@@ -2401,6 +2401,42 @@
         .wt-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; font-weight: 600; color: #2A3766; }
         .wt-form input, .wt-form select { padding: 11px 12px; border: 1px solid #DCE2F5; border-radius: 10px; background: #fff; font: inherit; font-size: 14px; font-weight: 400; color: #1E2A4A; }
         .wt-form .field-hint { font-weight: 400; font-size: 12px; color: #7A84AE; line-height: 1.35; }
+        .ch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 10px; }
+        @media (max-width: 900px) { .ch-grid { grid-template-columns: minmax(0, 1fr); } }
+        .ch-card { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 20px; background: #fff; border: 1.5px solid #E6EAF6; box-shadow: 0 8px 22px rgba(40, 60, 140, 0.07); overflow: hidden; }
+        .ch-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 6px; }
+        .ch-card.whatsapp::before { background: linear-gradient(90deg, #25D366, #128C7E); }
+        .ch-card.instagram::before { background: linear-gradient(90deg, #F58529, #DD2A7B, #8134AF); }
+        .ch-card.facebook::before { background: linear-gradient(90deg, #1877F2, #5B9BFF); }
+        .ch-card.on.whatsapp { border-color: #BDEFD2; background: linear-gradient(180deg, #F2FCF6, #fff 55%); }
+        .ch-card.on.instagram { border-color: #F6CDE1; background: linear-gradient(180deg, #FFF4FA, #fff 55%); }
+        .ch-card.on.facebook { border-color: #C9DCFB; background: linear-gradient(180deg, #F2F7FF, #fff 55%); }
+        .ch-top { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+        .ch-logo { width: 54px; height: 54px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: #F5F7FD; flex-shrink: 0; }
+        .ch-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .ch-name b { font-size: 17px; color: #141C3A; }
+        .ch-pill { align-self: flex-start; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #EEF1F8; color: #5C668F; }
+        .ch-pill.on { background: #DDF7E7; color: #17703D; }
+        .ch-detail { font-size: 13.5px; color: #3A4466; line-height: 1.4; min-height: 38px; word-break: break-word; }
+        .ch-card.on .ch-detail { font-weight: 700; color: #141C3A; }
+        .ch-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+        .pb .ch-btn, .ch-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 10px; border: 0; border-radius: 14px; font: inherit; font-size: 14.5px; font-weight: 800; white-space: normal; line-height: 1.2; text-align: center; color: #fff; cursor: pointer; box-shadow: 0 10px 22px rgba(30, 40, 90, 0.18); transition: transform 0.12s, box-shadow 0.12s; }
+        .ch-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 14px 26px rgba(30, 40, 90, 0.24); }
+        .ch-btn:disabled { opacity: 0.6; cursor: default; }
+        .ch-btn.whatsapp { background: linear-gradient(135deg, #25D366, #128C7E); }
+        .ch-btn.instagram { background: linear-gradient(135deg, #F58529, #DD2A7B 55%, #8134AF); }
+        .ch-btn.facebook { background: linear-gradient(135deg, #1877F2, #0A55C9); }
+        .ch-btn.ghost { background: #fff; box-shadow: none; border: 1.5px solid #DCE2F5; color: #2A3766; font-weight: 700; }
+        .ch-btn svg { flex-shrink: 0; background: #fff; border-radius: 50%; padding: 2px; box-sizing: content-box; }
+        .ch-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: #4B567A; line-height: 1.35; cursor: pointer; }
+        .ch-check input { margin-top: 2px; }
+        .ch-link { background: none; border: 0; padding: 2px 0; font: inherit; font-size: 13px; font-weight: 700; color: #128C7E; text-decoration: underline; cursor: pointer; text-align: left; }
+        .ch-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+        .ch-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 8px; border-radius: 999px; background: #F3F5FA; border: 1px solid #E3E7F2; font-size: 12.5px; color: #6B7599; }
+        .ch-chip b { color: #3A4466; font-weight: 700; }
+        .ch-chip small { font-size: 11.5px; }
+        .ch-chip.on { background: #EAF9F0; border-color: #BDEFD2; color: #17703D; }
+        .ch-chip.on b { color: #11552E; }
         /* Computadora: una fila por publicación. */
         .sr-table-wrap { border: 1px solid #E8ECF6; border-radius: 14px; overflow-x: auto; }
         .sr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; color: #1E2A4A; }
@@ -3570,6 +3606,8 @@
                         <span className={'pl-pill ' + pill.cls}>{pill.text}</span>
                     </div>
 
+                    <ChannelChips channels={business.legacy ? business.channels : readiness?.channels} />
+
                     <div className="pl-rows">
                         {business.legacy ? (
                             <>
@@ -4494,6 +4532,7 @@
 
             const navItems = [
                 { id: 'top', icon: 'user', label: 'Perfil del negocio' },
+                ...extras.filter(x => x.pinned).map(x => ({ id: x.id, icon: x.icon, label: x.label })),
                 { id: 'general', icon: 'home', label: 'General' },
                 { id: 'ventas', icon: 'tag', label: 'Ventas' },
                 { id: 'pagos', icon: 'card', label: 'Pagos' },
@@ -4503,7 +4542,7 @@
                 { id: 'empaques', icon: 'box', label: 'Empaques' },
                 { id: 'avisos', icon: 'sparkle', label: 'Avisos y estilo' },
                 { id: 'privacidad', icon: 'key', label: 'Privacidad y datos' },
-                ...extras.map(x => ({ id: x.id, icon: x.icon, label: x.label }))
+                ...extras.filter(x => !x.pinned).map(x => ({ id: x.id, icon: x.icon, label: x.label }))
             ];
 
             // Las secciones del perfil: en la computadora van una debajo de otra y en el celular cada una en su pantalla.
@@ -4705,6 +4744,7 @@
             // Celular: menú de secciones y cada sección en su propia pantalla (la computadora sigue con todo en una página).
             if (mobile) {
                 const menu = [
+                    ...extras.filter(x => x.pinned).map(x => ({ id: x.id, icon: x.icon, label: x.label, sub: x.sub || x.subtitle })),
                     { id: 'general', icon: 'home', label: 'General', sub: 'Información básica de tu negocio' },
                     { id: 'ventas', icon: 'tag', label: 'Ventas', sub: 'Productos, precios y ventas' },
                     { id: 'pagos', icon: 'card', label: 'Pagos', sub: 'Métodos de pago y condiciones' },
@@ -4714,7 +4754,7 @@
                     { id: 'empaques', icon: 'box', label: 'Empaques', sub: 'Presentación de tus productos' },
                     { id: 'avisos', icon: 'sparkle', label: 'Avisos y estilo', sub: 'Tus avisos y cómo habla el asistente' },
                     { id: 'privacidad', icon: 'key', label: 'Privacidad y datos', sub: 'Ley de Protección de Datos Personales' },
-                    ...extras.map(x => ({ id: x.id, icon: x.icon, label: x.label, sub: x.sub || x.subtitle }))
+                    ...extras.filter(x => !x.pinned).map(x => ({ id: x.id, icon: x.icon, label: x.label, sub: x.sub || x.subtitle }))
                 ];
                 const titles = {
                     ventas: 'Cómo vendes', pagos: 'Pagos', fechas: 'Fechas de entrega', envios: 'Envíos',
@@ -4923,6 +4963,10 @@
                             </div>
                         </CfgCard>
 
+                        {extras.filter(x => x.pinned).map(x => (
+                            <CfgCard key={x.id} id={x.id} icon={x.icon} title={x.title} subtitle={x.subtitle}>{x.node}</CfgCard>
+                        ))}
+
                         {cfgCards.ventas}
                         {cfgCards.pagos}
                         {cfgCards.fechas}
@@ -4931,7 +4975,7 @@
                         {cfgCards.empaques}
                         {cfgCards.avisos}
 
-                        {extras.map(x => (
+                        {extras.filter(x => !x.pinned).map(x => (
                             <CfgCard key={x.id} id={x.id} icon={x.icon} title={x.title} subtitle={x.subtitle}>{x.node}</CfgCard>
                         ))}
 
@@ -7604,6 +7648,11 @@
 
             const configExtras = [
                 {
+                    id: 'canales', icon: 'whatsapp', label: 'Canales conectados', title: 'Conecta tus canales', pinned: true,
+                    subtitle: 'WhatsApp, Instagram y Facebook con un solo botón', sub: 'WhatsApp, Instagram y Facebook',
+                    node: <ChannelsPanel canConfigure={canConfigure} />
+                },
+                {
                     id: 'transferencia', icon: 'building', label: 'Datos de transferencia', title: 'Datos para transferencia',
                     subtitle: 'Lo que el bot envía cuando la clienta paga por transferencia', sub: 'Información bancaria',
                     node: (
@@ -7628,7 +7677,7 @@
                 {
                     id: 'redes', icon: 'instagram', label: 'Instagram y Facebook', title: 'Instagram y Facebook',
                     subtitle: 'Mensajes y comentarios atendidos por el mismo asistente', sub: 'Conecta tus redes sociales',
-                    node: <SocialConnect available={!!session?.business?.legacy || !session?.business} canConfigure={canConfigure} />
+                    node: <SocialConnect available canConfigure={canConfigure} />
                 },
                 {
                     id: 'plantillas', icon: 'chat', label: 'Plantillas de WhatsApp', title: 'Plantillas de WhatsApp',
@@ -8495,6 +8544,142 @@
         }
 
         // Conecta la página de Facebook y su Instagram: se abre la ventana de Facebook y el servidor guarda la clave.
+        // ---------- Canales de la empresa: WhatsApp, Instagram y Facebook con un botón cada uno ----------
+
+        function WaLogo({ size = 22 }) {
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="12" fill="#25D366" />
+                    <path d="M12 5.2a6.8 6.8 0 0 0-5.85 10.27L5.2 18.8l3.42-.9A6.8 6.8 0 1 0 12 5.2z" fill="#fff" />
+                    <path d="M9.55 8.6c.18 0 .36 0 .5.32l.6 1.43c.05.13.08.27 0 .42l-.3.43c-.1.12-.2.25-.08.47a5.3 5.3 0 0 0 2.5 2.2c.2.1.35.08.47-.06l.52-.63c.13-.17.27-.14.45-.08l1.4.66c.2.1.33.15.37.23.05.1.05.55-.13 1.07-.18.53-1.06 1-1.47 1.03-.38.04-.86.05-1.38-.1a12.4 12.4 0 0 1-1.25-.47 9.7 9.7 0 0 1-3.7-3.27c-.37-.5-.97-1.36-.97-2.6 0-1.23.65-1.84.88-2.1.23-.24.5-.3.67-.3z" fill="#25D366" />
+                </svg>
+            );
+        }
+
+        function ChannelCard({ kind, logo, title, connected, detail, note, children }) {
+            return (
+                <div className={'ch-card ' + kind + (connected ? ' on' : '')}>
+                    <div className="ch-top">
+                        <span className="ch-logo">{logo}</span>
+                        <div className="ch-name">
+                            <b>{title}</b>
+                            <span className={'ch-pill' + (connected ? ' on' : '')}>{connected ? '✓ Conectado' : 'Sin conectar'}</span>
+                        </div>
+                    </div>
+                    <div className="ch-detail">{connected ? (detail || 'Listo para atender') : note}</div>
+                    <div className="ch-actions">{children}</div>
+                </div>
+            );
+        }
+
+        function ChannelsPanel({ canConfigure }) {
+            const [ch, setCh] = useState(null);
+            const [busy, setBusy] = useState('');
+            const [error, setError] = useState('');
+            const [coexistence, setCoexistence] = useState(true);
+            const [byCode, setByCode] = useState(false);
+            const load = () => api('/api/me/channels').then(setCh).catch(e => setError(e.message));
+            useEffect(() => { load(); }, []);
+
+            // La ventana se abre al instante (si espera al servidor el navegador la bloquea) y el estado se revisa cada
+            // pocos segundos hasta que cambie: al pasar a Facebook se pierde el vínculo con la ventana.
+            async function open(which, urlPath) {
+                setError('');
+                const win = window.open('about:blank', 'conectar-' + which, 'width=640,height=780');
+                setBusy(which);
+                try {
+                    const { url } = await api(urlPath);
+                    if (!win) { window.location.href = url; return; }
+                    win.location.href = url;
+                    const before = JSON.stringify(ch);
+                    const started = Date.now();
+                    const timer = setInterval(async () => {
+                        const now = await api('/api/me/channels').catch(() => null);
+                        if (now) setCh(now);
+                        if ((now && JSON.stringify(now) !== before) || Date.now() - started > 5 * 60 * 1000) {
+                            clearInterval(timer);
+                            setBusy('');
+                        }
+                    }, 4000);
+                } catch (e) {
+                    if (win) win.close();
+                    setError(e.message);
+                    setBusy('');
+                }
+            }
+
+            if (!ch) return error ? <p className="hint" style={{ color: '#B42318' }}>{error}</p> : <p className="hint">Revisando tus canales…</p>;
+            const social = () => open('redes', '/api/meta/connect-url');
+            const whatsappButton = ch.legacy ? null : ch.whatsappSignup ? (
+                <>
+                    {!ch.whatsapp.connected && (
+                        <label className="ch-check"><input type="checkbox" checked={coexistence} onChange={e => setCoexistence(e.target.checked)} /> Ya uso este número en WhatsApp Business y quiero seguir usándolo en el celular</label>
+                    )}
+                    <button type="button" className={'ch-btn whatsapp' + (ch.whatsapp.connected ? ' ghost' : '')} disabled={!!busy} onClick={() => open('whatsapp', '/api/me/whatsapp/connect-url?coexistence=' + (coexistence ? '1' : '0'))}>
+                        <WaLogo size={20} /> {busy === 'whatsapp' ? 'Esperando a WhatsApp…' : ch.whatsapp.connected ? 'Cambiar número' : 'Conectar WhatsApp'}
+                    </button>
+                </>
+            ) : <button type="button" className="ch-btn whatsapp" disabled title="Se activa cuando Meta apruebe la plataforma"><WaLogo size={20} /> Muy pronto</button>;
+
+            return (
+                <>
+                    <p className="hint">Conecta tus redes y el asistente atenderá a tus clientes por WhatsApp, Instagram y Facebook desde un solo lugar. Cada botón abre una ventana oficial de Meta: solo inicias sesión y eliges tu cuenta.</p>
+                    <div className="ch-grid">
+                        <ChannelCard kind="whatsapp" title="WhatsApp" logo={<WaLogo size={34} />} connected={ch.whatsapp.connected}
+                            detail={ch.legacy ? 'Conectado desde el servidor' : ch.whatsapp.detail ? '+' + ch.whatsapp.detail : ''}
+                            note={ch.whatsappSignup ? 'Responde por WhatsApp con tu propio número.' : 'El botón se activa cuando Meta apruebe la plataforma.'}>
+                            {canConfigure && whatsappButton}
+                            {canConfigure && !ch.legacy && !ch.whatsapp.connected && ch.numberByCode && (
+                                <button type="button" className="ch-link" onClick={() => setByCode(!byCode)}>{byCode ? 'Ocultar' : 'O conecta un número nuevo con un código por SMS'}</button>
+                            )}
+                        </ChannelCard>
+                        <ChannelCard kind="instagram" title="Instagram" logo={<PbNetLogo net="instagram" size={34} />} connected={ch.instagram.connected}
+                            detail={ch.instagram.detail}
+                            note={ch.facebook.connected ? 'Tu página de Facebook no tiene un Instagram profesional enlazado.' : 'Mensajes directos y comentarios de tus publicaciones.'}>
+                            {canConfigure && (
+                                <button type="button" className={'ch-btn instagram' + (ch.instagram.connected ? ' ghost' : '')} disabled={!!busy} onClick={social}>
+                                    <PbNetLogo net="instagram" size={20} /> {busy === 'redes' ? 'Esperando a Meta…' : ch.instagram.connected ? 'Volver a conectar' : 'Conectar Instagram'}
+                                </button>
+                            )}
+                        </ChannelCard>
+                        <ChannelCard kind="facebook" title="Facebook" logo={<PbNetLogo net="facebook" size={34} />} connected={ch.facebook.connected}
+                            detail={ch.facebook.detail}
+                            note="Mensajes de Messenger y comentarios de tu página.">
+                            {canConfigure && (
+                                <button type="button" className={'ch-btn facebook' + (ch.facebook.connected ? ' ghost' : '')} disabled={!!busy} onClick={social}>
+                                    <PbNetLogo net="facebook" size={20} /> {busy === 'redes' ? 'Esperando a Meta…' : ch.facebook.connected ? 'Volver a conectar' : 'Conectar Facebook'}
+                                </button>
+                            )}
+                        </ChannelCard>
+                    </div>
+                    <p className="hint" style={{ marginTop: 10 }}>Instagram y Facebook se conectan juntos: tu Instagram profesional va enlazado a tu página de Facebook.</p>
+                    {!canConfigure && <p className="hint">Solo el dueño de la empresa puede conectar los canales.</p>}
+                    {byCode && <ConnectNumberCard onDone={() => { setByCode(false); load(); }} />}
+                    {error && <p className="hint" style={{ color: '#B42318', marginTop: 8 }}>{error}</p>}
+                </>
+            );
+        }
+
+        /** En la tarjeta de cada empresa: qué redes tiene conectadas. */
+        function ChannelChips({ channels }) {
+            if (!channels) return null;
+            const chip = (key, label, logo) => {
+                const c = channels[key] || {};
+                return (
+                    <span className={'ch-chip' + (c.connected ? ' on' : '')} title={c.connected ? (c.detail || 'Conectado') : 'Sin conectar'}>
+                        {logo}<b>{label}</b><small>{c.connected ? 'Conectado' : 'Sin conectar'}</small>
+                    </span>
+                );
+            };
+            return (
+                <div className="ch-chips">
+                    {chip('whatsapp', 'WhatsApp', <WaLogo size={18} />)}
+                    {chip('instagram', 'Instagram', <PbNetLogo net="instagram" size={18} />)}
+                    {chip('facebook', 'Facebook', <PbNetLogo net="facebook" size={18} />)}
+                </div>
+            );
+        }
+
         function SocialConnect({ available, canConfigure }) {
             const [status, setStatus] = useState(null);
             const [busy, setBusy] = useState(false);

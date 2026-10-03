@@ -45,6 +45,7 @@ import {
   updateBusinessInfo,
   deleteBusinessCompletely,
   getBusinessReadiness,
+  channelsSummary,
   markWebhookConnected,
   getUsageByBusiness,
   getTenantUsage,
@@ -62,7 +63,8 @@ import { removeFilesByPublicUrls, storagePath, uploadBufferToStorage } from './s
 import { toWhatsAppVoice, isRecordedAudio } from './services/audio';
 import { maskPhone } from './services/privacy';
 import { createSignupCode, isSignupCodeUsable, useSignupCode } from './services/signupCodes';
-import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister } from './services/metaNumbers';
+import { splitPhone, platformMeta, addNumberAndRequestCode, verifyAndRegister, registerNumber } from './services/metaNumbers';
+import { whatsappSignupConfigId, whatsappSignupUrl, completeWhatsAppSignup } from './services/whatsappSignup';
 import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './services/tenant';
 import { socialRouter, startSocialAgent } from './social';
 import { metricsReport } from './social/insights';
@@ -76,7 +78,7 @@ import { loadTenant } from './services/supabase';
 import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
 import { noteWebhook, webhookTrace } from './services/webhookTrace';
-import { subscribePage, isSocialAddress, socialStatus, socialDiagnosis, connectUrl, createConnectState, readConnectState, completeConnection, publishingStatus } from './services/metaChannels';
+import { subscribePage, syncCompanySocialConnections, isSocialAddress, socialStatus, socialDiagnosis, connectUrl, createConnectState, readConnectState, completeConnection, publishingStatus } from './services/metaChannels';
 import {
   requireCrmSession,
   requireAdminSession,
@@ -277,9 +279,8 @@ app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
   }
 });
 
-/** Conecta la página de Facebook (y su Instagram) para que Meta envíe mensajes y comentarios. Solo VELAMIA por ahora. */
+/** Vuelve a suscribir la página de Facebook (y su Instagram) de la empresa para que Meta envíe mensajes y comentarios. */
 app.post('/api/me/connect-social', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
-  if (currentTenant()) return res.status(400).json({ error: 'Instagram y Facebook todavía no están disponibles para esta empresa' });
   try {
     res.json({ success: true, detail: await subscribePage() });
   } catch (error: any) {
@@ -333,8 +334,7 @@ function metaResultPage(ok: boolean, lines: string[]) {
 }
 
 app.get('/api/meta/connect-url', requireCrmSession, requireOwnerRole, async (_req: Request, res: Response) => {
-  // Las demás empresas conectan su página solo para publicar (servicio adicional); los mensajes siguen siendo de VELAMIA.
-  if (currentTenant() && !hasAddon('publicaciones')) return res.status(400).json({ error: 'Instagram y Facebook todavía no están disponibles para esta empresa' });
+  // Cada empresa conecta su propia página e Instagram: sus mensajes y comentarios le llegan a ella.
   try {
     res.json({ url: await connectUrl(metaRedirectUri(), createConnectState()) });
   } catch (error: any) {
@@ -342,14 +342,65 @@ app.get('/api/meta/connect-url', requireCrmSession, requireOwnerRole, async (_re
   }
 });
 
+// Las ventanas de WhatsApp pendientes (por su sello): la vuelta de Meta llega a la misma dirección que la de Facebook.
+const WHATSAPP_SIGNUP_MS = 15 * 60 * 1000;
+const pendingWhatsAppSignups = new Map<string, { coexistence: boolean; at: number }>();
+
+/** Abre la ventana oficial de Meta para que la empresa conecte su WhatsApp sola. */
+app.get('/api/me/whatsapp/connect-url', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+  if (!currentTenant()) return res.status(400).json({ error: 'El WhatsApp de VELAMIA ya está conectado desde el servidor' });
+  if (!whatsappSignupConfigId()) return res.status(503).json({ error: 'El botón de WhatsApp todavía no está activado en la plataforma' });
+  try {
+    const state = createConnectState();
+    for (const [key, pending] of pendingWhatsAppSignups) if (Date.now() - pending.at > WHATSAPP_SIGNUP_MS) pendingWhatsAppSignups.delete(key);
+    pendingWhatsAppSignups.set(state, { coexistence: req.query.coexistence === '1', at: Date.now() });
+    res.json({ url: await whatsappSignupUrl(metaRedirectUri(), state, req.query.coexistence === '1') });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Vuelta de la ventana de WhatsApp: guarda la cuenta y el número de la empresa y los conecta al asistente. */
+async function finishWhatsAppSignup(businessId: string, code: string, coexistence: boolean): Promise<{ ok: boolean; lines: string[] }> {
+  const number = await completeWhatsAppSignup(code, metaRedirectUri());
+  await updateBusinessCredentials(businessId, {
+    metaAccessToken: number.token, wabaId: number.wabaId, phoneNumberId: number.phoneNumberId, displayPhoneNumber: number.displayPhoneNumber
+  });
+  const lines = [`Número: +${number.displayPhoneNumber}${number.verifiedName ? ` (${number.verifiedName})` : ''}`];
+  // Un número nuevo hay que dejarlo listo para la API; con coexistencia sigue en la app del celular y no se registra.
+  if (!coexistence && number.platformType !== 'CLOUD_API') {
+    await registerNumber(number.token, number.phoneNumberId).catch((error: any) => lines.push(`Aviso: Meta no dejó registrar el número todavía (${error.message}).`));
+  }
+  const row = await getBusinessRow(businessId);
+  if (!row) return { ok: false, lines: ['La empresa ya no existe.'] };
+  const result = await connectBusinessWhatsApp(row);
+  await markWebhookConnected(row.id, result.ok);
+  console.log(`📲 ${row.name}: WhatsApp conectado con la ventana de Meta (${result.ok ? 'ok' : 'falló la suscripción'})`);
+  return { ok: result.ok, lines: [...lines, ...result.steps.map(s => `${s.ok ? '✓' : '✗'} ${s.detail}`)] };
+}
+
 // Facebook devuelve aquí a quien aceptó los permisos. No lleva la sesión del CRM: la protege el sello de un solo uso.
 app.get('/api/meta/callback', async (req: Request, res: Response) => {
+  const whatsapp = pendingWhatsAppSignups.get(String(req.query.state || ''));
+  pendingWhatsAppSignups.delete(String(req.query.state || ''));
   if (req.query.error) {
-    return res.status(400).send(metaResultPage(false, ['Se canceló la conexión en Facebook. Vuelve a intentarlo desde el CRM y acepta todos los permisos.']));
+    return res.status(400).send(metaResultPage(false, [whatsapp
+      ? 'Se canceló la conexión de WhatsApp. Vuelve a intentarlo desde el CRM.'
+      : 'Se canceló la conexión en Facebook. Vuelve a intentarlo desde el CRM y acepta todos los permisos.']));
   }
   const businessId = readConnectState(req.query.state);
   if (!businessId) {
-    return res.status(400).send(metaResultPage(false, ['El enlace venció o ya se usó. Vuelve a presionar "Conectar con Facebook" en el CRM.']));
+    return res.status(400).send(metaResultPage(false, ['El enlace venció o ya se usó. Vuelve a presionar el botón de conectar en el CRM.']));
+  }
+  if (whatsapp) {
+    if (businessId === VELAMIA_ID || !(await loadTenant(businessId))) return res.status(404).send(metaResultPage(false, ['La empresa no existe o está suspendida.']));
+    try {
+      const result = await finishWhatsAppSignup(businessId, String(req.query.code || ''), whatsapp.coexistence);
+      return res.status(result.ok ? 200 : 500).send(metaResultPage(result.ok, result.lines));
+    } catch (error: any) {
+      console.error('❌ Error conectando WhatsApp:', error.response?.data || error.message);
+      return res.status(500).send(metaResultPage(false, [error.response?.data?.error?.message || error.message]));
+    }
   }
   try {
     // El sello dice de qué empresa era: la conexión se guarda en esa empresa y en ninguna otra.
@@ -1811,10 +1862,31 @@ app.post('/api/health-check', requireAdminSession, async (_req: Request, res: Re
   }
 });
 
+/** Redes de VELAMIA: su WhatsApp está en las variables del servidor; Instagram y Facebook, en la conexión del CRM. */
+async function velamiaChannels() {
+  return channelsSummary({
+    whatsapp: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID),
+    phone: process.env.WHATSAPP_DISPLAY_NUMBER || '',
+    socialConnection: (await runWithTenant(undefined, () => getConfig('meta_page_connection'))) || ''
+  });
+}
+
+/** Qué canales tiene conectados la empresa y qué botones de conexión están disponibles. */
+app.get('/api/me/channels', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    const tenant = currentTenant();
+    const row = tenant ? await getBusinessRow(tenant.businessId) : null;
+    const channels = row ? (await getBusinessReadiness(row)).channels : await velamiaChannels();
+    res.json({ ...channels, legacy: !tenant, whatsappSignup: !!whatsappSignupConfigId(), numberByCode: !!platformMeta() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/me/business', requireCrmSession, async (_req: Request, res: Response) => {
   try {
     const tenant = currentTenant();
-    if (!tenant) return res.json(velamiaCompany());
+    if (!tenant) return res.json({ ...velamiaCompany(), channels: await velamiaChannels() });
     const row = await getBusinessRow(tenant.businessId);
     if (!row) return res.status(404).json({ error: 'Negocio no encontrado' });
     res.json(toPublicBusiness(row));
@@ -2074,6 +2146,9 @@ async function start() {
       .then(detail => console.log(`📘 Instagram/Messenger: ${detail}`))
       .catch(error => console.error('❌ No se pudo conectar la página de Facebook:', error.response?.data?.error?.message || error.message));
   }
+  syncCompanySocialConnections()
+    .then(count => { if (count) console.log(`📘 Instagram/Messenger: ${count} empresa(s) quedaron recibiendo los mensajes de sus redes`); })
+    .catch(error => console.error('❌ No se pudieron revisar las redes de las empresas:', error.message));
   });
 }
 

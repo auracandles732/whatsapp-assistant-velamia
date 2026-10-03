@@ -343,11 +343,11 @@ export function handleWebhookMessage(message: any, value: any): Promise<void> {
 
 /**
  * Mensaje de Instagram o Messenger ya traducido a la forma de WhatsApp ("from" = "ig:<id>" o "fb:<id>").
- * Por ahora solo VELAMIA tiene estos canales, así que se atiende sin negocio.
+ * Se atiende dentro de la empresa dueña de la página o el Instagram que lo recibió.
  */
 export function handleSocialMessage(message: any): Promise<void> {
   const from = String(message?.from || '');
-  return enqueue(customerKey(from, undefined), async () => {
+  return enqueue(customerKey(from), async () => {
     const known = await getConversation(from);
     const name = known ? '' : await socialProfileName(from);
     await ingestMessage(message, { contacts: [{ profile: { name: name || undefined } }] });
@@ -360,7 +360,7 @@ export function handleSocialMessage(message: any): Promise<void> {
  */
 export function handleSocialEcho(messageId: string, to: string, text: string): Promise<void> {
   if (!messageId || !to || wasSentByUs(messageId)) return Promise.resolve();
-  return new Promise(resolve => setTimeout(resolve, 4000)).then(() => enqueue(customerKey(to, undefined), async () => {
+  return new Promise(resolve => setTimeout(resolve, 4000)).then(() => enqueue(customerKey(to), async () => {
     if (wasSentByUs(messageId) || await isMessageAlreadyProcessed(messageId)) return;
     const conversation = await getConversation(to);
     if (!conversation || !text) return;

@@ -941,6 +941,15 @@ export async function setConfig(key: string, value: string) {
   return data;
 }
 
+/** El mismo dato de configuración en todas las empresas (no incluye a VELAMIA, que guarda sin prefijo). */
+export async function getConfigOfAllBusinesses(key: string): Promise<{ businessId: string; value: string }[]> {
+  const { data, error } = await supabase.from('business_config').select('key, value').like('key', `business:%:${key}`);
+  if (error) throw new Error(`Error leyendo configuración: ${error.message}`);
+  return (data || [])
+    .map(row => ({ businessId: String(row.key).slice('business:'.length, String(row.key).length - key.length - 1), value: String(row.value || '') }))
+    .filter(row => !!row.businessId && !row.businessId.includes(':'));
+}
+
 /** El número del perfil del negocio manda; owner_phone queda para instalaciones anteriores al perfil. */
 export async function getOwnerPhone(): Promise<string | null> {
   const { profile } = await import('../config/businessProfile');
@@ -1402,6 +1411,27 @@ export interface ReadinessItem {
   hint: string;
 }
 
+export interface ChannelState { connected: boolean; detail: string }
+export interface ChannelsSummary { whatsapp: ChannelState; instagram: ChannelState; facebook: ChannelState }
+
+/** Qué redes tiene conectadas una empresa, para mostrarlo en su tarjeta y en Configuración. */
+export function channelsSummary(input: { whatsapp: boolean; phone: string; socialConnection: string }): ChannelsSummary {
+  let social: { pageName: string; instagramId: string; instagramUsername: string } | null = null;
+  try {
+    if (input.socialConnection) {
+      const record = JSON.parse(decryptSecret(input.socialConnection));
+      social = { pageName: String(record.pageName || ''), instagramId: String(record.instagramId || ''), instagramUsername: String(record.instagramUsername || '') };
+    }
+  } catch {
+    social = null;
+  }
+  return {
+    whatsapp: { connected: input.whatsapp, detail: input.whatsapp ? input.phone : '' },
+    instagram: { connected: !!social?.instagramId, detail: social?.instagramUsername ? `@${social.instagramUsername}` : '' },
+    facebook: { connected: !!social, detail: social?.pageName || '' }
+  };
+}
+
 /**
  * Lista de lo que necesita una empresa para que su bot atienda bien.
  * botReady solo es true si están todas las obligatorias: WhatsApp, OpenAI y número conectado.
@@ -1455,6 +1485,11 @@ export async function getBusinessReadiness(row: BusinessRow) {
   const missingRequired = items.filter(i => i.required && !i.ok);
   return {
     items,
+    channels: channelsSummary({
+      whatsapp: items[0].ok && items[1].ok,
+      phone: row.meta_phone_number || '',
+      socialConnection: config.get('meta_page_connection') || ''
+    }),
     products,
     botReady: row.active && missingRequired.length === 0,
     summary: !row.active
