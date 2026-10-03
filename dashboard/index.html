@@ -846,189 +846,162 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* ---------- Pantalla de ingreso (Nexly by VELAMIA) ---------- */
         .login-screen {
+            --lg-ink: #2B1C14;
+            --lg-ink-soft: #4E3E33;
+            --lg-muted: #7C6B5D;
+            --lg-gold: #C9A271;
+            --lg-terra: #B5654A;
+            --lg-terra-dark: #9F5239;
+            --lg-link: #A3522F;
+            --lg-line: #E3D8CA;
+            --lg-serif: Georgia, 'Times New Roman', 'Noto Serif', serif;
             min-height: 100vh;
+            min-height: 100dvh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 24px;
+            padding: 32px 24px;
             position: relative;
             overflow: hidden;
-            color: #fff;
+            color: var(--lg-ink);
             background:
-                linear-gradient(rgba(10, 15, 70, 0.10), rgba(10, 15, 70, 0.10)),
-                url('fondo.jpg') center / cover no-repeat,
-                linear-gradient(135deg, #1E2A9A 0%, #5B6CF0 55%, #A99BF5 100%);
+                url('fondo-nexly.webp') center / cover no-repeat,
+                linear-gradient(120deg, #B98B62 0%, #E9CDA8 55%, #F3D9B8 100%);
         }
 
-        .login-layout {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 56px;
-            width: 100%;
-            max-width: 1100px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .login-hero {
-            flex: 0 1 400px;
-            position: relative;
-        }
-
-        .login-hero::before {
-            content: '';
+        /* Letrero "N" en la pared, como en la foto de la marca. Solo en pantallas anchas. */
+        .login-sign {
             position: absolute;
-            inset: -50px -60px -50px -90px;
-            background: radial-gradient(ellipse at center, rgba(18, 26, 110, 0.6), rgba(18, 26, 110, 0) 70%);
-            z-index: -1;
+            left: 14.5%;
+            top: 16%;
+            height: 21vh;
+            width: auto;
+            pointer-events: none;
+            filter: drop-shadow(10px 12px 10px rgba(92, 52, 22, 0.42));
         }
 
-        .login-hero h1 {
-            font-size: clamp(34px, 4vw, 52px);
-            line-height: 1.08;
-            font-weight: 800;
-            letter-spacing: -1px;
-            margin: 0 0 16px;
-            color: #fff;
-        }
-
-        .login-grad {
-            background: linear-gradient(90deg, #4FD8FF, #B08CFF);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .login-hero p {
-            font-size: 16px;
-            line-height: 1.5;
-            color: rgba(255, 255, 255, 0.88);
-            margin: 0 0 30px;
-            max-width: 340px;
-        }
-
-        .login-features {
-            display: flex;
-        }
-
-        .login-feature {
-            flex: 1;
-            text-align: center;
-            font-size: 12px;
-            line-height: 1.3;
-            color: rgba(255, 255, 255, 0.88);
-            padding: 0 10px;
-            border-left: 1px solid rgba(255, 255, 255, 0.22);
-        }
-
-        .login-feature:first-child {
-            border-left: none;
-            padding-left: 0;
-        }
-
-        .login-feature .ico {
-            width: 46px;
-            height: 46px;
-            border-radius: 50%;
-            border: 1.5px solid rgba(160, 180, 255, 0.75);
-            background: rgba(90, 110, 255, 0.25);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 8px;
-        }
+        .login-sign .star { filter: drop-shadow(0 0 10px rgba(255, 222, 160, 0.95)) drop-shadow(0 0 22px rgba(255, 200, 120, 0.7)); }
 
         .login-card {
-            flex: 0 0 400px;
-            width: 400px;
+            position: relative;
+            z-index: 1;
+            width: 560px;
             max-width: 100%;
             text-align: center;
-            padding: 34px 34px 24px;
-            border-radius: 26px;
-            color: #1E2A6B;
-            border: 1px solid rgba(255, 255, 255, 0.9);
-            background: rgba(255, 255, 255, 0.94);
-            -webkit-backdrop-filter: blur(18px);
-            backdrop-filter: blur(18px);
-            box-shadow: 0 20px 60px rgba(20, 30, 120, 0.40);
+            padding: 40px 62px 34px;
+            border-radius: 30px;
+            color: var(--lg-ink);
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            background: rgba(248, 243, 236, 0.96);
+            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 30px 80px rgba(70, 38, 14, 0.34), 0 2px 0 rgba(255, 255, 255, 0.6) inset;
         }
 
-        .login-logo {
+        .login-brand {
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-bottom: 18px;
+            margin-bottom: 30px;
         }
 
-        .login-logo .name {
-            margin-top: 6px;
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: 7px;
-            padding-left: 7px;
-            color: #1E2A6B;
+        .login-wordmark { width: 330px; max-width: 100%; height: auto; display: block; }
+
+        .login-platform {
+            margin-top: 8px;
+            font-size: 12.5px;
+            font-weight: 700;
+            letter-spacing: 6px;
+            padding-left: 6px;
+            color: var(--lg-ink);
         }
 
-        .login-logo .sub {
-            margin-top: 2px;
-            font-size: 9.5px;
-            font-weight: 600;
-            letter-spacing: 3.5px;
-            padding-left: 3.5px;
-            color: #6C7AC8;
+        .login-rule {
+            width: 312px;
+            max-width: 100%;
+            height: 1px;
+            margin: 16px 0 14px;
+            background: linear-gradient(90deg, rgba(201, 162, 113, 0), var(--lg-gold) 18%, var(--lg-gold) 82%, rgba(201, 162, 113, 0));
         }
+
+        .login-owner {
+            font-family: var(--lg-serif);
+            font-size: 22px;
+            letter-spacing: 9px;
+            padding-left: 9px;
+            color: var(--lg-ink);
+        }
+
+        .login-motto, .login-foot {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            padding-left: 4px;
+            color: var(--lg-ink-soft);
+            margin-top: 8px;
+        }
+
+        .login-motto span, .login-foot span { margin: 0 8px; }
 
         .login-card h2 {
-            font-size: 22px;
-            font-weight: 800;
-            color: #1E2A6B;
-            margin: 0 0 4px;
+            font-family: var(--lg-serif);
+            font-size: 42px;
+            font-weight: 700;
+            line-height: 1.1;
+            color: var(--lg-ink);
+            margin: 0 0 8px;
         }
 
         .login-tagline {
-            font-size: 14px;
-            color: #5C668F;
-            margin-bottom: 20px;
+            font-size: 17px;
+            color: var(--lg-ink-soft);
+            margin: 0 0 30px;
         }
 
         .login-field {
             position: relative;
-            margin-bottom: 12px;
+            margin-bottom: 15px;
         }
 
-        .login-card .login-field input {
+        .login-card .login-field input,
+        .login-card .login-field select {
             width: 100%;
-            padding: 14px 44px;
-            border: 1.5px solid #DCE2F5;
+            height: 55px;
+            padding: 0 54px;
+            border: 1px solid var(--lg-line);
             border-radius: 12px;
-            background: #fff;
-            color: #1E2A6B;
+            background: #FDFBF8;
+            color: var(--lg-ink);
             font-family: inherit;
-            font-size: 15px;
+            font-size: 16.5px;
             text-align: left;
+            box-shadow: 0 1px 2px rgba(80, 50, 30, 0.05);
         }
+
+        .login-card .login-field > input:first-child,
+        .login-card .login-field select { padding: 0 16px; }
 
         .login-card .login-field input::placeholder {
-            color: #6B7599;
+            color: #9A8A7C;
         }
 
-        .login-card .login-field input:focus {
+        .login-card .login-field input:focus,
+        .login-card .login-field select:focus {
             outline: none;
-            border-color: #6C7CF0;
-            box-shadow: 0 0 0 3px rgba(108, 124, 240, 0.18);
+            border-color: var(--lg-terra);
+            box-shadow: 0 0 0 3px rgba(181, 101, 74, 0.16);
         }
 
         .login-card .login-field input:-webkit-autofill {
-            -webkit-text-fill-color: #1E2A6B;
-            box-shadow: 0 0 0 1000px #fff inset;
+            -webkit-text-fill-color: var(--lg-ink);
+            box-shadow: 0 0 0 1000px #FDFBF8 inset;
         }
 
         .login-field .lead {
             position: absolute;
-            left: 15px;
+            left: 18px;
             top: 50%;
             transform: translateY(-50%);
             display: flex;
@@ -1037,7 +1010,7 @@
 
         .login-card .login-field .trail {
             position: absolute;
-            right: 10px;
+            right: 14px;
             top: 50%;
             transform: translateY(-50%);
             width: auto;
@@ -1052,25 +1025,27 @@
 
         .login-card .login-submit {
             width: 100%;
-            margin-top: 4px;
-            padding: 14px;
+            height: 57px;
+            margin-top: 2px;
+            padding: 0 14px;
             border: none;
             border-radius: 12px;
-            background: linear-gradient(90deg, #3B82F6, #8B5CF6);
+            background: linear-gradient(180deg, #C1714F 0%, var(--lg-terra) 50%, var(--lg-terra-dark) 100%);
             color: #fff;
-            font-size: 16px;
-            font-weight: 600;
+            font-family: var(--lg-serif);
+            font-size: 20px;
+            font-weight: 400;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 14px;
             cursor: pointer;
-            box-shadow: 0 8px 22px rgba(90, 100, 240, 0.4);
+            box-shadow: 0 10px 22px rgba(150, 72, 42, 0.34);
         }
 
         .login-card .login-submit:hover {
-            filter: brightness(1.08);
-            background: linear-gradient(90deg, #3B82F6, #8B5CF6);
+            filter: brightness(1.06);
+            background: linear-gradient(180deg, #C1714F 0%, var(--lg-terra) 50%, var(--lg-terra-dark) 100%);
         }
 
         .login-card .login-submit:disabled {
@@ -1081,78 +1056,112 @@
         .login-remember {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin: 14px 0 0;
-            font-size: 12.5px;
-            color: #5C668F;
+            gap: 12px;
+            margin: 22px 0 0;
+            font-size: 16px;
+            color: var(--lg-ink);
             cursor: pointer;
             text-align: left;
         }
 
         .login-card .login-remember input {
-            width: 16px;
-            height: 16px;
+            width: 21px;
+            height: 21px;
             margin: 0;
             padding: 0;
-            accent-color: #6C7CF0;
+            accent-color: var(--lg-terra);
+        }
+
+        .login-signup {
+            margin-top: 22px;
+            font-size: 16.5px;
+            line-height: 1.6;
+            color: var(--lg-ink);
+        }
+
+        .login-signup a {
+            color: var(--lg-link);
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            font-weight: 500;
         }
 
         .login-foot {
-            margin-top: 20px;
-            padding-top: 16px;
-            border-top: 1px solid #E4E8F7;
-            font-size: 10.5px;
-            font-weight: 600;
-            letter-spacing: 3px;
-            color: #7A84AE;
+            margin-top: 26px;
+            padding-top: 26px;
+            border-top: 1px solid var(--lg-line);
+            font-size: 11px;
+            letter-spacing: 5px;
+            padding-left: 5px;
+            color: var(--lg-muted);
         }
 
         .login-error {
-            background: #FDECEC;
-            border: 1px solid #F5B5B5;
-            color: #A63A3A;
+            background: #FBEDE8;
+            border: 1px solid #EBC1B2;
+            color: #9A3B22;
             border-radius: 10px;
             padding: 9px 12px;
             font-size: 13px;
             margin-top: 14px;
         }
 
-        .login-corner {
-            position: absolute;
-            z-index: 1;
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.82);
+        @media (max-width: 1000px) {
+            .login-sign { display: none; }
         }
 
-        .login-corner.tr { top: 26px; right: 34px; max-width: 190px; line-height: 1.4; }
-        .login-corner.bl { left: 34px; bottom: 22px; letter-spacing: 1px; }
-        .login-corner.br { right: 34px; bottom: 22px; }
-
-        @media (max-width: 980px) {
-            .login-hero, .login-corner { display: none; }
+        @media (max-height: 840px) and (min-width: 701px) {
+            .login-screen { padding: 20px 24px; }
+            .login-card { width: 500px; padding: 30px 54px 22px; }
+            .login-brand { margin-bottom: 18px; }
+            .login-wordmark { width: 280px; }
+            .login-rule { width: 270px; margin: 12px 0 10px; }
+            .login-owner { font-size: 19px; }
+            .login-card h2 { font-size: 36px; }
+            .login-tagline { font-size: 16px; margin-bottom: 20px; }
+            .login-field { margin-bottom: 12px; }
+            .login-card .login-field input, .login-card .login-field select { height: 49px; font-size: 15.5px; }
+            .login-card .login-submit { height: 51px; font-size: 18px; }
+            .login-remember, .login-signup { margin-top: 14px; font-size: 15px; }
+            .login-foot { margin-top: 16px; padding-top: 16px; font-size: 10px; }
         }
 
-        @media (max-width: 480px) {
-            .login-card { padding: 30px 22px 20px; }
+        @media (max-height: 680px) and (min-width: 701px) {
+            .login-card { padding: 22px 50px 16px; }
+            .login-brand { margin-bottom: 12px; }
+            .login-wordmark { width: 240px; }
+            .login-card h2 { font-size: 30px; margin-bottom: 4px; }
+            .login-tagline { margin-bottom: 14px; }
+            .login-card .login-field input, .login-card .login-field select { height: 45px; }
+            .login-card .login-submit { height: 47px; }
+            .login-remember, .login-signup { margin-top: 10px; }
+            .login-foot { margin-top: 12px; padding-top: 10px; }
         }
 
         @media (max-width: 700px) {
             .login-screen {
-                align-items: center;
-                min-height: 100vh;
-                min-height: 100dvh;
-                padding: 20px 14px;
+                padding: 20px 16px;
                 background:
-                    linear-gradient(rgba(20, 28, 100, 0.18), rgba(20, 28, 100, 0.30)),
-                    url('fondo-movil.jpg') center / cover no-repeat,
-                    #2A3590;
+                    url('fondo-nexly.webp') 84% center / cover no-repeat,
+                    #D9B48C;
             }
-            .login-card { padding: 22px 20px 16px; border-radius: 24px; }
-            .login-logo { margin-bottom: 10px; }
-            .login-logo svg { width: 46px; height: 46px; }
-            .login-logo .name { font-size: 24px; }
-            .login-tagline { margin-bottom: 14px; }
-            .login-foot { margin-top: 14px; padding-top: 12px; }
+            .login-card { padding: 30px 22px 20px; border-radius: 26px; }
+            .login-brand { margin-bottom: 20px; }
+            .login-wordmark { width: 240px; }
+            .login-platform { font-size: 11px; letter-spacing: 5px; padding-left: 5px; }
+            .login-rule { width: 230px; margin: 12px 0 10px; }
+            .login-owner { font-size: 18px; letter-spacing: 7px; padding-left: 7px; }
+            .login-motto { font-size: 9px; letter-spacing: 3px; padding-left: 3px; }
+            .login-card h2 { font-size: 32px; }
+            .login-tagline { font-size: 15px; margin-bottom: 20px; }
+            .login-field { margin-bottom: 12px; }
+            .login-card .login-field input, .login-card .login-field select { height: 50px; font-size: 16px; padding-left: 48px; padding-right: 48px; }
+            .login-card .login-field > input:first-child, .login-card .login-field select { padding: 0 14px; }
+            .login-card .login-submit { height: 52px; font-size: 18px; }
+            .login-remember { margin-top: 16px; font-size: 15px; }
+            .login-signup { margin-top: 16px; font-size: 15px; }
+            .login-foot { margin-top: 18px; padding-top: 16px; font-size: 9.5px; letter-spacing: 3px; padding-left: 3px; }
+            .login-foot span, .login-motto span { margin: 0 5px; }
         }
 
         /* ---------- Pantalla de empresas (plataforma) ---------- */
@@ -4035,6 +4044,49 @@
             );
         }
 
+        // Letras de NEXLY dibujadas (trazo grueso y fino, estilo editorial): se ven iguales en cualquier celular, sin fuentes externas.
+        const NEXLY_LETTERS = [
+            { dx: 0, paths: ['M0 0h4.5v100H0z', 'M0 0h16.5l62 100H61.5z', 'M74 0h4.5v100H74z'] },
+            { dx: 8, paths: ['M102.5 0h16v100h-16z', 'M102.5 0H152v4.5h-49.5z', 'M102.5 47.75H147v4.5h-44.5z', 'M102.5 95.5H153v4.5h-50.5z'] },
+            { dx: 16, paths: ['M177 0h17l57 100h-17z', 'M246.5 0h4.5l-69.5 100H177z'] },
+            { dx: 24, paths: ['M275 0h16v100h-16z', 'M275 95.5h51v4.5h-51z'] },
+            { dx: 32, paths: ['M348 0h17l29.5 52h-16z', 'M420.5 0h4.5l-35 53h-4.5z', 'M378.5 50h16v50h-16z'] }
+        ];
+        // La "N" del letrero de la pared lleva los trazos más gruesos para que se lea de lejos.
+        const SIGN_N = ['M0 0h9v100H0z', 'M0 0h20l58.5 100h-20z', 'M69.5 0h9v100h-9z'];
+        const SPARKLE = 'M0 -30C2.6 -7 5 -3.8 22 0C5 3.8 2.6 7 0 30C-2.6 7 -5 3.8 -22 0C-5 -3.8 -2.6 -7 0 -30Z';
+
+        function NexlyWordmark() {
+            return (
+                <svg className="login-wordmark" viewBox="-44 -40 545 142" role="img" aria-label="Nexly">
+                    <defs>
+                        <linearGradient id="nx-spark" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stopColor="#E8C690" />
+                            <stop offset="1" stopColor="#B48449" />
+                        </linearGradient>
+                    </defs>
+                    <g fill="#2B1C14">{NEXLY_LETTERS.map(l => <g key={l.dx} transform={'translate(' + l.dx + ' 0)'}>{l.paths.map(d => <path key={d} d={d} />)}</g>)}</g>
+                    <path d={SPARKLE} transform="translate(479 -10)" fill="url(#nx-spark)" />
+                </svg>
+            );
+        }
+
+        function NexlySign() {
+            return (
+                <svg className="login-sign" viewBox="-4 -44 136 148" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="nx-sign" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stopColor="#5A4030" />
+                            <stop offset="0.55" stopColor="#3A281C" />
+                            <stop offset="1" stopColor="#24170F" />
+                        </linearGradient>
+                    </defs>
+                    <g fill="url(#nx-sign)">{SIGN_N.map(d => <path key={d} d={d} />)}</g>
+                    <path className="star" d={SPARKLE} transform="translate(106 -12)" fill="#FFF1D2" />
+                </svg>
+            );
+        }
+
         function LoginScreen({ onLogin, branding }) {
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
@@ -4099,72 +4151,50 @@
                 }
             }
 
-            const ico = { fill: 'none', stroke: '#fff', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
-            const icoBlue = { ...ico, stroke: '#6C7CF0' };
+            const icoInk = { fill: 'none', stroke: '#6B5849', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' };
 
             return (
                 <div className="login-screen">
-                    <div className="login-corner tr">Grandes relaciones crean grandes negocios</div>
-                    <div className="login-corner bl">NEXLY &nbsp;|&nbsp; CRM · IA · VENTAS · SIN LÍMITES</div>
-                    <div className="login-corner br">El futuro de tus ventas, hoy</div>
+                    <NexlySign />
 
-                    <div className="login-layout">
-                        <div className="login-hero">
-                            <h1>Convierte conversaciones en <span className="login-grad">crecimiento</span></h1>
-                            <p>Un solo lugar para atender, automatizar y hacer crecer tu negocio con IA.</p>
-                            <div className="login-features">
-                                <div className="login-feature">
-                                    <div className="ico"><svg width="22" height="22" viewBox="0 0 24 24" {...ico}><path d="M21 12a8 8 0 0 1-11.8 7L4 20.5l1.5-4.6A8 8 0 1 1 21 12z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" /></svg></div>
-                                    Más clientes<br />a tu alcance
-                                </div>
-                                <div className="login-feature">
-                                    <div className="ico"><svg width="22" height="22" viewBox="0 0 24 24" {...ico}><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" /></svg></div>
-                                    Automatiza<br />procesos
-                                </div>
-                                <div className="login-feature">
-                                    <div className="ico"><svg width="22" height="22" viewBox="0 0 24 24" {...ico}><path d="M6 20v-6M12 20V6M18 20v-10" /></svg></div>
-                                    Resultados<br />reales
-                                </div>
-                            </div>
+                    <div className="login-card">
+                        <div className="login-brand">
+                            <NexlyWordmark />
+                            <div className="login-platform">AI BUSINESS PLATFORM</div>
+                            <div className="login-rule" />
+                            <div className="login-owner">VELAMIA</div>
+                            <div className="login-motto">AUTOMATIZA<span>•</span>VENDE<span>•</span>CRECE</div>
                         </div>
+                        <h2>{signup ? 'Crea tu cuenta' : 'Bienvenido'}</h2>
+                        <p className="login-tagline">{signup ? 'Empieza en minutos, sin instalar nada' : 'Inicia sesión para continuar en tu CRM'}</p>
 
-                        <div className="login-card">
-                            <div className="login-logo">
-                                <NexlyMark size={60} id="nx-login" />
-                                <div className="name">NEXLY</div>
-                                <div className="sub">AI BUSINESS PLATFORM</div>
-                            </div>
-                            <h2>{signup ? 'Crea tu cuenta' : 'Bienvenido'}</h2>
-                            <p className="login-tagline">{signup ? 'Empieza en minutos, sin instalar nada' : 'Inicia sesión para continuar'}</p>
-
-                            {signup && (
-                                <React.Fragment>
-                                    <div className="login-field"><input type="text" placeholder="Código de registro (lo recibes al pagar tu mensualidad)" autoCapitalize="characters" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} autoFocus /></div>
-                                    <div className="login-field"><input type="text" placeholder="Nombre de tu negocio" value={form.businessName} onChange={e => setForm({ ...form, businessName: e.target.value })} /></div>
-                                    <div className="login-field"><input type="text" placeholder="Tu nombre" autoComplete="name" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} /></div>
-                                    <div className="login-field"><input type="email" placeholder="Tu correo" autoComplete="email" autoCapitalize="none" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
-                                    <div className="login-field"><input type="password" placeholder="Contraseña (mínimo 8 caracteres)" autoComplete="new-password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} onKeyDown={e => e.key === 'Enter' && createAccount()} /></div>
-                                    <div className="login-field">
-                                        <select value={form.preset} onChange={e => setForm({ ...form, preset: e.target.value })} style={{ width: '100%', background: 'transparent', border: 0, fontSize: '15px', padding: '12px' }}>
-                                            <option value="tienda">Vendo productos por unidad (tienda)</option>
-                                            <option value="eventos">Vendo detalles para eventos (por docena)</option>
-                                        </select>
-                                    </div>
-                                    <input type="text" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={{ position: 'absolute', left: '-9999px', opacity: 0, height: 0 }} aria-hidden="true" />
-                                    <button className="login-submit" onClick={createAccount} disabled={checking}>{checking ? 'Creando tu cuenta...' : 'Crear mi cuenta'}</button>
-                                    {error && <div className="login-error">{error}</div>}
-                                    <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '14px' }}>
-                                        ¿Ya tienes cuenta? <a href="#" onClick={e => { e.preventDefault(); setSignup(false); setError(''); }}>Inicia sesión</a>
-                                    </div>
-                                </React.Fragment>
-                            )}
-                            <div style={signup ? { display: 'none' } : undefined}>
-
+                        {signup && (
+                            <React.Fragment>
+                                <div className="login-field"><input type="text" placeholder="Código de registro (lo recibes al pagar)" autoCapitalize="characters" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} autoFocus /></div>
+                                <div className="login-field"><input type="text" placeholder="Nombre de tu negocio" value={form.businessName} onChange={e => setForm({ ...form, businessName: e.target.value })} /></div>
+                                <div className="login-field"><input type="text" placeholder="Tu nombre" autoComplete="name" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} /></div>
+                                <div className="login-field"><input type="email" placeholder="Tu correo" autoComplete="email" autoCapitalize="none" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+                                <div className="login-field"><input type="password" placeholder="Contraseña (mínimo 8 caracteres)" autoComplete="new-password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} onKeyDown={e => e.key === 'Enter' && createAccount()} /></div>
+                                <div className="login-field">
+                                    <select value={form.preset} onChange={e => setForm({ ...form, preset: e.target.value })}>
+                                        <option value="tienda">Vendo productos por unidad (tienda)</option>
+                                        <option value="eventos">Vendo detalles para eventos (por docena)</option>
+                                    </select>
+                                </div>
+                                <input type="text" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} style={{ position: 'absolute', left: '-9999px', opacity: 0, height: 0 }} aria-hidden="true" />
+                                <button className="login-submit" onClick={createAccount} disabled={checking}>{checking ? 'Creando tu cuenta...' : 'Crear mi cuenta'}</button>
+                                {error && <div className="login-error">{error}</div>}
+                                <div className="login-signup">
+                                    ¿Ya tienes cuenta? <a href="#" onClick={e => { e.preventDefault(); setSignup(false); setError(''); }}>Inicia sesión</a>
+                                </div>
+                            </React.Fragment>
+                        )}
+                        <div style={signup ? { display: 'none' } : undefined}>
                             <div className="login-field">
-                                <span className="lead"><svg width="20" height="20" viewBox="0 0 24 24" {...icoBlue}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></svg></span>
+                                <span className="lead"><svg width="20" height="20" viewBox="0 0 24 24" {...icoInk}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></svg></span>
                                 <input
                                     type="text"
-                                    placeholder="Usuario (correo)"
+                                    placeholder="usuario@velamia.ec"
                                     autoComplete="username"
                                     autoCapitalize="none"
                                     value={username}
@@ -4174,7 +4204,7 @@
                                 />
                             </div>
                             <div className="login-field">
-                                <span className="lead"><svg width="20" height="20" viewBox="0 0 24 24" {...icoBlue}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
+                                <span className="lead"><svg width="20" height="20" viewBox="0 0 24 24" {...icoInk}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /><path d="M12 15v1.5" /></svg></span>
                                 <input
                                     type={showPassword ? 'text' : 'password'}
                                     placeholder="Contraseña"
@@ -4184,7 +4214,7 @@
                                     onKeyDown={e => e.key === 'Enter' && submit()}
                                 />
                                 <button type="button" className="trail" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" {...icoBlue}>
+                                    <svg width="22" height="22" viewBox="0 0 24 24" {...icoInk}>
                                         <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
                                         <circle cx="12" cy="12" r="3" />
                                         {showPassword && <path d="M4 4l16 16" />}
@@ -4194,19 +4224,19 @@
 
                             <button className="login-submit" onClick={submit} disabled={checking}>
                                 {checking ? 'Entrando...' : 'Entrar al CRM'}
-                                {!checking && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16M14 6l6 6-6 6" /></svg>}
+                                {!checking && <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16M14 6l6 6-6 6" /></svg>}
                             </button>
                             <label className="login-remember">
                                 <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
                                 Recordarme
                             </label>
                             {error && <div className="login-error">{error}</div>}
-                            <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '14px' }}>
-                                ¿Ya pagaste tu mensualidad? <a href="#" onClick={e => { e.preventDefault(); setSignup(true); setError(''); }}>Crea tu cuenta con tu código</a>
+                            <div className="login-signup">
+                                ¿Ya pagaste tu mensualidad?<br />
+                                <a href="#" onClick={e => { e.preventDefault(); setSignup(true); setError(''); }}>Crea tu cuenta con tu código</a>
                             </div>
-                            </div>
-                            <div className="login-foot">AUTOMATIZA &nbsp;•&nbsp; VENDE &nbsp;•&nbsp; CRECE</div>
                         </div>
+                        <div className="login-foot">AUTOMATIZA<span>•</span>VENDE<span>•</span>CRECE</div>
                     </div>
                 </div>
             );
