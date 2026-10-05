@@ -107,3 +107,14 @@ export async function voiceStatus() {
     return { configured: true, enabled, voiceName: '', problem: describeVoiceError(error) };
   }
 }
+
+let healthCache: { at: number; text: string } | null = null;
+
+/** Estado corto para /health (público): solo si funciona o qué falta, sin claves ni nombres. Se guarda 30 minutos. */
+export async function voiceHealth(): Promise<string> {
+  if (healthCache && Date.now() - healthCache.at < 30 * 60 * 1000) return healthCache.text;
+  const s = await voiceStatus();
+  const text = !s.configured ? 'falta configurar en Render' : s.problem ? `con problema: ${s.problem}` : s.enabled ? 'conectada' : 'conectada, apagada en el CRM';
+  healthCache = { at: Date.now(), text };
+  return text;
+}

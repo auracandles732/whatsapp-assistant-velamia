@@ -90,8 +90,16 @@ const MAX_EPISODES_PER_RUN = 10;
 const MAX_LESSONS = 400;
 const REVIEW_EVERY_MS = 60 * 60 * 1000;
 const CHECK_EVERY_MS = 15 * 60 * 1000;
-/** El reporte del día anterior sale desde esta hora (la dueña lo ve en la mañana). */
+/** El reporte del día anterior se arma desde esta hora. */
 const REPORT_HOUR = 6;
+/**
+ * Los avisos a la dueña salen solo de día (antes llegaban también de noche, cuando un reintento terminaba tarde). Lo
+ * que se arma de noche espera a la mañana.
+ */
+const TELL_FROM_HOUR = 8;
+const TELL_UNTIL_HOUR = 20;
+/** Lo que ya se le avisó a la dueña (reportes por día y aprendizajes por id): cada cosa se avisa una sola vez. */
+const TOLD_KEY = 'supervisor_told';
 const REPORT_CHATS = 40;
 const CHATS_PER_CALL = 6;
 
@@ -717,7 +725,8 @@ async function newLessonMessages(): Promise<StaffMessage[]> {
 registerStaffTopic('sv:lessons', () => newLessonMessages());
 registerStaffTopic('sv:report:', async topic => {
   const report = await getReport(topic.slice('sv:report:'.length));
-  if (!report) return [];
+  // Un reporte sin nada que hacer (guardado antes de este cambio) ya no se manda: solo los aprendizajes nuevos.
+  if (!report || !reportWorthTelling(report)) return newLessonMessages();
   const pending = (await listLessons()).filter(l => l.status === 'pending').length;
   return [{ kind: 'text', text: reportText(report, pending) }, ...(await newLessonMessages())];
 });
@@ -737,6 +746,49 @@ registerStaffReplies(async inbound => {
   return true;
 });
 
+/**
+ * ¿Vale la pena escribirle a la dueña por este reporte? Solo si hay algo que hacer: clientes que quedaron sin respuesta
+ * o problemas que encontró la revisión. Un día sin clientes (o sin nada raro) no se avisa: queda en el CRM. Antes llegaba
+ * todos los días, aunque fuera "0 chats", y cada aviso fuera de las 24 horas es una plantilla que se cobra.
+ */
+export function reportWorthTelling(r: DayReport): boolean {
+  return r.metrics.chats > 0 && (r.metrics.unanswered.length > 0 || r.problems.length > 0);
+}
+
+/** ¿Es hora de escribirle a la dueña? (de día, en la hora del negocio). */
+export function tellingHours(now: Date, tz: string): boolean {
+  const hour = localParts(now, tz).hour;
+  return hour >= TELL_FROM_HOUR && hour < TELL_UNTIL_HOUR;
+}
+
+/**
+ * Le avisa a la dueña, de día y una sola vez, lo que vale la pena: el reporte de ayer si trae algo que hacer (con los
+ * aprendizajes nuevos) o, si no, solo los aprendizajes nuevos por aprobar.
+ */
+async function tellWhatMatters(now: Date) {
+  const tz = profile().business.timezone;
+  if (!tellingHours(now, tz)) return;
+  const told = await readJson<{ reports: string[]; lessons: string[] }>(TOLD_KEY, { reports: [], lessons: [] });
+  const pending = (await listLessons()).filter(l => l.status === 'pending');
+  const sent = new Set<string>(await readJson<string[]>(NOTIFIED_KEY, []));
+  const newLessons = pending.filter(l => !sent.has(l.id) && !told.lessons.includes(l.id));
+  const yesterday = localDayOf(new Date(now.getTime() - DAY_MS), tz);
+  const report = told.reports.includes(yesterday) ? null : await getReport(yesterday);
+  const tellReport = !!report && reportWorthTelling(report);
+  if (!tellReport && newLessons.length === 0) return;
+  if (tellReport) {
+    const m = report!.metrics;
+    await tellOwner(`sv:report:${yesterday}`, '📊 Tu reporte del día está listo', `${m.chats} chats · ${m.unanswered.length} sin respuesta · ${report!.problems.length} cosas por mejorar`);
+  } else {
+    await tellOwner('sv:lessons', '🧠 El supervisor tiene aprendizajes para aprobar', `${newLessons.length} nuevo(s) de los chats que atendiste`);
+  }
+  const stillPending = new Set(pending.map(l => l.id));
+  await setConfig(TOLD_KEY, JSON.stringify({
+    reports: [...new Set([...(tellReport ? [yesterday] : []), ...told.reports])].slice(0, 30),
+    lessons: [...told.lessons.filter(id => stillPending.has(id)), ...newLessons.map(l => l.id)]
+  }));
+}
+
 async function tellOwner(topic: string, title: string, detail: string) {
   const phone = await ownerPhone();
   if (!phone) return;
@@ -755,24 +807,21 @@ async function tickForCurrent(now: Date) {
       if (!(error instanceof BudgetReached)) console.error('❌ Supervisor (aprendizajes):', error.message);
       return null;
     });
-    if (result?.created) {
-      console.log(`🧑‍🏫 Supervisor: ${result.created} aprendizaje(s) nuevo(s) por aprobar`);
-      await tellOwner('sv:lessons', '🧠 El supervisor tiene aprendizajes para aprobar', `${result.created} nuevo(s) de los chats que atendiste`);
-    }
+    if (result?.created) console.log(`🧑‍🏫 Supervisor: ${result.created} aprendizaje(s) nuevo(s) por aprobar`);
   }
   const tz = profile().business.timezone;
-  if (localParts(now, tz).hour < REPORT_HOUR) return;
-  const yesterday = localDayOf(new Date(now.getTime() - DAY_MS), tz);
-  const existing = await getReport(yesterday);
-  // Si la IA falló (sin saldo), se reintenta cada 3 horas, hasta 4 veces.
-  const retry = existing?.aiError && existing.attempts < 4 && now.getTime() - new Date(existing.createdAt).getTime() >= 3 * 60 * 60 * 1000;
-  if (existing && !retry) return;
-  const report = await buildDayReport(yesterday, now);
-  console.log(`🧑‍🏫 Supervisor: reporte del ${yesterday} listo (${report.metrics.chats} chats, ${report.problems.length} problemas)`);
-  // Se avisa la primera vez y cuando un reintento por fin pudo revisar con IA.
-  if (!retry || !report.aiError) {
-    await tellOwner(`sv:report:${yesterday}`, '📊 Tu reporte del día está listo', `${report.metrics.chats} chats · ${report.metrics.unanswered.length} sin respuesta · ${report.problems.length} cosas por mejorar`);
+  if (localParts(now, tz).hour >= REPORT_HOUR) {
+    const yesterday = localDayOf(new Date(now.getTime() - DAY_MS), tz);
+    const existing = await getReport(yesterday);
+    // Si la IA falló (sin saldo), se reintenta cada 3 horas, hasta 4 veces.
+    const retry = existing?.aiError && existing.attempts < 4 && now.getTime() - new Date(existing.createdAt).getTime() >= 3 * 60 * 60 * 1000;
+    if (!existing || retry) {
+      const report = await buildDayReport(yesterday, now);
+      console.log(`🧑‍🏫 Supervisor: reporte del ${yesterday} listo (${report.metrics.chats} chats, ${report.problems.length} problemas)`);
+    }
   }
+  // Los mensajes a la dueña van aparte: de día, una vez y solo si hay algo que hacer.
+  await tellWhatMatters(now);
 }
 
 let running = false;

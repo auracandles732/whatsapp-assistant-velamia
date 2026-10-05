@@ -202,7 +202,7 @@ export async function runFollowUps(now: Date = new Date()): Promise<{ sent: numb
 }
 
 async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skipped?: string }> {
-  const { enabled, steps, stepsNoQuote, requireInterest, fromHour, untilHour } = profile().followUps;
+  const { enabled, steps, stepsNoQuote, audience, fromHour, untilHour } = profile().followUps;
   if (!enabled || (steps.length === 0 && stepsNoQuote.length === 0)) return { sent: 0, skipped: 'seguimientos desactivados en el perfil' };
   const hour = hourLocal(now);
   if (hour < fromHour || hour >= untilHour) return { sent: 0, skipped: 'fuera de horario' };
@@ -228,11 +228,13 @@ async function runFollowUpsForCurrent(now: Date): Promise<{ sent: number; skippe
       .sort((a, b) => a.at.getTime() - b.at.getTime());
 
     const hasQuotation = activity.withQuotation.has(conv.id);
+    // Sin cotización no se insiste (salvo que la empresa elija escribir también a quien mostró interés).
+    if (!hasQuotation && audience === 'quotation') continue;
     const due = dueFollowUps(lastCustomerAt, sentSinceLast, now, followUpStepsFor(hasQuotation));
     if (due.length === 0) continue;
 
-    // Solo a quien de verdad quiere algo: con cotización, o que dijo más que el saludo del anuncio.
-    if (requireInterest && !hasQuotation && !(await showedInterest(conv.id))) continue;
+    // Quien solo saludó (o mandó el texto automático del anuncio) nunca recibe seguimientos.
+    if (!hasQuotation && !(await showedInterest(conv.id))) continue;
 
     // La primera plantilla que tenga sentido con lo que ya pasó en el chat; las que no aplican se saltan.
     const context = followUpContext(await getConversationHistory(conv.id, 80), hasQuotation);
@@ -268,8 +270,8 @@ export function startFollowUpScheduler() {
 
   setTimeout(tick, 60 * 1000);
   setInterval(tick, CHECK_EVERY_MS);
-  const { enabled, steps, fromHour, untilHour } = profile().followUps;
+  const { enabled, steps, fromHour, untilHour, audience } = profile().followUps;
   console.log(enabled && steps.length
-    ? `📩 Seguimientos automáticos activos (días ${steps.map(step => step.days).join(', ')} · ${fromHour}:00-${untilHour}:00)`
+    ? `📩 Seguimientos automáticos activos (días ${steps.map(step => step.days).join(', ')} · ${fromHour}:00-${untilHour}:00 · ${audience === 'quotation' ? 'solo con cotización' : 'con cotización o interés'})`
     : '📩 Seguimientos automáticos desactivados en el perfil del negocio');
 }

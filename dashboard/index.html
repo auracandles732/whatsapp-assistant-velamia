@@ -5589,8 +5589,17 @@
                     <CfgCard id="seguimientos" icon="bell" title="Seguimientos automáticos" subtitle="Mensajes a clientes que dejaron de responder">
                         <div className="profile-grid">
                             {check('followUps.enabled', 'Enviar seguimientos a clientas que no responden')}
-                            {form.followUps.enabled && check('followUps.requireInterest', 'Solo a quien mostró interés (no a quien solo saludó)')}
+                            {form.followUps.enabled && (
+                                <div className="form-field wide">
+                                    <label>¿A quién se le envían?</label>
+                                    <select value={form.followUps.audience === 'interest' ? 'interest' : 'quotation'} onChange={e => set('followUps.audience', e.target.value)}>
+                                        <option value="quotation">Solo a quien recibió una cotización (recomendado)</option>
+                                        <option value="interest">También a quien preguntó algo concreto, aunque no tenga cotización</option>
+                                    </select>
+                                </div>
+                            )}
                         </div>
+                        {form.followUps.enabled && <p className="hint">{form.followUps.audience === 'interest' ? 'Quien solo saludó nunca recibe seguimientos.' : 'Quien solo saludó o preguntó algo sin llegar a una cotización no recibe seguimientos: así no se gastan mensajes ni se cansa a nadie.'}</p>}
                         {form.followUps.enabled && (
                             <>
                                 <p className="hint">Cada seguimiento es una plantilla aprobada en Meta y se envía tras esos días sin respuesta.</p>
@@ -5604,6 +5613,7 @@
                                 ))}
                                 <button type="button" className="btn-link" onClick={() => set('followUps.steps', [...steps, { template: '', days: (steps[steps.length - 1]?.days || 0) + 1 }])}>+ Agregar seguimiento</button>
 
+                                {form.followUps.audience === 'interest' && <>
                                 <h4 className="nx-sub">Para chats que nunca recibieron una cotización</h4>
                                 <p className="hint">Quien solo saludó o vio fotos no debe recibir plantillas que hablen de "la cotización" o de su pedido. Aquí eliges las plantillas neutras para esos chats. Si lo dejas vacío, todos reciben la lista de arriba.</p>
                                 {(form.followUps.stepsNoQuote || []).map((step, i) => (
@@ -5615,6 +5625,7 @@
                                     </div>
                                 ))}
                                 <button type="button" className="btn-link" onClick={() => set('followUps.stepsNoQuote', [...(form.followUps.stepsNoQuote || []), { template: '', days: ((form.followUps.stepsNoQuote || []).slice(-1)[0]?.days || 0) + 1 }])}>+ Agregar seguimiento sin cotización</button>
+                                </>}
                                 <div className="profile-grid" style={{ marginTop: '10px' }}>
                                     {number('followUps.fromHour', 'Desde la hora (0-23)')}
                                     {number('followUps.untilHour', 'Hasta la hora (1-24)')}

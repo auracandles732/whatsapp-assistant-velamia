@@ -70,7 +70,7 @@ import { currentTenant, decryptSecret, runWithTenant, hasAddon } from './service
 import { socialRouter, startSocialAgent } from './social';
 import { metricsReport } from './social/insights';
 import { currentAiProblem } from './services/aiStatus';
-import { voiceStatus, setVoiceNotesEnabled, voiceNotesEnabled, textToMp3, textToVoice, speechToVoice, describeVoiceError } from './services/elevenlabs';
+import { voiceStatus, voiceHealth, setVoiceNotesEnabled, voiceNotesEnabled, textToMp3, textToVoice, speechToVoice, describeVoiceError } from './services/elevenlabs';
 import { privacyPolicyHtml, salesTermsHtml } from './services/legalPages';
 import { audit, listAudit } from './services/audit';
 import { startRetention } from './services/retention';
@@ -475,6 +475,8 @@ app.get('/health', async (_req: Request, res: Response) => {
     followups: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? 'activo' : 'falta WHATSAPP_BUSINESS_ACCOUNT_ID',
     // Público: solo el estado. Permisos, cuenta y vencimiento se ven en el CRM (/api/meta/status, con sesión).
     instagram_messenger: (await socialStatus().catch(() => ({ estado: 'no se pudo revisar' }))).estado,
+    // Notas de voz con ElevenLabs (solo el estado; se revisa cada 30 minutos).
+    notas_de_voz: await voiceHealth().catch(() => 'no se pudo revisar'),
     // Cuántos avisos mandó Meta por canal desde que arrancó el servidor: solo cantidades y horas.
     avisos_meta: webhookTrace()
   });

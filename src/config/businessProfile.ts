@@ -5,6 +5,8 @@ import { currentTenant } from '../services/tenant';
  */
 export type ShippingMode = 'ecuador_table' | 'flat' | 'none';
 
+/** A quién le llegan los seguimientos: solo con cotización, o también a quien mostró interés sin cotización. */
+export type FollowUpAudience = 'quotation' | 'interest';
 export interface FollowUpStep {
   template: string;
   days: number;
@@ -89,10 +91,11 @@ export interface BusinessProfile {
      */
     stepsNoQuote: FollowUpStep[];
     /**
-     * true = solo se le escribe a quien mostró interés real: recibió una cotización o dijo algo más que el saludo
-     * automático del anuncio. Quien solo saludó no recibe seguimientos.
+     * A quién se le escribe. 'quotation' (por defecto) = solo a quien recibió una cotización: lo demás era insistirle a
+     * gente que apenas saludó o preguntó "¿de dónde son?" (caso real de VELAMIA: 53 seguimientos en 14 días a 26 chats,
+     * ninguno con cotización). 'interest' = también a quien dijo algo más que el saludo del anuncio.
      */
-    requireInterest: boolean;
+    audience: FollowUpAudience;
     fromHour: number;
     untilHour: number;
     optOutMessage: string;
@@ -214,7 +217,7 @@ export const VELAMIA_PROFILE: BusinessProfile = {
       { template: 'velamia_seguimiento_05_v2', days: 14 }
     ],
     stepsNoQuote: [],
-    requireInterest: false,
+    audience: 'quotation',
     fromHour: 9,
     untilHour: 19,
     optOutMessage: 'Listo 🤍 No te enviaré más mensajes de seguimiento. Si más adelante necesitas velitas para tu evento, aquí estaré ✨'
@@ -288,7 +291,7 @@ export const STORE_PROFILE: BusinessProfile = {
     enabled: false,
     steps: [],
     stepsNoQuote: [],
-    requireInterest: false,
+    audience: 'quotation',
     fromHour: 9,
     untilHour: 19,
     optOutMessage: 'Listo 😊 No te enviaré más mensajes de seguimiento. Si más adelante necesitas algo, aquí estaré.'
@@ -425,7 +428,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       enabled: bool(f.enabled, base.followUps.enabled),
       steps,
       stepsNoQuote,
-      requireInterest: bool(f.requireInterest, base.followUps.requireInterest === true),
+      // Lo guardado antes ("requireInterest") ya no manda: quien no lo cambió a propósito queda en "solo con cotización".
+      audience: f.audience === 'interest' ? 'interest' : 'quotation',
       fromHour,
       untilHour: Math.max(fromHour + 1, num(f.untilHour, base.followUps.untilHour, 1, 24)),
       optOutMessage: text(f.optOutMessage, base.followUps.optOutMessage, 500) || base.followUps.optOutMessage

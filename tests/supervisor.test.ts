@@ -7,7 +7,8 @@ import './entorno';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  relevantLessons, lessonsContext, newLessonsFrom, sameSituation, cleanLessonText, transcript, dayMetrics, plainWords, Lesson
+  relevantLessons, lessonsContext, newLessonsFrom, sameSituation, cleanLessonText, transcript, dayMetrics, plainWords, Lesson,
+  reportWorthTelling, tellingHours, DayReport
 } from '../src/services/supervisor';
 
 const lesson = (situation: string, answer: string, extra: Partial<Lesson> = {}): Lesson => ({
@@ -105,4 +106,25 @@ test('los números del día salen sin IA: chats, sin respuesta, avisos, cotizaci
   assert.deepEqual(metrics.handoffs, { owner_question: 1 });
   assert.equal(metrics.orders, 1);
   assert.equal(metrics.quotations, 1);
+});
+
+const reporte = (chats: number, unanswered: number, problems: number): DayReport => ({
+  day: '2026-10-04', createdAt: '2026-10-05T11:00:00Z', summary: '', recommendations: ['Responder más rápido'], lessonsCreated: 0, reviewedChats: chats, aiError: null, attempts: 1,
+  metrics: { chats, newChats: 0, customerMessages: chats, teamChats: 0, unanswered: Array.from({ length: unanswered }, (_, i) => ({ conversationId: String(i), customer: 'C' + i })), handoffs: {}, quotations: 0, orders: 0 } as any,
+  problems: Array.from({ length: problems }, (_, i) => ({ conversationId: String(i), customer: 'C' + i, type: 'error', detail: 'x', suggestion: 'y' })) as any
+});
+
+test('el reporte solo se avisa por WhatsApp si hay algo que hacer (antes llegaba aunque fueran 0 chats)', () => {
+  assert.equal(reportWorthTelling(reporte(0, 0, 0)), false, 'sin clientes no se escribe');
+  assert.equal(reportWorthTelling(reporte(3, 0, 0)), false, 'chats normales, solo consejos generales: queda en el CRM');
+  assert.equal(reportWorthTelling(reporte(3, 1, 0)), true, 'un cliente quedó sin respuesta');
+  assert.equal(reportWorthTelling(reporte(3, 0, 2)), true, 'la revisión encontró problemas');
+});
+
+test('a la dueña se le escribe solo de día (8:00 a 20:00 en la hora del negocio)', () => {
+  const TZ = 'America/Guayaquil';
+  assert.equal(tellingHours(new Date('2026-10-05T03:04:00Z'), TZ), false, '22:04 en Guayaquil');
+  assert.equal(tellingHours(new Date('2026-10-05T11:04:00Z'), TZ), false, '06:04 en Guayaquil');
+  assert.equal(tellingHours(new Date('2026-10-05T13:30:00Z'), TZ), true, '08:30 en Guayaquil');
+  assert.equal(tellingHours(new Date('2026-10-06T01:30:00Z'), TZ), false, '20:30 en Guayaquil');
 });

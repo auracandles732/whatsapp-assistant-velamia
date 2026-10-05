@@ -39,7 +39,7 @@ const conLista = normalizeProfile({
     enabled: true,
     steps: [{ template: 'seg_cotizacion', days: 1 }, { template: 'seg_pedido', days: 3 }],
     stepsNoQuote: [{ template: 'seg_neutra', days: 2 }],
-    requireInterest: true
+    audience: 'interest'
   }
 });
 
@@ -51,7 +51,7 @@ test('con cotización se usa la lista completa; sin cotización, la neutra', () 
 test('un negocio sin lista propia sigue usando la misma para todos', () => {
   const sinLista = normalizeProfile({ ...PROFILE_PRESETS.eventos.profile, followUps: { ...PROFILE_PRESETS.eventos.profile.followUps, stepsNoQuote: [] } });
   assert.deepEqual(followUpStepsFor(false, sinLista), sinLista.followUps.steps);
-  assert.equal(sinLista.followUps.requireInterest, false);
+  assert.equal(sinLista.followUps.audience, 'quotation', 'por defecto, solo a quien recibió una cotización');
 });
 
 test('la lista sin cotización se guarda ordenada y se descartan plantillas inválidas', () => {
