@@ -41,9 +41,28 @@ async function waitUntilReady(containerId: string, token: string, waitMs: number
   throw new Error('Instagram tardó demasiado en procesar el archivo');
 }
 
+/**
+ * Instagram a veces responde "Media ID is not available" aunque el archivo ya figura listo (lo terminó de procesar hace
+ * un instante): sale si se espera unos segundos. Caso real: la historia de VELAMIA del 5-oct no salió en Instagram.
+ */
+export const notReadyYet = (error: any) => {
+  const e = error?.response?.data?.error || {};
+  return e.code === 9007 || e.error_subcode === 2207027 || /media id is not available|not ready to be published/i.test(String(e.message || ''));
+};
+const PUBLISH_TRIES = 5;
+
 async function publishContainer(conn: PublishingConnection, containerId: string, waitMs: number, checks = READY_CHECKS): Promise<ChannelResult> {
   await waitUntilReady(containerId, conn.pageToken, waitMs, checks);
-  const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media_publish`, { creation_id: containerId }, { params: { access_token: conn.pageToken } });
+  let data: any;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      ({ data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media_publish`, { creation_id: containerId }, { params: { access_token: conn.pageToken } }));
+      break;
+    } catch (error: any) {
+      if (attempt >= PUBLISH_TRIES || !notReadyYet(error)) throw error;
+      await wait(waitMs * 2 * attempt);
+    }
+  }
   const id = String(data?.id || '');
   const permalink = await graph.get(`${GRAPH_API}/${id}`, { params: { fields: 'permalink', access_token: conn.pageToken } })
     .then(r => String(r.data?.permalink || '')).catch(() => '');
@@ -82,11 +101,13 @@ async function instagramFeed(conn: PublishingConnection, post: SocialPost, { wai
 }
 
 /**
- * Historias de Instagram: cada foto o video sale como una historia, en orden (armadas en 9:16). Si una falla después de
- * que otras salieron, se deja como publicada (reintentarla repetiría las que ya salieron) y se anota en el registro.
+ * Historias de Instagram: cada foto o video sale como una historia, en orden (armadas en 9:16). Si una falla, se sigue con
+ * las demás (antes, si fallaba la primera, no salía ninguna); si salió al menos una se deja como publicada (reintentarla
+ * repetiría las que ya salieron) y se anota en el registro.
  */
 async function instagramStory(conn: PublishingConnection, post: SocialPost, { waitMs, prepareImage }: PublishOptions): Promise<ChannelResult> {
   let first: ChannelResult | null = null;
+  let firstError: any = null;
   const items = mediaOf(post);
   for (const [i, item] of items.entries()) {
     try {
@@ -97,11 +118,12 @@ async function instagramStory(conn: PublishingConnection, post: SocialPost, { wa
       const done = await publishContainer(conn, String(data.id), waitMs, item.type === 'video' ? VIDEO_CHECKS : READY_CHECKS);
       first = first || done;
     } catch (error: any) {
-      if (!first) throw error;
+      firstError = firstError || error;
       console.warn(`⚠️ Historia ${i + 1} de ${items.length} no salió: ${metaError(error)}`);
     }
   }
-  return first!;
+  if (!first) throw firstError || new Error('No salió ninguna historia');
+  return first;
 }
 
 /**

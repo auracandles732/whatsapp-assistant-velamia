@@ -13,6 +13,9 @@ import jpeg from 'jpeg-js';
 // Meta simulado: se instala antes de cargar los módulos que crean su cliente HTTP.
 const calls: { method: string; url: string; body?: any }[] = [];
 let counter = 0;
+// Errores que devuelve Meta al publicar en Instagram, en orden (para probar los reintentos).
+const publishErrors: any[] = [];
+const metaFail = (code: number, message: string, error_subcode?: number) => Object.assign(new Error(message), { response: { data: { error: { code, message, error_subcode } } } });
 const fakeGraph = {
   get: async (url: string, config: any) => {
     calls.push({ method: 'GET', url });
@@ -23,7 +26,10 @@ const fakeGraph = {
   post: async (url: string, body: any) => {
     calls.push({ method: 'POST', url, body });
     if (url.endsWith('/media')) return { data: { id: `contenedor${++counter}` } };
-    if (url.endsWith('/media_publish')) return { data: { id: 'ig_publicado' } };
+    if (url.endsWith('/media_publish')) {
+      if (publishErrors.length) throw publishErrors.shift();
+      return { data: { id: 'ig_publicado' } };
+    }
     if (url.endsWith('/photos')) return { data: body.published === false ? { id: `foto${++counter}` } : { id: 'foto', post_id: 'pagina_1' } };
     if (url.endsWith('/feed')) return { data: { id: 'pagina_2' } };
     if (url.endsWith('/videos')) return { data: { id: 'video_1' } };
@@ -446,4 +452,22 @@ test('temporada primero y las demás se turnan: no gana siempre la categoría m�
   assert.notEqual(picks[1].theme, 'Halloween', 'no dos veces el mismo día');
   assert.equal(picks[1].theme, 'Bautizo', 'Animales salió hace poco: espera su turno');
   assert.equal(picks[2].theme, 'Halloween');
+});
+
+test('"Media ID is not available" de Instagram se reintenta en unos segundos y la historia sale', async () => {
+  calls.length = 0;
+  publishErrors.push(metaFail(9007, 'Media ID is not available', 2207027), metaFail(9007, 'Media ID is not available', 2207027));
+  const r = await publisher.publishToChannels(conexion, ['instagram_content_publish'], post(2, ['instagram_story']), { waitMs: 0, prepareImage: async (url: string) => url });
+  assert.equal(r.status, 'published');
+  assert.equal(calls.filter(c => c.url.endsWith('/media_publish')).length, 4, 'dos intentos fallidos y las dos historias');
+});
+
+test('si la primera historia falla de verdad, las demás igual salen', async () => {
+  calls.length = 0;
+  publishErrors.length = 0;
+  publishErrors.push(metaFail(100, 'Invalid parameter'));
+  const r = await publisher.publishToChannels(conexion, ['instagram_content_publish'], post(3, ['instagram_story']), { waitMs: 0, prepareImage: async (url: string) => url });
+  assert.equal(r.status, 'published');
+  assert.equal(calls.filter(c => c.url.endsWith('/media_publish')).length, 3);
+  publishErrors.length = 0;
 });
