@@ -214,7 +214,8 @@ export function dayMetrics(input: {
     }
   }
   const handoffs: Record<string, number> = {};
-  for (const n of input.notifications) if (inDay(n.created_at)) handoffs[n.event_type] = (handoffs[n.event_type] || 0) + 1;
+  // "wa_…" son avisos de entrega de WhatsApp, no chats que se pasaron a una persona.
+  for (const n of input.notifications) if (inDay(n.created_at) && !n.event_type.startsWith('wa_')) handoffs[n.event_type] = (handoffs[n.event_type] || 0) + 1;
   return {
     chats,
     newChats: input.conversations.filter(c => inDay(c.created_at)).length,
@@ -448,7 +449,7 @@ export async function reviewHandoffs(now = new Date()): Promise<{ reviewed: numb
       const start = Math.max(0, first - 14);
       const piece = history.slice(start, start + 45);
       const { data: alerts } = await supabase.from('notifications').select('event_type, message, created_at')
-        .eq('conversation_id', conversationId).gte('created_at', since).order('created_at', { ascending: true }).limit(10);
+        .eq('conversation_id', conversationId).not('event_type', 'like', 'wa_%').gte('created_at', since).order('created_at', { ascending: true }).limit(10);
       const alertText = (alerts || []).map(a => `- ${a.event_type}: ${String(a.message || '').replace(/\s+/g, ' ').slice(0, 160)}`).join('\n');
       const lessons = await listLessons();
       const result = await askJson<{ aprendizajes: unknown[] }>({

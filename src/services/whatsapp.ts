@@ -167,7 +167,7 @@ export function summarizeTemplate(t: any): TemplateSummary {
   };
 }
 
-export interface NewTemplate { name: string; category: string; language: string; body: string; examples: string[] }
+export interface NewTemplate { name: string; category: string; language: string; body: string; examples: string[]; quickReplies?: string[] }
 
 export const TEMPLATE_CATEGORIES = ['UTILITY', 'MARKETING'];
 
@@ -199,24 +199,34 @@ export async function createMessageTemplate(t: NewTemplate): Promise<{ id: strin
     name: t.name,
     category: t.category,
     language: t.language,
-    components: [{ type: 'BODY', text: t.body, ...(t.examples.length > 0 && { example: { body_text: [t.examples] } }) }]
+    components: [
+      { type: 'BODY', text: t.body, ...(t.examples.length > 0 && { example: { body_text: [t.examples] } }) },
+      ...(t.quickReplies?.length ? [{ type: 'BUTTONS', buttons: t.quickReplies.slice(0, 3).map(text => ({ type: 'QUICK_REPLY', text: [...text].slice(0, 25).join('') })) }] : [])
+    ]
   }, { headers: authHeaders() });
   return { id: String(response.data?.id || ''), status: String(response.data?.status || 'PENDING') };
+}
+
+/**
+ * Meta rechazó el envío porque pasaron más de 24 horas desde el último mensaje de la clienta (WhatsApp, Instagram o
+ * Messenger). El código 10 también es "la App no tiene permiso": solo cuenta como plazo cuando Meta lo dice.
+ */
+export function isOutsideWindowError(error: any): boolean {
+  const data = error?.response?.data?.error || {};
+  if (data.code === 131047 || data.code === 551) return true;
+  // 2018278 es el subcódigo de Messenger y 2534022 el de Instagram; el texto llega traducido, por eso no basta con leerlo.
+  return [2018278, 2534022].includes(data.error_subcode) || /outside (of )?(the )?allowed window/i.test(String(data.message || ''));
 }
 
 /** Explica en español los rechazos de WhatsApp más comunes al escribir desde el CRM. */
 export function describeWhatsAppError(error: any): string {
   const code = error.response?.data?.error?.code;
   if (code === 131047) {
-    return 'Pasaron más de 24 horas desde el último mensaje de la clienta y WhatsApp no permite escribirle libremente. El seguimiento automático la contactará con una plantilla aprobada.';
+    return 'Pasaron más de 24 horas desde el último mensaje de la clienta y WhatsApp no permite escribirle libremente hasta que ella responda.';
   }
   if (code === 131026) return 'WhatsApp no pudo entregar el mensaje: el número no está disponible en WhatsApp.';
-  // Instagram y Messenger: fuera de las 24 horas desde el último mensaje de la clienta no se le puede escribir.
-  // El código 10 también es "la App no tiene permiso": solo se explica como las 24 horas cuando Meta lo dice.
   const metaMessage = String(error.response?.data?.error?.message || '');
-  // 2018278 es el subcódigo de Messenger y 2534022 el de Instagram; el texto llega traducido, por eso no basta con leerlo.
-  const outsideWindow = [2018278, 2534022].includes(error.response?.data?.error?.error_subcode) || /outside (of )?(the )?allowed window/i.test(metaMessage);
-  if (outsideWindow || code === 551) {
+  if (isOutsideWindowError(error)) {
     return 'Pasaron más de 24 horas desde el último mensaje de la clienta y Meta no permite escribirle por Instagram o Messenger hasta que ella vuelva a escribir.';
   }
   if (code === 10) return `Meta no permitió enviar el mensaje: ${metaMessage}`;

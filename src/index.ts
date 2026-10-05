@@ -76,7 +76,7 @@ import { audit, listAudit } from './services/audit';
 import { startRetention } from './services/retention';
 import { buildSale, quotationDelivery } from './services/manualSales';
 import { loadTenant } from './services/supabase';
-import { handleWebhookMessage, handleEchoMessage, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
+import { handleWebhookMessage, handleEchoMessage, handleFailedStatus, flushPendingResponses, forgetConversation, startPhotoNudgeScheduler } from './controllers/messageController';
 import { handleSocialWebhook } from './controllers/socialController';
 import { noteWebhook, webhookTrace } from './services/webhookTrace';
 import { subscribePage, syncCompanySocialConnections, isSocialAddress, socialStatus, socialDiagnosis, connectUrl, createConnectState, readConnectState, completeConnection, publishingStatus } from './services/metaChannels';
@@ -93,9 +93,10 @@ import {
   verifyWebhookSignature
 } from './middleware/auth';
 import {
-  sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError,
+  sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError, isOutsideWindowError,
   getMessageTemplates, summarizeTemplate, templateProblem, createMessageTemplate
 } from './services/whatsapp';
+import { chatWindow, holdForLater, PendingInput, deliveryState, undeliveredIn, dropPending, sendReopen, holdNotice, ensureReopenTemplate } from './services/delivery';
 import { startFollowUpScheduler } from './services/followups';
 import { startSupervisor } from './services/supervisor';
 import { supervisorRouter } from './services/supervisorRoutes';
@@ -277,6 +278,10 @@ app.post('/webhook', verifyWebhookSignature, (req: Request, res: Response) => {
         handleWebhookMessage(message, value).catch(error => {
           console.error('Error procesando mensaje:', error);
         });
+      }
+      // Enviado, entregado y leído no se guardan; "no entregado" sí: el CRM lo muestra en ese mensaje.
+      for (const status of value?.statuses || []) {
+        if (status?.status === 'failed') handleFailedStatus(status, value).catch(error => console.error('Error procesando aviso de no entregado:', error.message));
       }
     }
   }
@@ -713,8 +718,16 @@ app.get('/api/conversations', requireCrmSession, async (_req: Request, res: Resp
 app.get('/api/conversations/:id/messages', requireCrmSession, requireUuidParam, async (req: Request, res: Response) => {
   try {
     // El chat debe ser del negocio en que se trabaja: los mensajes no llevan business_id propio.
-    if (!(await getConversationById(req.params.id))) return res.status(404).json({ error: 'Conversación no encontrada' });
-    res.json(await getMessages(req.params.id));
+    const conv = await getConversationById(req.params.id);
+    if (!conv) return res.status(404).json({ error: 'Conversación no encontrada' });
+    const messages = await getMessages(req.params.id);
+    if (req.query.full !== '1') return res.json(messages);
+    // Cada mensaje que WhatsApp no entregó lleva el motivo; aparte va lo guardado para cuando la clienta responda.
+    const [undelivered, delivery] = await Promise.all([undeliveredIn(conv.id), deliveryState(conv, messages)]);
+    res.json({
+      messages: messages.map((m: any) => (m.wa_message_id && undelivered[m.wa_message_id] ? { ...m, undelivered: undelivered[m.wa_message_id] } : m)),
+      delivery
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1083,25 +1096,34 @@ app.post('/api/quotations/:id/send', requireCrmSession, requireUuidParam, requir
     }
     const delivery = quotationDelivery(products, Number(quotation.total_amount || 0), await getAllProducts());
     await pauseBot(conv.id);
-    // Una foto que no se pueda enviar no frena la cotización: el texto con el total siempre sale.
-    let photosSent = 0;
-    for (const photo of delivery.photos) {
-      try {
-        const sent = await sendImageMessage(conv.phone_number, photo.url, photo.caption);
-        await saveMessage(conv.id, 'human', 'image', `${photo.url}
+    const heldText = delivery.text ?? (delivery.photos.length === 0 ? delivery.fullText : null);
+    const pending: PendingInput[] = [
+      ...delivery.photos.map(photo => ({ kind: 'image' as const, url: photo.url, caption: photo.caption })),
+      ...(heldText ? [{ kind: 'text' as const, text: heldText }] : [])
+    ];
+    const result = await sendOrHold(conv, pending, async () => {
+      // Una foto que no se pueda enviar no frena la cotización: el texto con el total siempre sale.
+      let photosSent = 0;
+      for (const photo of delivery.photos) {
+        try {
+          const sent = await sendImageMessage(conv.phone_number, photo.url, photo.caption);
+          await saveMessage(conv.id, 'human', 'image', `${photo.url}
 ${photo.caption}`, getSentMessageId(sent));
-        photosSent++;
-      } catch (error: any) {
-        console.warn('Foto de la cotización no enviada:', error.response?.data?.error?.message || error.message);
+          photosSent++;
+        } catch (error: any) {
+          // Fuera de las 24 horas (Instagram o Messenger) no sale nada: se guarda la cotización completa.
+          if (photosSent === 0 && isOutsideWindowError(error)) throw error;
+          console.warn('Foto de la cotización no enviada:', error.response?.data?.error?.message || error.message);
+        }
       }
-    }
-    const text = delivery.text ?? (photosSent === 0 ? delivery.fullText : null);
-    if (text) {
-      const sent = await sendTextMessage(conv.phone_number, text);
-      await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
-    }
+      const text = delivery.text ?? (photosSent === 0 ? delivery.fullText : null);
+      if (text) {
+        const sent = await sendTextMessage(conv.phone_number, text);
+        await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
+      }
+    });
     if (quotation.status !== 'accepted') await updateQuotationStatus(quotation.id, 'sent');
-    res.json({ success: true, bot_paused: true, quotation: await getQuotationById(quotation.id) });
+    res.json({ success: true, bot_paused: true, ...result, quotation: await getQuotationById(quotation.id) });
   } catch (error: any) {
     console.error('Error enviando cotización:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
@@ -1148,6 +1170,51 @@ app.patch('/api/orders/:id', requireCrmSession, requireUuidParam, requireEditorR
 
 // ---------- Mensajería manual ----------
 
+/**
+ * Envía lo escrito desde el CRM o, si la clienta no escribe hace más de 24 horas, lo guarda para enviarlo apenas responda
+ * (WhatsApp lo aceptaría y después lo descartaría sin avisar). En WhatsApp se le manda la plantilla para retomar; en
+ * Instagram y Messenger Meta lo rechaza al instante y también queda guardado.
+ */
+async function sendOrHold(conv: { id: string; phone_number: string }, items: PendingInput[], send: () => Promise<void>): Promise<{ queued: boolean; notice?: string }> {
+  if (!isSocialAddress(conv.phone_number) && !(await chatWindow(conv.id)).open) {
+    return { queued: true, notice: (await holdForLater(conv, items)).notice };
+  }
+  try {
+    await send();
+    return { queued: false };
+  } catch (error: any) {
+    if (!isOutsideWindowError(error)) throw error;
+    return { queued: true, notice: (await holdForLater(conv, items)).notice };
+  }
+}
+
+/** Manda (otra vez) a la clienta la plantilla para que responda y salga lo guardado. */
+app.post('/api/conversations/:id/reopen', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const conv = await getConversationById(req.params.id);
+    if (!conv) return res.status(404).json({ error: 'Conversación no encontrada' });
+    if (isSocialAddress(conv.phone_number)) return res.status(400).json({ error: 'Instagram y Messenger no tienen plantillas: lo guardado sale cuando la clienta vuelva a escribir.' });
+    if ((await chatWindow(conv.id)).open) return res.status(400).json({ error: 'La clienta escribió hace menos de 24 horas: puedes escribirle normalmente.' });
+    const reopen = await sendReopen(conv, true);
+    if (reopen.status === 'template_pending') return res.status(400).json({ error: 'El aviso para retomar la conversación está en revisión de Meta (suele tardar minutos). Vuelve a intentarlo en un rato.' });
+    if (reopen.status !== 'sent') return res.status(400).json({ error: reopen.detail || 'No hay una plantilla aprobada para retomar la conversación.' });
+    res.json({ success: true, reopen });
+  } catch (error: any) {
+    res.status(500).json({ error: describeWhatsAppError(error) });
+  }
+});
+
+/** Quita un mensaje guardado que todavía no sale. */
+app.delete('/api/conversations/:id/pending/:pendingId', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    if (!(await getConversationById(req.params.id))) return res.status(404).json({ error: 'Conversación no encontrada' });
+    if (!(await dropPending(req.params.id, String(req.params.pendingId)))) return res.status(404).json({ error: 'Ese mensaje ya salió o ya no está guardado' });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** El número se toma del chat guardado, nunca del navegador: así un mensaje no puede ir a otra persona. */
 async function conversationForSending(req: Request, res: Response) {
   const conversationId = String(req.body?.conversationId || '');
@@ -1170,9 +1237,11 @@ app.post('/api/send-message', requireCrmSession, requireEditorRole, async (req: 
     // Una persona tomó el chat: el bot se calla aquí hasta que lo reactiven desde el CRM. Se pausa ANTES de enviar
     // para que el bot no conteste encima mientras el mensaje viaja.
     await pauseBot(conv.id);
-    const sent = await sendTextMessage(conv.phone_number, text);
-    await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
-    res.json({ success: true, bot_paused: true });
+    const result = await sendOrHold(conv, [{ kind: 'text', text }], async () => {
+      const sent = await sendTextMessage(conv.phone_number, text);
+      await saveMessage(conv.id, 'human', 'text', text, getSentMessageId(sent));
+    });
+    res.json({ success: true, bot_paused: true, ...result });
   } catch (error: any) {
     console.error('Error enviando mensaje manual:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
@@ -1196,9 +1265,11 @@ app.post('/api/send-image', requireCrmSession, requireEditorRole, async (req: Re
     const conv = await conversationForSending(req, res);
     if (!conv) return;
     await pauseBot(conv.id);
-    const sent = await sendImageMessage(conv.phone_number, imageUrl, caption);
-    await saveMessage(conv.id, 'human', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl, getSentMessageId(sent));
-    res.json({ success: true, bot_paused: true });
+    const result = await sendOrHold(conv, [{ kind: 'image', url: imageUrl, caption: caption ? String(caption) : '' }], async () => {
+      const sent = await sendImageMessage(conv.phone_number, imageUrl, caption);
+      await saveMessage(conv.id, 'human', 'image', caption ? `${imageUrl}\n${caption}` : imageUrl, getSentMessageId(sent));
+    });
+    res.json({ success: true, bot_paused: true, ...result });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
@@ -1230,9 +1301,11 @@ app.post('/api/send-audio', requireCrmSession, requireEditorRole, async (req: Re
     }
     const audioUrl = await uploadBufferToStorage(voice, 'audio/ogg');
     await pauseBot(conv.id);
-    const sent = await sendAudioMessage(conv.phone_number, audioUrl);
-    await saveMessage(conv.id, 'human', 'audio', audioUrl, getSentMessageId(sent));
-    res.json({ success: true, bot_paused: true });
+    const result = await sendOrHold(conv, [{ kind: 'audio', url: audioUrl }], async () => {
+      const sent = await sendAudioMessage(conv.phone_number, audioUrl);
+      await saveMessage(conv.id, 'human', 'audio', audioUrl, getSentMessageId(sent));
+    });
+    res.json({ success: true, bot_paused: true, ...result });
   } catch (error: any) {
     console.error('Error enviando nota de voz:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
@@ -1259,9 +1332,11 @@ app.post('/api/send-voice-text', requireCrmSession, requireEditorRole, async (re
     }
     const audioUrl = await uploadBufferToStorage(voice, 'audio/ogg');
     await pauseBot(conv.id);
-    const sent = await sendAudioMessage(conv.phone_number, audioUrl);
-    await saveMessage(conv.id, 'human', 'audio', audioUrl, getSentMessageId(sent));
-    res.json({ success: true, bot_paused: true });
+    const result = await sendOrHold(conv, [{ kind: 'audio', url: audioUrl }], async () => {
+      const sent = await sendAudioMessage(conv.phone_number, audioUrl);
+      await saveMessage(conv.id, 'human', 'audio', audioUrl, getSentMessageId(sent));
+    });
+    res.json({ success: true, bot_paused: true, ...result });
   } catch (error: any) {
     console.error('Error enviando nota de voz escrita:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
@@ -2162,6 +2237,8 @@ async function start() {
   startRetention();
   startPhotoNudgeScheduler();
   startHealthCheck();
+  // Mensajes del CRM escritos pasadas las 24 horas: la plantilla para que la clienta responda queda lista.
+  ensureReopenTemplate().catch(error => console.error('❌ Plantilla para retomar conversaciones:', error.message));
   // Con la página de Facebook configurada, se suscribe sola a la App al arrancar (repetirlo no hace daño).
   if (process.env.META_PAGE_ID && process.env.META_PAGE_TOKEN) {
     subscribePage()

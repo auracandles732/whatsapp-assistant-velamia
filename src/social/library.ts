@@ -95,7 +95,7 @@ export async function listAssets(): Promise<SocialAsset[]> {
   const { data, error } = await supabase.from(TABLE).select('*')
     .filter('business_id', tenantOp(), tenantValue())
     .order('created_at', { ascending: false })
-    .limit(300);
+    .limit(1000);
   if (error) throw new Error(`Error leyendo la biblioteca: ${error.message}`);
   return (data || []) as SocialAsset[];
 }

@@ -3246,6 +3246,22 @@
         .nx-bubble.unsent { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #7A6A5E !important; font-style: normal; }
         .nx-bubble.unsent .nx-time { flex-basis: 100%; margin-top: 0; }
 
+        /* Entrega por WhatsApp: no entregado, guardado para cuando responda y aviso de las 24 horas */
+        .dl-fail { margin-top: 8px; padding: 7px 10px; border-radius: 10px; background: #FDECEA; color: #A12C2C; font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+        .dl-pending-bubble { opacity: .92; border: 1.5px dashed #C9A27E !important; background: #FBF4EA !important; color: #3A2A20 !important; }
+        .dl-pending-bubble img { max-width: 220px; border-radius: 12px; display: block; margin-bottom: 6px; }
+        .dl-pending { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 700; color: #8A5A2B; }
+        .dl-pending button { background: none; border: none; padding: 0; color: #A12C2C; font-weight: 700; font-size: 12px; cursor: pointer; text-decoration: underline; }
+        .dl-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #FFF6E5; border-top: 1px solid #F0DDB8; color: #6B4A12; font-size: 13px; line-height: 1.45; flex-shrink: 0; }
+        .dl-banner .t { flex: 1; min-width: 0; }
+        .dl-banner .t b { color: #5A3C0A; }
+        .dl-banner button { flex-shrink: 0; padding: 9px 14px; border-radius: 10px; border: none; background: #B5654A; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .dl-banner button:disabled { opacity: .6; cursor: default; }
+        @media (max-width: 760px) {
+            .dl-banner { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 14px; font-size: 12.5px; }
+            .dl-banner button { width: 100%; }
+        }
+
         .nx-shell .nx-input { gap: 10px; padding: 14px 18px 16px; background: var(--sh-card); border-top: 1px solid var(--sh-line); }
         .nx-shell .nx-round { width: 50px; height: 50px; border-radius: 13px; border-color: #E6DACC; background: var(--sh-card); cursor: pointer; }
         .nx-shell .nx-round:hover { background: #F8F0E8; }
@@ -3976,6 +3992,57 @@
         function formatTime(value) {
             const date = parseTs(value);
             return date ? date.toLocaleTimeString('es-EC', { timeZone: BUSINESS_TZ, hour: 'numeric', minute: '2-digit' }) : '';
+        }
+
+        // Mensaje escrito pasadas las 24 horas: espera guardado y sale solo apenas la clienta responda.
+        function PendingBubble({ item, mobile, onDrop }) {
+            const p = mobile ? 'mx' : 'nx';
+            const text = item.kind === 'text' ? item.text || '' : item.caption || '';
+            return (
+                <div className={p + '-msg human'}>
+                    <div className={p + '-bubble dl-pending-bubble'}>
+                        {item.kind === 'image' && item.url ? <img src={item.url} alt="" /> : null}
+                        {item.kind === 'audio' && item.url ? <audio controls src={item.url} style={{ maxWidth: '220px', marginBottom: '6px', display: 'block' }} /> : null}
+                        {renderWa(text)}
+                        <div className="dl-pending">⏳ Guardado: sale solo cuando la clienta responda{onDrop && <button type="button" onClick={onDrop}>Quitar</button>}</div>
+                    </div>
+                </div>
+            );
+        }
+
+        // WhatsApp avisó que este mensaje no llegó.
+        function UndeliveredNote({ msg, delivery }) {
+            if (!msg.undelivered) return null;
+            const retry = delivery && (delivery.pending || []).some(p => p.retryOf && p.retryOf === msg.wa_message_id);
+            return <div className="dl-fail">⚠️ No entregado: {msg.undelivered}{retry ? ' Se vuelve a enviar solo cuando la clienta responda.' : ''}</div>;
+        }
+
+        // Aviso sobre el plazo de 24 horas de WhatsApp (y de Instagram y Messenger), encima del cuadro para escribir.
+        function DeliveryBanner({ delivery, canEdit, onReopen, busy }) {
+            if (!delivery || !delivery.window || delivery.window.open) return null;
+            const social = delivery.channel === 'social';
+            const never = !delivery.window.lastCustomerAt;
+            const r = delivery.reopen;
+            let status = '';
+            if (!social) {
+                if (r && r.status === 'sent') status = 'Ya le enviamos un aviso para que responda (' + formatDateTime(r.at) + ').';
+                else if (delivery.template === 'PENDING' || delivery.template === 'IN_APPEAL') status = 'El aviso para que responda está en revisión de Meta (suele tardar minutos).';
+                else if (delivery.template === 'REJECTED') status = 'Meta rechazó el aviso para retomar conversaciones.';
+                else if (r && r.status === 'failed' && r.detail) status = 'No se pudo enviar el aviso: ' + r.detail;
+            }
+            const canReopen = !social && canEdit && delivery.template === 'APPROVED';
+            return (
+                <div className="dl-banner">
+                    <div className="t">
+                        <b>⏰ {never ? 'Esta persona todavía no te ha escrito por aquí.' : 'Pasaron más de 24 horas desde su último mensaje.'}</b>{' '}
+                        {social
+                            ? 'Meta no deja escribirle hasta que vuelva a escribir: lo que envíes queda guardado y sale solo en ese momento.'
+                            : 'WhatsApp no deja escribirle libremente: lo que envíes queda guardado y sale solo apenas responda.'}
+                        {status ? ' ' + status : ''}
+                    </div>
+                    {canReopen && <button type="button" onClick={onReopen} disabled={busy}>{busy ? 'Enviando…' : r && r.status === 'sent' ? 'Enviar aviso otra vez' : 'Enviar aviso para que responda'}</button>}
+                </div>
+            );
         }
 
         function isBotPausedIn(conv) {
@@ -8053,6 +8120,9 @@
             const [sideOpen, setSideOpen] = useState(false);
             useEffect(() => { setSideOpen(false); }, [selectedConv?.id]);
             const [messages, setMessages] = useState([]);
+            // Entrega del chat abierto: plazo de 24 horas, lo guardado para cuando responda y el aviso para retomar.
+            const [delivery, setDelivery] = useState(null);
+            const [reopening, setReopening] = useState(false);
             const [inputText, setInputText] = useState('');
             const [botEnabled, setBotEnabled] = useState(true);
             const [stats, setStats] = useState({ total: 0, active: 0, orders: 0, revenue: 0 });
@@ -8612,6 +8682,8 @@
             );
             const timeline = [
                 ...messages.map(m => ({ kind: 'msg', key: 'm' + m.id, ts: m.timestamp, data: m })),
+                // Lo guardado para cuando responda (lo que se reenvía tras un "no entregado" ya se ve en ese mensaje).
+                ...((delivery && delivery.pending) || []).filter(p => !p.retryOf).map(p => ({ kind: 'pending', key: 'p' + p.id, ts: p.at, data: p })),
                 ...((summary && summary.phase2 ? summary.notes : []).map(n => ({ kind: 'note', key: 'n' + n.id, ts: n.created_at, data: n })))
             ].sort((a, b) => parseTs(a.ts) - parseTs(b.ts));
 
@@ -8747,6 +8819,7 @@
                 // Al abrir otro chat no se muestran por un instante los mensajes del anterior.
                 stickToBottom.current = true;
                 setMessages([]);
+                setDelivery(null);
                 openChatId.current = selectedConv ? selectedConv.id : null;
                 if (selectedConv) {
                     loadMessages(selectedConv.id);
@@ -8771,9 +8844,15 @@
 
             async function loadMessages(convId) {
                 try {
-                    const data = await api(`/api/conversations/${convId}/messages`);
+                    const data = await api(`/api/conversations/${convId}/messages?full=1`);
                     if (openChatId.current !== convId) return;
-                    setMessages(Array.isArray(data) ? data : []);
+                    if (Array.isArray(data)) {
+                        setMessages(data);
+                        setDelivery(null);
+                    } else {
+                        setMessages(Array.isArray(data?.messages) ? data.messages : []);
+                        setDelivery(data?.delivery || null);
+                    }
                 } catch (err) {
                     console.error('Error cargando mensajes:', err);
                 }
@@ -8893,6 +8972,38 @@
                 }
                 loadMessages(conv.id);
                 loadConversations();
+            }
+
+            // Le manda a la clienta la plantilla aprobada para que responda: al responder sale lo guardado.
+            async function reopenChat() {
+                if (!selectedConv || reopening) return;
+                const conv = selectedConv;
+                const again = delivery && delivery.reopen && delivery.reopen.status === 'sent';
+                const ask = again
+                    ? '¿Enviarle el aviso otra vez? WhatsApp cobra cada aviso como mensaje de plantilla.'
+                    : '¿Enviarle a ' + contactName(conv) + ' un aviso para que responda?\n\nEs un mensaje de plantilla aprobada (WhatsApp lo cobra). Apenas responda, le llega todo lo que dejaste guardado.';
+                if (!confirm(ask)) return;
+                setReopening(true);
+                try {
+                    await api('/api/conversations/' + conv.id + '/reopen', { method: 'POST', body: JSON.stringify({}) });
+                    loadMessages(conv.id);
+                    loadConversations();
+                } catch (err) {
+                    alert('No se pudo enviar el aviso: ' + err.message);
+                } finally {
+                    setReopening(false);
+                }
+            }
+
+            async function dropPendingMessage(item) {
+                if (!selectedConv || !confirm('¿Quitar este mensaje? Ya no se enviará.')) return;
+                const conv = selectedConv;
+                try {
+                    await api('/api/conversations/' + conv.id + '/pending/' + encodeURIComponent(item.id), { method: 'DELETE' });
+                    loadMessages(conv.id);
+                } catch (err) {
+                    alert('No se pudo quitar: ' + err.message);
+                }
             }
 
             async function sendMessage() {
@@ -9235,6 +9346,9 @@
                                             </React.Fragment>
                                         );
                                     }
+                                    if (item.kind === 'pending') {
+                                        return <React.Fragment key={item.key}>{dayPill}<PendingBubble item={item.data} mobile onDrop={canEdit ? () => dropPendingMessage(item.data) : null} /></React.Fragment>;
+                                    }
                                     const msg = item.data;
                                     const content = msg.content || '';
                                     const urlMatch = MEDIA_TYPES.includes(msg.type) ? content.match(/^https?:\/\/\S+/) : null;
@@ -9255,6 +9369,7 @@
                                                             <div className="more">{extraLines.length ? renderWa(extraLines.join('\n')) : mxPretty(product.category)}</div>
                                                             <button type="button" className="mx-link" onClick={() => { setCatalogFocus(product.id); goTab('catalogo'); }}>Ver más detalles <MxIcon name="external" size={15} /></button>
                                                             <div className="mx-time">{formatTime(msg.timestamp)}</div>
+                                                            <UndeliveredNote msg={msg} delivery={delivery} />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -9271,6 +9386,7 @@
                                                     {msg.type === 'document' && mediaUrl ? <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>📎 Abrir documento</a> : null}
                                                     {renderWa(textPart)}
                                                     <div className="mx-time">{formatTime(msg.timestamp)}</div>
+                                                    <UndeliveredNote msg={msg} delivery={delivery} />
                                                 </div>
                                             </div>
                                         </React.Fragment>
@@ -9289,6 +9405,7 @@
                                     </div>
                                 </div>
                             )}
+                            <DeliveryBanner delivery={delivery} canEdit={canEdit} onReopen={reopenChat} busy={reopening} />
                             {!canEdit && <div className="mx-readonly">Tu usuario es solo de consulta: puedes ver los chats, pero no responder.</div>}
                             {canEdit && (
                                 <div className={'mx-input' + (noteMode ? ' note' : '')}>
@@ -9652,6 +9769,9 @@
                                                     </React.Fragment>
                                                 );
                                             }
+                                            if (item.kind === 'pending') {
+                                                return <React.Fragment key={item.key}>{dayPill}<PendingBubble item={item.data} onDrop={canEdit ? () => dropPendingMessage(item.data) : null} /></React.Fragment>;
+                                            }
                                             const msg = item.data;
                                             const content = msg.content || '';
                                             // Solo en fotos, audios y documentos la primera línea es la URL del archivo;
@@ -9679,6 +9799,7 @@
                                                             {msg.type === 'document' && mediaUrl ? <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>📎 Abrir documento</a> : null}
                                                             {renderWa(textPart)}
                                                             <div className="nx-time">{formatTime(msg.timestamp)}</div>
+                                                            <UndeliveredNote msg={msg} delivery={delivery} />
                                                         </div>
                                                     </div>
                                                 </React.Fragment>
@@ -9689,6 +9810,7 @@
                                     {photoPickerModal}
 
                                     {photoStatus && <div style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: '#B5654A', background: '#FBF6F0', borderTop: '1px solid #EADFD2' }}>📤 {photoStatus} No cierres el chat.</div>}
+                                    <DeliveryBanner delivery={delivery} canEdit={canEdit} onReopen={reopenChat} busy={reopening} />
                                     {!canEdit && <div className="nx-readonly"><PlatIcon name="user" size={18} color="#8A7868" /> Tu usuario es solo de consulta: puedes ver los chats, pero no responder.</div>}
                                     {canEdit && <div className={'nx-input' + (noteMode ? ' note' : '')}>
                                         <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} disabled={!!photoStatus} title="Enviar foto (también puedes pegarla con Ctrl+V o arrastrarla al chat)"><MxIcon name="clip" size={22} color="#6B5849" /></button>
@@ -10062,6 +10184,10 @@
         // 0 = decide la IA (hasta 3 al día y algunas historias); igual que MAX_POSTS_PER_DAY en el servidor.
         // Quién elige qué mostrar en cada tanda (postsPerDay: 0 = la IA; 1 = reglas, sin gastar IA).
         const PHOTOS_PER_DAY_OPTIONS = [2, 4, 6, 8, 10, 12, 15, 20, 25, 30];
+        // Fotos y videos de la biblioteca por día (una tanda propia, aparte de las fotos del Catálogo).
+        const LIBRARY_PER_DAY_OPTIONS = [0, 3, 4, 5, 6, 8, 10];
+        const libraryPerDayOf = s => (s.libraryPerDay === undefined || s.libraryPerDay === null ? 4 : Number(s.libraryPerDay));
+        const libraryOptionLabel = n => (n === 0 ? 'No usar la biblioteca' : n + ' de la biblioteca al día');
         // Igual que setTimes en el servidor: n tandas, la última cerca de la hora elegida, cada 3 horas, de 8:00 a 21:30.
         function setTimesOf(hour, n) {
             const [hh, mm] = hour.split(':').map(Number);
@@ -10570,6 +10696,13 @@
                                         {PHOTOS_PER_DAY_OPTIONS.map(n => <option key={n} value={n}>{n} fotos al día</option>)}
                                     </select>
                                 </div>
+                                <div className="pb-label">De tu biblioteca por día</div>
+                                <div className="pb-select">
+                                    <PlatIcon name="image" size={18} color="#4E3E33" />
+                                    <select value={libraryPerDayOf(s)} disabled={!canConfigure} onChange={e => setS({ libraryPerDay: Number(e.target.value) })} aria-label="Fotos y videos de la biblioteca por día">
+                                        {LIBRARY_PER_DAY_OPTIONS.map(n => <option key={n} value={n}>{libraryOptionLabel(n)}</option>)}
+                                    </select>
+                                </div>
                                 <div className="pb-label">Hora principal</div>
                                 <div className="pb-select">
                                     <PlatIcon name="clock" size={18} color="#4E3E33" />
@@ -10580,7 +10713,8 @@
                                 {(() => {
                                     const perSet = Math.max(1, s.photosPerPost || 5);
                                     const sets = Math.min(6, Math.ceil((s.photosPerDay || 10) / perSet));
-                                    return <p className="pb-muted" style={{ margin: '6px 0 0' }}>Cada día se completan <b>{s.photosPerDay || 10} fotos</b> (lo que ya programaste cuenta y nunca se toca), en tandas de {perSet} a las {setTimesOf(s.hour, sets).join(', ')}.</p>;
+                                    const lib = libraryPerDayOf(s);
+                                    return <p className="pb-muted" style={{ margin: '6px 0 0' }}>Cada día se completan <b>{s.photosPerDay || 10} fotos</b> del Catálogo (lo que ya programaste cuenta y nunca se toca), en tandas de {perSet} a las {setTimesOf(s.hour, sets).join(', ')}.{lib > 0 && <> Además, una tanda con <b>{lib} fotos y videos de tu biblioteca</b>: primero lo que nunca salió y lo que hace más tiempo no sale.</>}</p>;
                                 })()}
                                 <div className="pb-tz"><PbIcon name="globe" size={20} color="#4E3E33" /><div>Zona horaria<b>{tzCity()}{tzOffset() ? ` (${tzOffset()})` : ''}</b></div></div>
                             </>
@@ -10703,6 +10837,11 @@
                                     </span>
                                 </label>
                             </div>
+                            <label><span className="pb-label">De tu biblioteca por día</span>
+                                <span className="pb-select"><PlatIcon name="image" size={18} color="#4E3E33" />
+                                    <select value={libraryPerDayOf(s)} disabled={!canConfigure} onChange={e => setS({ libraryPerDay: Number(e.target.value) })}>{LIBRARY_PER_DAY_OPTIONS.map(n => <option key={n} value={n}>{libraryOptionLabel(n)}</option>)}</select>
+                                </span>
+                            </label>
                             <label><span className="pb-label">Cómo trabaja el agente</span>
                                 <span className="pb-select"><PbIcon name="bolt" size={18} color="#4E3E33" />
                                     <select value={planModeOf(s)} disabled={!canConfigure} onChange={e => setS({ planMode: e.target.value })}>{PLAN_MODE_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select>

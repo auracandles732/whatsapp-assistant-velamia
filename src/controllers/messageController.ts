@@ -35,6 +35,7 @@ import {
 import { TenantContext, currentTenant, runWithTenant } from '../services/tenant';
 import { maskPhone, privacyRequest } from '../services/privacy';
 import { audit } from '../services/audit';
+import { flushOutbox, recordUndelivered } from '../services/delivery';
 import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG } from '../services/followups';
 import {
   sendTextMessage,
@@ -339,6 +340,19 @@ export function handleWebhookMessage(message: any, value: any): Promise<void> {
       enqueue(customerKey(from, tenant), () => ingestMessage(message, value));
     });
   });
+}
+
+/**
+ * WhatsApp avisó que un mensaje NO se entregó (por ejemplo, se escribió pasadas las 24 horas). Se anota en el chat de la
+ * empresa dueña del número. El aviso puede llegar antes de que el mensaje termine de guardarse: se reintenta una vez.
+ */
+export async function handleFailedStatus(status: any, value: any): Promise<void> {
+  const tenant = await resolveTenant(value);
+  if (tenant === null) return;
+  for (const wait of [4000, 20000]) {
+    await new Promise(resolve => setTimeout(resolve, wait));
+    if (await runWithTenant(tenant, () => recordUndelivered(status))) return;
+  }
 }
 
 /**
@@ -709,6 +723,8 @@ async function ingestMessage(message: any, value: any) {
 
     await saveMessage(conversationId, 'customer', messageType, storedContent, waMessageId);
     await touchConversation(conversationId);
+    // Lo que el equipo escribió pasadas las 24 horas quedó guardado: sale ahora que la clienta escribió.
+    await flushOutbox(conversationId, phoneNumber).catch((error: any) => console.error('❌ Mensajes guardados para la clienta:', error.message));
 
     // Las plantillas de seguimiento dicen "responde NO": se respeta siempre, aunque el bot esté pausado.
     const answeredFollowUp = lastMessage?.sender === 'bot' && isFollowUpMessage(lastMessage.content);

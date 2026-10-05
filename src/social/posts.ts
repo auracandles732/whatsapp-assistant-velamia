@@ -69,6 +69,11 @@ export interface PublishingSettings {
    * en tandas de una sola categoría: publicaciones y/o historias según los canales elegidos.
    */
   photosPerDay: number;
+  /**
+   * Fotos y videos de la biblioteca por día (0 = no usarla): una tanda propia con lo que menos ha salido, aparte de las
+   * fotos del Catálogo. Así lo que la empresa sube a la biblioteca se publica solo, sin programarlo a mano.
+   */
+  libraryPerDay: number;
   /** Cómo trabaja el agente (reporte para aprobar, automático o manual). */
   planMode: PlanMode;
   /** Se deriva de planMode ("automático"): se conserva para lo que ya lo leía. */
@@ -103,6 +108,7 @@ export const DEFAULT_SETTINGS: PublishingSettings = {
   channels: ['instagram_feed', 'facebook'],
   photosPerPost: 5,
   photosPerDay: 10,
+  libraryPerDay: 4,
   planMode: 'manual',
   autoPlan: false,
   marketingPhone: '',
@@ -122,12 +128,14 @@ export function normalizeSettings(raw: any): PublishingSettings {
   const photos = Math.round(Number(r.photosPerPost));
   const perDay = r.postsPerDay === undefined || r.postsPerDay === null || r.postsPerDay === '' ? NaN : Math.round(Number(r.postsPerDay));
   const photosDay = Math.round(Number(r.photosPerDay));
+  const libraryDay = r.libraryPerDay === undefined || r.libraryPerDay === null || r.libraryPerDay === '' ? NaN : Math.round(Number(r.libraryPerDay));
   return {
     days,
     hour,
     channels: channels.length ? channels : DEFAULT_SETTINGS.channels,
     photosPerPost: Number.isFinite(photos) ? Math.min(MAX_CAROUSEL, Math.max(1, photos)) : DEFAULT_SETTINGS.photosPerPost,
     photosPerDay: Number.isFinite(photosDay) && photosDay >= 1 ? Math.min(MAX_PHOTOS_PER_DAY, photosDay) : DEFAULT_SETTINGS.photosPerDay,
+    libraryPerDay: Number.isFinite(libraryDay) && libraryDay >= 0 ? Math.min(MAX_CAROUSEL, libraryDay) : DEFAULT_SETTINGS.libraryPerDay,
     // Lo guardado antes de los modos: automático encendido = "automatico"; apagado = "manual".
     planMode: PLAN_MODES.includes(r.planMode) ? r.planMode : r.autoPlan === true ? 'automatico' : 'manual',
     autoPlan: PLAN_MODES.includes(r.planMode) ? r.planMode === 'automatico' : r.autoPlan === true,
@@ -280,6 +288,13 @@ export function daySlots(settings: PublishingSettings, days: string[], used: Day
 
 /** Fotos que lleva una publicación (en historias, cada foto sale como una historia). */
 export const photosOf = (post: Pick<SocialPost, 'media' | 'products'>) => Math.min(MAX_CAROUSEL, (post.media && post.media.length) || post.products.length || 0);
+
+/**
+ * Fotos del Catálogo que lleva una publicación: lo de la biblioteca (archivos con asset_id) tiene su propia meta por día
+ * (libraryPerDay) y no le quita lugar a la meta de fotos del Catálogo.
+ */
+export const catalogPhotosOf = (post: Pick<SocialPost, 'media' | 'products'>) =>
+  Math.min(MAX_CAROUSEL, post.media && post.media.length ? post.media.filter(m => !m.asset_id).length : post.products.length || 0);
 
 // ---------- Qué productos mostrar ----------
 
@@ -580,7 +595,10 @@ export async function stuckPosts(olderThan: Date): Promise<SocialPost[]> {
 
 export const toPostProduct = (c: CatalogItem): PostProduct => ({ name: c.name, image_url: String(c.image_url || ''), price: Number(c.price) });
 
-export interface LibraryItem { id: string; kind: 'image' | 'video'; url: string; product_name: string | null; used_count?: number; title?: string; last_used_at?: string | null }
+export interface LibraryItem {
+  id: string; kind: 'image' | 'video'; url: string; product_name: string | null; used_count?: number; title?: string; last_used_at?: string | null;
+  width?: number | null; height?: number | null; created_at?: string;
+}
 
 /**
  * Carrusel del modo automático: cada foto del Catálogo va seguida de los videos y fotos de la biblioteca que muestran

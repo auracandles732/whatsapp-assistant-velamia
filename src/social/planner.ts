@@ -2,10 +2,10 @@ import { getAllProducts, getConfig, setConfig } from '../services/supabase';
 import { profile } from '../config/businessProfile';
 import { currentBrain, PostFormat, PlannedPost } from './brain';
 import {
-  SocialPost, PublishingSettings, PostChannel, PostProduct, PostMedia, DEFAULT_SETTINGS, getSavedSettings, daySlots, photosOf,
+  SocialPost, PublishingSettings, PostChannel, PostProduct, PostMedia, DEFAULT_SETTINGS, getSavedSettings, daySlots,
   publishingDays, listPosts, localDay, localParts, recentActivity, insertPosts, fallbackCaption, toPostProduct, withLibraryMedia,
   LibraryItem, postsBetween, postFingerprint, isStoryChannel, pendingDrafts, getPost, updatePost, deletePost, plain, titleCase, pickProducts,
-  CatalogItem, zonedTime
+  CatalogItem, zonedTime, catalogPhotosOf, MAX_CAROUSEL, MIN_SET
 } from './posts';
 import { productKey } from '../services/openai';
 import { listAssets, markAssetsUsed } from './library';
@@ -52,6 +52,10 @@ function channelsFor(format: PostFormat, settings: PublishingSettings, _byAi: bo
 /** Arma lo que se publica: el video (reel o historia) o las fotos del Catálogo con lo suyo de la biblioteca. */
 function buildMedia(pick: PlannedPost, library: LibraryItem[], usedAssets: Set<string>) {
   const products = pick.products.map(toPostProduct);
+  if (pick.library?.length) {
+    pick.library.forEach(a => usedAssets.add(a.id));
+    return { products, media: pick.library.map(a => ({ type: a.kind, url: a.url, asset_id: a.id })) as PostMedia[], items: pick.library.map(a => ({ asset: a.id })) };
+  }
   if (pick.video) {
     usedAssets.add(pick.video.id);
     return { products, media: [{ type: pick.video.kind, url: pick.video.url, asset_id: pick.video.id }] as PostMedia[], items: [{ asset: pick.video.id }] };
@@ -63,6 +67,102 @@ function buildMedia(pick: PlannedPost, library: LibraryItem[], usedAssets: Set<s
   let next = 0;
   const items = built.media.map(m => (m.asset_id ? { asset: m.asset_id } : { product: built.products[next++].name }));
   return { products: built.products, media: built.media, items };
+}
+
+/** Minutos del día (hora local) de una fecha. */
+const minutesOf = (at: Date, timeZone: string) => { const p = localParts(at, timeZone); return p.hour * 60 + p.minute; };
+
+/**
+ * Una hora libre ese día (a una hora o más de lo ya programado y de lo planificado), entre las candidatas en orden, de
+ * 8:00 a 22:00 y al menos una hora después de ahora.
+ */
+function freeTimeOn(day: string, candidates: number[], planned: PlannedPost[], live: Pick<SocialPost, 'scheduled_at'>[], now: Date, timeZone: string): Date | undefined {
+  const taken = [
+    ...planned.filter(p => localDay(p.at, timeZone) === day).map(p => minutesOf(p.at, timeZone)),
+    ...live.filter(p => localDay(p.scheduled_at, timeZone) === day).map(p => minutesOf(new Date(p.scheduled_at), timeZone))
+  ];
+  const [y, m, d] = day.split('-').map(Number);
+  return candidates
+    .filter(t => t >= 8 * 60 && t <= 22 * 60 && !taken.some(x => Math.abs(x - t) < 60))
+    .map(t => zonedTime(y, m, d, Math.floor(t / 60), t % 60, timeZone))
+    .find(date => date.getTime() >= now.getTime() + 60 * 60 * 1000);
+}
+
+/** Lo mismo subido dos veces (mismo nombre de archivo y tamaño) cuenta como un solo archivo. */
+const twinKey = (a: LibraryItem) => (a.title && a.width && a.height ? `${a.kind}|${plain(a.title)}|${a.width}x${a.height}` : a.id);
+/** Lo que salió hace menos de esto no vuelve a salir todavía. */
+const LIBRARY_REST_DAYS = 7;
+
+/**
+ * Fotos y videos de la biblioteca en la planificación: cada día de publicación lleva una tanda propia ("De tu biblioteca
+ * por día", aparte de la meta de fotos del Catálogo) con lo que menos ha salido: primero lo que nunca se publicó y luego
+ * lo que hace más tiempo no sale. Con solo historias la tanda empieza con un video; con publicaciones en el feed los
+ * videos salen como reels (libraryReels) y la tanda lleva fotos. Nada se repite mientras esté programado ni en los 7 días
+ * después de salir, y lo subido dos veces cuenta una sola vez. Un día que ya tiene algo de la biblioteca no lleva otra.
+ * Antes solo entraban las fotos marcadas con el nombre exacto de un producto: la biblioteca casi nunca se usaba.
+ */
+export function libraryTandas(
+  planned: PlannedPost[], library: LibraryItem[], posts: Pick<SocialPost, 'scheduled_at' | 'status' | 'media'>[],
+  settings: PublishingSettings, now: Date, timeZone: string, publishDays: string[]
+): PlannedPost[] {
+  const goal = Math.min(MAX_CAROUSEL, Math.max(0, Math.round(settings.libraryPerDay || 0)));
+  const storiesOn = settings.channels.some(isStoryChannel);
+  const feedOn = settings.channels.some(c => !isStoryChannel(c));
+  if (!goal || library.length === 0 || (!storiesOn && !feedOn)) return [];
+  const live = posts.filter(p => p.status !== 'failed' && p.status !== 'cancelled');
+  // Cuándo salió (o saldrá) cada archivo por última vez.
+  const lastUse = new Map<string, number>();
+  for (const post of live) {
+    const at = new Date(post.scheduled_at).getTime();
+    for (const m of post.media || []) if (m.asset_id) lastUse.set(m.asset_id, Math.max(lastUse.get(m.asset_id) || 0, at));
+  }
+  const usedAt = (a: LibraryItem) => lastUse.get(a.id) ?? (a.last_used_at ? new Date(a.last_used_at).getTime() || 0 : 0);
+  const resting = new Set<string>();
+  const restSince = now.getTime() - LIBRARY_REST_DAYS * 86_400_000;
+  for (const a of library) if (lastUse.has(a.id) && lastUse.get(a.id)! > restSince) resting.add(twinKey(a));
+  const order = (a: LibraryItem, b: LibraryItem) =>
+    usedAt(a) - usedAt(b) || (a.used_count || 0) - (b.used_count || 0) || String(a.created_at || '').localeCompare(String(b.created_at || ''));
+  const pool = (kind: LibraryItem['kind']) => library.filter(a => a.kind === kind && a.url && !resting.has(twinKey(a))).sort(order);
+  const photos = pool('image');
+  const videos = pool('video');
+  const chosen = new Set<string>();
+  const take = (list: LibraryItem[]) => {
+    while (list.length) {
+      const asset = list.shift()!;
+      if (chosen.has(twinKey(asset))) continue;
+      chosen.add(twinKey(asset));
+      return asset;
+    }
+    return null;
+  };
+  const [hh, mm] = settings.hour.split(':').map(Number);
+  const h = hh * 60 + mm;
+  const candidates = [h + 60, h - 60, h + 120, h - 120, h + 180, h - 180, h + 240, 10 * 60, 12 * 60, 15 * 60, 18 * 60, 20 * 60];
+  const out: PlannedPost[] = [];
+  for (const day of [...new Set(publishDays)].sort()) {
+    const hasLibrary = live.some(p => localDay(p.scheduled_at, timeZone) === day && (p.media || []).some(m => m.asset_id))
+      || planned.some(p => localDay(p.at, timeZone) === day && (p.library?.length || p.video));
+    if (hasLibrary) continue;
+    const at = freeTimeOn(day, candidates, [...planned, ...out], live, now, timeZone);
+    if (!at) continue;
+    const items: LibraryItem[] = [];
+    // Solo historias: la tanda abre con un video (con publicaciones, los videos van como reels).
+    if (!feedOn) { const video = take(videos); if (video) items.push(video); }
+    while (items.length < goal) { const photo = take(photos); if (!photo) break; items.push(photo); }
+    if (!feedOn) while (items.length < goal) { const video = take(videos); if (!video) break; items.push(video); }
+    // Nunca una tanda de 1 o 2 sueltas para completar: si ya no alcanza, se deja para cuando suban más.
+    if (items.length === 0 || items.length < Math.min(MIN_SET, goal)) break;
+    const fresh = items.some(a => !usedAt(a) && !(a.used_count || 0));
+    out.push({
+      theme: 'Nuestros productos',
+      products: [],
+      at,
+      format: storiesOn ? 'historia' : items.length > 1 ? 'carrusel' : items[0].kind === 'video' ? 'reel' : 'foto',
+      reason: fresh ? 'Fotos y videos de tu biblioteca que todavía no se publican' : 'Lo de tu biblioteca que hace más tiempo no sale',
+      library: items
+    });
+  }
+  return out;
 }
 
 /**
@@ -84,22 +184,13 @@ export function libraryReels(
   if (videos.length === 0) return [];
   const withVideo = new Set(live.filter(p => (p.media || []).some(m => m.type === 'video')).map(p => localDay(p.scheduled_at, timeZone)));
   const days = [...new Set(publishDays)].filter(day => !withVideo.has(day)).sort();
-  const minutesOf = (at: Date) => { const p = localParts(at, timeZone); return p.hour * 60 + p.minute; };
   const [hh, mm] = settings.hour.split(':').map(Number);
   const reels: PlannedPost[] = [];
   for (const day of days) {
     if (videos.length === 0) break;
-    const taken = [
-      ...planned.filter(p => localDay(p.at, timeZone) === day).map(p => minutesOf(p.at)),
-      ...live.filter(p => localDay(p.scheduled_at, timeZone) === day).map(p => minutesOf(new Date(p.scheduled_at)))
-    ];
     // Dos horas antes de la hora elegida (a las 17:00 si se publica a las 19:00), lejos de las demás tandas del día.
-    const free = (t: number) => !taken.some(x => Math.abs(x - t) < 60);
-    const candidates = [hh * 60 + mm - 120, hh * 60 + mm - 60, hh * 60 + mm + 60, hh * 60 + mm - 180, hh * 60 + mm - 240, 12 * 60, 10 * 60]
-      .filter(t => t >= 8 * 60 && t <= 22 * 60);
-    const [y, m, d] = day.split('-').map(Number);
-    const at = candidates.filter(free).map(t => zonedTime(y, m, d, Math.floor(t / 60), t % 60, timeZone))
-      .find(date => date.getTime() >= now.getTime() + 60 * 60 * 1000);
+    const candidates = [hh * 60 + mm - 120, hh * 60 + mm - 60, hh * 60 + mm + 60, hh * 60 + mm - 180, hh * 60 + mm - 240, 12 * 60, 10 * 60];
+    const at = freeTimeOn(day, candidates, [...planned, ...reels], live, now, timeZone);
     if (!at) continue;
     const video = videos.shift()!;
     const product = video.product_name ? catalog.find(c => productKey(c.name) === productKey(String(video.product_name))) : undefined;
@@ -126,10 +217,12 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
   const allDays = publishingDays(settings, now, days, tz);
   if (allDays.length === 0) return empty('No hay días de publicación elegidos.');
   // Lo ya programado (tuyo o de antes) cuenta para la meta del día y nunca se toca; lo que falló no salió, no cuenta.
-  const existing = await listPosts(new Date(now.getTime() - 86_400_000).toISOString(), new Date(now.getTime() + (days + 1) * 86_400_000).toISOString());
+  // Dos meses hacia atrás: así se sabe qué fotos y videos de la biblioteca hace más tiempo que no salen.
+  const history = await listPosts(new Date(now.getTime() - 60 * 86_400_000).toISOString(), new Date(now.getTime() + (days + 1) * 86_400_000).toISOString());
+  const existing = history.filter(post => new Date(post.scheduled_at).getTime() >= now.getTime() - 86_400_000);
   const used = existing.filter(post => post.status !== 'failed').map(post => {
     const at = localParts(new Date(post.scheduled_at), tz);
-    return { day: localDay(post.scheduled_at, tz), minutes: at.hour * 60 + at.minute, photos: photosOf(post) };
+    return { day: localDay(post.scheduled_at, tz), minutes: at.hour * 60 + at.minute, photos: catalogPhotosOf(post) };
   });
   const slots = daySlots(settings, allDays, used, now, tz);
   const full = `Los próximos días ya tienen sus ${settings.photosPerDay} fotos (o no queda hora libre hoy).`;
@@ -143,17 +236,29 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
       settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p, request
     })
     : { posts: [] as PlannedPost[], summary: full, tasks: [] as string[] };
-  // Los videos de la biblioteca salen como reels (uno por día), aparte de las fotos del Catálogo.
-  const reels = libraryReels(plan.posts, library, existing, catalog, settings, now, tz, allDays);
-  if (reels.length) {
-    plan.posts.push(...reels);
+  // La biblioteca tiene su propia tanda cada día (fotos y, con solo historias, un video), aparte de las fotos del Catálogo.
+  const fromLibrary = libraryTandas(plan.posts, library, history, settings, now, tz, allDays);
+  const inTandas = new Set(fromLibrary.flatMap(t => t.library!.map(a => a.id)));
+  // Con publicaciones en el feed, los videos salen además como reels (uno por día).
+  const reels = libraryReels([...plan.posts, ...fromLibrary], library.filter(a => !inTandas.has(a.id)), existing, catalog, settings, now, tz, allDays);
+  const extras = [...fromLibrary, ...reels];
+  if (extras.length) {
+    plan.posts.push(...extras);
     plan.posts.sort((a, b) => a.at.getTime() - b.at.getTime());
-    plan.summary = [plan.summary, `Además, ${reels.length} reel(s) con videos de tu biblioteca (los que menos han salido).`].filter(Boolean).join(' ');
+    const notes = [
+      fromLibrary.length && `${fromLibrary.length} tanda(s) con ${fromLibrary.reduce((n, t) => n + t.library!.length, 0)} fotos y videos de tu biblioteca`,
+      reels.length && `${reels.length} reel(s) con videos de tu biblioteca`
+    ].filter(Boolean);
+    const base = slots.length ? plan.summary : '';
+    plan.summary = [base, `Además, ${notes.join(' y ')} (primero lo que nunca salió y lo que hace más tiempo no sale).`].filter(Boolean).join(' ');
   }
-  if (plan.posts.length === 0) return empty(slots.length ? plan.summary || 'No hay productos con foto para publicar.' : full);
+  if (plan.posts.length === 0) {
+    const noLibrary = settings.libraryPerDay > 0 && library.length > 0 ? ' Lo de tu biblioteca ya está programado esos días o salió hace menos de una semana.' : '';
+    return empty((slots.length ? plan.summary || 'No hay productos con foto para publicar.' : full) + noLibrary);
+  }
 
-  // Los videos de los reels no se repiten dentro de un carrusel de la misma planificación.
-  const usedAssets = new Set<string>(reels.map(r => r.video!.id));
+  // Lo de la biblioteca ya elegido no se repite dentro de un carrusel de la misma planificación.
+  const usedAssets = new Set<string>([...inTandas, ...reels.map(r => r.video!.id)]);
   const built = plan.posts.map(pick => buildMedia(pick, library, usedAssets));
   const byAi = brain.name === 'ia';
   const channels = plan.posts.map(pick => channelsFor(pick.format, settings, byAi));
@@ -272,10 +377,16 @@ export async function pendingPlan(now = new Date()) {
 /** Aprueba la planificación (toda o las tandas indicadas): desde ahí sale sola a su hora. */
 export async function approvePlan(ids?: string[], now = new Date()): Promise<number> {
   let approved = 0;
+  const assets: string[] = [];
   for (const post of await pendingDrafts(now)) {
     if (ids && !ids.includes(post.id)) continue;
-    if (await updatePost(post.id, { status: 'approved', error: null }, ['draft'])) approved++;
+    if (await updatePost(post.id, { status: 'approved', error: null }, ['draft'])) {
+      approved++;
+      assets.push(...(post.media || []).map(m => m.asset_id).filter(Boolean) as string[]);
+    }
   }
+  // Lo aprobado de la biblioteca cuenta como usado: la próxima planificación empieza por otras fotos y videos.
+  if (assets.length) await markAssetsUsed([...new Set(assets)]).catch(() => {});
   return approved;
 }
 

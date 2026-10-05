@@ -39,8 +39,10 @@ export interface PlannedPost {
   format: PostFormat;
   /** Por qué (se muestra en la planificación del CRM). */
   reason: string;
-  /** Video de la biblioteca (ya no lo elige el plan; se conserva para publicaciones hechas a mano). */
+  /** Video de la biblioteca que sale como reel. */
   video?: LibraryItem;
+  /** Fotos y videos de la biblioteca de la tanda propia de la biblioteca (libraryTandas). */
+  library?: LibraryItem[];
 }
 
 export interface Plan { posts: PlannedPost[]; summary: string; /** Cosas que la dueña puede hacer (grabar un video…). */ tasks?: string[] }
