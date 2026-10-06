@@ -111,11 +111,25 @@ async function attribute(conversationId: string, trackingId: string, method: Att
   if (error) console.warn('⚠️ No se anotó de qué publicación vino el chat:', error.message);
 }
 
-/** Lo que la vendedora necesita saber cuando la clienta llega con un código. */
-export function codeContext(row: Pick<TrackingRow, 'code' | 'category' | 'product_name' | 'platforms'>): string {
+/**
+ * Lo que la vendedora necesita saber cuando la clienta llega por una publicación. products = lo que mostraba la
+ * publicación; seen = el producto exacto de la historia a la que respondió (si se sabe).
+ */
+export function codeContext(row: Pick<TrackingRow, 'code' | 'category' | 'product_name' | 'platforms'>, products: string[] = [], seen = '', viaStory = false): string {
   const where = (row.platforms || []).some(p => p.startsWith('facebook')) && !(row.platforms || []).some(p => p.startsWith('instagram')) ? 'Facebook' : 'Instagram o Facebook';
-  return `[La clienta escribió ${row.code}, el código de una publicación de ${where}${row.product_name ? ` del producto ${row.product_name}` : ''}${row.category ? ` (categoría ${row.category})` : ''}. `
-    + `Atiéndela directo con ${row.product_name ? 'ese producto (muéstraselo con su precio)' : 'opciones de esa categoría'} y avanza hacia la cotización; no le expliques qué es el código.]`;
+  const how = viaStory ? `La clienta respondió a una historia (código ${row.code})` : `La clienta escribió ${row.code}, el código de una publicación de ${where}`;
+  const category = row.category && !/nuestros productos/i.test(row.category) ? ` (categoría ${row.category})` : '';
+  const list = [...new Set(products.filter(Boolean))].slice(0, 6);
+  if (seen) return `[${how} del producto ${seen}${category}. Atiéndela directo con ese producto (muéstraselo con su precio) y avanza hacia la cotización; no le expliques qué es el código.]`;
+  if (list.length > 1) return `[${how}${category}. Esa publicación mostraba: ${list.join(', ')}. Muéstrale esas opciones con su precio y pregúntale cuál le gustó, y avanza hacia la cotización; no le expliques qué es el código.]`;
+  const one = list[0] || row.product_name;
+  return `[${how}${one ? ` del producto ${one}` : ''}${category}. Atiéndela directo con ${one ? 'ese producto (muéstraselo con su precio)' : 'opciones de esa categoría'} y avanza hacia la cotización; no le expliques qué es el código.]`;
+}
+
+/** Los productos que mostraba una publicación (en orden). */
+async function postProducts(postId: string): Promise<{ names: string[]; media: any[] }> {
+  const { data } = await supabase.from('social_posts').select('products, media').eq('id', postId).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
+  return { names: (data?.products || []).map((p: any) => String(p?.name || '')).filter(Boolean), media: data?.media || [] };
 }
 
 /**
@@ -130,7 +144,7 @@ export async function attributeByCode(conversationId: string, text: string): Pro
   const row = data[0] as TrackingRow;
   await attribute(conversationId, row.id, 'exacta');
   console.log(`🔖 Chat atribuido a la publicación ${row.code}`);
-  return codeContext(row);
+  return codeContext(row, (await postProducts(row.post_id).catch(() => ({ names: [] as string[] }))).names);
 }
 
 /** La clienta respondió a una historia de Instagram o Facebook: se busca qué publicación era (atribución exacta). */
@@ -145,7 +159,12 @@ export async function attributeStoryReply(conversationId: string, storyId: strin
   if (!row) return '';
   await attribute(conversationId, row.id, 'historia');
   console.log(`🔖 Respuesta a la historia ${row.code}: chat atribuido`);
-  return codeContext(row);
+  // Cada foto de la tanda es una historia: la posición de la historia dice qué producto vio (solo con fotos del Catálogo).
+  const { names, media } = await postProducts(row.post_id).catch(() => ({ names: [] as string[], media: [] as any[] }));
+  const ids = (Object.values(post.results || {}) as any[]).find(r => r && (r.id === storyId || (Array.isArray(r.ids) && r.ids.includes(storyId))));
+  const at = Array.isArray(ids?.ids) ? ids.ids.indexOf(storyId) : -1;
+  const seen = at >= 0 && !media.length && names[at] ? names[at] : '';
+  return codeContext(row, names, seen, true);
 }
 
 /**

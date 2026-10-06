@@ -92,3 +92,12 @@ test('la frase de la historia no repite la pregunta del llamado a la acción', (
   const [piece] = piecesFor([{ goal: 'consulta', cta: '¿Cuántas necesitas? Escríbenos {CODIGO} y te cotizamos' }]);
   assert.notEqual(piece.phrase, '¿Cuántas necesitas?');
 });
+
+test('con varias velas en la publicación, la vendedora las conoce todas y pregunta cuál le gustó', async () => {
+  const { codeContext } = await import('../src/social/tracking');
+  const row = { code: 'HALLOWEEN01', category: 'Halloween', product_name: 'VELA CATRINA', platforms: ['instagram_story', 'facebook_story'] };
+  const varias = codeContext(row, ['VELA CATRINA', 'VELA CHUCKY']);
+  assert.match(varias, /mostraba: VELA CATRINA, VELA CHUCKY/);
+  assert.match(varias, /pregúntale cuál le gustó/);
+  assert.match(codeContext(row, ['VELA CATRINA', 'VELA CHUCKY'], 'VELA CHUCKY', true), /respondió a una historia.*del producto VELA CHUCKY/);
+});

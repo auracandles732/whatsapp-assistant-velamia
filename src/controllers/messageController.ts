@@ -152,8 +152,17 @@ export function typingDelayMs(batch: { readyAt: number }, now = Date.now()): num
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
 export const PHOTO_BATCH_SIZE = 4;
-/** Fotos por tanda de la empresa (Configuración → Ventas); 4 si no la eligió. */
-const photoBatchSize = () => profile().sales.photosPerBatch || PHOTO_BATCH_SIZE;
+/** Chats que llegaron por una publicación (escribieron su código o respondieron a la historia), con la hora. */
+const fromPostChats = new Map<string, number>();
+/**
+ * Fotos por tanda de la empresa (Configuración → Ventas); 4 si no la eligió. Quien llegó por una publicación ya vio esas
+ * fotos: esa vez se le muestran todas las de la publicación (hasta 6), así encuentra la que le gustó.
+ */
+const photoBatchSize = (conversationId?: string) => {
+  const base = profile().sales.photosPerBatch || PHOTO_BATCH_SIZE;
+  const at = conversationId ? fromPostChats.get(conversationId) : undefined;
+  return at && Date.now() - at < 15 * 60_000 ? Math.max(base, 6) : base;
+};
 // El emoji de cada variante es fijo para un mismo perfil: así se reconoce la pregunta al leer el historial.
 const withEmojis = (texts: string[]) => {
   const emojis = profile().style.decorativeEmojis;
@@ -732,7 +741,10 @@ async function ingestMessage(message: any, value: any) {
     // sabe qué producto vio, para atenderla directo con ese diseño.
     const fromStory = message.story_id ? await attributeStoryReply(conversationId, String(message.story_id)).catch(() => '') : '';
     const fromCode = !fromStory && ['text', 'button', 'interactive'].includes(messageType) ? await attributeByCode(conversationId, userContent).catch(() => '') : '';
-    if (fromStory || fromCode) aiContent = `${fromStory || fromCode} ${aiContent}`;
+    if (fromStory || fromCode) {
+      aiContent = `${fromStory || fromCode} ${aiContent}`;
+      fromPostChats.set(conversationId, Date.now());
+    }
 
     // Las plantillas de seguimiento dicen "responde NO": se respeta siempre, aunque el bot esté pausado.
     const answeredFollowUp = lastMessage?.sender === 'bot' && isFollowUpMessage(lastMessage.content);
@@ -966,7 +978,7 @@ async function respondToBatch(batch: PendingBatch) {
       // Si la IA eligió una tanda de las pendientes, se toman todas: las que no entren quedan para la
       // siguiente pregunta en vez de perderse. Si pidió uno o dos modelos concretos, se envían solo esos.
       const continuesPending = pendingProducts.length > 0
-        && plan.show_products.length >= Math.min(photoBatchSize(), pendingProducts.length)
+        && plan.show_products.length >= Math.min(photoBatchSize(conversationId), pendingProducts.length)
         && plan.show_products.every(n => pendingProducts.includes(n));
       const saidByCustomer = [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), aiContent].join('\n');
       const chosen = photosFromBackup ? plan.show_products : sameCategoryAsMost(plan.show_products, catalog, saidByCustomer);
@@ -977,7 +989,7 @@ async function respondToBatch(batch: PendingBatch) {
       sex = gendered ? customerSex(saidByCustomer) : '';
       photos = continuesPending ? pendingProducts
         : gendered && !photosFromBackup && !plan.keep_photo_order ? withOppositeGender(chosen, catalog, sentProducts, sex) : chosen;
-      const firstBatch = photos.filter(n => catalog.some((p: any) => p.name === n && p.image_url)).slice(0, photoBatchSize());
+      const firstBatch = photos.filter(n => catalog.some((p: any) => p.name === n && p.image_url)).slice(0, photoBatchSize(conversationId));
       const noted = noteOppositeGender(plan.reply, firstBatch, catalog, sex);
       if (noted !== plan.reply) {
         console.log('📸 La tanda trae modelos del otro sexo: se aclara en el texto que se pueden personalizar');
@@ -1092,8 +1104,10 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
     .map(name => catalog.find(p => p.name === name))
     .filter(p => p && p.image_url);
 
-  const batch = products.slice(0, photoBatchSize());
-  const rest = products.slice(photoBatchSize()).map(p => p.name);
+  const size = photoBatchSize(conversationId);
+  fromPostChats.delete(conversationId);
+  const batch = products.slice(0, size);
+  const rest = products.slice(size).map(p => p.name);
   console.log(`📸 Enviando ${batch.length} foto(s) de productos${rest.length ? ` (quedan ${rest.length})` : ''}`);
   const profToUse = batchProfile || profile();
   const { business, sales } = profToUse;
