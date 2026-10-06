@@ -103,6 +103,8 @@ import { startSupervisor } from './services/supervisor';
 import { startSalesWatch } from './services/salesWatch';
 import { adsRouter } from './services/adsRoutes';
 import { startAdsSync, originsOf } from './services/ads';
+import { webCatalogRouter } from './services/webCatalogRoutes';
+import { startWebCatalogSync, scheduleWebPush } from './services/webCatalog';
 import { supervisorRouter } from './services/supervisorRoutes';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
@@ -449,6 +451,10 @@ app.use(supervisorRouter());
 // ---------- Anuncios de Meta: de qué anuncio (o de la web) llegó cada chat y qué ventas dejó ----------
 
 app.use(adsRouter());
+
+// ---------- Catálogo de la página web: el CRM manda y la web se actualiza sola ----------
+
+app.use(webCatalogRouter());
 
 // ---------- Páginas legales (públicas): política de privacidad y condiciones de venta ----------
 // VELAMIA en /privacidad y /condiciones; cada empresa en /legal/<id>/privacidad y /legal/<id>/condiciones.
@@ -1587,10 +1593,12 @@ app.post('/api/products', requireCrmSession, requireEditorRole, async (req: Requ
       return res.status(400).json({ error: 'La foto del producto debe ser un enlace https' });
     }
 
-    res.json(await createProduct(
+    const created = await createProduct(
       cleanProductName(name), parsedPrice, String(category).trim().toUpperCase(), image_url || undefined, pkg,
       productUnit(req.body)
-    ));
+    );
+    scheduleWebPush();
+    res.json(created);
   } catch (error: any) {
     console.error('Error creando producto:', error.message);
     res.status(500).json({ error: error.message });
@@ -1629,6 +1637,8 @@ app.put('/api/products/:id', requireCrmSession, requireUuidParam, requireEditorR
 
     const updated = await updateProduct(req.params.id, updates);
     if (!updated) return res.status(404).json({ error: 'Producto no encontrado' });
+    // Si está en la web, el cambio (precio, foto, nombre) sale allá en un momento.
+    scheduleWebPush();
     res.json(updated);
   } catch (error: any) {
     console.error('Error actualizando producto:', error.message);
@@ -1640,6 +1650,8 @@ app.delete('/api/products/:id', requireCrmSession, requireUuidParam, requireEdit
   try {
     const deleted = await deleteProduct(req.params.id);
     if (!deleted) return res.status(404).json({ error: 'Producto no encontrado' });
+    // Si estaba en la web, allá se oculta.
+    scheduleWebPush();
 
     // La foto se borra solo si ningún otro producto la usa. Si falla, el producto ya se eliminó.
     if (deleted.image_url) {
@@ -2292,6 +2304,7 @@ async function start() {
   startSupervisor();
   startSalesWatch();
   startAdsSync();
+  startWebCatalogSync();
   startRetention();
   startPhotoNudgeScheduler();
   startHealthCheck();

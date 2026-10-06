@@ -2610,6 +2610,28 @@
         .cs-box h3 { margin: 0 0 10px; font-size: 16px; color: #2B1C14; }
         .cs-scroll { overflow-x: auto; }
         .cs-scroll .sv-table { min-width: 640px; }
+        .web-panel { padding: 16px 20px !important; }
+        .web-h { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+        .web-h .tile { width: 44px; height: 44px; border-radius: 12px; background: #F3ECE3; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+        .web-h .grow { flex: 1; min-width: 0; }
+        .web-h h2 { margin: 0; font-size: 17px; color: #2B1C14; }
+        .web-h p { margin: 2px 0 0; font-size: 13.5px; color: #6B5849; }
+        .web-more { font-size: 13px; font-weight: 700; color: #B5654A; }
+        .web-body { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .web-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .web-row input { flex: 1; min-width: 220px; border: 1px solid #EADFD2; border-radius: 10px; padding: 9px 11px; font: inherit; }
+        .web-conflicts { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: #FFF6E6; border: 1px solid #F5D9A8; font-size: 13.5px; }
+        .web-conflict { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .web-conflict img { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; }
+        .web-conflict .nm { flex: 1; min-width: 140px; color: #2B1C14; font-weight: 600; }
+        .web-box { margin-top: 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid #EADFD3; background: #FDFAF6; display: flex; flex-direction: column; gap: 8px; }
+        .web-switch { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #2B1C14; font-size: 14px; cursor: pointer; }
+        .web-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .web-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 700; color: #4E3E33; }
+        .web-fields .wide, .web-fields small { grid-column: 1 / -1; }
+        .web-fields input, .web-fields textarea { border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; font-weight: 400; background: #fff; resize: vertical; }
+        .cat-tag.web, .mx-pill.web { background: #E7EEFB; color: #3C4FA8; margin-left: 4px; }
+        @media (max-width: 760px) { .web-fields { grid-template-columns: 1fr; } }
         .og-chip { align-self: center; max-width: 92%; margin: 8px auto; padding: 8px 14px; border-radius: 14px; background: #FFF6EC; border: 1px solid #F1DCC4; color: #5A3B26; font-size: 13px; display: flex; flex-direction: column; gap: 2px; text-align: center; }
         .og-chip b { color: #8E4A2E; }
         .og-chip small { color: #8A7868; font-size: 12px; }
@@ -6499,6 +6521,134 @@
             return category;
         }
 
+        // ---------- Catálogo de la página web: el CRM manda y la web se actualiza sola ----------
+        function useWebCatalog() {
+            const [overview, setOverview] = useState(null);
+            const load = () => api('/api/web-catalog').then(setOverview).catch(() => setOverview(null));
+            useEffect(() => { load(); }, []);
+            return [overview, load];
+        }
+
+        const webTitle = name => String(name || '').toLowerCase().split(/\s+/).filter(Boolean)
+            .map((w, i) => (i > 0 && ['de', 'del', 'la', 'el', 'los', 'las', 'en', 'con', 'y', 'o', 'a', 'para', 'por', 'al'].includes(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
+
+        // Conexión con la web, precios distintos por revisar y activar o pausar.
+        function WebCatalogPanel({ overview, reload, reloadProducts, canEdit }) {
+            const [url, setUrl] = useState('');
+            const [busy, setBusy] = useState('');
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            const [newKey, setNewKey] = useState('');
+            const [open, setOpen] = useState(false);
+            if (!overview || !overview.available) return null;
+            async function run(name, fn, ok) {
+                setBusy(name); setError(''); setNotice('');
+                try {
+                    const r = await fn();
+                    if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok);
+                    await reload();
+                    if (reloadProducts) reloadProducts();
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+            const o = overview;
+            const conflicts = o.conflicts || [];
+            return (
+                <div className="cat-card web-panel">
+                    <div className="web-h" onClick={() => setOpen(!open)}>
+                        <div className="tile">🌐</div>
+                        <div className="grow">
+                            <h2>Página web</h2>
+                            <p>{!o.connected ? 'Sin conectar: conéctala y tu web mostrará los productos que marques aquí, con el mismo precio y foto.'
+                                : (o.enabled ? '🟢 Se actualiza sola' : '⏸️ Pausada') + ` · ${o.counts.visible} producto(s) en la web` + (o.lastSyncAt ? ' · última vez ' + formatDateTime(o.lastSyncAt) : '')
+                                + (conflicts.length ? ` · ⚠️ ${conflicts.length} precio(s) por revisar` : '')}</p>
+                        </div>
+                        <span className="web-more">{open ? 'Cerrar' : 'Ver'}</span>
+                    </div>
+                    {open && (
+                        <div className="web-body">
+                            {error && <div className="pb-err">{error}</div>}
+                            {notice && <div className="pb-notice ok">{notice}</div>}
+                            {o.lastError && <div className="pb-err">La última vez no se pudo actualizar la web: {o.lastError}</div>}
+                            {!o.connected ? (
+                                <div className="web-row">
+                                    <input type="url" placeholder="https://panel-de-tu-web.com" value={url} onChange={e => setUrl(e.target.value)} />
+                                    <button type="button" className="pb-btn sm main" disabled={!!busy || !url || !canEdit} onClick={() => run('connect', () => api('/api/web-catalog/connect', { method: 'POST', body: JSON.stringify({ url }) }).then(r => { setNewKey(r.key); return r; }), 'Web conectada. Copia la llave y ponla en tu web (variable CRM_SYNC_KEY).')}>Conectar</button>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="pb-muted">Conectada a <b>{o.url}</b>. Lo que cambies aquí (precio, foto, nombre, mostrar u ocultar) sale en tu web en menos de un minuto. Las ofertas, etiquetas y el orden se siguen poniendo en el panel de la web.</div>
+                                    {conflicts.length > 0 && (
+                                        <div className="web-conflicts">
+                                            <b>⚠️ Estos productos tienen un precio en la web y otro aquí. Elige cuál queda (antes de activar):</b>
+                                            {conflicts.map(c => (
+                                                <div key={c.id} className="web-conflict">
+                                                    {c.image ? <img src={c.image} alt="" /> : null}
+                                                    <span className="nm">{c.webName || c.name}</span>
+                                                    <button type="button" className="pb-btn sm" disabled={!!busy || !canEdit} onClick={() => run('p' + c.id, () => api('/api/products/' + c.id + '/web-price', { method: 'POST', body: JSON.stringify({ use: 'web' }) }))}>Web ${Number(c.webPrice).toFixed(2)}</button>
+                                                    <button type="button" className="pb-btn sm" disabled={!!busy || !canEdit} onClick={() => run('p' + c.id, () => api('/api/products/' + c.id + '/web-price', { method: 'POST', body: JSON.stringify({ use: 'crm' }) }))}>CRM ${Number(c.crmPrice).toFixed(2)}</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="sv-actions" style={{ marginTop: 10 }}>
+                                        {o.enabled
+                                            ? <button type="button" className="pb-btn sm" disabled={!!busy || !canEdit} onClick={() => run('sync', () => api('/api/web-catalog/sync', { method: 'POST' }), r => `Listo: ${r.count} producto(s) enviados a la web.`)}>{busy === 'sync' ? 'Enviando…' : '🔄 Actualizar la web ahora'}</button>
+                                            : <button type="button" className="pb-btn sm main" disabled={!!busy || !canEdit || conflicts.length > 0} onClick={() => run('on', () => api('/api/web-catalog/enabled', { method: 'POST', body: JSON.stringify({ enabled: true }) }), 'Activada: desde ahora tu web se actualiza sola con este catálogo.')}>{busy === 'on' ? 'Activando…' : '▶️ Activar'}</button>}
+                                        {o.enabled && <button type="button" className="pb-btn sm" disabled={!!busy || !canEdit} onClick={() => run('off', () => api('/api/web-catalog/enabled', { method: 'POST', body: JSON.stringify({ enabled: false }) }), 'Pausada: la web se queda como está.')}>⏸️ Pausar</button>}
+                                        <button type="button" className="pb-btn sm" disabled={!!busy || !canEdit} onClick={() => { if (confirm('¿Desconectar la web? Los productos de la web se quedan como están.')) run('off', () => api('/api/web-catalog/disconnect', { method: 'POST' }), 'Web desconectada.'); }}>Desconectar</button>
+                                    </div>
+                                </>
+                            )}
+                            {newKey && <div className="ad-key" style={{ marginTop: 10 }}>{newKey}</div>}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Cómo se ve un producto en la web: mostrar u ocultar, nombre, categoría y descripción de allá.
+        function WebProductBox({ product, overview, onSaved, readOnly }) {
+            const web = product?.web || {};
+            const [f, setF] = useState({ visible: !!web.visible, name: web.name || '', category: web.category || '', description: web.description || '' });
+            const [busy, setBusy] = useState(false);
+            const [msg, setMsg] = useState('');
+            useEffect(() => { setF({ visible: !!web.visible, name: web.name || '', category: web.category || '', description: web.description || '' }); setMsg(''); }, [product?.id]);
+            if (!overview || !overview.available || !overview.connected || !product?.id) return null;
+            async function save() {
+                setBusy(true); setMsg('');
+                try {
+                    await api('/api/products/' + product.id + '/web', { method: 'PUT', body: JSON.stringify(f) });
+                    setMsg(overview.enabled ? '✅ Guardado: sale en la web en menos de un minuto.' : '✅ Guardado (la web se actualiza cuando actives la sincronización).');
+                    if (onSaved) onSaved();
+                } catch (e) {
+                    setMsg('⚠️ ' + e.message);
+                } finally {
+                    setBusy(false);
+                }
+            }
+            const listId = 'web-cats-' + product.id;
+            return (
+                <div className="web-box">
+                    <label className="web-switch"><input type="checkbox" checked={f.visible} disabled={readOnly} onChange={e => setF({ ...f, visible: e.target.checked })} /> 🌐 Mostrar en la página web</label>
+                    {f.visible && (
+                        <div className="web-fields">
+                            <label>Nombre en la web<input type="text" value={f.name} placeholder={webTitle(product.name)} disabled={readOnly} onChange={e => setF({ ...f, name: e.target.value })} /></label>
+                            <label>Categoría en la web<input type="text" list={listId} value={f.category} placeholder="baby-shower" disabled={readOnly} onChange={e => setF({ ...f, category: e.target.value })} />
+                                <datalist id={listId}>{(overview.categories || []).map(c => <option key={c} value={c} />)}</datalist></label>
+                            <label className="wide">Descripción en la web<textarea rows={2} value={f.description} disabled={readOnly} onChange={e => setF({ ...f, description: e.target.value })} /></label>
+                            <small className="pb-muted">Precio y foto son los de este Catálogo. Las ofertas se ponen en el panel de la web.</small>
+                        </div>
+                    )}
+                    {!readOnly && <button type="button" className="pb-btn sm" disabled={busy} onClick={save}>{busy ? 'Guardando…' : 'Guardar para la web'}</button>}
+                    {msg && <div className="pb-muted" style={{ marginTop: 6 }}>{msg}</div>}
+                </div>
+            );
+        }
+
         function CatalogView({ products, biz, legacy, reload, readOnly = false }) {
             const perProductUnits = !!biz?.sales?.perProductUnits;
             const genderTagging = !!biz?.sales?.genderTagging;
@@ -6513,6 +6663,7 @@
             const [view, setView] = useState('grid');
             const [editing, setEditing] = useState(null);
             const [busyId, setBusyId] = useState('');
+            const [webOverview, reloadWeb] = useWebCatalog();
 
             const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
             const total = products.length;
@@ -6682,6 +6833,8 @@
                             </div>
                         </div>
 
+                        <WebCatalogPanel overview={webOverview} reload={reloadWeb} reloadProducts={reload} canEdit={!readOnly} />
+
                         {!readOnly && <div className="cat-card">
                             <div className="cat-add-h">
                                 <div className="plus"><PlatIcon name="plus" size={24} color="#fff" /></div>
@@ -6741,7 +6894,7 @@
                                         <div className="cat-item" key={p.id}>
                                             {photo(p, 'ph')}
                                             <div className="body">
-                                                <span className="cat-tag">{p.category}</span>
+                                                <span className="cat-tag">{p.category}</span>{p.web?.visible && <span className="cat-tag web">🌐 En la web</span>}
                                                 <h3>{p.name}</h3>
                                                 <div className="cat-price">{priceText(p)}</div>
                                                 <div className="cat-lines">{detailLines(p).map(([icon, text]) => <div key={icon}><PlatIcon name={icon} size={16} color="#A69585" /><span>{text}</span></div>)}</div>
@@ -6756,7 +6909,7 @@
                                         <div className="cat-row" key={p.id}>
                                             {photo(p, 'th')}
                                             <div className="mid">
-                                                <span className="cat-tag">{p.category}</span>
+                                                <span className="cat-tag">{p.category}</span>{p.web?.visible && <span className="cat-tag web">🌐 En la web</span>}
                                                 <h3>{p.name}</h3>
                                                 <div className="meta">{detailLines(p).map(([, text]) => text).join(' · ')}</div>
                                             </div>
@@ -6780,6 +6933,7 @@
                                 <div className="cat-fields">
                                     <ProductFields value={editing} onChange={setEditing} biz={biz} categories={categories} listId="cat-list-edit" />
                                 </div>
+                                <WebProductBox product={products.find(x => x.id === editing.id)} overview={webOverview} onSaved={() => { reload(); reloadWeb(); }} />
                                 <div className="foot">
                                     <button type="button" className="cancel" onClick={() => setEditing(null)}>Cancelar</button>
                                     <button type="button" className="cat-submit" onClick={saveEdit} disabled={busyId === editing.id}>{busyId === editing.id ? 'Guardando...' : 'Guardar cambios'}</button>
@@ -6995,6 +7149,8 @@
                 ? <img className={big ? 'mx-hero-img' : ''} src={p.image_url || 'logo.png'} alt="" loading="lazy" />
                 : big ? <div className="mx-hero-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><PlatIcon name="image" size={48} color="#B5A595" /></div> : <div className="noimg"><PlatIcon name="image" size={34} color="#B5A595" /></div>);
             const caption = p => emoji + ' *' + p.name + '*\n💰 $' + Number(p.price).toFixed(2) + (biz?.sales?.priceSuffix ? ' ' + biz.sales.priceSuffix : '');
+
+            const [webOverview, reloadWeb] = useWebCatalog();
 
             function closeDetail() {
                 setDetailId(null);
@@ -7260,6 +7416,7 @@
                             <button type="button" className="share" onClick={() => setShare(p)}><PlatIcon name="whatsapp" size={24} color="#1E8A4A" />Compartir por WhatsApp</button>
                             {!readOnly && <button type="button" className="del" disabled={busyId === p.id} onClick={() => remove(p)}><PlatIcon name="trash" size={24} color="#D03535" />Eliminar</button>}
                         </div>
+                        {webOverview?.connected && <div className="mx-info"><WebProductBox product={p} overview={webOverview} readOnly={readOnly} onSaved={() => { reload(); reloadWeb(); }} /></div>}
                         <div className="mx-info">
                             <h3>Información del producto</h3>
                             {rows.map(([icon, label, value]) => (
@@ -7288,6 +7445,7 @@
                         <div className="grow"><h1>Catálogo</h1><p>Administra los productos de tu catálogo. Edita, agrega o compártelos por WhatsApp.</p></div>
                     </div>
                     {notice && <div className="mx-notice">{notice}</div>}
+                    <WebCatalogPanel overview={webOverview} reload={reloadWeb} reloadProducts={reload} canEdit={!readOnly} />
                     {!readOnly && (
                         <button type="button" className="mx-addcard" onClick={startAdd}>
                             <span className="plus"><PlatIcon name="plus" size={26} color="#fff" /></span>
@@ -7325,7 +7483,7 @@
                                     <button type="button" className="ph" onClick={() => setDetailId(p.id)}>{photoOf(p)}</button>
                                     <div className="dots"><PbMenu items={menuFor(p)} /></div>
                                     <div className="body" onClick={() => setDetailId(p.id)}>
-                                        <span className="mx-pill">{p.category}</span>
+                                        <span className="mx-pill">{p.category}</span>{p.web?.visible && <span className="mx-pill web">🌐</span>}
                                         <div className="nm">{p.name}</div>
                                         {priceLine(p)}
                                     </div>
