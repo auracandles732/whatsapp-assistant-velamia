@@ -6,6 +6,7 @@ import { socialAi, track, isStopError } from './ai';
 import { renderPoster, TEMPLATE_NAMES, templateName } from './template';
 import { productKey } from '../services/openai';
 import { toJpeg, toJpegMax, isOwnStorageUrl } from './images';
+import { plain } from './posts';
 import { getSupplierSettings, getSupplierProduct, SupplierProduct, SupplierSettings, addSupplierProductsToCatalog, discardAsDuplicate, listSupplierCatalogs } from './suppliers';
 
 /**
@@ -325,7 +326,11 @@ async function drawPoster(model: Buffer, refs: Buffer[], t: PosterTexts, occasio
   const ai = await socialAi();
   const form = new FormData();
   form.append('model', ai.imageModel);
-  form.append('prompt', posterPrompt(t, occasion, design, instructions));
+  // Los colores por categoría de las instrucciones del agente van solo en las fotos que dibuja la IA.
+  const palette = paletteFor(ai.prompt, occasion);
+  form.append('prompt', posterPrompt(t, occasion, design, instructions) + (palette ? `
+
+Color palette for the background theme of this occasion (from the shop's style guide): ${palette}. Keep the series design; use these colors for the background and decorations, soft and warm, not saturated.` : ''));
   form.append('size', '1024x1024');
   form.append('quality', ai.imageQuality);
   [toJpeg(model), ...refs].forEach((buffer, i) => form.append('image[]', new Blob([buffer], { type: 'image/jpeg' }), `foto${i}.jpg`));
@@ -865,4 +870,24 @@ export async function resumeStuck(catalogId: string) {
   }
   for (const [id] of stuck) await setState(catalogId, id, { status: 'cola' });
   if (!postersRunning(catalogId)) void runQueue(catalogId);
+}
+
+/**
+ * Los colores que la empresa pidió para la ocasión (sección "COLORES POR CATEGORÍA" de sus instrucciones del Cerebro IA),
+ * solo para las fotos que dibuja la IA: las plantillas de proveedor mantienen sus propios colores. '' si no hay.
+ */
+export function paletteFor(instructions: string, occasion: string): string {
+  const text = String(instructions || '');
+  const start = text.search(/COLORES POR CATEGOR[IÍ]A/i);
+  if (start < 0 || !occasion) return '';
+  const section = text.slice(start).split(/\n\s*={5,}/).slice(0, 2).join('\n').split(/\n(?=[A-ZÁÉÍÓÚÑ ]{6,}\n)/)[0];
+  const want = plain(occasion);
+  const lines = section.split('\n').map(l => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length - 1; i++) {
+    const head = lines[i].replace(/:$/, '');
+    if (!lines[i].endsWith(':')) continue;
+    const names = head.split(/[\/,]| y /).map(n => plain(n).trim()).filter(n => n.length >= 3);
+    if (names.some(n => want.includes(n) || n.includes(want) || want.includes(n.split(' ')[0]))) return lines[i + 1].replace(/\.$/, '');
+  }
+  return '';
 }

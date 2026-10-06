@@ -25,8 +25,9 @@ test('un modelo o una calidad que no están en la lista vuelven al recomendado',
   assert.equal(normalizeSocialAi({ textModel: 'gpt-5.6-sol' }).textModel, 'gpt-5.6-sol');
 });
 
-test('las instrucciones del agente se guardan limpias y con un máximo de 4.000 caracteres', () => {
+test('las instrucciones del agente se guardan limpias y con un máximo de 12.000 caracteres', () => {
   assert.equal(normalizeSocialAi({ prompt: '  # OBJETIVO\nVender más  ' }).prompt, '# OBJETIVO\nVender más');
-  assert.equal(normalizeSocialAi({ prompt: 'x'.repeat(5000) }).prompt.length, 4000);
+  assert.equal(normalizeSocialAi({ prompt: 'x'.repeat(5000) }).prompt.length, 5000);
+  assert.equal(normalizeSocialAi({ prompt: 'x'.repeat(15000) }).prompt.length, 12000);
   assert.equal(normalizeSocialAi({ prompt: 123 }).prompt, '');
 });

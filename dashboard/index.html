@@ -2606,6 +2606,10 @@
         .sv-table th, .sv-table td { padding: 8px 6px; border-bottom: 1px solid #F3ECE3; text-align: right; }
         .sv-table th:first-child, .sv-table td:first-child { text-align: left; }
         .sv-table th { color: #7A6858; font-weight: 700; font-size: 12.5px; }
+        .cs-box { margin-top: 18px; padding-top: 16px; border-top: 1px solid #F3ECE3; }
+        .cs-box h3 { margin: 0 0 10px; font-size: 16px; color: #2B1C14; }
+        .cs-scroll { overflow-x: auto; }
+        .cs-scroll .sv-table { min-width: 640px; }
         .sv-prompt textarea { width: 100%; min-height: 260px; padding: 12px; border-radius: 12px; border: 1px solid #E6DACC; font: inherit; font-size: 13.5px; line-height: 1.5; background: #fff; resize: vertical; }
         @media (max-width: 760px) { .sv-step { grid-template-columns: 110px 1fr 46px; font-size: 13px; } .sv-table { font-size: 12.5px; } }
         .sv-kpis div { border: 1px solid #EADFD3; border-radius: 14px; padding: 10px 12px; background: #FDFCFB; display: flex; flex-direction: column; }
@@ -10628,8 +10632,9 @@
                                 </div>
                             )}
                             <div className="pb-field">
-                                <label className="pb-label" htmlFor={'pb-text-' + post.id}>Texto</label>
+                                <label className="pb-label" htmlFor={'pb-text-' + post.id}>{channels.length > 0 && channels.every(c => c.endsWith('_story')) ? 'Texto sobre la historia' : 'Texto'}</label>
                                 <textarea id={'pb-text-' + post.id} value={caption} readOnly={!editable} onChange={e => setCaption(e.target.value)} />
+                                {channels.length > 0 && channels.every(c => c.endsWith('_story')) && <div className="pb-muted" style={{ marginTop: 6 }}>1ª línea: frase que va sobre la primera foto. 2ª línea: llamado a la acción (con su código) sobre la última. Déjalo vacío para publicar las fotos sin texto.</div>}
                                 <div className={'pb-count' + (tooLong ? ' bad' : '')}>{caption.length} / {CAPTION_MAX}</div>
                             </div>
                             {links.length > 0 && (
@@ -12576,7 +12581,55 @@
                                 : <ResultsTable posts={data.posts} />}
                         </>
                     )}
+                    <ContentSales days={days} />
                 </section>
+            );
+        }
+
+        const GOAL_LABELS = { alcance: 'Alcance', interaccion: 'Interacción', confianza: 'Confianza', consulta: 'Consulta', venta: 'Venta' };
+
+        // Ventas por contenido: qué publicación trajo chats, cotizaciones, pedidos y ventas (por su código o estimado).
+        function ContentSales({ days }) {
+            const [data, setData] = useState(null);
+            const [error, setError] = useState('');
+            useEffect(() => {
+                setData(null);
+                api('/api/social/attribution?days=' + days).then(setData).catch(e => setError(e.message));
+            }, [days]);
+            if (error) return <div className="pb-err" style={{ marginTop: 16 }}>{error}</div>;
+            if (!data) return null;
+            const money = n => '$' + Number(n || 0).toFixed(2);
+            return (
+                <div className="cs-box">
+                    <h3>🛒 Ventas por contenido</h3>
+                    {!data.available ? (
+                        <div className="pb-muted">Falta activar la medición: hay que aplicar una actualización en la base de datos (migración 026). Mientras tanto el agente publica normal, sin códigos.</div>
+                    ) : data.results.length === 0 ? (
+                        <div className="pb-muted">Todavía no hay publicaciones con código en este período. Desde ahora cada publicación del agente lleva un código (por ejemplo BAUTIZO07) en su llamado a la acción: cuando una clienta lo escribe o responde a la historia, aquí se ve qué contenido trajo chats y ventas.</div>
+                    ) : (
+                        <>
+                            {data.recommendations.length > 0 && <div className="pl-tasks"><b>💡 Recomendaciones</b><ul>{data.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>}
+                            <div className="cs-scroll">
+                                <table className="sv-table">
+                                    <thead><tr><th>Categoría</th><th>Publicaciones</th><th>Alcance</th><th>Interacciones</th><th>Chats</th><th>Cotizaciones</th><th>Pedidos</th><th>Ventas</th><th>Ingresos</th></tr></thead>
+                                    <tbody>{data.categories.map(c => (
+                                        <tr key={c.category}><td>{c.category}{!c.enoughData && <small className="pb-muted"> · pocos datos</small>}</td><td>{c.posts}</td><td>{c.reach}</td><td>{c.interactions}</td><td>{c.chats}</td><td>{c.quotations}</td><td>{c.orders}</td><td>{c.sales}</td><td>{money(c.revenue)}</td></tr>
+                                    ))}</tbody>
+                                </table>
+                            </div>
+                            <div className="cs-scroll" style={{ marginTop: 12 }}>
+                                <table className="sv-table">
+                                    <thead><tr><th>Código</th><th>Publicada</th><th>Objetivo</th><th>Llamado a la acción</th><th>Chats</th><th>Cotiz.</th><th>Ventas</th><th>Ingresos</th></tr></thead>
+                                    <tbody>{data.results.slice(0, 40).map(r => (
+                                        <tr key={r.code}><td><b>{r.code}</b><br /><small className="pb-muted">{r.category}</small></td><td>{formatDateTime(r.publishAt)}</td><td>{GOAL_LABELS[r.goal] || r.goal || '—'}</td><td style={{ textAlign: 'left', maxWidth: 260 }}>{r.cta}</td>
+                                            <td>{r.chats}{r.chats > r.exactChats ? <small className="pb-muted"> ({r.chats - r.exactChats} est.)</small> : null}</td><td>{r.quotations}</td><td>{r.sales}</td><td>{money(r.revenue)}</td></tr>
+                                    ))}</tbody>
+                                </table>
+                            </div>
+                            <small className="pb-muted">"est." = estimado: llegó poco después de la publicación y preguntó por lo mismo, pero sin escribir el código.</small>
+                        </>
+                    )}
+                </div>
             );
         }
 

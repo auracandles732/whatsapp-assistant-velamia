@@ -218,6 +218,20 @@ export function isOutsideWindowError(error: any): boolean {
   return [2018278, 2534022].includes(data.error_subcode) || /outside (of )?(the )?allowed window/i.test(String(data.message || ''));
 }
 
+const numberCache = new Map<string, { at: number; value: string }>();
+
+/** El número de WhatsApp de la empresa en curso (solo dígitos), preguntado a Meta y guardado un día. '' si no se sabe. */
+export async function businessWhatsAppNumber(): Promise<string> {
+  const key = currentTenant()?.businessId || 'velamia';
+  const cached = numberCache.get(key);
+  if (cached && Date.now() - cached.at < 86_400_000) return cached.value;
+  const { phoneId } = credentials();
+  const { data } = await graph.get(`${GRAPH_API}/${phoneId}`, { headers: authHeaders(), params: { fields: 'display_phone_number' } });
+  const value = String(data?.display_phone_number || '').replace(/\D/g, '');
+  numberCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 /** Explica en español los rechazos de WhatsApp más comunes al escribir desde el CRM. */
 export function describeWhatsAppError(error: any): string {
   const code = error.response?.data?.error?.code;

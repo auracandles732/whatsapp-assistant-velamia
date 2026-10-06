@@ -9,6 +9,8 @@ import {
 } from './posts';
 import { productKey } from '../services/openai';
 import { listAssets, markAssetsUsed } from './library';
+import { trackingAvailable, nextCodes, saveTracking, contentResults, byCategory } from './tracking';
+import { imageForAi } from './posters';
 
 /**
  * Prepara las publicaciones de los próximos días de publicación que todavía no tienen ninguna (un día cuya publicación
@@ -34,7 +36,57 @@ export interface PlanDraft {
   media: PostMedia[];
   /** Lo mismo en el formato que acepta "Programar": fotos del Catálogo por nombre y archivos de la biblioteca por id. */
   items: ({ product: string } | { asset: string })[];
+  /** Código, objetivo y llamado a la acción de la pieza (para saber después qué chats y ventas trajo). */
+  tracking?: { code: string; goal: string; cta: string; source: string; category: string; productName: string };
 }
+
+// ---------- Objetivo, frase y llamado a la acción de cada pieza ----------
+
+const GOALS = ['consulta', 'venta', 'confianza', 'interaccion', 'alcance'];
+const PHRASES: Record<string, string[]> = {
+  consulta: ['¿Cuántas necesitas?', 'Cotiza tu evento', 'Disponible bajo pedido'],
+  venta: ['Cotiza tu evento', 'Pide las tuyas', 'Reserva tu fecha'],
+  confianza: ['Personalizamos con nombre y fecha', 'Hechas a mano con amor', 'Diseños personalizados'],
+  interaccion: ['¿Cuál te gusta más?', '¿Para qué evento las quieres?', 'Personaliza el tuyo'],
+  alcance: ['Diseños para tu evento', 'Detalles que se recuerdan', 'Personaliza el tuyo']
+};
+const CTAS = [
+  '¿Cuántas necesitas? Escríbenos {CODIGO} y te cotizamos',
+  'Escríbenos {CODIGO} y te mostramos opciones',
+  'Cuéntanos tu evento: escríbenos {CODIGO}',
+  'Personalízalas con nombre y fecha: escríbenos {CODIGO}',
+  '¿Ya tienes fecha? Escríbenos {CODIGO}',
+  'Pide tu cotización: escríbenos {CODIGO}'
+];
+
+/** El CTA con su código; sin código (sin la migración 026) queda sin él. Si la IA olvidó el código, se agrega. */
+export function ctaWithCode(cta: string, code: string): string {
+  const text = String(cta || '').replace(/\s+/g, ' ').trim();
+  if (!code) return text.replace(/\s*\{CODIGO\}/g, '').replace(/\s+([:,.])/g, '$1').replace(/:\s*$/, '').trim();
+  if (text.includes('{CODIGO}')) return text.replace(/\{CODIGO\}/g, code);
+  return text ? `${text.replace(/[.!]+$/, '')} · Escríbenos ${code}` : `Escríbenos ${code} y te cotizamos`;
+}
+
+/** Objetivo, frase y CTA de cada pieza: los de la IA o, si no vienen, variados (sin repetir los recientes). */
+export function piecesFor(picks: { goal?: string; phrase?: string; cta?: string; library?: unknown[]; video?: unknown }[], recentCtas: string[] = []) {
+  const usedCtas = new Set(recentCtas.map(c => c.replace(/[A-Z]+\d+/g, '{CODIGO}')));
+  let ctaTurn = 0;
+  return picks.map((pick, i) => {
+    const goal = pick.goal && GOALS.includes(pick.goal) ? pick.goal : (pick.library?.length || pick.video) ? 'confianza' : GOALS[i % GOALS.length];
+    const phrases = PHRASES[goal];
+    const phrase = pick.phrase || phrases[i % phrases.length];
+    let cta = pick.cta || '';
+    if (!cta) {
+      const options = CTAS.filter(c => !usedCtas.has(c));
+      cta = (options.length ? options : CTAS)[ctaTurn++ % (options.length || CTAS.length)];
+      usedCtas.add(cta);
+    }
+    return { goal, phrase, cta };
+  });
+}
+
+/** Miniatura de un video de la biblioteca (para que la IA vea qué muestra), o '' si no hay. */
+const thumbOf = (item: { id: string; url: string }) => (/\/social\/[^/]+$/.test(item.url || '') ? item.url.replace(/[^/]*$/, `thumbs/${item.id}.jpg`) : '');
 
 export interface PlanProposal { drafts: PlanDraft[]; summary: string; brain: string; tasks: string[]; days: number }
 
@@ -229,11 +281,19 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
 
   // Sin la migración 025 no hay biblioteca: se publica solo con las fotos del Catálogo.
   const [catalog, recent, library] = await Promise.all([getAllProducts(), recentActivity(tz), listAssets().catch(() => [])]);
+  // Qué trajo cada categoría los últimos 30 días (lo calcula el CRM con los códigos; sin datos, "SIN DATOS SUFICIENTES").
+  const tracked = await trackingAvailable();
+  const lastMonth = tracked ? await contentResults(new Date(now.getTime() - 30 * 86_400_000), now).catch(() => []) : [];
+  const performance = byCategory(lastMonth).map(c => ({
+    categoria: c.category, publicaciones: c.posts, alcance: c.reach, chats: c.chats, cotizaciones: c.quotations, ventas: c.sales,
+    datos: c.enoughData ? 'suficientes' : 'SIN DATOS SUFICIENTES'
+  }));
+  const recentCtas = lastMonth.sort((a, b) => String(b.publishAt).localeCompare(String(a.publishAt))).slice(0, 12).map(r => r.cta);
   // Con las fotos del día completas igual pueden entrar los videos de la biblioteca (reels).
   const plan = slots.length
     ? await brain.plan({
       slots, catalog, recent: recent.names, recentThemes: recent.themes, library,
-      settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p, request
+      settings, month: localParts(now, tz).month, now, timeZone: tz, profile: p, request, performance, recentCtas
     })
     : { posts: [] as PlannedPost[], summary: full, tasks: [] as string[] };
   // La biblioteca tiene su propia tanda cada día (fotos y, con solo historias, un video), aparte de las fotos del Catálogo.
@@ -262,11 +322,24 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
   const built = plan.posts.map(pick => buildMedia(pick, library, usedAssets));
   const byAi = brain.name === 'ia';
   const channels = plan.posts.map(pick => channelsFor(pick.format, settings, byAi));
-  // Las historias no llevan texto: solo se escribe para lo que va al feed o a Facebook.
+  // Lo que va al feed o a Facebook lleva texto; las historias, una frase corta y el llamado a la acción sobre la foto.
   const needsText = plan.posts.map((_, i) => channels[i].some(c => !isStoryChannel(c)));
+  const pieces = piecesFor(plan.posts, recentCtas);
+  const codes = tracked ? await nextCodes(plan.posts.map(pick => pick.theme), p.business.name).catch(() => [] as string[]) : [];
+  const ctas = plan.posts.map((_, i) => ctaWithCode(pieces[i].cta, codes[i] || ''));
+  // La portada de los videos (reels y tandas de la biblioteca) para que la IA escriba sobre lo que muestran.
+  const covers = await Promise.all(plan.posts.map(async (pick, i) => {
+    const video = pick.video || (pick.library || []).find(a => a.kind === 'video');
+    if (!video || !needsText[i]) return '';
+    const thumb = thumbOf(video);
+    return thumb ? imageForAi(thumb, 512).catch(() => '') : '';
+  }));
   let captions: string[] = [];
   try {
-    const requests = plan.posts.map((pick, i) => ({ theme: pick.theme, products: built[i].products.map(c => ({ name: c.name, price: c.price })) })).filter((_, i) => needsText[i]);
+    const requests = plan.posts.map((pick, i) => ({
+      theme: pick.theme, products: built[i].products.map(c => ({ name: c.name, price: c.price })),
+      goal: pieces[i].goal, cta: ctas[i], ...(covers[i] ? { image: covers[i] } : {})
+    })).filter((_, i) => needsText[i]);
     const written = requests.length ? await brain.write(requests, p) : [];
     let next = 0;
     captions = plan.posts.map((_, i) => (needsText[i] ? written[next++] || '' : ''));
@@ -285,16 +358,43 @@ export async function draftUpcomingPosts(now = new Date(), days = 7, settingsPar
       channels: channels[i],
       theme: pick.theme,
       reason: pick.reason,
-      caption: needsText[i] ? captions[i] || fallbackCaption({ theme: pick.theme, products: built[i].products }, p) : '',
+      // Historias: la frase y el llamado a la acción que van sobre las fotos (primera y última de la tanda).
+      caption: needsText[i]
+        ? withCta(captions[i] || fallbackCaption({ theme: pick.theme, products: built[i].products }, p), ctas[i])
+        : [pieces[i].phrase, ctas[i]].filter(Boolean).join('\n'),
       products: built[i].products,
       media: built[i].media,
-      items: built[i].items
+      items: built[i].items,
+      ...(codes[i] ? {
+        tracking: {
+          code: codes[i], goal: pieces[i].goal, cta: ctas[i],
+          source: pick.library?.length || pick.video ? (built[i].products.length ? 'mixto' : 'biblioteca') : 'catalogo',
+          category: pick.theme, productName: built[i].products[0]?.name || ''
+        }
+      } : {})
     }))
   };
 }
 
+/** El texto del feed termina con el llamado a la acción (con su código) si la IA no lo puso, antes de los hashtags. */
+export function withCta(caption: string, cta: string): string {
+  if (!cta) return caption;
+  const code = cta.match(/[A-Z]{3,11}\d{2,3}/)?.[0];
+  if (caption.includes(cta) || (code && caption.includes(code))) return caption;
+  const tags = caption.match(/\n\n(#[^\n]*)$/);
+  return tags ? `${caption.slice(0, tags.index)}\n${cta}\n\n${tags[1]}` : `${caption}\n${cta}`;
+}
+
+function trackingRow(post: SocialPost, tracking: PlanDraft['tracking'] | undefined, format: string | undefined) {
+  if (!tracking) return null;
+  return {
+    code: tracking.code, postId: post.id, category: tracking.category, productName: tracking.productName, contentType: format || '',
+    goal: tracking.goal, cta: tracking.cta, source: tracking.source, platforms: post.channels, publishAt: post.scheduled_at
+  };
+}
+
 /** Guarda publicaciones ya armadas como programadas (salen solas a su hora) y anota la estrategia de la semana. */
-export async function schedulePlan(all: Omit<PlanDraft, 'items' | 'format' | 'reason'>[], summary: string, tasks: string[] = []): Promise<SocialPost[]> {
+export async function schedulePlan(all: (Omit<PlanDraft, 'items' | 'format' | 'reason'> & { format?: string })[], summary: string, tasks: string[] = []): Promise<SocialPost[]> {
   if (all.length === 0) return [];
   // Confirmar dos veces la misma propuesta (se cortó la respuesta y se volvió a tocar) no la duplica: lo que ya está
   // programado igual (misma hora, redes, texto y fotos) se salta.
@@ -322,6 +422,7 @@ export async function schedulePlan(all: Omit<PlanDraft, 'items' | 'format' | 're
     results: {},
     error: null
   })));
+  await saveTracking(posts.map((post, i) => trackingRow(post, (drafts[i] as any).tracking, (drafts[i] as any).format)).filter(Boolean) as any[]);
   const assets = drafts.flatMap(d => d.media.filter(m => m.asset_id).map(m => m.asset_id!));
   if (assets.length) await markAssetsUsed([...new Set(assets)]).catch(() => {});
   if (summary) await setConfig(SUMMARY_KEY, JSON.stringify({ at: new Date().toISOString(), summary, tasks: tasks.slice(0, 5) })).catch(() => {});
@@ -360,6 +461,7 @@ export async function proposePlan(now = new Date(), settingsParam?: PublishingSe
     scheduled_at: d.scheduled_at, status: 'draft' as const, channels: d.channels, caption: d.caption, products: d.products,
     ...(withMedia ? { media: d.media } : {}), theme: d.theme, results: {}, error: null
   })));
+  await saveTracking(posts.map((post, i) => trackingRow(post, proposal.drafts[i]?.tracking, proposal.drafts[i]?.format)).filter(Boolean) as any[]);
   const reasons: Record<string, string> = {};
   posts.forEach((post, i) => { reasons[post.id] = proposal.drafts[i]?.reason || ''; });
   const previous = options.replace ? null : await lastPlanReport();

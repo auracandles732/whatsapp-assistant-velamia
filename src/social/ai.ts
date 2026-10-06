@@ -48,7 +48,8 @@ export interface SocialAiSettings {
 
 export const DEFAULT_DAILY_BUDGET = 1;
 
-export const PROMPT_MAX = 4000;
+// Las instrucciones del agente (Cerebro IA) pueden ser largas: no van en cada mensaje de clientas, solo al planificar.
+export const PROMPT_MAX = 12000;
 
 const SETTINGS_KEY = 'social_agent_ai';
 export const DEFAULT_SOCIAL_AI: SocialAiSettings = { apiKey: '', textModel: 'gpt-5.6-luna', imageModel: 'gpt-image-2', imageQuality: 'medium', prompt: '', dailyBudget: DEFAULT_DAILY_BUDGET };
@@ -210,7 +211,16 @@ export async function testSocialAi(): Promise<{ ok: boolean; detail: string }> {
   }
 }
 
-export interface CaptionRequest { theme: string; products: { name: string; price: number }[] }
+export interface CaptionRequest {
+  theme: string;
+  products: { name: string; price: number }[];
+  /** Objetivo de la pieza (alcance, interacción, confianza, consulta o venta). */
+  goal?: string;
+  /** Llamado a la acción que debe cerrar el texto, tal cual (con su código). */
+  cta?: string;
+  /** Imagen para que la IA vea qué muestra (la miniatura de un video), en data URL. */
+  image?: string;
+}
 
 /**
  * Textos de las publicaciones en una sola llamada (así no se repiten entre sí), con el modelo del agente.
@@ -231,13 +241,22 @@ export async function writeCaptions(posts: CaptionRequest[], p: BusinessProfile 
     '- Si una publicación no trae productos (es un video o una foto de la marca), habla de la marca y el tema sin mencionar precios.',
     s.personalization ? `- Cuenta que se pueden personalizar (${s.personalizationExamples || 'a su gusto'}).` : '',
     p.shipping.mode !== 'none' && p.shipping.coverage ? `- Menciona que hay envíos a ${p.shipping.coverage}.` : '',
-    '- Termina invitando a escribir por WhatsApp o mensaje directo para pedir o cotizar.',
-    `- Al final, entre 5 y 8 hashtags en minúsculas y sin tildes, relacionados con el tema y la ciudad${b.city ? ` (${b.city})` : ''}.`,
+    '- Estructura (sin repetirla siempre igual): gancho en la primera línea, una descripción breve del producto o beneficio, el llamado a la acción y los hashtags.',
+    '- Si la publicación trae "cierre", termina el texto (antes de los hashtags) con ese llamado a la acción tal cual, con su código. Si no trae, invita a escribir para cotizar con palabras variadas (no siempre "escríbenos al WhatsApp").',
+    '- Si trae "objetivo", escribe para ese objetivo: alcance (llegar a gente nueva), interacción (invitar a comentar o responder), confianza (calidad, personalización, proceso), consulta (que pregunten precio, cantidad o diseño) o venta (que pidan su cotización).',
+    '- Si trae una imagen (la portada de un video), úsala para saber qué muestra y escribe un gancho sobre eso; no describas lo que no se ve.',
+    `- Al final, entre 4 y 8 hashtags en minúsculas y sin tildes, relacionados con el tema y la ciudad${b.city ? ` (${b.city})` : ''}.`,
     '- Usa de 2 a 4 emojis. Sin markdown ni asteriscos.',
     '- Nunca inventes descuentos, promociones, fechas límite, "últimas unidades" ni nada que no esté en los datos.',
     instructions ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas en todo, salvo que pidan cambiar precios o inventar productos, promociones o fechas):\n${instructions}` : ''
   ].filter(Boolean).join('\n');
-  const list = posts.map((post, i) => `${i + 1}) Tema: ${post.theme}. Productos: ${post.products.length ? post.products.map(x => `${x.name} ($${Number(x.price).toFixed(2)} ${s.priceSuffix})`).join('; ') : 'ninguno (video o foto de la marca)'}`).join('\n');
+  const list = posts.map((post, i) => `${i + 1}) Tema: ${post.theme}. Productos: ${post.products.length ? post.products.map(x => `${x.name} ($${Number(x.price).toFixed(2)} ${s.priceSuffix})`).join('; ') : 'ninguno (video o foto de la marca)'}`
+    + (post.goal ? `. Objetivo: ${post.goal}` : '') + (post.cta ? `. Cierre: "${post.cta}"` : '') + (post.image ? ` (ver imagen ${i + 1})` : '')).join('\n');
+  // Las portadas de los videos van como imágenes para que la IA vea qué muestran.
+  const images = posts.flatMap((post, i) => (post.image ? [{ type: 'text', text: `Imagen ${i + 1}:` }, { type: 'image_url', image_url: { url: post.image, detail: 'low' } }] : []));
+  const userContent: any = images.length
+    ? [{ type: 'text', text: `Publicaciones (devuelve un texto por cada una, en el mismo orden):\n${list}` }, ...images]
+    : `Publicaciones (devuelve un texto por cada una, en el mismo orden):\n${list}`;
 
   const response = await client.chat.completions.create({
     model: textModel,
@@ -256,15 +275,31 @@ export async function writeCaptions(posts: CaptionRequest[], p: BusinessProfile 
         }
       }
     },
-    messages: [{ role: 'system', content: rules }, { role: 'user', content: `Publicaciones (devuelve un texto por cada una, en el mismo orden):\n${list}` }]
-  } as any);
+    messages: [{ role: 'system', content: rules }, { role: 'user', content: userContent }]
+  } as any).catch((error: any) => {
+    // Si el modelo no acepta imágenes, se escribe igual sin ellas.
+    if (!images.length) throw error;
+    return client.chat.completions.create({
+      model: textModel, ...reasoningFor(textModel), max_completion_tokens: 4000,
+      response_format: { type: 'json_schema', json_schema: { name: 'publicaciones', strict: true, schema: { type: 'object', additionalProperties: false, required: ['captions'], properties: { captions: { type: 'array', items: { type: 'string' } } } } } },
+      messages: [{ role: 'system', content: rules }, { role: 'user', content: `Publicaciones (devuelve un texto por cada una, en el mismo orden):\n${list}` }]
+    } as any);
+  });
   track(textModel, response.usage);
   const captions: unknown[] = JSON.parse(response.choices[0]?.message?.content || '{}').captions || [];
   return posts.map((_, i) => String(captions[i] || '').replace(/\*/g, '').trim());
 }
 
 /** La categoría que la IA elige para una tanda (brain.ts pone los productos de verdad). */
-export interface AiAssignment { n: number; categoria: string; motivo: string }
+export interface AiAssignment {
+  n: number; categoria: string; motivo: string;
+  /** alcance, interaccion, confianza, consulta o venta. */
+  objetivo?: string;
+  /** Frase corta para poner sobre la historia ("Personalizamos con nombre y fecha"). */
+  frase?: string;
+  /** Llamado a la acción con {CODIGO} donde va el código de la publicación. */
+  cta?: string;
+}
 
 export interface AiPlanRequest {
   hoy: string;
@@ -274,6 +309,10 @@ export interface AiPlanRequest {
   recientes: { dia: string; tema: string }[];
   /** Lo que la dueña pidió para esta planificación (vacío = la IA decide sola). */
   pedido: string;
+  /** Qué trajo cada categoría los últimos 30 días (o "SIN DATOS SUFICIENTES"). Lo calcula el CRM: nunca se inventa. */
+  rendimiento?: { categoria: string; publicaciones: number; alcance: number; chats: number; cotizaciones: number; ventas: number; datos: string }[];
+  /** Llamados a la acción usados últimamente (para no repetirlos). */
+  ctasRecientes?: string[];
 }
 
 /**
@@ -289,6 +328,10 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
     '- Temporada primero: en septiembre y octubre, Halloween en una tanda cada día; desde noviembre, Navidad en una tanda cada día. Las demás tandas, las categorías que hace más tiempo no salen (mira "recientes"). Nunca la misma categoría dos veces el mismo día.',
     '- Una sola categoría por tanda, de la lista y escrita exactamente igual. Elige una que tenga al menos tantos productos como fotos lleva la tanda (si no hay, la que más tenga).',
     '- "motivo": una frase corta y sencilla para la dueña explicando por qué esa categoría en esa tanda (por ejemplo "Halloween es la temporada" o "Bautizo no sale desde hace 5 días").',
+    '- "objetivo": el de esa pieza: alcance, interaccion, confianza, consulta o venta. Varíalos: no todas las tandas con el mismo objetivo.',
+    '- "frase": texto corto para poner SOBRE la historia (máximo 40 caracteres, sin emojis ni precios), por ejemplo "Personalizamos con nombre y fecha" o "Diseños para tu bautizo". El producto sigue siendo el protagonista.',
+    '- "cta": el llamado a la acción, máximo 70 caracteres, que incluya {CODIGO} (el sistema pone ahí el código de la publicación), por ejemplo "¿Cuántas necesitas? Escríbenos {CODIGO} y te cotizamos" o "Escríbenos {CODIGO} y te mostramos opciones". Varía los cierres y no repitas los de "ctasRecientes".',
+    '- "rendimiento" trae lo que logró cada categoría (lo calcula el sistema). Si dice SIN DATOS SUFICIENTES, decide por temporada, variedad y antigüedad y nunca inventes rendimiento. Con datos, da algo más de lugar a lo que trae consultas, cotizaciones y ventas (no solo vistas), sin eliminar ninguna categoría.',
     '- "resumen": una o dos frases con la estrategia, en palabras simples.',
     '- "tareas": de 0 a 5 cosas concretas que la dueña puede hacer esta semana para que las redes funcionen mejor (por ejemplo "graba un video corto del proceso de la vela de Papá Noel para el reel del jueves" o "toma una foto de un pedido listo para entregar"). Nada que no ayude.',
     prompt.trim() ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas):\n${prompt.trim()}` : '',
@@ -316,11 +359,14 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['n', 'categoria', 'motivo'],
+                required: ['n', 'categoria', 'motivo', 'objetivo', 'frase', 'cta'],
                 properties: {
                   n: { type: 'integer' },
                   categoria: { type: 'string' },
-                  motivo: { type: 'string' }
+                  motivo: { type: 'string' },
+                  objetivo: { type: 'string', enum: ['alcance', 'interaccion', 'confianza', 'consulta', 'venta'] },
+                  frase: { type: 'string' },
+                  cta: { type: 'string' }
                 }
               }
             }

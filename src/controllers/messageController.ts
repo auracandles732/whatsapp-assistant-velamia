@@ -36,6 +36,7 @@ import { TenantContext, currentTenant, runWithTenant } from '../services/tenant'
 import { maskPhone, privacyRequest } from '../services/privacy';
 import { audit } from '../services/audit';
 import { flushOutbox, recordUndelivered } from '../services/delivery';
+import { attributeByCode, attributeStoryReply } from '../social/tracking';
 import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG } from '../services/followups';
 import {
   sendTextMessage,
@@ -727,6 +728,11 @@ async function ingestMessage(message: any, value: any) {
     await touchConversation(conversationId);
     // Lo que el equipo escribió pasadas las 24 horas quedó guardado: sale ahora que la clienta escribió.
     await flushOutbox(conversationId, phoneNumber).catch((error: any) => console.error('❌ Mensajes guardados para la clienta:', error.message));
+    // De qué publicación viene (escribió su código o respondió a la historia): el chat queda atribuido y la vendedora
+    // sabe qué producto vio, para atenderla directo con ese diseño.
+    const fromStory = message.story_id ? await attributeStoryReply(conversationId, String(message.story_id)).catch(() => '') : '';
+    const fromCode = !fromStory && ['text', 'button', 'interactive'].includes(messageType) ? await attributeByCode(conversationId, userContent).catch(() => '') : '';
+    if (fromStory || fromCode) aiContent = `${fromStory || fromCode} ${aiContent}`;
 
     // Las plantillas de seguimiento dicen "responde NO": se respeta siempre, aunque el bot esté pausado.
     const answeredFollowUp = lastMessage?.sender === 'bot' && isFollowUpMessage(lastMessage.content);

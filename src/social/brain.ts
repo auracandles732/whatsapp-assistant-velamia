@@ -29,6 +29,10 @@ export interface PlanInput {
   profile: BusinessProfile;
   /** Lo que la dueña pidió para esta planificación. */
   request?: string;
+  /** Qué trajo cada categoría (lo calcula el CRM; "SIN DATOS SUFICIENTES" si no hay). */
+  performance?: AiPlanRequest['rendimiento'];
+  /** Llamados a la acción usados últimamente. */
+  recentCtas?: string[];
 }
 
 export interface PlannedPost {
@@ -43,6 +47,12 @@ export interface PlannedPost {
   video?: LibraryItem;
   /** Fotos y videos de la biblioteca de la tanda propia de la biblioteca (libraryTandas). */
   library?: LibraryItem[];
+  /** Objetivo de la pieza: alcance, interaccion, confianza, consulta o venta. */
+  goal?: string;
+  /** Frase corta que va sobre la historia. */
+  phrase?: string;
+  /** Llamado a la acción con {CODIGO}. */
+  cta?: string;
 }
 
 export interface Plan { posts: PlannedPost[]; summary: string; /** Cosas que la dueña puede hacer (grabar un video…). */ tasks?: string[] }
@@ -139,7 +149,9 @@ export function aiPlanRequest(input: PlanInput): AiPlanRequest {
     tandas: slots.map((s, i) => ({ n: i + 1, dia: s.day, semana: WEEKDAYS[new Date(s.day + 'T12:00:00Z').getUTCDay()], hora: hhmm(s.at, timeZone), donde: s.kind === 'story' ? 'historias' : 'publicación', fotos: s.count })),
     categorias: [...categories.entries()].map(([categoria, v]) => ({ categoria, ...v })),
     recientes: recentThemes.slice(0, 20).map(r => ({ dia: r.day, tema: r.theme })),
-    pedido: String(input.request || '').trim().slice(0, 600)
+    pedido: String(input.request || '').trim().slice(0, 600),
+    rendimiento: input.performance || [],
+    ctasRecientes: input.recentCtas || []
   };
 }
 
@@ -181,7 +193,10 @@ export function resolveAiPlan(assignments: AiAssignment[], input: PlanInput): Pl
     usedToday.add(plain(theme));
     perDay.set(slot.day, usedToday);
     products.forEach(p => used.add(productKey(p.name)));
-    out.push({ theme, products, at: slot.at, format: formatOf(slot, products.length), reason });
+    const goal = ['alcance', 'interaccion', 'confianza', 'consulta', 'venta'].includes(String(chosen?.objetivo)) ? String(chosen!.objetivo) : undefined;
+    const phrase = String(chosen?.frase || '').replace(/[*_~]/g, '').trim().slice(0, 48) || undefined;
+    const cta = String(chosen?.cta || '').replace(/[*_~]/g, '').trim().slice(0, 90) || undefined;
+    out.push({ theme, products, at: slot.at, format: formatOf(slot, products.length), reason, goal, phrase, cta });
   });
   return out;
 }

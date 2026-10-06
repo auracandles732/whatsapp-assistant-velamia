@@ -1,8 +1,11 @@
 import axios from 'axios';
 import { publishingConnection, tokenInfo, PublishingConnection, PUBLISH_SCOPES } from '../services/metaChannels';
-import { instagramReadyUrl, uprightUrl, ImageKind } from './images';
+import { businessWhatsAppNumber } from '../services/whatsapp';
+import { instagramReadyUrl, storyWithTextUrl, StoryText, uprightUrl, ImageKind } from './images';
+import { profile } from '../config/businessProfile';
 import { SocialPost, PostChannel, PostStatus, PostMedia, MAX_CAROUSEL, duePosts, stuckPosts, updatePost, getSavedSettings, scheduleDrafts, expireDrafts } from './posts';
 import { planUpcomingPosts } from './planner';
+import { estimateAttributions } from './tracking';
 import { marketingTick } from './marketingChat';
 import { getPublishingTenants } from '../services/supabase';
 import { runWithTenant } from '../services/tenant';
@@ -23,7 +26,8 @@ const VIDEO_CHECKS = 60;
 const READY_WAIT_MS = 3000;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export type ChannelResult = { id?: string; permalink?: string; error?: string };
+/** ids: todas las historias de la tanda (así una respuesta a cualquiera se reconoce y se atribuye a la publicación). */
+export type ChannelResult = { id?: string; permalink?: string; error?: string; ids?: string[] };
 
 /** Lo que se publica: las fotos y videos de la biblioteca elegidos o, si no hay, las fotos de los productos. */
 export function mediaOf(post: SocialPost): PostMedia[] {
@@ -71,8 +75,13 @@ async function publishContainer(conn: PublishingConnection, containerId: string,
 
 interface PublishOptions {
   waitMs: number;
-  /** Arma cada foto para Instagram (publicación 4:5 o historia 9:16, sin recortarla) y devuelve su dirección. */
-  prepareImage: (url: string, kind: ImageKind) => Promise<string>;
+  /**
+   * Arma cada foto para Instagram (publicación 4:5 o historia 9:16, sin recortarla) y devuelve su dirección. En las
+   * historias puede llevar la frase y el llamado a la acción encima.
+   */
+  prepareImage: (url: string, kind: ImageKind, text?: StoryText) => Promise<string>;
+  /** Número de WhatsApp de la empresa (para el enlace con el código en Facebook); '' si no se sabe. */
+  whatsappNumber?: () => Promise<string>;
   /** Foto original para Facebook, enderezada si el celular la guardó acostada (sin esto, la original). */
   uprightImage?: (url: string) => Promise<string>;
 }
@@ -108,22 +117,43 @@ async function instagramFeed(conn: PublishingConnection, post: SocialPost, { wai
 async function instagramStory(conn: PublishingConnection, post: SocialPost, { waitMs, prepareImage }: PublishOptions): Promise<ChannelResult> {
   let first: ChannelResult | null = null;
   let firstError: any = null;
+  const ids: string[] = [];
   const items = mediaOf(post);
+  const texts = storyTexts(post, items);
   for (const [i, item] of items.entries()) {
     try {
       const body = item.type === 'video'
         ? { media_type: 'STORIES', video_url: item.url }
-        : { media_type: 'STORIES', image_url: await prepareImage(item.url, 'story') };
+        : { media_type: 'STORIES', image_url: await prepareImage(item.url, 'story', texts[i]) };
       const { data } = await graph.post(`${GRAPH_API}/${conn.instagramId}/media`, body, { params: { access_token: conn.pageToken } });
       const done = await publishContainer(conn, String(data.id), waitMs, item.type === 'video' ? VIDEO_CHECKS : READY_CHECKS);
       first = first || done;
+      if (done.id) ids.push(done.id);
     } catch (error: any) {
       firstError = firstError || error;
       console.warn(`⚠️ Historia ${i + 1} de ${items.length} no salió: ${metaError(error)}`);
     }
   }
   if (!first) throw firstError || new Error('No salió ninguna historia');
-  return first;
+  return { ...first, ids };
+}
+
+/**
+ * Qué texto va sobre cada foto de una tanda de historias: la frase en la primera y el llamado a la acción en la última
+ * (con una sola foto, los dos). El texto de una historia es "frase\nllamado a la acción" (lo arma el planificador).
+ */
+export function storyTexts(post: Pick<SocialPost, 'caption' | 'channels'>, items: PostMedia[]): (StoryText | undefined)[] {
+  const lines = String(post.caption || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const storyOnly = post.channels.length > 0 && post.channels.every(c => c === 'instagram_story' || c === 'facebook_story');
+  if (!storyOnly || lines.length === 0 || lines.length > 2 || lines.some(l => l.length > 90)) return items.map(() => undefined);
+  const [phrase, cta] = lines.length === 2 ? lines : [lines[0], ''];
+  const photos = items.map((item, i) => (item.type === 'video' ? -1 : i)).filter(i => i >= 0);
+  const firstPhoto = photos[0], lastPhoto = photos[photos.length - 1];
+  return items.map((_, i) => {
+    if (i !== firstPhoto && i !== lastPhoto) return undefined;
+    if (firstPhoto === lastPhoto) return { phrase, cta };
+    return i === firstPhoto ? { phrase } : cta ? { cta } : undefined;
+  });
 }
 
 /**
@@ -142,7 +172,9 @@ export function facebookItems(items: PostMedia[]): PostMedia[] {
 async function facebookStory(conn: PublishingConnection, post: SocialPost, { prepareImage }: PublishOptions): Promise<ChannelResult> {
   const params = { access_token: conn.pageToken };
   let first: ChannelResult | null = null;
+  const ids: string[] = [];
   const items = mediaOf(post);
+  const texts = storyTexts(post, items);
   for (const [i, item] of items.entries()) {
     try {
       let id: string;
@@ -152,22 +184,37 @@ async function facebookStory(conn: PublishingConnection, post: SocialPost, { pre
         const { data: done } = await graph.post(`${GRAPH_API}/${conn.pageId}/video_stories`, { upload_phase: 'finish', video_id: start.video_id }, { params });
         id = String(done.post_id || start.video_id);
       } else {
-        const { data: photo } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: await prepareImage(item.url, 'story'), published: false }, { params });
+        const { data: photo } = await graph.post(`${GRAPH_API}/${conn.pageId}/photos`, { url: await prepareImage(item.url, 'story', texts[i]), published: false }, { params });
         const { data: story } = await graph.post(`${GRAPH_API}/${conn.pageId}/photo_stories`, { photo_id: photo.id }, { params });
         id = String(story.post_id || photo.id);
       }
       first = first || { id, permalink: `https://www.facebook.com/${id}` };
+      ids.push(id);
     } catch (error: any) {
       if (!first) throw error;
       console.warn(`⚠️ Historia de Facebook ${i + 1} de ${items.length} no salió: ${metaError(error)}`);
     }
   }
-  return first!;
+  return { ...first!, ids };
+}
+
+/**
+ * En Facebook los enlaces sí se pueden tocar: si el texto lleva el código de la publicación, se agrega un enlace a
+ * WhatsApp con el mensaje ya escrito (la clienta solo toca y envía, y el chat queda atribuido).
+ */
+export function withWhatsAppLink(caption: string, number: string, business: string): string {
+  const code = String(caption || '').match(/\b[A-Z]{3,11}\d{2,3}\b/)?.[0];
+  const digits = String(number || '').replace(/\D/g, '');
+  if (!code || !digits || caption.includes('wa.me/')) return caption;
+  const text = encodeURIComponent(`Hola ${business} 🤍 Quiero información (${code})`);
+  return `${caption}\n\n👉 Escríbenos por WhatsApp: https://wa.me/${digits}?text=${text}`;
 }
 
 /** Página de Facebook: una o varias fotos originales o, si solo lleva videos, un video. */
-async function facebookPage(conn: PublishingConnection, post: SocialPost, { uprightImage = async (url: string) => url }: PublishOptions): Promise<ChannelResult> {
+async function facebookPage(conn: PublishingConnection, original: SocialPost, { uprightImage = async (url: string) => url, whatsappNumber }: PublishOptions): Promise<ChannelResult> {
   const params = { access_token: conn.pageToken };
+  const number = whatsappNumber ? await whatsappNumber().catch(() => '') : '';
+  const post = { ...original, caption: withWhatsAppLink(original.caption, number, profile().business.name) };
   const link = (id: string) => `https://www.facebook.com/${id}`;
   const items = facebookItems(mediaOf(post));
   const video = items[0]?.type === 'video' ? items[0] : null;
@@ -245,7 +292,12 @@ export async function publishNow(post: SocialPost): Promise<PublishOutcome> {
   const conn = await publishingConnection();
   if (!conn) return { status: 'failed', results: {}, error: 'Facebook e Instagram no están conectados: conéctalos en Publicaciones.' };
   const scopes = (await tokenInfo(conn.pageToken)).scopes;
-  return publishToChannels(conn, scopes, post, { waitMs: READY_WAIT_MS, prepareImage: instagramReadyUrl, uprightImage: uprightUrl });
+  return publishToChannels(conn, scopes, post, {
+    waitMs: READY_WAIT_MS,
+    prepareImage: (url, kind, text) => (text && kind === 'story' ? storyWithTextUrl(url, text) : instagramReadyUrl(url, kind)),
+    uprightImage: uprightUrl,
+    whatsappNumber: businessWhatsAppNumber
+  });
 }
 
 export const CHANNEL_NAMES: Record<PostChannel, string> = { instagram_feed: 'Instagram', instagram_story: 'Historia de Instagram', facebook: 'Facebook', facebook_story: 'Historia de Facebook' };
@@ -294,6 +346,9 @@ async function runForCurrent(now: Date, plan: boolean) {
     }
   }
   if (plan && settings) {
+    // Chats nuevos sin código que llegaron justo después de una publicación y preguntaron por lo mismo (estimada).
+    const estimated = await estimateAttributions(now).catch(() => 0);
+    if (estimated) console.log(`🔖 ${estimated} chat(s) atribuidos (estimado) a publicaciones`);
     if (mode === 'automatico') {
       const created = await planUpcomingPosts(now, 7, settings);
       if (created.length) console.log(`📣 ${created.length} publicación(es) programadas por la IA`);

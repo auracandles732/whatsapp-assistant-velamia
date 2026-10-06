@@ -281,3 +281,78 @@ export async function instagramReadyUrl(imageUrl: string, kind: ImageKind = 'fee
   if (error) throw new Error(`No se pudo guardar la foto para Instagram: ${error.message}`);
   return publicUrl;
 }
+
+// ---------- Texto sobre las historias ----------
+
+/** Frase y llamado a la acción que van sobre una historia (el producto sigue siendo el protagonista). */
+export interface StoryText { phrase?: string; cta?: string }
+
+const escapeXml = (t: string) => t.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c] as string));
+
+/** Corta el texto en líneas de hasta `max` letras (como mucho 2 líneas por parte). */
+export function wrapText(text: string, max: number, maxLines = 2): string[] {
+  const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  const lines: string[] = [];
+  for (const w of words) {
+    const last = lines[lines.length - 1];
+    if (last !== undefined && (last + ' ' + w).length <= max) lines[lines.length - 1] = last + ' ' + w;
+    else lines.push(w);
+  }
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines - 1] = `${kept[maxLines - 1]}…`;
+    return kept;
+  }
+  return lines;
+}
+
+/**
+ * Pone la frase y el llamado a la acción en una franja clara debajo de la foto (o sobre su borde de abajo si no hay
+ * espacio), lejos de lo que tapan el nombre de la cuenta arriba y la barra para responder abajo.
+ */
+export function storyWithText(buffer: Buffer, text: StoryText): Buffer {
+  const img = decodeImage(buffer);
+  const composed = composeImage(img, 'story');
+  const { width, height, boxW, boxH } = LAYOUT.story;
+  const phrase = wrapText(text.phrase || '', 26);
+  const cta = wrapText(text.cta || '', 30);
+  if (!phrase.length && !cta.length) return Buffer.from(jpeg.encode({ width, height, data: composed.data as Buffer }, JPEG_QUALITY).data);
+  const scale = Math.min(boxW / img.width, boxH / img.height);
+  const photoBottom = Math.floor((height + Math.round(img.height * scale)) / 2);
+  const PHRASE = 56, CTA = 44, GAP = 14, PAD = 36;
+  const bandH = PAD * 2 + phrase.length * (PHRASE + 12) + (phrase.length && cta.length ? GAP : 0) + cta.length * (CTA + 12) - 12;
+  const limit = height - 210; // la barra para responder
+  const top = Math.max(240, Math.min(photoBottom + 28, limit - bandH));
+  let y = top + PAD;
+  const lines: string[] = [];
+  for (const l of phrase) { y += PHRASE; lines.push(`<text x="${width / 2}" y="${y}" text-anchor="middle" font-family="Montserrat" font-weight="800" font-size="${PHRASE}" fill="#2B1C14">${escapeXml(l)}</text>`); y += 12; }
+  if (phrase.length && cta.length) y += GAP;
+  for (const l of cta) { y += CTA; lines.push(`<text x="${width / 2}" y="${y}" text-anchor="middle" font-family="Montserrat" font-weight="700" font-size="${CTA}" fill="#A3522F">${escapeXml(l)}</text>`); y += 12; }
+  const background = Buffer.from(jpeg.encode({ width, height, data: composed.data as Buffer }, 95).data).toString('base64');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
+    + `<image href="data:image/jpeg;base64,${background}" x="0" y="0" width="${width}" height="${height}"/>`
+    + `<rect x="80" y="${top}" width="${width - 160}" height="${bandH}" rx="40" fill="#FFFDF9" fill-opacity="0.93"/>`
+    + lines.join('') + '</svg>';
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Resvg } = require('@resvg/resvg-js');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const path = require('path') as typeof import('path');
+  const fonts = ['Montserrat-ExtraBold.ttf', 'Montserrat-Bold.ttf', 'Montserrat-SemiBold.ttf'].map(f => path.join(__dirname, '../../assets/fonts', f));
+  const png = PNG.sync.read(new Resvg(svg, { font: { fontFiles: fonts, loadSystemFonts: false, defaultFontFamily: 'Montserrat' } }).render().asPng());
+  return Buffer.from(jpeg.encode({ width: png.width, height: png.height, data: png.data }, JPEG_QUALITY).data);
+}
+
+/** La historia lista con su texto, guardada (un nombre por foto y texto: no se repite el trabajo). */
+export async function storyWithTextUrl(imageUrl: string, text: StoryText): Promise<string> {
+  if (!text.phrase && !text.cta) return instagramReadyUrl(imageUrl, 'story');
+  if (!isOwnStorageUrl(imageUrl)) throw new Error('La foto debe estar en el catálogo del CRM');
+  const tenant = currentTenant();
+  const key = createHash('sha256').update(`${imageUrl}|${text.phrase || ''}|${text.cta || ''}`).digest('hex').slice(0, 24);
+  const path = `${tenant ? `${tenant.businessId}/` : ''}social-story-text-${LAYOUT_VERSION}-${key}.jpg`;
+  const publicUrl = supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+  if (await axios.head(publicUrl, { timeout: 15_000 }).then(r => r.status === 200).catch(() => false)) return publicUrl;
+  const { data } = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60_000, maxContentLength: MAX_DOWNLOAD });
+  const { error } = await supabase.storage.from('product-images').upload(path, storyWithText(Buffer.from(data), text), { contentType: 'image/jpeg', upsert: true });
+  if (error) throw new Error(`No se pudo guardar la historia con texto: ${error.message}`);
+  return publicUrl;
+}

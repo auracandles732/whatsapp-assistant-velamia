@@ -99,7 +99,8 @@ export function toWhatsAppShape(channel: SocialChannel, event: any): any | null 
   if (!message || message.is_echo || message.is_deleted || !message.mid) return null;
   const context = message.reply_to?.mid ? { context: { id: String(message.reply_to.mid) } } : {};
   const storyReply = message.reply_to?.story ? '[Respondió a tu historia] ' : '';
-  const shaped = { ...base, id: String(message.mid), ...context };
+  // La historia a la que respondió: así se sabe de qué publicación vino (atribución exacta).
+  const shaped = { ...base, id: String(message.mid), ...context, ...(message.reply_to?.story?.id ? { story_id: String(message.reply_to.story.id) } : {}) };
 
   const attachment = (message.attachments || [])[0];
   if (!attachment) {

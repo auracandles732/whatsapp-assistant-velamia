@@ -23,6 +23,7 @@ import { listResults } from './insights';
 import { startPosters, posterStates, postersRunning, applyPoster, keepModel, clearPosterStates, resumeStuck, POSTER_COST, catalogTemplate, setCatalogTemplate, templatePreview } from './posters';
 import { templateName, TEMPLATE_NAMES } from './template';
 import { publicSocialAi, saveSocialAi, testSocialAi, socialAi } from './ai';
+import { trackingAvailable, contentResults, byCategory, recommendations } from './tracking';
 
 /** ¿El agente tiene su propia clave de OpenAI? (sin ella, los modelos de un PDF entran al Catálogo sin revisar). */
 const hasSocialAi = () => socialAi().then(() => true, () => false);
@@ -620,6 +621,20 @@ export function socialRouter(): Router {
   });
 
   // ---------- Resultados ----------
+
+  /** Qué trajo cada publicación (con su código): alcance, interacciones, chats, cotizaciones, pedidos, ventas e ingresos. */
+  router.get('/api/social/attribution', requireCrmSession, requirePublishing, async (req: Request, res: Response) => {
+    try {
+      const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+      if (!(await trackingAvailable())) return res.json({ available: false, days, results: [], categories: [], recommendations: [] });
+      const to = new Date();
+      const results = await contentResults(new Date(to.getTime() - days * 86_400_000), to);
+      const categories = byCategory(results);
+      res.json({ available: true, days, results: results.sort((a, b) => String(b.publishAt).localeCompare(String(a.publishAt))), categories, recommendations: recommendations(categories, results) });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   router.get('/api/social/results', requireCrmSession, requirePublishing, async (req: Request, res: Response) => {
     try {
