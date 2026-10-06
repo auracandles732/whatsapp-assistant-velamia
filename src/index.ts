@@ -100,6 +100,7 @@ import { officeState, talkToAgent, applyAction, isOfficeAgent, officeTenant } fr
 import { chatWindow, holdForLater, PendingInput, deliveryState, undeliveredIn, dropPending, sendReopen, holdNotice, ensureReopenTemplate } from './services/delivery';
 import { startFollowUpScheduler } from './services/followups';
 import { startSupervisor } from './services/supervisor';
+import { startSalesWatch } from './services/salesWatch';
 import { supervisorRouter } from './services/supervisorRoutes';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
@@ -2281,6 +2282,7 @@ async function start() {
   startFollowUpScheduler();
   startSocialAgent();
   startSupervisor();
+  startSalesWatch();
   startRetention();
   startPhotoNudgeScheduler();
   startHealthCheck();

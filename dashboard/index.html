@@ -2585,6 +2585,29 @@
         .sv-report-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
         .sv-report-bar select { border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; background: #fff; }
         .sv-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        /* Supervisor comercial: avisos en vivo, embudo y seguimientos */
+        .sv-alerts { display: flex; flex-direction: column; gap: 8px; }
+        .sv-alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 14px; border: 1px solid #EEE4D9; background: #FFFCF8; }
+        .sv-alert .pr { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .sv-alert .pr.alta { background: #FDECEA; color: #A12C2C; } .sv-alert .pr.media { background: #FFF3DC; color: #7A5300; } .sv-alert .pr.baja { background: #EEF3EA; color: #3E5A33; }
+        .sv-alert .tx { flex: 1; min-width: 0; font-size: 13.5px; color: #3A2A20; }
+        .sv-alert .tx b { display: block; font-size: 14px; color: #2B1C14; }
+        .sv-alert .tx small { color: #8A7868; }
+        .sv-funnel { display: flex; flex-direction: column; gap: 8px; }
+        .sv-step { display: grid; grid-template-columns: 150px 1fr 70px; align-items: center; gap: 10px; font-size: 14px; color: #3A2A20; }
+        .sv-step .bar { height: 26px; border-radius: 8px; background: #F3ECE3; overflow: hidden; }
+        .sv-step .bar i { display: block; height: 100%; border-radius: 8px; background: linear-gradient(90deg, #D9A07A, #B5654A); min-width: 4px; }
+        .sv-step b { text-align: right; color: #2B1C14; }
+        .sv-funnel-note { margin-top: 10px; font-size: 13.5px; color: #4E3E33; }
+        .sv-days { display: inline-flex; gap: 6px; }
+        .sv-days button { padding: 6px 12px; border-radius: 999px; border: 1px solid #EADFD2; background: #fff; color: #4E3E33; font-weight: 700; cursor: pointer; }
+        .sv-days button.on { background: #B5654A; border-color: #B5654A; color: #fff; }
+        .sv-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        .sv-table th, .sv-table td { padding: 8px 6px; border-bottom: 1px solid #F3ECE3; text-align: right; }
+        .sv-table th:first-child, .sv-table td:first-child { text-align: left; }
+        .sv-table th { color: #7A6858; font-weight: 700; font-size: 12.5px; }
+        .sv-prompt textarea { width: 100%; min-height: 260px; padding: 12px; border-radius: 12px; border: 1px solid #E6DACC; font: inherit; font-size: 13.5px; line-height: 1.5; background: #fff; resize: vertical; }
+        @media (max-width: 760px) { .sv-step { grid-template-columns: 110px 1fr 46px; font-size: 13px; } .sv-table { font-size: 12.5px; } }
         .sv-kpis div { border: 1px solid #EADFD3; border-radius: 14px; padding: 10px 12px; background: #FDFCFB; display: flex; flex-direction: column; }
         .sv-kpis b { font-size: 24px; color: #B5654A; }
         .sv-kpis small { font-size: 12.5px; color: #857262; }
@@ -13432,7 +13455,9 @@
             );
         }
 
-        const PROBLEM_LABELS = { respuesta_incorrecta: 'Respuesta incorrecta', venta_perdida: 'Venta que se cayó', no_respondio_la_pregunta: 'No respondió lo que preguntaron', repetitivo: 'Se repitió', otro: 'Otro' };
+        const PROBLEM_LABELS = { respuesta_incorrecta: 'Respuesta incorrecta', venta_perdida: 'Venta que se cayó', no_respondio_la_pregunta: 'No respondió lo que preguntaron', repetitivo: 'Se repitió', objecion_mal_manejada: 'Objeción mal manejada', otro: 'Otro' };
+        const SV_ALERT_LABELS = { ready_to_pay_waiting: 'Quiere pagar y nadie le responde', hot_waiting: 'Interesada esperando respuesta', quote_stalled: 'Cotización sin avance ni seguimiento', asks_person: 'Pide hablar con una persona', undelivered_important: 'Mensaje importante no entregado', complaint: 'Reclamo', card_payment: 'Quiere pagar con tarjeta', payment_proof: 'Envió comprobante de pago', owner_question: 'Pregunta que no supo responder', bot_error: 'El asistente no pudo responder' };
+        const SV_STAGES = { frio: 'Frías', interesado: 'Interesadas', caliente: 'Calientes', listo_para_pagar: 'Listas para pagar' };
         const LESSON_SOURCES = { pausa: 'De un chat que atendiste tú', reporte: 'Del reporte diario', manual: 'Lo escribiste tú' };
         const svDay = (day, today) => {
             const [y, m, d] = day.split('-').map(Number);
@@ -13847,7 +13872,19 @@
             const [editing, setEditing] = useState(null);
             const [adding, setAdding] = useState(null);
             const [showApproved, setShowApproved] = useState(false);
+            const [live, setLive] = useState(null);
+            const [liveDays, setLiveDays] = useState(7);
+            const [prompt, setPrompt] = useState(null);
+            const [showPrompt, setShowPrompt] = useState(false);
+            useEffect(() => {
+                let alive = true;
+                const get = () => api('/api/supervisor/live?days=' + liveDays).then(r => { if (alive) setLive(r); }).catch(() => {});
+                get();
+                const t = setInterval(whenVisible(get), 60000);
+                return () => { alive = false; clearInterval(t); };
+            }, [liveDays]);
             const load = () => api('/api/supervisor').then(r => {
+                setPrompt(prev => (prev === null ? r.prompt || '' : prev));
                 setData(r);
                 setReport(prev => (prev && r.days.includes(prev.day) ? prev : r.report));
                 setError('');
@@ -13891,6 +13928,13 @@
                 await load();
             });
             const openReport = day => run('open', async () => { setReport((await api(`/api/supervisor/reports/${day}`)).report); });
+            const savePrompt = () => run('prompt', async () => {
+                const r = await api('/api/supervisor/prompt', { method: 'PUT', body: JSON.stringify({ prompt }) });
+                setPrompt(r.prompt);
+                setNotice('✅ Instrucciones del supervisor guardadas: las usa desde su próxima revisión.');
+            });
+            const funnelSteps = live ? [['chats', live.funnel.chats], ['interested', live.funnel.interested], ['quotations', live.funnel.quotations], ['pendingPayment', live.funnel.pendingPayment], ['orders', live.funnel.orders], ['sales', live.funnel.sales]] : [];
+            const funnelNames = { chats: 'Chats', interested: 'Interesadas', quotations: 'Cotizaciones', pendingPayment: 'Pendiente de pago', orders: 'Pedidos', sales: 'Ventas' };
 
             const editForm = (value, set) => (
                 <div className="sv-form">
@@ -13945,7 +13989,7 @@
                         <div className="pb-hero-ic"><PlatIcon name="bulb" size={30} color="#fff" /></div>
                         <div className="pb-hero-tt">
                             <h1>Supervisor</h1>
-                            <p>Revisa tus chats y aprende de cómo resuelves tú lo que el asistente no supo. Cada mañana te deja un reporte del día anterior. Los aprendizajes nuevos y el reporte también te llegan por WhatsApp (al número de alertas) para aprobarlos ahí con un botón. Nada llega al asistente sin tu aprobación.</p>
+                            <p>Vigila tus chats en tiempo real, mide tu embudo de ventas y tus seguimientos, revisa cada mañana el día anterior y aprende de cómo resuelves tú lo que el asistente no supo. Por WhatsApp (al número de alertas) solo te escribe lo importante. Nada llega al asistente sin tu aprobación.</p>
                         </div>
                         {canConfigure && (
                             <div className="pb-hero-actions">
@@ -13955,6 +13999,81 @@
                     </div>
                     {error && <div className="pb-err">{error}</div>}
                     {notice && <div className="pb-notice ok">{notice}</div>}
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="bell" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>🚨 Avisos en vivo (últimas 48 horas)</h2>
+                                <p>Lo que vigila cada 5 minutos: clienta lista para pagar o interesada esperando más de 15 minutos, cotización sin avance en 24 horas, pide hablar con una persona y mensajes importantes no entregados. Te avisa por WhatsApp una vez por caso: los de pago a cualquier hora, el resto de 8:00 a 20:00.</p>
+                            </div>
+                        </div>
+                        {!live ? <div className="pb-muted">Cargando…</div> : live.alerts.length === 0 ? <div className="pb-muted">Todo en orden: no hay avisos en las últimas 48 horas. 👌</div> : (
+                            <div className="sv-alerts">
+                                {live.alerts.map((a, i) => (
+                                    <div key={i} className="sv-alert">
+                                        <span className={'pr ' + a.priority}>{a.priority}</span>
+                                        <div className="tx"><b>{SV_ALERT_LABELS[a.event] || a.event} · {a.customer}</b>{a.detail}<br /><small>{formatDateTime(a.at)}</small></div>
+                                        {openChat && <button type="button" className="sv-link" onClick={() => openChat(a.conversationId)}>Ver chat</button>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="chart" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>🛒 Embudo de ventas</h2>
+                                <p>Lo calcula el sistema con tus chats, cotizaciones y pedidos (sin IA). Cada etapa incluye a las que siguen.</p>
+                            </div>
+                            <div className="sv-days">{[7, 30].map(d => <button key={d} type="button" className={liveDays === d ? 'on' : ''} onClick={() => setLiveDays(d)}>{d} días</button>)}</div>
+                        </div>
+                        {!live ? <div className="pb-muted">Cargando…</div> : (
+                            <>
+                                <div className="sv-funnel">
+                                    {funnelSteps.map(([k, n]) => (
+                                        <div key={k} className="sv-step">
+                                            <span>{funnelNames[k]}</span>
+                                            <span className="bar"><i style={{ width: (live.funnel.chats ? Math.max(2, Math.round(n / live.funnel.chats * 100)) : 0) + '%' }}></i></span>
+                                            <b>{n}</b>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="sv-funnel-note">
+                                    {live.funnel.chats
+                                        ? <>De chat a cotización: <b>{live.funnel.rates.quote}%</b> · de cotización a venta: <b>{live.funnel.rates.quoteToSale}%</b> · de chat a venta: <b>{live.funnel.rates.sale}%</b>{live.funnel.biggestDrop ? <> · donde más se pierden: <b>{live.funnel.biggestDrop}</b></> : null}</>
+                                        : 'Todavía no hay chats en este período.'}
+                                </div>
+                            </>
+                        )}
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="refresh" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>📩 Rendimiento de los seguimientos ({liveDays} días)</h2>
+                                <p>Qué pasó después de cada seguimiento: si la clienta respondió (en 3 días), si llegó a cotización (en 7) o compró (en 14). Enviar no cuenta como éxito.</p>
+                            </div>
+                        </div>
+                        {!live ? <div className="pb-muted">Cargando…</div> : live.followUps.total.sent === 0 ? <div className="pb-muted">No salieron seguimientos en este período.</div> : (
+                            <>
+                                <table className="sv-table">
+                                    <thead><tr><th>Seguimiento</th><th>Enviados</th><th>Respondieron</th><th>Cotizaron</th><th>Compraron</th></tr></thead>
+                                    <tbody>
+                                        {[...live.followUps.byTemplate, live.followUps.total].map(r => (
+                                            <tr key={r.template} style={r.template === 'Todos' ? { fontWeight: 800 } : null}>
+                                                <td>{r.template}{r.template === live.followUps.best ? ' ⭐' : ''}</td><td>{r.sent}</td><td>{r.responded}</td><td>{r.quoted}</td><td>{r.bought}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {live.followUps.best && <div className="sv-funnel-note">⭐ El que mejor funciona: <b>{live.followUps.best}</b></div>}
+                            </>
+                        )}
+                    </section>
 
                     <section className="pb-card">
                         <div className="pb-card-h">
@@ -13990,6 +14109,23 @@
                         ) : <button type="button" className="pb-btn sm" style={{ marginTop: showApproved ? 12 : 0 }} onClick={() => setAdding({ situation: '', answer: '', always: false })}>➕ Enseñarle algo yo misma</button>)}
                     </section>
 
+                    <section className="pb-card sv-prompt">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="note" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>📝 Instrucciones del supervisor</h2>
+                                <p>Cómo quieres que supervise, clasifique y te reporte. Se suman a sus reglas fijas (no inventar números, aprendizajes por aprobar).</p>
+                            </div>
+                            <button type="button" className="pb-btn sm" onClick={() => setShowPrompt(!showPrompt)}>{showPrompt ? 'Ocultar' : 'Ver y editar'}</button>
+                        </div>
+                        {showPrompt && (
+                            <>
+                                <textarea value={prompt || ''} maxLength={data.promptMax || 15000} readOnly={!canConfigure} placeholder="Ej: Da prioridad a las clientas listas para pagar. No marques detalles menores como problemas." onChange={e => setPrompt(e.target.value)}></textarea>
+                                {canConfigure && <div className="sv-actions" style={{ marginTop: 10 }}><button type="button" className="pb-btn main sm" disabled={!!busy} onClick={savePrompt}>{busy === 'prompt' ? 'Guardando…' : 'Guardar instrucciones'}</button></div>}
+                            </>
+                        )}
+                    </section>
+
                     <section className="pb-card">
                         <div className="pb-card-h">
                             <div className="pb-tile"><PlatIcon name="chart" size={22} color="#B5654A" /></div>
@@ -14017,7 +14153,25 @@
                                     <div><b>{r.metrics.orders}</b><small>pedidos</small></div>
                                 </div>
                                 {r.aiError && <div className="pb-notice">⚠️ {r.aiError}</div>}
+                                {r.funnel && r.funnel.chats > 0 && <div className="sv-funnel-note">🛒 {r.funnel.chats} chats → {r.funnel.interested} interesadas → {r.funnel.quotations} cotizaciones → {r.funnel.pendingPayment} pendiente de pago → {r.funnel.orders} pedidos → {r.funnel.sales} ventas</div>}
+                                {r.followUps && r.followUps.total.sent > 0 && <div className="sv-funnel-note">📩 Seguimientos (7 días): {r.followUps.total.sent} enviados · {r.followUps.total.responded} respondieron · {r.followUps.total.quoted} cotizaron · {r.followUps.total.bought} compraron</div>}
                                 {r.summary && <div className="pl-summary">🧑‍🏫 {r.summary}</div>}
+                                {r.performance && <div className="pl-summary">👩‍💼 {r.performance}</div>}
+                                {r.stages && Object.keys(r.stages).length > 0 && <div className="sv-chips">{Object.entries(SV_STAGES).filter(([k]) => r.stages[k]).map(([k, label]) => <span key={k} className="sv-chip">{label}: {r.stages[k]}</span>)}</div>}
+                                {r.lost && r.lost.length > 0 && (
+                                    <div className="sv-list">
+                                        <b>🎯 Oportunidades de venta perdidas ({r.lost.length})</b>
+                                        {r.lost.map((l, i) => (
+                                            <div key={i} className="sv-item col">
+                                                <div><b>{l.customer}</b></div>
+                                                <div>{l.detail}</div>
+                                                {openChat && <button type="button" className="sv-link" onClick={() => openChat(l.conversationId)}>Ver chat</button>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {r.lossReasons && Object.keys(r.lossReasons).length > 0 && <div className="sv-chips"><b style={{ marginRight: 6 }}>Por qué no compraron:</b>{Object.entries(r.lossReasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => <span key={k} className="sv-chip">{(data.lossReasons || {})[k] || k}: {n}</span>)}</div>}
+                                {r.objections && r.objections.length > 0 && <div className="sv-chips"><b style={{ marginRight: 6 }}>Objeciones:</b>{r.objections.map(o => <span key={o} className="sv-chip">{o}</span>)}</div>}
                                 {r.recommendations?.length > 0 && <div className="pl-tasks"><b>✅ Qué mejorar</b><ul>{r.recommendations.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
                                 {handoffs.length > 0 && <div className="sv-chips">{handoffs.map(([k, n]) => <span key={k} className="sv-chip">{labels[k] || k}: {n}</span>)}</div>}
                                 {r.metrics.unanswered.length > 0 && (

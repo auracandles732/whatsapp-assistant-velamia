@@ -3,8 +3,9 @@ import { requireCrmSession, requireOwnerRole } from '../middleware/auth';
 import { profile } from '../config/businessProfile';
 import {
   listLessons, decideLesson, deleteLesson, createLesson, LessonNotFound, reviewHandoffs, buildDayReport, getReport, listReportDays,
-  supervisorSpentToday, localDayOf, SUPERVISOR_DAILY_BUDGET, HANDOFF_LABELS
+  supervisorSpentToday, localDayOf, SUPERVISOR_DAILY_BUDGET, HANDOFF_LABELS, supervisorPrompt, saveSupervisorPrompt, SUPERVISOR_PROMPT_MAX, LOSS_REASONS
 } from './supervisor';
+import { salesFunnel, followUpPerformance, recentAlerts, FUNNEL_LABELS } from './salesWatch';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,7 +21,7 @@ export function supervisorRouter(): Router {
 
   router.get('/api/supervisor', requireCrmSession, async (_req: Request, res: Response) => {
     try {
-      const [lessons, days, spent] = await Promise.all([listLessons(), listReportDays(), supervisorSpentToday().catch(() => 0)]);
+      const [lessons, days, spent, prompt] = await Promise.all([listLessons(), listReportDays(), supervisorSpentToday().catch(() => 0), supervisorPrompt()]);
       const latest = days[0] ? await getReport(days[0]) : null;
       res.json({
         pending: lessons.filter(l => l.status === 'pending').reverse(),
@@ -30,10 +31,35 @@ export function supervisorRouter(): Router {
         today: localDayOf(new Date(), profile().business.timezone),
         spentToday: spent,
         dailyBudget: SUPERVISOR_DAILY_BUDGET,
-        handoffLabels: HANDOFF_LABELS
+        handoffLabels: HANDOFF_LABELS,
+        lossReasons: LOSS_REASONS,
+        prompt,
+        promptMax: SUPERVISOR_PROMPT_MAX
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** En vivo: embudo y seguimientos (7 o 30 días, calculados por el CRM) y los avisos de las últimas 48 horas. */
+  router.get('/api/supervisor/live', requireCrmSession, async (req: Request, res: Response) => {
+    try {
+      const days = Number(req.query.days) === 30 ? 30 : 7;
+      const to = new Date();
+      const from = new Date(to.getTime() - days * 86_400_000);
+      const [funnel, followUps, alerts] = await Promise.all([salesFunnel(from, to), followUpPerformance(from, to), recentAlerts(48)]);
+      res.json({ days, funnel, followUps, alerts, funnelLabels: FUNNEL_LABELS });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** Las instrucciones de la empresa para el supervisor (se suman a sus reglas fijas). */
+  router.put('/api/supervisor/prompt', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+    try {
+      res.json({ prompt: await saveSupervisorPrompt(req.body?.prompt) });
+    } catch (error: any) {
+      fail(res, error);
     }
   });
 

@@ -10,6 +10,7 @@ import { profile } from '../config/businessProfile';
 import { localParts, zonedTime } from '../social/posts';
 import { sendTextMessage } from './whatsapp';
 import { registerStaffTopic, registerStaffReplies, notifyStaff, ownerPhone, StaffMessage } from './staffChat';
+import { salesFunnel, followUpPerformance, Funnel, FollowUpStats, Stage, STAGE_ORDER } from './salesWatch';
 
 /**
  * Supervisor de los chats. Aprende de lo que respondió el equipo cuando el bot pasó el chat a una persona y cada día
@@ -74,6 +75,45 @@ export interface DayReport {
   /** Si la revisión con IA no se pudo hacer (sin crédito, tope del día): los números igual salen. */
   aiError: string | null;
   attempts: number;
+  /** Embudo del día (lo calcula el CRM, sin IA). */
+  funnel?: Funnel;
+  /** Seguimientos de los últimos 7 días hasta ese día: enviados, respondidos, cotizaciones y compras que generaron. */
+  followUps?: FollowUpStats;
+  /** Cuántos chats revisados quedaron en cada etapa (según la IA). */
+  stages?: Partial<Record<Stage, number>>;
+  /** Clientas que mostraron interés y no se aprovechó, con lo que debió hacerse. */
+  lost?: { conversationId: string; customer: string; detail: string }[];
+  /** Por qué no compraron (motivo → cuántos chats). */
+  lossReasons?: Record<string, number>;
+  /** Objeciones de las clientas (precio alto, envío caro…). */
+  objections?: string[];
+  /** Cómo vendió el asistente ese día, en una o dos frases. */
+  performance?: string;
+}
+
+export const LOSS_REASONS: Record<string, string> = {
+  precio: 'precio', envio: 'envío', fecha: 'fecha', diseno: 'diseño', disponibilidad: 'disponibilidad', forma_de_pago: 'forma de pago',
+  dejo_de_responder: 'dejó de responder', falta_de_seguimiento: 'falta de seguimiento', mala_atencion: 'mala atención', otro: 'otro', desconocido: 'desconocido'
+};
+
+// ---------- Instrucciones de la empresa para el supervisor (se editan en el CRM) ----------
+
+const PROMPT_KEY = 'supervisor_prompt';
+export const SUPERVISOR_PROMPT_MAX = 15000;
+
+export async function supervisorPrompt(): Promise<string> {
+  return String((await getConfig(PROMPT_KEY).catch(() => '')) || '').trim();
+}
+
+export async function saveSupervisorPrompt(text: unknown): Promise<string> {
+  const value = String(text ?? '').replace(/\r\n/g, '\n').trim().slice(0, SUPERVISOR_PROMPT_MAX);
+  await setConfig(PROMPT_KEY, value);
+  return value;
+}
+
+/** Las instrucciones de la empresa van después de las reglas fijas: el formato de la respuesta lo siguen mandando estas. */
+export function withCompanyRules(system: string, prompt: string): string {
+  return prompt ? `${system}\n\nINSTRUCCIONES DE LA EMPRESA PARA EL SUPERVISOR (síguelas; responde siempre en el formato pedido arriba):\n${prompt}` : system;
 }
 
 const LESSONS_KEY = 'supervisor_lessons';
@@ -464,8 +504,8 @@ export async function reviewHandoffs(now = new Date()): Promise<{ reviewed: numb
         purpose: 'supervisor',
         schemaName: 'aprendizajes_del_equipo',
         schema: { type: 'object', additionalProperties: false, required: ['aprendizajes'], properties: { aprendizajes: { type: 'array', items: LESSON_ITEM } } },
-        system: `Eres el supervisor del asistente de ventas por WhatsApp de ${profile().business.name}. Te paso un chat donde una persona del equipo intervino (el asistente pasó el chat o el equipo lo tomó). `
-          + 'Tu trabajo: sacar APRENDIZAJES para que el asistente resuelva solo una situación igual la próxima vez (0 a 3).\n' + LESSON_RULES,
+        system: withCompanyRules(`Eres el supervisor del asistente de ventas por WhatsApp de ${profile().business.name}. Te paso un chat donde una persona del equipo intervino (el asistente pasó el chat o el equipo lo tomó). `
+          + 'Tu trabajo: sacar APRENDIZAJES para que el asistente resuelva solo una situación igual la próxima vez (0 a 3).\n' + LESSON_RULES, await supervisorPrompt()),
         user: `AVISOS QUE EL ASISTENTE LE MANDÓ A LA DUEÑA EN ESTE CHAT:\n${alertText || '(ninguno)'}\n\nAPRENDIZAJES QUE YA EXISTEN:\n${existingText(lessons)}\n\nCHAT (los mensajes "Equipo" los escribió una persona):\n${transcript(piece)}`,
         maxTokens: 3000
       });
@@ -486,9 +526,24 @@ export async function reviewHandoffs(now = new Date()): Promise<{ reviewed: numb
 const REVIEW_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['notas', 'problemas', 'aprendizajes'],
+  required: ['notas', 'problemas', 'aprendizajes', 'chats'],
   properties: {
     notas: { type: 'string' },
+    chats: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['chat', 'clasificacion', 'oportunidad_perdida', 'motivo_perdida', 'objeciones'],
+        properties: {
+          chat: { type: 'integer' },
+          clasificacion: { type: 'string', enum: ['frio', 'interesado', 'caliente', 'listo_para_pagar'] },
+          oportunidad_perdida: { type: 'string' },
+          motivo_perdida: { type: 'string', enum: [...Object.keys(LOSS_REASONS), 'ninguno'] },
+          objeciones: { type: 'array', items: { type: 'string' } }
+        }
+      }
+    },
     problemas: {
       type: 'array',
       items: {
@@ -497,7 +552,7 @@ const REVIEW_SCHEMA = {
         required: ['chat', 'tipo', 'detalle', 'sugerencia'],
         properties: {
           chat: { type: 'integer' },
-          tipo: { type: 'string', enum: ['respuesta_incorrecta', 'venta_perdida', 'no_respondio_la_pregunta', 'repetitivo', 'otro'] },
+          tipo: { type: 'string', enum: ['respuesta_incorrecta', 'venta_perdida', 'no_respondio_la_pregunta', 'repetitivo', 'objecion_mal_manejada', 'otro'] },
           detalle: { type: 'string' },
           sugerencia: { type: 'string' }
         }
@@ -510,8 +565,8 @@ const REVIEW_SCHEMA = {
 const SUMMARY_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['resumen', 'recomendaciones'],
-  properties: { resumen: { type: 'string' }, recomendaciones: { type: 'array', items: { type: 'string' } } }
+  required: ['resumen', 'recomendaciones', 'desempeno'],
+  properties: { resumen: { type: 'string' }, recomendaciones: { type: 'array', items: { type: 'string' } }, desempeno: { type: 'string' } }
 };
 
 export const HANDOFF_LABELS: Record<string, string> = {
@@ -527,7 +582,12 @@ export const HANDOFF_LABELS: Record<string, string> = {
   new_quotation: 'cotizaciones',
   order_updated: 'pedidos cambiados',
   bank_details_missing: 'faltan datos bancarios',
-  not_customer: 'no eran clientes'
+  not_customer: 'no eran clientes',
+  ready_to_pay_waiting: 'listas para pagar sin respuesta',
+  hot_waiting: 'interesadas esperando',
+  quote_stalled: 'cotizaciones sin avance',
+  asks_person: 'pidieron una persona',
+  undelivered_important: 'mensajes no entregados'
 };
 
 function dayBounds(day: string, tz: string) {
@@ -575,10 +635,18 @@ export async function buildDayReport(day: string, now = new Date()): Promise<Day
   }
   const metrics = dayMetrics({ start, end, now, conversations, messages, notifications, orders, quotations });
   const previous = await getReport(day);
+  // El embudo y los seguimientos los calcula el CRM (la IA nunca inventa estos números).
+  const [funnel, followUps, companyPrompt] = await Promise.all([
+    salesFunnel(start, end).catch(() => undefined),
+    followUpPerformance(new Date(end.getTime() - 7 * DAY_MS), end).catch(() => undefined),
+    supervisorPrompt()
+  ]);
   const report: DayReport = {
     day, createdAt: now.toISOString(), metrics, summary: '', recommendations: [], problems: [], lessonsCreated: 0,
-    reviewedChats: 0, aiError: null, attempts: (previous?.attempts || 0) + 1
+    reviewedChats: 0, aiError: null, attempts: (previous?.attempts || 0) + 1,
+    funnel, followUps, stages: {}, lost: [], lossReasons: {}, objections: [], performance: ''
   };
+  const objections = new Map<string, number>();
 
   // Los chats del día con más mensajes primero (los más importantes si hay que recortar).
   const names = new Map<string, string>(conversations.map((c: any) => [c.id, String(c.customer_name || c.phone_number || 'Cliente')]));
@@ -603,17 +671,35 @@ export async function buildDayReport(day: string, now = new Date()): Promise<Day
           purpose: 'supervisor',
           schemaName: 'revision_de_chats',
           schema: REVIEW_SCHEMA,
-          system: `Eres el supervisor del asistente de ventas por WhatsApp de ${profile().business.name}. Revisas los chats de un día para que la dueña sepa qué mejorar. `
+          system: withCompanyRules(`Eres el supervisor del asistente de ventas por WhatsApp de ${profile().business.name}. Revisas los chats de un día para que la dueña sepa qué mejorar. `
             + 'Señala solo problemas reales y concretos: el asistente respondió algo incorrecto o contradictorio, no respondió lo que el cliente preguntó, repitió lo mismo, '
-            + 'o un cliente interesado se fue sin comprar (por precio, demora, falta de respuesta o algo que no se le ofreció). No marques como problema los chats normales. '
+            + 'manejó mal una objeción, o un cliente interesado se fue sin comprar (por precio, demora, falta de respuesta o algo que no se le ofreció). No marques como problema los chats normales ni detalles menores. '
             + '"chat" es el número del chat. detalle y sugerencia: una frase cada uno (máximo 200 caracteres), sin datos personales. '
             + 'notas: 1 o 2 frases sobre cómo fueron estos chats en general.\n'
-            + 'APRENDIZAJES (opcional, 0 a 3): cuando el equipo resolvió algo que el asistente debería saber hacer solo.\n' + LESSON_RULES,
+            + 'CHATS (uno por cada chat de la lista, con su número): clasificacion = frio (consulta sin señales de compra), interesado (pregunta precio, producto, diseño, envío o disponibilidad), '
+            + 'caliente (ya dio cantidad, evento, fecha o producto) o listo_para_pagar (pregunta dónde pagar, pide datos bancarios, quiere reservar o pedir). '
+            + 'oportunidad_perdida: si mostró interés y el asistente no la aprovechó (dio cantidad y fecha y no se cotizó, preguntó precio y no se avanzó, preguntó cómo pagar y quedó ahí, dijo que estaba caro y no se buscó su presupuesto, quedó esperando), una frase con qué debió hacerse; si no, "". '
+            + 'motivo_perdida: si no compró, el motivo de la lista; "desconocido" si no hay datos suficientes (no lo inventes); "ninguno" si compró o la conversación sigue en curso. '
+            + 'objeciones: lo que frenó al cliente en pocas palabras ("precio alto", "envío caro", "fecha muy cercana"); vacío si no hubo.\n'
+            + 'APRENDIZAJES (opcional, 0 a 3): cuando el equipo resolvió algo que el asistente debería saber hacer solo.\n' + LESSON_RULES, companyPrompt),
           user: `APRENDIZAJES QUE YA EXISTEN:\n${existingText(lessons)}\n\n`
             + group.map((c, k) => `=== CHAT ${k + 1} ===\n${transcript(c.list)}`).join('\n\n'),
           maxTokens: 5000
         });
         if (result.notas) notes.push(String(result.notas).slice(0, 400));
+        for (const c of Array.isArray((result as any).chats) ? (result as any).chats : []) {
+          const chat = group[Number(c?.chat) - 1];
+          if (!chat) continue;
+          const stage = STAGE_ORDER.includes(c.clasificacion) ? c.clasificacion as Stage : null;
+          if (stage) report.stages![stage] = (report.stages![stage] || 0) + 1;
+          const missed = cleanLessonText(c.oportunidad_perdida, 220);
+          if (missed) report.lost!.push({ conversationId: chat.id, customer: chat.customer, detail: missed });
+          if (LOSS_REASONS[c.motivo_perdida]) report.lossReasons![c.motivo_perdida] = (report.lossReasons![c.motivo_perdida] || 0) + 1;
+          for (const o of Array.isArray(c.objeciones) ? c.objeciones : []) {
+            const text = cleanLessonText(o, 60).toLowerCase();
+            if (text) objections.set(text, (objections.get(text) || 0) + 1);
+          }
+        }
         for (const p of Array.isArray(result.problemas) ? result.problemas : []) {
           const chat = group[Number(p?.chat) - 1];
           if (!chat) continue;
@@ -632,19 +718,29 @@ export async function buildDayReport(day: string, now = new Date()): Promise<Day
         report.reviewedChats += group.length;
       }
       const handoffs = Object.entries(metrics.handoffs).map(([k, n]) => `${HANDOFF_LABELS[k] || k}: ${n}`).join(', ') || 'ninguno';
+      report.objections = [...objections.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+      const f = report.funnel;
+      const fu = report.followUps?.total;
+      const crmNumbers = [
+        f ? `EMBUDO (lo calcula el sistema, no lo cambies): ${f.chats} chats → ${f.interested} interesados → ${f.quotations} cotizaciones → ${f.pendingPayment} pendientes de pago → ${f.orders} pedidos → ${f.sales} ventas. Conversión chat → venta ${f.rates.sale}%. Donde más se pierden: ${f.biggestDrop || 'sin datos'}.` : '',
+        fu ? `SEGUIMIENTOS (últimos 7 días): ${fu.sent} enviados, ${fu.responded} respondidos, ${fu.quoted} llevaron a cotización, ${fu.bought} a compra.` : '',
+        `OPORTUNIDADES PERDIDAS: ${report.lost!.length}. MOTIVOS DE PÉRDIDA: ${Object.entries(report.lossReasons!).map(([k, n]) => `${LOSS_REASONS[k]}: ${n}`).join(', ') || 'ninguno'}. OBJECIONES: ${report.objections.join(', ') || 'ninguna'}.`
+      ].filter(Boolean).join('\n');
       const final = await askJson<{ resumen: string; recomendaciones: string[] }>({
         purpose: 'supervisor',
         schemaName: 'resumen_del_dia',
         schema: SUMMARY_SCHEMA,
-        system: 'Escribe para la dueña del negocio, en español sencillo y directo, el resumen del día de su asistente de WhatsApp. '
-          + 'resumen: 2 a 4 frases (qué tal fue el día y lo más importante). recomendaciones: 0 a 3 acciones concretas para mejorar, una frase cada una.',
+        system: withCompanyRules('Escribe para la dueña del negocio, en español sencillo y directo, el resumen del día de su asistente de WhatsApp. '
+          + 'resumen: 2 a 4 frases (qué tal fue el día, en qué etapa se pierden clientes y lo más importante). recomendaciones: 0 a 3 acciones concretas para mejorar, una frase cada una, priorizando lo que tiene impacto en ventas. '
+          + 'desempeno: 1 o 2 frases sobre cómo vendió el asistente (si avanzó hacia la cotización y el cierre, si manejó bien las objeciones). Usa solo los números que te doy: nunca inventes cifras.', companyPrompt),
         user: `NÚMEROS DEL DÍA: ${metrics.chats} chats con mensajes de clientes (${metrics.newChats} nuevos), ${metrics.quotations} cotizaciones, ${metrics.orders} pedidos, `
           + `${metrics.unanswered.length} clientes sin respuesta, el equipo escribió en ${metrics.teamChats} chats. Avisos a la dueña: ${handoffs}.\n\n`
-          + `NOTAS DE LA REVISIÓN:\n${notes.join('\n') || '(sin notas)'}\n\nPROBLEMAS ENCONTRADOS:\n${report.problems.map(p => `- ${p.type}: ${p.detail}`).join('\n') || '(ninguno)'}`,
+          + `${crmNumbers}\n\nNOTAS DE LA REVISIÓN:\n${notes.join('\n') || '(sin notas)'}\n\nPROBLEMAS ENCONTRADOS:\n${report.problems.map(p => `- ${p.type}: ${p.detail}`).join('\n') || '(ninguno)'}`,
         maxTokens: 1500
       });
       report.summary = cleanLessonText(final.resumen, 800);
       report.recommendations = (Array.isArray(final.recomendaciones) ? final.recomendaciones : []).map(r => cleanLessonText(r, 240)).filter(Boolean).slice(0, 3);
+      report.performance = cleanLessonText((final as any).desempeno, 400);
     } catch (error: any) {
       report.aiError = error instanceof BudgetReached ? error.message : explainAi(error);
     }
@@ -694,7 +790,11 @@ export function reportText(r: DayReport, pendingLessons = 0): string {
     `📊 *Reporte del supervisor · ${longDay(r.day)}*`,
     '',
     `💬 ${m.chats} chats · ${m.unanswered.length} sin respuesta · ${alerts} avisos para ti · ${m.quotations} cotizaciones · ${m.orders} pedidos`,
+    r.funnel && r.funnel.chats ? `🛒 ${r.funnel.chats} chats → ${r.funnel.interested} interesadas → ${r.funnel.quotations} cotizaciones → ${r.funnel.pendingPayment} por pagar → ${r.funnel.sales} ventas` : '',
+    r.followUps && r.followUps.total.sent ? `📩 Seguimientos (7 días): ${r.followUps.total.sent} enviados · ${r.followUps.total.responded} respondieron · ${r.followUps.total.bought} compraron` : '',
     r.summary ? `\n🧑‍🏫 ${r.summary}` : '',
+    r.performance ? `\n👩‍💼 ${r.performance}` : '',
+    r.lost && r.lost.length ? `\n🎯 *Oportunidades perdidas: ${r.lost.length}*\n${r.lost.slice(0, 4).map(l => `• ${l.customer}: ${l.detail}`).join('\n')}` : '',
     r.recommendations.length ? `\n✅ *Qué mejorar*\n${r.recommendations.map(x => `• ${x}`).join('\n')}` : '',
     names.length ? `\n💬 *Quedaron sin respuesta:* ${names.slice(0, 6).join(', ')}${names.length > 6 ? ` y ${names.length - 6} más` : ''}` : '',
     r.problems.length ? `\n🔎 *Lo que encontró*\n${r.problems.slice(0, 5).map(p => `• ${p.customer}: ${p.detail}`).join('\n')}${r.problems.length > 5 ? `\n• y ${r.problems.length - 5} más` : ''}` : '',
@@ -752,7 +852,7 @@ registerStaffReplies(async inbound => {
  * todos los días, aunque fuera "0 chats", y cada aviso fuera de las 24 horas es una plantilla que se cobra.
  */
 export function reportWorthTelling(r: DayReport): boolean {
-  return r.metrics.chats > 0 && (r.metrics.unanswered.length > 0 || r.problems.length > 0);
+  return r.metrics.chats > 0 && (r.metrics.unanswered.length > 0 || r.problems.length > 0 || (r.lost?.length || 0) > 0);
 }
 
 /** ¿Es hora de escribirle a la dueña? (de día, en la hora del negocio). */
@@ -763,7 +863,8 @@ export function tellingHours(now: Date, tz: string): boolean {
 
 /**
  * Le avisa a la dueña, de día y una sola vez, lo que vale la pena: el reporte de ayer si trae algo que hacer (con los
- * aprendizajes nuevos) o, si no, solo los aprendizajes nuevos por aprobar.
+ * aprendizajes nuevos). Un aprendizaje nuevo solo es prioridad baja: no se manda por WhatsApp por sí solo (cada aviso
+ * fuera de las 24 horas es una plantilla que se cobra); queda en el CRM y sale con el próximo reporte que se avise.
  */
 async function tellWhatMatters(now: Date) {
   const tz = profile().business.timezone;
@@ -775,16 +876,12 @@ async function tellWhatMatters(now: Date) {
   const yesterday = localDayOf(new Date(now.getTime() - DAY_MS), tz);
   const report = told.reports.includes(yesterday) ? null : await getReport(yesterday);
   const tellReport = !!report && reportWorthTelling(report);
-  if (!tellReport && newLessons.length === 0) return;
-  if (tellReport) {
-    const m = report!.metrics;
-    await tellOwner(`sv:report:${yesterday}`, '📊 Tu reporte del día está listo', `${m.chats} chats · ${m.unanswered.length} sin respuesta · ${report!.problems.length} cosas por mejorar`);
-  } else {
-    await tellOwner('sv:lessons', '🧠 El supervisor tiene aprendizajes para aprobar', `${newLessons.length} nuevo(s) de los chats que atendiste`);
-  }
+  if (!tellReport) return;
+  const m = report!.metrics;
+  await tellOwner(`sv:report:${yesterday}`, '📊 Tu reporte del día está listo', `${m.chats} chats · ${m.unanswered.length} sin respuesta · ${report!.problems.length} cosas por mejorar${report!.lost?.length ? ` · ${report!.lost.length} oportunidades perdidas` : ''}`);
   const stillPending = new Set(pending.map(l => l.id));
   await setConfig(TOLD_KEY, JSON.stringify({
-    reports: [...new Set([...(tellReport ? [yesterday] : []), ...told.reports])].slice(0, 30),
+    reports: [...new Set([yesterday, ...told.reports])].slice(0, 30),
     lessons: [...told.lessons.filter(id => stillPending.has(id)), ...newLessons.map(l => l.id)]
   }));
 }
