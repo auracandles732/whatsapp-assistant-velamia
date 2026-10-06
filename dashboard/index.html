@@ -5609,6 +5609,7 @@
                             {text('sales.productLabelPlural', 'En plural', 'Modelos, Productos')}
                             {text('sales.goodsWord', 'Qué vendes (para hablar del total)', 'velas, zapatos, productos')}
                             {text('sales.minimumOrder', 'Pedido mínimo', 'Ej: 2 docenas', 'Vacío = sin mínimo')}
+                            {number('sales.photosPerBatch', 'Fotos que muestra de una vez', 'Las demás las ofrece después ("¿quieres ver más modelos?"). Con 2, la clienta decide más fácil.')}
                             {check('sales.personalization', 'Los productos se pueden personalizar')}
                             {check('sales.perProductUnits', 'Cada producto tiene su propia unidad y medida (cajas, tubos, metros…)')}
                             {check('sales.genderTagging', 'Los productos se marcan como niño, niña o neutro (baby shower)')}
@@ -5660,7 +5661,7 @@
                             {shippingMode !== 'none' && text('shipping.packingNote', 'Cómo se empaca el envío', 'Ej: en caja de cartón bien protegida', 'El asistente lo dice cuando preguntan si los productos llegan bien cuidados', true)}
                             {shippingMode !== 'none' && number('shipping.unitsIncludedInRate', 'Cantidad que cubre la tarifa', '0 = sin recargo por cantidad')}
                             {shippingMode !== 'none' && number('shipping.extraCost', 'Recargo si supera esa cantidad ($)', '', '0.01')}
-                            {shippingMode !== 'none' && check('shipping.showSeparately', 'Mostrar el envío por separado (si no, el total es un solo valor)')}
+                            {shippingMode !== 'none' && check('shipping.showSeparately', 'Mostrar el envío por separado: da el valor de los productos sin esperar la ciudad y suma el envío al saberla (si no, el total es un solo valor y espera la ciudad)')}
                             {check('shipping.pickupAvailable', 'Se puede retirar en el local')}
                             {(form.shipping.pickupAvailable || shippingMode === 'none') && text('shipping.pickupAddress', 'Dirección para retirar', 'Ej: Av. 9 de Octubre 123', '', true)}
                         </div>

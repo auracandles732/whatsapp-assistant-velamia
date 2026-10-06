@@ -44,6 +44,11 @@ export interface BusinessProfile {
     perProductUnits: boolean;
     /** true = los productos pueden marcarse "niño", "niña" o neutro (baby shower); el asistente pregunta el sexo antes de mostrar fotos de esa categoría. */
     genderTagging: boolean;
+    /**
+     * Cuántas fotos manda el asistente de una vez al mostrar modelos (las demás quedan para "¿quieres ver más?"). Con
+     * pocas, la clienta decide más fácil: VELAMIA usa 2, las recomendadas para su evento.
+     */
+    photosPerBatch: number;
   };
   payments: {
     transferEnabled: boolean;
@@ -188,7 +193,8 @@ export const VELAMIA_PROFILE: BusinessProfile = {
     personalizationExamples: 'cambios de colores, nombres, frases y detalles',
     minimumOrder: '',
     perProductUnits: false,
-    genderTagging: false
+    genderTagging: false,
+    photosPerBatch: 4
   },
   payments: { transferEnabled: true, depositPercent: 50, cardEnabled: true, cardBrands: 'Visa y Mastercard' },
   dates: { enabled: true, eventLabel: 'evento', deliveryDaysBeforeEvent: 3, urgentDays: 3, alwaysAvailable: true },
@@ -268,7 +274,8 @@ export const STORE_PROFILE: BusinessProfile = {
     personalizationExamples: '',
     minimumOrder: '',
     perProductUnits: false,
-    genderTagging: false
+    genderTagging: false,
+    photosPerBatch: 4
   },
   payments: { transferEnabled: true, depositPercent: 100, cardEnabled: false, cardBrands: '' },
   dates: { enabled: false, eventLabel: 'evento', deliveryDaysBeforeEvent: 0, urgentDays: 2, alwaysAvailable: false },
@@ -394,7 +401,8 @@ export function normalizeProfile(raw: any, base: BusinessProfile = STORE_PROFILE
       personalizationExamples: text(s.personalizationExamples, base.sales.personalizationExamples),
       minimumOrder: text(s.minimumOrder, base.sales.minimumOrder, 120),
       perProductUnits: bool(s.perProductUnits, base.sales.perProductUnits === true),
-      genderTagging: bool(s.genderTagging, base.sales.genderTagging === true)
+      genderTagging: bool(s.genderTagging, base.sales.genderTagging === true),
+      photosPerBatch: Math.round(num(s.photosPerBatch, base.sales.photosPerBatch ?? 4, 1, 10))
     },
     payments: {
       transferEnabled: bool(p.transferEnabled, base.payments.transferEnabled),

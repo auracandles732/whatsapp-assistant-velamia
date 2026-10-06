@@ -337,7 +337,9 @@ export function buildCoreRules(p: BusinessProfile, exampleProduct = 'Nombre del 
     s.minimumOrder
       ? `- Pedido mínimo: ${s.minimumOrder}.`
       : `- No hay pedido mínimo: se puede pedir cualquier cantidad (el precio del catálogo sigue siendo por ${unit}).`,
-    `- Para dar un valor total (${amountList}) necesitas saber qué ${models}, la cantidad de ${units}${hasShipping ? ' y la ciudad de envío. Si falta la ciudad, pregúntala antes de dar cualquier total' : ''}.`,
+    hasShipping && sh.showSeparately
+      ? `- Para dar el valor de los ${s.goodsWord} (subtotal) basta con saber qué ${models} y la cantidad de ${units}: dalo apenas los sepas, aunque falte la ciudad, y en ese mismo mensaje pregunta la ciudad para sumar el envío. Escríbelo como "${s.goodsWord.charAt(0).toUpperCase() + s.goodsWord.slice(1)}: $X" (nunca con la palabra "total"). El envío, el valor total${usesDeposit ? ', el anticipo' : ''} y las formas de pago van solo cuando ya sepas la ciudad.`
+      : `- Para dar un valor total (${amountList}) necesitas saber qué ${models}, la cantidad de ${units}${hasShipping ? ' y la ciudad de envío. Si falta la ciudad, pregúntala antes de dar cualquier total' : ''}.`,
     d.enabled && `- La fecha del ${d.eventLabel} NO hace falta para dar el total: si ya conoces ${models}, cantidad${hasShipping ? ' y ciudad' : ''}, da el total y después pregunta la fecha.`
   );
   if (hasShipping && !sh.showSeparately) {
@@ -613,6 +615,8 @@ export interface TurnPlan {
   shipping_place: string;
   /** Valor total calculado por el sistema (productos + envío) o 0 si falta información. */
   order_total: number;
+  /** Valor de los productos cuando el envío va aparte y falta la ciudad (0 en los demás casos). */
+  order_subtotal: number;
   /** Monto a transferir para iniciar (anticipo o total) o 0. */
   deposit: number;
   /** Las fotos ya vienen ordenadas (sin saber el sexo: neutros y luego niña/niño intercalados): no se reordenan. */
@@ -1426,6 +1430,12 @@ export async function planTurn(params: {
   if (askModels.length === 0 && (quotedTotal > 0 || quotedDeposit > 0) && !repeatsKnownPrice) {
     if (firstOrder.missing === 'items') {
       corrections.push(`${noAmountsYet} Aún no está claro qué ${p.sales.productLabelPlural.toLowerCase()} y cuántas ${p.sales.unitPlural} quiere; pregúntale.`);
+    } else if (firstOrder.missing === 'place' && hasShipping && p.shipping.showSeparately) {
+      // Envío aparte: el valor de los productos ya se puede dar; el total y el anticipo esperan la ciudad.
+      const onlySubtotal = amountsInReply.every(a => Math.abs(a - firstOrder.subtotal) < 0.009 || catalog.some(c => Math.abs(Number(c.price) - a) < 0.009));
+      if (!onlySubtotal || quotedDeposit > 0 || (quotedTotal > 0 && Math.abs(quotedTotal - firstOrder.subtotal) > 0.009)) {
+        corrections.push(`El valor de los ${p.sales.goodsWord} es ${money(firstOrder.subtotal)}. Todavía no sabes la ciudad: da solo ese valor (como "${p.sales.goodsWord.charAt(0).toUpperCase() + p.sales.goodsWord.slice(1)}: ${money(firstOrder.subtotal)}", sin la palabra "total" ni anticipo) y pregunta a qué ciudad se envía para sumar el envío.`);
+      }
     } else if (firstOrder.missing === 'place') {
       corrections.push(`${noAmountsYet} Pregunta primero a qué ciudad se envía el pedido.`);
     } else if (firstOrder.missing === 'unknown_place') {
@@ -1690,6 +1700,8 @@ export async function planTurn(params: {
     })),
     shipping_place: order.place,
     order_total: order.total,
+    // Envío aparte y sin ciudad todavía: el valor de los productos ya es una cotización (el envío se suma después).
+    order_subtotal: order.missing === 'place' && p.shipping.mode !== 'none' && p.shipping.showSeparately ? order.subtotal : 0,
     deposit: order.total ? order.deposit : 0,
     keep_photo_order: keepPhotoOrder
   };

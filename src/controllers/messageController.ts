@@ -151,6 +151,8 @@ export function typingDelayMs(batch: { readyAt: number }, now = Date.now()): num
 
 // Fotos por tanda: si hay más, se pregunta antes de seguir para no saturar el chat.
 export const PHOTO_BATCH_SIZE = 4;
+/** Fotos por tanda de la empresa (Configuración → Ventas); 4 si no la eligió. */
+const photoBatchSize = () => profile().sales.photosPerBatch || PHOTO_BATCH_SIZE;
 // El emoji de cada variante es fijo para un mismo perfil: así se reconoce la pregunta al leer el historial.
 const withEmojis = (texts: string[]) => {
   const emojis = profile().style.decorativeEmojis;
@@ -958,7 +960,7 @@ async function respondToBatch(batch: PendingBatch) {
       // Si la IA eligió una tanda de las pendientes, se toman todas: las que no entren quedan para la
       // siguiente pregunta en vez de perderse. Si pidió uno o dos modelos concretos, se envían solo esos.
       const continuesPending = pendingProducts.length > 0
-        && plan.show_products.length >= Math.min(PHOTO_BATCH_SIZE, pendingProducts.length)
+        && plan.show_products.length >= Math.min(photoBatchSize(), pendingProducts.length)
         && plan.show_products.every(n => pendingProducts.includes(n));
       const saidByCustomer = [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), aiContent].join('\n');
       const chosen = photosFromBackup ? plan.show_products : sameCategoryAsMost(plan.show_products, catalog, saidByCustomer);
@@ -969,7 +971,7 @@ async function respondToBatch(batch: PendingBatch) {
       sex = gendered ? customerSex(saidByCustomer) : '';
       photos = continuesPending ? pendingProducts
         : gendered && !photosFromBackup && !plan.keep_photo_order ? withOppositeGender(chosen, catalog, sentProducts, sex) : chosen;
-      const firstBatch = photos.filter(n => catalog.some((p: any) => p.name === n && p.image_url)).slice(0, PHOTO_BATCH_SIZE);
+      const firstBatch = photos.filter(n => catalog.some((p: any) => p.name === n && p.image_url)).slice(0, photoBatchSize());
       const noted = noteOppositeGender(plan.reply, firstBatch, catalog, sex);
       if (noted !== plan.reply) {
         console.log('📸 La tanda trae modelos del otro sexo: se aclara en el texto que se pueden personalizar');
@@ -1007,7 +1009,9 @@ async function respondToBatch(batch: PendingBatch) {
     }
     // Si el bot le dio el valor total, es una cotización aunque la clienta no usara esa palabra:
     // la dueña quiere revisarlas todas.
-    const gaveTotal = plan.order_total > 0 && plan.reply.includes(plan.order_total.toFixed(2));
+    // Con el envío aparte, el valor de los productos sin la ciudad también es una cotización (el envío se suma después).
+    const gaveTotal = (plan.order_total > 0 && plan.reply.includes(plan.order_total.toFixed(2)))
+      || (plan.order_subtotal > 0 && plan.reply.includes(plan.order_subtotal.toFixed(2)));
     if (saleIntent !== 'order' && (gaveTotal || (plan.order_total > 0 && TOTAL_REQUEST_PATTERN.test(aiContent)))) {
       saleIntent = 'quotation';
     }
@@ -1018,8 +1022,8 @@ async function respondToBatch(batch: PendingBatch) {
 
     // La personalización (aroma, colores) y los ajustes de cantidad suelen llegar después del total o de confirmar:
     // mientras haya un pedido o una cotización en curso, se mantiene al día con lo último que dijo la clienta.
-    // Solo con el total completo: sin ciudad se guardaría un valor sin envío.
-    if (saleIntent !== 'order' && saleIntent !== 'quotation' && plan.order_items.length > 0 && plan.order_total > 0) {
+    // Solo con un valor calculado: el total completo o, con el envío aparte, el de los productos (sin ciudad todavía).
+    if (saleIntent !== 'order' && saleIntent !== 'quotation' && plan.order_items.length > 0 && (plan.order_total > 0 || plan.order_subtotal > 0)) {
       if (await getRecentPendingOrder(conversationId)) saleIntent = 'order';
       else if (await getRecentPendingQuotation(conversationId)) saleIntent = 'quotation';
     }
@@ -1076,14 +1080,14 @@ async function respondToBatch(batch: PendingBatch) {
   }
 }
 
-/** Envía hasta PHOTO_BATCH_SIZE fotos; si quedan más, las guarda y pregunta si desea verlas. */
+/** Envía hasta photoBatchSize() fotos; si quedan más, las guarda y pregunta si desea verlas. */
 async function sendProductPhotos(conversationId: string, phoneNumber: string, names: string[], catalog: any[], askAfter = true, batchProfile?: any, kind: 'liked' | 'quantity' = 'liked') {
   const products = names
     .map(name => catalog.find(p => p.name === name))
     .filter(p => p && p.image_url);
 
-  const batch = products.slice(0, PHOTO_BATCH_SIZE);
-  const rest = products.slice(PHOTO_BATCH_SIZE).map(p => p.name);
+  const batch = products.slice(0, photoBatchSize());
+  const rest = products.slice(photoBatchSize()).map(p => p.name);
   console.log(`📸 Enviando ${batch.length} foto(s) de productos${rest.length ? ` (quedan ${rest.length})` : ''}`);
   const profToUse = batchProfile || profile();
   const { business, sales } = profToUse;
