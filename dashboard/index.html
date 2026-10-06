@@ -2610,6 +2610,25 @@
         .cs-box h3 { margin: 0 0 10px; font-size: 16px; color: #2B1C14; }
         .cs-scroll { overflow-x: auto; }
         .cs-scroll .sv-table { min-width: 640px; }
+        .og-chip { align-self: center; max-width: 92%; margin: 8px auto; padding: 8px 14px; border-radius: 14px; background: #FFF6EC; border: 1px solid #F1DCC4; color: #5A3B26; font-size: 13px; display: flex; flex-direction: column; gap: 2px; text-align: center; }
+        .og-chip b { color: #8E4A2E; }
+        .og-chip small { color: #8A7868; font-size: 12px; }
+        .ad-cell { display: flex; gap: 10px; align-items: flex-start; min-width: 220px; text-align: left; }
+        .ad-cell img { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: #F3ECE3; }
+        .ad-cell b { display: block; color: #2B1C14; font-size: 13.5px; }
+        .ad-cell small { display: block; color: #8A7868; font-size: 12px; }
+        .ad-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #F3ECE3; color: #6B5849; margin: 2px 4px 0 0; }
+        .ad-tag.on { background: #E7F3E4; color: #2F6B2A; }
+        .ad-tag.sug { background: #FFF3DC; color: #7A5300; }
+        .ad-pick { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+        .ad-pick input[type=search] { border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; }
+        .ad-pick .list { max-height: 220px; overflow: auto; border: 1px solid #EFE6DB; border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+        .ad-pick label { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 4px 6px; border-radius: 8px; cursor: pointer; text-align: left; }
+        .ad-pick label:hover { background: #FAF2EB; }
+        .ad-key { font-family: monospace; font-size: 13px; padding: 10px 12px; border-radius: 10px; background: #FFF6EC; border: 1px dashed #D9A07A; word-break: break-all; user-select: all; }
+        .ad-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .ad-form input { border: 1px solid #EADFD2; border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; }
+        @media (max-width: 760px) { .ad-form { grid-template-columns: 1fr; } }
         .sv-prompt textarea { width: 100%; min-height: 260px; padding: 12px; border-radius: 12px; border: 1px solid #E6DACC; font: inherit; font-size: 13.5px; line-height: 1.5; background: #fff; resize: vertical; }
         @media (max-width: 760px) { .sv-step { grid-template-columns: 110px 1fr 46px; font-size: 13px; } .sv-table { font-size: 12.5px; } }
         .sv-kpis div { border: 1px solid #EADFD3; border-radius: 14px; padding: 10px 12px; background: #FDFCFB; display: flex; flex-direction: column; }
@@ -4119,6 +4138,22 @@
         }
 
         // WhatsApp avisó que este mensaje no llegó.
+        // De dónde llegó la clienta (anuncio de Meta o la web), arriba de su primer mensaje.
+        function OriginChip({ origin }) {
+            const o = origin || {};
+            const label = o.source === 'web' ? (o.adId ? 'Llegó por la web desde un anuncio' : 'Llegó por la web')
+                : o.sourceType === 'post' ? 'Llegó desde una publicación promocionada' : 'Llegó desde un anuncio';
+            const name = o.adName || o.headline || o.utmCampaign || '';
+            const products = (o.products || []).slice(0, 4);
+            return (
+                <div className="og-chip">
+                    <span>📣 <b>{label}</b>{name ? <> · {name}</> : null}</span>
+                    {products.length > 0 && <small>Producto: {products.join(', ')}</small>}
+                    {o.refCode && <small>Referencia de la web: {o.refCode}{o.landing ? ' · ' + o.landing : ''}</small>}
+                </div>
+            );
+        }
+
         function UndeliveredNote({ msg, delivery }) {
             if (!msg.undelivered) return null;
             const retry = delivery && (delivery.pending || []).some(p => p.retryOf && p.retryOf === msg.wa_message_id);
@@ -6761,7 +6796,7 @@
         // Secciones que ocupan el segundo lugar de la barra de abajo cuando están abiertas.
         const MX_SECTIONS = {
             cotizaciones: ['doc', 'Cotizaciones'], catalogo: ['box', 'Catálogo'], estadisticas: ['chart', 'Estadísticas'],
-            publicaciones: ['image', 'Publicaciones'], oficina: ['users', 'Oficina'], supervisor: ['bulb', 'Supervisor'], configuracion: ['gear', 'Configuración'], consumo: ['chart', 'Consumo'], claves: ['key', 'Claves']
+            publicaciones: ['image', 'Publicaciones'], anuncios: ['dollar', 'Anuncios'], oficina: ['users', 'Oficina'], supervisor: ['bulb', 'Supervisor'], configuracion: ['gear', 'Configuración'], consumo: ['chart', 'Consumo'], claves: ['key', 'Claves']
         };
         const MX_QUOTE_STATUS = { pending: 'Pendiente', sent: 'Enviada', accepted: 'Aprobada', expired: 'Vencida' };
 
@@ -7993,7 +8028,7 @@
         }
 
         // La sección abierta queda en la dirección (#/cotizaciones, #/conversaciones/<chat>…): al recargar se vuelve ahí.
-        const APP_TABS = ['conversaciones', 'estadisticas', 'oficina', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'supervisor', 'configuracion', 'consumo', 'claves'];
+        const APP_TABS = ['conversaciones', 'estadisticas', 'oficina', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'anuncios', 'supervisor', 'configuracion', 'consumo', 'claves'];
         function readRoute() {
             const [tab, id] = decodeURIComponent(window.location.hash || '').replace(/^#\/?/, '').split('/');
             return { tab: APP_TABS.includes(tab) ? tab : 'conversaciones', id: /^[0-9a-f-]{36}$/i.test(id || '') ? id : '' };
@@ -8008,6 +8043,7 @@
             pedidos: ['Pedidos', 'Marca el avance de cada pedido'],
             catalogo: ['Catálogo', 'Tus productos, precios y fotos'],
             publicaciones: ['Publicaciones', 'Prepara, publica y mide tus redes sociales'],
+            anuncios: ['Anuncios', 'Qué anuncio de Meta te trae chats, cotizaciones y ventas de verdad'],
             supervisor: ['Supervisor', 'La revisión diaria de los chats y lo que aprende el asistente'],
             configuracion: ['Configuración', 'Datos del negocio, del asistente y de tus canales'],
             consumo: ['Consumo de IA', 'Lo que usa la inteligencia artificial cada día'],
@@ -8021,11 +8057,12 @@
             ['pedidos', 'bag', 'Pedidos'],
             ['catalogo', 'box', 'Catálogo'],
             ['publicaciones', 'image', 'Publicaciones'],
+            ['anuncios', 'dollar', 'Anuncios'],
             ['supervisor', 'bulb', 'Supervisor'],
             ['configuracion', 'gear', 'Configuración'],
             ['consumo', 'sparkle', 'Consumo de IA']
         ];
-        const DESK_ICONS = { estadisticas: 'home', oficina: 'users', cotizaciones: 'doc', pedidos: 'bag', catalogo: 'box', publicaciones: 'calendar', supervisor: 'bulb', configuracion: 'gear', consumo: 'chart', claves: 'key' };
+        const DESK_ICONS = { estadisticas: 'home', oficina: 'users', cotizaciones: 'doc', pedidos: 'bag', catalogo: 'box', publicaciones: 'calendar', anuncios: 'dollar', supervisor: 'bulb', configuracion: 'gear', consumo: 'chart', claves: 'key' };
 
         // Encabezado de cada sección en la computadora: ícono terracota, título y descripción (y botones si los hay).
         function DeskHero({ tab, children }) {
@@ -8244,6 +8281,7 @@
             const [messages, setMessages] = useState([]);
             // Entrega del chat abierto: plazo de 24 horas, lo guardado para cuando responda y el aviso para retomar.
             const [delivery, setDelivery] = useState(null);
+            const [origins, setOrigins] = useState([]);
             const [reopening, setReopening] = useState(false);
             const [inputText, setInputText] = useState('');
             const [botEnabled, setBotEnabled] = useState(true);
@@ -8806,7 +8844,9 @@
                 ...messages.map(m => ({ kind: 'msg', key: 'm' + m.id, ts: m.timestamp, data: m })),
                 // Lo guardado para cuando responda (lo que se reenvía tras un "no entregado" ya se ve en ese mensaje).
                 ...((delivery && delivery.pending) || []).filter(p => !p.retryOf).map(p => ({ kind: 'pending', key: 'p' + p.id, ts: p.at, data: p })),
-                ...((summary && summary.phase2 ? summary.notes : []).map(n => ({ kind: 'note', key: 'n' + n.id, ts: n.created_at, data: n })))
+                ...((summary && summary.phase2 ? summary.notes : []).map(n => ({ kind: 'note', key: 'n' + n.id, ts: n.created_at, data: n }))),
+                // De qué anuncio o de la web llegó: se anota al guardar su primer mensaje, así que va justo antes de él.
+                ...(origins || []).map(o => ({ kind: 'origin', key: 'o' + o.id, ts: new Date((o.at ? parseTs(o.at) : messages[0] ? parseTs(messages[0].timestamp) : new Date()).getTime() - 3000).toISOString(), data: o }))
             ].sort((a, b) => parseTs(a.ts) - parseTs(b.ts));
 
             async function loadQuotations() {
@@ -8971,9 +9011,11 @@
                     if (Array.isArray(data)) {
                         setMessages(data);
                         setDelivery(null);
+                        setOrigins([]);
                     } else {
                         setMessages(Array.isArray(data?.messages) ? data.messages : []);
                         setDelivery(data?.delivery || null);
+                        setOrigins(Array.isArray(data?.origins) ? data.origins : []);
                     }
                 } catch (err) {
                     console.error('Error cargando mensajes:', err);
@@ -9471,6 +9513,7 @@
                                     if (item.kind === 'pending') {
                                         return <React.Fragment key={item.key}>{dayPill}<PendingBubble item={item.data} mobile onDrop={canEdit ? () => dropPendingMessage(item.data) : null} /></React.Fragment>;
                                     }
+                                    if (item.kind === 'origin') return <React.Fragment key={item.key}>{dayPill}<OriginChip origin={item.data} /></React.Fragment>;
                                     const msg = item.data;
                                     const content = msg.content || '';
                                     const urlMatch = MEDIA_TYPES.includes(msg.type) ? content.match(/^https?:\/\/\S+/) : null;
@@ -9660,6 +9703,7 @@
                     ['cotizaciones', 'doc', 'Cotizaciones'],
                     ['catalogo', 'box', 'Catálogo'],
                     ['publicaciones', 'image', 'Publicaciones'],
+                    ['anuncios', 'dollar', 'Anuncios'],
                     ['supervisor', 'bulb', 'Supervisor'],
                     ['configuracion', 'gear', 'Configuración'],
                     ['consumo', 'chart', 'Consumo de IA'],
@@ -9682,6 +9726,7 @@
                             {activeTab === 'publicaciones' && <PostsView canEdit={canEdit} canConfigure={canConfigure} isAdmin={isAdmin} />}
                             {activeTab === 'supervisor' && <SupervisorView canConfigure={canConfigure} openChat={openChatFromQuotation} />}
                             {activeTab === 'oficina' && <OfficeView canEdit={canEdit} canConfigure={canConfigure} mobile />}
+                            {activeTab === 'anuncios' && <AdsView canEdit={canEdit} canConfigure={canConfigure} openChat={openChatFromQuotation} />}
                             {activeTab === 'cotizaciones' && <QuotesMobile quotations={quotations} products={products} conversations={conversations} biz={biz} canEdit={canEdit} filter={quoteFilter} setFilter={setQuoteFilter} openId={mxQuoteId} setOpenId={setMxQuoteId} reload={loadQuotations} openChat={id => { setMxQuoteId(null); openChatFromQuotation(id); }} onCompose={setComposer} />}
                             {activeTab === 'pedidos' && (
                                 <div className="mx-page">
@@ -9896,6 +9941,7 @@
                                             if (item.kind === 'pending') {
                                                 return <React.Fragment key={item.key}>{dayPill}<PendingBubble item={item.data} onDrop={canEdit ? () => dropPendingMessage(item.data) : null} /></React.Fragment>;
                                             }
+                                            if (item.kind === 'origin') return <React.Fragment key={item.key}>{dayPill}<OriginChip origin={item.data} /></React.Fragment>;
                                             const msg = item.data;
                                             const content = msg.content || '';
                                             // Solo en fotos, audios y documentos la primera línea es la URL del archivo;
@@ -10085,6 +10131,8 @@
                         {activeTab === 'supervisor' && <SupervisorView canConfigure={canConfigure} openChat={openChatFromQuotation} />}
 
                         {activeTab === 'oficina' && <OfficeView canEdit={canEdit} canConfigure={canConfigure} />}
+
+                        {activeTab === 'anuncios' && <AdsView canEdit={canEdit} canConfigure={canConfigure} openChat={openChatFromQuotation} />}
 
                         {activeTab === 'consumo' && (
                         <ConsumptionView />
@@ -13912,6 +13960,215 @@
                     </div>
                     {mobile && <div className="of-cards">{Object.keys(OF_AGENTS).map(agentCard)}</div>}
                     {mobile && selected && <MxSheet title={OF_AGENTS[selected].name} onClose={() => setSelected(null)}>{chat}</MxSheet>}
+                </div>
+            );
+        }
+
+        // ---------- Anuncios de Meta: qué anuncio trae chats, cotizaciones y ventas (y lo gastado, con la cuenta conectada) ----------
+        const AD_DESTINATIONS = { whatsapp: 'WhatsApp', web: 'Web', mensajes: 'Instagram / Messenger' };
+        const AD_LIVE = ['ACTIVE', 'IN_PROCESS', 'WITH_ISSUES', 'PENDING_REVIEW'];
+        const AD_STATUS = { ACTIVE: 'Activo', PAUSED: 'Pausado', CAMPAIGN_PAUSED: 'Campaña pausada', ADSET_PAUSED: 'Conjunto pausado', IN_PROCESS: 'Procesando', WITH_ISSUES: 'Con problemas', PENDING_REVIEW: 'En revisión', DISAPPROVED: 'Rechazado' };
+
+        function AdsView({ canEdit, canConfigure }) {
+            const [days, setDays] = useState(30);
+            const [data, setData] = useState(null);
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            const [busy, setBusy] = useState('');
+            const [form, setForm] = useState({ accountId: '', token: '' });
+            const [showConnect, setShowConnect] = useState(false);
+            const [editing, setEditing] = useState(null);
+            const [picked, setPicked] = useState([]);
+            const [query, setQuery] = useState('');
+            const [newKey, setNewKey] = useState('');
+            const [showAll, setShowAll] = useState(false);
+            const load = () => api('/api/ads?days=' + days).then(d => { setData(d); setError(''); }).catch(e => setError(e.message));
+            useEffect(() => { setData(null); load(); }, [days]);
+            const money = n => (n === null || n === undefined ? '—' : '$' + Number(n).toFixed(2));
+            async function run(name, fn, ok) {
+                setBusy(name); setError(''); setNotice('');
+                try {
+                    const r = await fn();
+                    if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok);
+                    await load();
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+            const connect = () => run('connect', () => api('/api/ads/settings', { method: 'PUT', body: JSON.stringify({ accountId: form.accountId, token: form.token }) }),
+                r => { setShowConnect(false); setForm({ accountId: '', token: '' }); return 'Cuenta publicitaria conectada' + (r.accountName ? ': ' + r.accountName : '') + '. Ya se leyeron tus anuncios.'; });
+            const disconnect = () => { if (confirm('¿Desconectar la cuenta publicitaria? Los chats ya atribuidos se quedan, pero deja de verse lo gastado.')) run('connect', () => api('/api/ads/settings', { method: 'PUT', body: JSON.stringify({ disconnect: true }) }), 'Cuenta publicitaria desconectada.'); };
+            const sync = () => run('sync', () => api('/api/ads/sync', { method: 'POST' }), r => r.count + ' anuncio(s) leídos de Meta.');
+            const makeKey = () => {
+                if (data && data.settings && data.settings.reportKey && !confirm('Ya existe una llave: si creas otra, la anterior deja de funcionar. ¿Continuar?')) return;
+                run('key', () => api('/api/ads/report-key', { method: 'POST' }).then(r => { setNewKey(r.key); return r; }), 'Llave creada: cópiala ahora, no se vuelve a mostrar.');
+            };
+            const startEdit = ad => { setEditing(ad.adId); setPicked(ad.products || []); setQuery(''); };
+            const saveProducts = adId => run('p' + adId, () => api('/api/ads/' + adId + '/products', { method: 'PUT', body: JSON.stringify({ products: picked }) }),
+                () => { setEditing(null); return 'Listo: la vendedora usará ese producto con las clientas que lleguen por ese anuncio.'; });
+
+            if (!data) return <div className="pb">{error ? <div className="pb-err">{error}</div> : <div className="pb-muted">Cargando…</div>}</div>;
+            const s = data.settings || {};
+            const rows = data.results || [];
+            const sum = k => rows.reduce((t, r) => t + Number(r[k] || 0), 0);
+            const spent = data.connected ? sum('spend') : null;
+            const revenue = sum('revenue');
+            const businessId = getCurrentBusinessId() || 'velamia';
+            const origin = window.location.origin;
+            const catalog = data.catalog || [];
+            const matches = query.trim() ? catalog.filter(p => (p.name + ' ' + p.category).toLowerCase().includes(query.trim().toLowerCase())).slice(0, 60) : catalog.slice(0, 60);
+            const ads = (data.ads || []).filter(a => showAll || AD_LIVE.includes(a.status) || rows.some(r => r.adId === a.adId) || !a.status);
+
+            return (
+                <div className="pb sv">
+                    <div className="pb-hero">
+                        <div className="pb-hero-ic"><PlatIcon name="dollar" size={30} color="#fff" /></div>
+                        <div className="pb-hero-tt">
+                            <h1>Anuncios</h1>
+                            <p>Cuando una clienta escribe desde un anuncio de Meta (o desde tu web), el chat queda unido a ese anuncio y la vendedora sabe qué producto vio. Aquí ves qué anuncio trae chats, cotizaciones y ventas de verdad, no solo clics.</p>
+                        </div>
+                        {canEdit && s.connected && (
+                            <div className="pb-hero-actions">
+                                <button type="button" className="pb-btn" disabled={!!busy} onClick={sync}>🔄 {busy === 'sync' ? 'Leyendo…' : 'Actualizar anuncios'}</button>
+                            </div>
+                        )}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {notice && <div className="pb-notice ok">{notice}</div>}
+                    {!data.available && <div className="pb-err">Falta activar la medición de anuncios: hay que aplicar una actualización en la base de datos (migración 027). Mientras tanto todo funciona normal.</div>}
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="chart" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>💰 Resultados por anuncio</h2>
+                                <p>Chats que llegaron por cada anuncio (directo o pasando por la web) y lo que pasó después. {data.connected ? 'El gasto viene de tu cuenta publicitaria.' : 'Conecta la cuenta publicitaria (abajo) para ver también lo gastado y el retorno.'}</p>
+                            </div>
+                            <div className="sv-days">{[7, 30, 90].map(d => <button key={d} type="button" className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{d} días</button>)}</div>
+                        </div>
+                        <div className="sv-kpis">
+                            <div><b>{spent === null ? '—' : money(spent)}</b><small>Gastado</small></div>
+                            <div><b>{sum('chats')}</b><small>Chats de anuncios</small></div>
+                            <div><b>{sum('quotations')}</b><small>Cotizaciones</small></div>
+                            <div><b>{sum('sales')}</b><small>Ventas</small></div>
+                            <div><b>{money(revenue)}</b><small>Ingresos{spent ? ' · retorno ' + (revenue / spent).toFixed(1) + 'x' : ''}</small></div>
+                        </div>
+                        {data.spendError && <div className="pb-muted">No se pudo leer lo gastado: {data.spendError}</div>}
+                        {rows.length === 0 ? (
+                            <div className="pb-muted">Todavía no hay chats de anuncios en este período. Desde ahora, cada clienta que escriba desde un anuncio de WhatsApp, Instagram o Messenger (o por el botón de WhatsApp de tu web) aparece aquí con su anuncio.</div>
+                        ) : (
+                            <div className="cs-scroll">
+                                <table className="sv-table">
+                                    <thead><tr><th>Anuncio</th><th>Destino</th><th>Gasto</th><th>Chats</th><th>Cotiz.</th><th>Pedidos</th><th>Ventas</th><th>Ingresos</th><th>Costo/chat</th><th>Retorno</th></tr></thead>
+                                    <tbody>{rows.map(r => (
+                                        <tr key={r.key}>
+                                            <td><div className="ad-cell">{r.imageUrl ? <img src={r.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" /> : null}<div><b>{r.adName}</b>{r.campaignName && <small>{r.campaignName}</small>}{r.products.length > 0 && <small>🕯️ {r.products.join(', ')}</small>}</div></div></td>
+                                            <td>{AD_DESTINATIONS[r.destination] || '—'}{r.webChats > 0 && <small className="pb-muted"><br />{r.webChats} por la web</small>}</td>
+                                            <td>{money(r.spend)}</td><td>{r.chats}</td><td>{r.quotations}</td><td>{r.orders}</td><td>{r.sales}</td><td>{money(r.revenue)}</td>
+                                            <td>{money(r.costPerChat)}</td><td>{r.roas === null ? '—' : r.roas.toFixed(1) + 'x'}</td>
+                                        </tr>
+                                    ))}</tbody>
+                                </table>
+                            </div>
+                        )}
+                        <small className="pb-muted">Retorno = ingresos ÷ gasto (3x = por cada $1 invertido vendiste $3). Las ventas cuentan los pedidos confirmados, enviados o entregados de esas clientas.</small>
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="tag" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>🕯️ Qué producto muestra cada anuncio</h2>
+                                <p>Con esto la vendedora atiende directo con el producto aunque la clienta solo escriba "precio". El sistema lo sugiere por el texto del anuncio; si no acertó, corrígelo y queda confirmado.</p>
+                            </div>
+                            <button type="button" className="pb-btn sm" onClick={() => setShowAll(v => !v)}>{showAll ? 'Solo activos y con chats' : 'Ver todos'}</button>
+                        </div>
+                        {ads.length === 0 ? <div className="pb-muted">{s.connected ? 'No hay anuncios activos ni con chats. Toca "Ver todos" para ver los pausados.' : 'Aparecen solos cuando llega el primer chat de un anuncio, o todos de una vez si conectas la cuenta publicitaria.'}</div> : (
+                            <div className="cs-scroll">
+                                <table className="sv-table">
+                                    <thead><tr><th>Anuncio</th><th>Estado</th><th>Destino</th><th>Producto</th><th></th></tr></thead>
+                                    <tbody>{ads.map(a => (
+                                        <tr key={a.adId}>
+                                            <td><div className="ad-cell">{a.imageUrl ? <img src={a.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" /> : null}<div><b>{a.adName || a.headline || 'Anuncio ' + a.adId}</b>{a.campaignName && <small>{a.campaignName}</small>}</div></div></td>
+                                            <td>{AD_STATUS[a.status] || a.status || '—'}</td>
+                                            <td>{AD_DESTINATIONS[a.destination] || '—'}</td>
+                                            <td style={{ textAlign: 'left', minWidth: 200 }}>
+                                                {editing === a.adId ? (
+                                                    <div className="ad-pick">
+                                                        <div>{picked.length ? picked.map(n => <span key={n} className="ad-tag on">{n}</span>) : <span className="pb-muted">Ninguno: la vendedora usará el texto del anuncio.</span>}</div>
+                                                        <input type="search" placeholder="Buscar en el catálogo…" value={query} onChange={e => setQuery(e.target.value)} />
+                                                        <div className="list">{matches.map(p => (
+                                                            <label key={p.name}><input type="checkbox" checked={picked.includes(p.name)} onChange={e => setPicked(list => e.target.checked ? [...list, p.name] : list.filter(n => n !== p.name))} />{p.name}<small className="pb-muted"> · {p.category}</small></label>
+                                                        ))}</div>
+                                                        <div className="sv-actions">
+                                                            <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={() => saveProducts(a.adId)}>{busy === 'p' + a.adId ? 'Guardando…' : 'Guardar'}</button>
+                                                            <button type="button" className="pb-btn sm" onClick={() => setEditing(null)}>Cancelar</button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        {(a.products || []).length ? a.products.map(n => <span key={n} className="ad-tag">{n}</span>) : <span className="pb-muted">{a.category ? 'Categoría ' + a.category : 'Sin producto'}</span>}
+                                                        {a.productSource === 'confirmado' ? <span className="ad-tag on">confirmado</span> : (a.products || []).length ? <span className="ad-tag sug">sugerido</span> : null}
+                                                    </>
+                                                )}
+                                            </td>
+                                            <td>{canEdit && editing !== a.adId && <button type="button" className="sv-link" onClick={() => startEdit(a)}>{a.productSource === 'confirmado' ? 'Cambiar' : 'Confirmar'}</button>}</td>
+                                        </tr>
+                                    ))}</tbody>
+                                </table>
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="link" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>🔗 Cuenta publicitaria de Meta</h2>
+                                <p>{s.connected
+                                    ? 'Conectada (' + s.accountId + ', token ' + s.tokenHint + '). Los anuncios se leen solos cada 6 horas' + (s.lastSyncAt ? '; última vez ' + formatDateTime(s.lastSyncAt) : '') + '.'
+                                    : 'Sin conectar. Con ella se ven lo gastado, el nombre y la campaña de cada anuncio. Sin ella igual se sabe de qué anuncio llegó cada chat.'}</p>
+                            </div>
+                        </div>
+                        {s.lastSyncError && <div className="pb-err">Última lectura con error: {s.lastSyncError}</div>}
+                        {canConfigure && (showConnect ? (
+                            <div className="sv-form">
+                                <div className="ad-form">
+                                    <label>Cuenta publicitaria<input type="text" placeholder="act_123456789" value={form.accountId} onChange={e => setForm(f => ({ ...f, accountId: e.target.value }))} /></label>
+                                    <label>Token de Meta (con permiso ads_read){s.connected && <small className="pb-muted">Vacío = se queda el actual</small>}<input type="password" autoComplete="off" value={form.token} onChange={e => setForm(f => ({ ...f, token: e.target.value }))} /></label>
+                                </div>
+                                <div className="sv-actions">
+                                    <button type="button" className="pb-btn sm main" disabled={!!busy || !form.accountId} onClick={connect}>{busy === 'connect' ? 'Probando…' : 'Conectar'}</button>
+                                    <button type="button" className="pb-btn sm" onClick={() => setShowConnect(false)}>Cancelar</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="sv-actions">
+                                <button type="button" className="pb-btn sm" onClick={() => { setForm({ accountId: s.accountId || '', token: '' }); setShowConnect(true); }}>{s.connected ? 'Cambiar cuenta o token' : 'Conectar cuenta publicitaria'}</button>
+                                {s.connected && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={disconnect}>Desconectar</button>}
+                            </div>
+                        ))}
+                    </section>
+
+                    {canConfigure && (
+                        <section className="pb-card">
+                            <div className="pb-card-h">
+                                <div className="pb-tile"><PlatIcon name="key" size={22} color="#B5654A" /></div>
+                                <div className="grow">
+                                    <h2>📲 Conectar tu web y tu app de métricas</h2>
+                                    <p>Tu web avisa de qué anuncio llegó cada visita y el botón de WhatsApp lleva una referencia (Ref: K7M2QX): así la vendedora sabe qué producto miraba. Tu app de métricas puede leer estos resultados con una llave.</p>
+                                </div>
+                            </div>
+                            <div className="pb-muted">Dirección para la web: <code>{origin}/api/public/web-ref/{businessId}</code></div>
+                            <div className="pb-muted">Dirección para la app de métricas: <code>{origin}/api/public/ads-report/{businessId}?days=30</code> {s.reportKey ? '· llave ' + s.reportKeyHint : '· sin llave todavía'}</div>
+                            {newKey && <div className="ad-key">{newKey}</div>}
+                            <div className="sv-actions" style={{ marginTop: 10 }}>
+                                <button type="button" className="pb-btn sm" disabled={!!busy} onClick={makeKey}>{busy === 'key' ? 'Creando…' : s.reportKey ? 'Crear llave nueva' : 'Crear llave para la app de métricas'}</button>
+                            </div>
+                        </section>
+                    )}
                 </div>
             );
         }

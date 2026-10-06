@@ -88,7 +88,9 @@ export function messagingEvents(entry: any): any[] {
  */
 export function toWhatsAppShape(channel: SocialChannel, event: any): any | null {
   const from = socialAddress(channel, String(event?.sender?.id || ''));
-  const base = { from, timestamp: String(Math.floor(Number(event?.timestamp || Date.now()) / 1000)) };
+  // El anuncio de "Enviar mensaje" del que vino (Meta lo manda con el primer mensaje): así se sabe qué anuncio la trajo.
+  const referral = event?.message?.referral || event?.postback?.referral || event?.referral;
+  const base = { from, channel, ...(referral ? { referral } : {}), timestamp: String(Math.floor(Number(event?.timestamp || Date.now()) / 1000)) };
 
   if (event?.postback) {
     const title = String(event.postback.title || event.postback.payload || '').trim();
@@ -147,6 +149,23 @@ async function eraseUnsent(channel: SocialChannel, mid: string, retryMs = 8000) 
   noteSocialOutcome(`${channelName(channel)}: la clienta anuló un mensaje y se quitó del CRM`);
 }
 
+const pendingReferrals = new Map<string, { at: number; referral: any }>();
+
+function rememberReferral(channel: SocialChannel, event: any) {
+  const sender = String(event?.sender?.id || '');
+  if (!sender) return;
+  if (pendingReferrals.size > 5000) pendingReferrals.clear();
+  pendingReferrals.set(`${channel}:${sender}`, { at: Date.now(), referral: event.referral });
+}
+
+function takeReferral(channel: SocialChannel, sender: string): any | null {
+  const key = `${channel}:${sender}`;
+  const pending = pendingReferrals.get(key);
+  if (!pending) return null;
+  pendingReferrals.delete(key);
+  return Date.now() - pending.at < 30 * 60_000 ? pending.referral : null;
+}
+
 async function handleMessagingEvent(channel: SocialChannel, event: any) {
   const message = event?.message;
   if (message?.is_deleted && message.mid) return eraseUnsent(channel, String(message.mid));
@@ -156,8 +175,16 @@ async function handleMessagingEvent(channel: SocialChannel, event: any) {
     await handleSocialEcho(String(message.mid || ''), to, text);
     return;
   }
+  // Si la clienta ya tenía chat, Meta avisa del anuncio aparte y justo antes del mensaje: se guarda para ese mensaje.
+  if (event?.referral && !message && !event?.postback) rememberReferral(channel, event);
   const shaped = toWhatsAppShape(channel, event);
-  if (shaped) return handleSocialMessage(shaped);
+  if (shaped) {
+    if (!shaped.referral) {
+      const pending = takeReferral(channel, String(event?.sender?.id || ''));
+      if (pending) shaped.referral = pending;
+    }
+    return handleSocialMessage(shaped);
+  }
   const kind = Object.keys(event || {}).filter(k => !['sender', 'recipient', 'timestamp'].includes(k)).join(', ') || 'vacío';
   console.log(`↪️  Aviso de ${channelName(channel)} sin mensaje que guardar (${kind})`);
 }

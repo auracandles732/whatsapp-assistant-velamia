@@ -37,6 +37,7 @@ import { maskPhone, privacyRequest } from '../services/privacy';
 import { audit } from '../services/audit';
 import { flushOutbox, recordUndelivered } from '../services/delivery';
 import { attributeByCode, attributeStoryReply } from '../social/tracking';
+import { referralFrom, attributeAdReferral, attributeWebRef } from '../services/ads';
 import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG } from '../services/followups';
 import {
   sendTextMessage,
@@ -737,12 +738,17 @@ async function ingestMessage(message: any, value: any) {
     await touchConversation(conversationId);
     // Lo que el equipo escribió pasadas las 24 horas quedó guardado: sale ahora que la clienta escribió.
     await flushOutbox(conversationId, phoneNumber).catch((error: any) => console.error('❌ Mensajes guardados para la clienta:', error.message));
-    // De qué publicación viene (escribió su código o respondió a la historia): el chat queda atribuido y la vendedora
-    // sabe qué producto vio, para atenderla directo con ese diseño.
-    const fromStory = message.story_id ? await attributeStoryReply(conversationId, String(message.story_id)).catch(() => '') : '';
-    const fromCode = !fromStory && ['text', 'button', 'interactive'].includes(messageType) ? await attributeByCode(conversationId, userContent).catch(() => '') : '';
-    if (fromStory || fromCode) {
-      aiContent = `${fromStory || fromCode} ${aiContent}`;
+    // De dónde viene: un anuncio (Meta lo dice en el primer mensaje), la web (su referencia), una historia o el código de
+    // una publicación. El chat queda atribuido y la vendedora sabe qué producto vio, para atenderla directo con ese diseño.
+    const textual = ['text', 'button', 'interactive'].includes(messageType);
+    const referral = referralFrom(message, message.channel === 'instagram' || message.channel === 'messenger' ? message.channel : 'whatsapp');
+    const fromAd = referral ? await attributeAdReferral(conversationId, referral).catch(() => '') : '';
+    const fromStory = !fromAd && message.story_id ? await attributeStoryReply(conversationId, String(message.story_id)).catch(() => '') : '';
+    const fromWeb = !fromAd && !fromStory && textual ? await attributeWebRef(conversationId, userContent).catch(() => '') : '';
+    const fromCode = !fromAd && !fromStory && !fromWeb && textual ? await attributeByCode(conversationId, userContent).catch(() => '') : '';
+    const origin = fromAd || fromStory || fromWeb || fromCode;
+    if (origin) {
+      aiContent = `${origin} ${aiContent}`;
       fromPostChats.set(conversationId, Date.now());
     }
 

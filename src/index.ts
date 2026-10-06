@@ -101,6 +101,8 @@ import { chatWindow, holdForLater, PendingInput, deliveryState, undeliveredIn, d
 import { startFollowUpScheduler } from './services/followups';
 import { startSupervisor } from './services/supervisor';
 import { startSalesWatch } from './services/salesWatch';
+import { adsRouter } from './services/adsRoutes';
+import { startAdsSync, originsOf } from './services/ads';
 import { supervisorRouter } from './services/supervisorRoutes';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
@@ -444,6 +446,10 @@ app.use(socialRouter());
 
 app.use(supervisorRouter());
 
+// ---------- Anuncios de Meta: de qué anuncio (o de la web) llegó cada chat y qué ventas dejó ----------
+
+app.use(adsRouter());
+
 // ---------- Páginas legales (públicas): política de privacidad y condiciones de venta ----------
 // VELAMIA en /privacidad y /condiciones; cada empresa en /legal/<id>/privacidad y /legal/<id>/condiciones.
 
@@ -727,10 +733,12 @@ app.get('/api/conversations/:id/messages', requireCrmSession, requireUuidParam, 
     const messages = await getMessages(req.params.id);
     if (req.query.full !== '1') return res.json(messages);
     // Cada mensaje que WhatsApp no entregó lleva el motivo; aparte va lo guardado para cuando la clienta responda.
-    const [undelivered, delivery] = await Promise.all([undeliveredIn(conv.id), deliveryState(conv, messages)]);
+    // De qué anuncio o de la web llegó (si se sabe).
+    const [undelivered, delivery, origins] = await Promise.all([undeliveredIn(conv.id), deliveryState(conv, messages), originsOf(conv.id).catch(() => [])]);
     res.json({
       messages: messages.map((m: any) => (m.wa_message_id && undelivered[m.wa_message_id] ? { ...m, undelivered: undelivered[m.wa_message_id] } : m)),
-      delivery
+      delivery,
+      origins
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -2283,6 +2291,7 @@ async function start() {
   startSocialAgent();
   startSupervisor();
   startSalesWatch();
+  startAdsSync();
   startRetention();
   startPhotoNudgeScheduler();
   startHealthCheck();
