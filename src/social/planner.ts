@@ -74,13 +74,16 @@ export function piecesFor(picks: { goal?: string; phrase?: string; cta?: string;
   return picks.map((pick, i) => {
     const goal = pick.goal && GOALS.includes(pick.goal) ? pick.goal : (pick.library?.length || pick.video) ? 'confianza' : GOALS[i % GOALS.length];
     const phrases = PHRASES[goal];
-    const phrase = pick.phrase || phrases[i % phrases.length];
     let cta = pick.cta || '';
     if (!cta) {
       const options = CTAS.filter(c => !usedCtas.has(c));
       cta = (options.length ? options : CTAS)[ctaTurn++ % (options.length || CTAS.length)];
       usedCtas.add(cta);
     }
+    // La frase no repite lo que ya dice el llamado a la acción ("¿Cuántas necesitas?" dos veces).
+    const repeats = (p: string) => plain(cta).includes(plain(p).replace(/[¿?¡!]/g, '').trim());
+    const phrase = pick.phrase && !repeats(pick.phrase) ? pick.phrase
+      : [...phrases.slice(i % phrases.length), ...phrases.slice(0, i % phrases.length), ...PHRASES.confianza].find(p => !repeats(p)) || phrases[0];
     return { goal, phrase, cta };
   });
 }

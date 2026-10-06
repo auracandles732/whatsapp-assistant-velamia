@@ -87,3 +87,8 @@ test('los colores por categoría de las instrucciones van solo a las fotos con I
   assert.equal(paletteFor(prompt, 'Halloween'), '');
   assert.equal(paletteFor('sin colores', 'Bautizo'), '');
 });
+
+test('la frase de la historia no repite la pregunta del llamado a la acción', () => {
+  const [piece] = piecesFor([{ goal: 'consulta', cta: '¿Cuántas necesitas? Escríbenos {CODIGO} y te cotizamos' }]);
+  assert.notEqual(piece.phrase, '¿Cuántas necesitas?');
+});
