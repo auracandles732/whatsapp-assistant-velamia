@@ -133,8 +133,11 @@ export async function reportKeyValid(key: string): Promise<boolean> {
 
 // ---------- Producto que muestra un anuncio ----------
 
-// Palabras que no distinguen un producto: "Vela de osito en nube" → osito, nube.
-const FILLER = new Set(['vela', 'velas', 'velita', 'velitas', 'de', 'del', 'la', 'el', 'los', 'las', 'en', 'con', 'para', 'y', 'un', 'una', 'mi', 'tu', 'su', 'al', 'por']);
+// Palabras que no distinguen un producto: "Vela de osito en nube" → osito, nube. Los colores tampoco ("conejito rosa" no
+// es la "Vela de rosa"): los anuncios los nombran todo el tiempo.
+const FILLER = new Set(['vela', 'velas', 'velita', 'velitas', 'de', 'del', 'la', 'el', 'los', 'las', 'en', 'con', 'para', 'y', 'un', 'una', 'mi', 'tu', 'su', 'al', 'por',
+  'rosa', 'rosado', 'rosada', 'blanco', 'blanca', 'celeste', 'verde', 'azul', 'dorado', 'dorada', 'lila', 'beige', 'crema', 'negro', 'negra', 'rojo', 'roja',
+  'amarillo', 'amarilla', 'morado', 'morada', 'nude', 'plateado', 'plateada', 'gris', 'pink', 'bicolor']);
 
 const tokensOf = (text: string) => plain(text).replace(/[^a-z0-9ñ\s]/g, ' ').split(/\s+/).filter(Boolean);
 const keyWords = (name: string) => tokensOf(name).filter(w => w.length >= 3 && !FILLER.has(w));
@@ -197,7 +200,8 @@ async function upsertAd(adId: string, fields: AdFields, mode: 'fill' | 'replace'
     const merged = { ...(current || {}), ...next } as any;
     const text = [merged.ad_name, merged.headline, merged.body, merged.campaign_name, merged.adset_name, extraText].filter(Boolean).join('\n');
     const s = suggestFor(text, catalog || await catalogLite());
-    if (!current || s.products.length || s.category) Object.assign(next, { products: s.products, category: s.category, product_source: 'sugerido' });
+    // Al leer la cuenta (replace) la sugerencia se rehace siempre; con lo que trae un mensaje, solo si encontró algo.
+    if (!current || mode === 'replace' || s.products.length || s.category) Object.assign(next, { products: s.products, category: s.category, product_source: 'sugerido' });
   }
   if (current) {
     if (Object.keys(next).length === 0) return current;

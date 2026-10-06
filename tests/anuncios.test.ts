@@ -44,6 +44,7 @@ test('el producto del anuncio se sugiere por su texto: el más específico, en s
   assert.deepEqual(suggestFor('Leoncito y elefante en docenas', CATALOGO).products.sort(), ['VELA DE LEONCITO', 'VELA ELEFANTE']);
   assert.deepEqual(suggestFor('Velas personalizadas para tu evento', CATALOGO).products, []);
   assert.equal(suggestFor('Recuerdos de bautizo', CATALOGO).category, 'BAUTIZO', 'sin producto, al menos la categoría');
+  assert.deepEqual(suggestFor('Conejito rosa – $35 la docena', [...CATALOGO, { name: 'VELA DE ROSA', category: 'QUINCEAÑERA' }]).products, [], 'un color no es un producto');
 });
 
 test('de un anuncio leído de Meta sale su destino y el texto de cada tarjeta del carrusel', () => {
