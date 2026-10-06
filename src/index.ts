@@ -96,6 +96,7 @@ import {
   sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError, isOutsideWindowError,
   getMessageTemplates, summarizeTemplate, templateProblem, createMessageTemplate
 } from './services/whatsapp';
+import { officeState, talkToAgent, applyAction, isOfficeAgent, officeTenant } from './services/office';
 import { chatWindow, holdForLater, PendingInput, deliveryState, undeliveredIn, dropPending, sendReopen, holdNotice, ensureReopenTemplate } from './services/delivery';
 import { startFollowUpScheduler } from './services/followups';
 import { startSupervisor } from './services/supervisor';
@@ -1352,6 +1353,50 @@ app.get('/api/bot-status', requireCrmSession, async (_req: Request, res: Respons
     res.json({ enabled: (await getConfig('bot_enabled')) !== 'false' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Oficina: los agentes como personajes (ver qué hacen, hablarles y darles indicaciones) ----------
+
+app.get('/api/office', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    res.json(await officeState());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cada respuesta usa la IA: como mucho 60 por hora por empresa.
+const OFFICE_TALKS_PER_HOUR = 60;
+const officeTalks = new Map<string, number[]>();
+
+app.post('/api/office/talk', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
+  const agent = req.body?.agent;
+  if (!isOfficeAgent(agent)) return res.status(400).json({ error: 'Agente inválido' });
+  const text = String(req.body?.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Escribe algo' });
+  const key = officeTenant();
+  const hourAgo = Date.now() - 60 * 60 * 1000;
+  const recent = (officeTalks.get(key) || []).filter(at => at > hourAgo);
+  if (recent.length >= OFFICE_TALKS_PER_HOUR) return res.status(429).json({ error: 'Hablaste mucho con la oficina en esta hora: espera un rato.' });
+  officeTalks.set(key, [...recent, Date.now()]);
+  const history = (Array.isArray(req.body?.history) ? req.body.history : []).slice(-6)
+    .map((t: any) => ({ from: t?.from === 'agent' ? 'agent' as const : 'owner' as const, text: String(t?.text || '').slice(0, 400) }));
+  try {
+    res.json(await talkToAgent(agent, text, history));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** La dueña aprobó el cambio que propuso el agente ("¿Lo aplico?" → sí). */
+app.post('/api/office/apply', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+  const agent = req.body?.agent;
+  if (!isOfficeAgent(agent)) return res.status(400).json({ error: 'Agente inválido' });
+  try {
+    res.json({ message: await applyAction(agent, req.body?.action) });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 });
 

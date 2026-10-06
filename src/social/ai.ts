@@ -338,3 +338,17 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
     tareas: (Array.isArray(data.tareas) ? data.tareas : []).map((t: unknown) => String(t || '').trim()).filter(Boolean).slice(0, 5)
   };
 }
+
+/** Una respuesta en JSON con la IA del agente (su clave y su modelo). La usa la oficina para hablar con el agente de redes. */
+export async function askSocialJson<T>(params: { system: string; user: string; schemaName: string; schema: Record<string, unknown>; maxTokens?: number }): Promise<T> {
+  const { client, textModel } = await socialAi();
+  const response = await client.chat.completions.create({
+    model: textModel,
+    ...reasoningFor(textModel),
+    max_completion_tokens: params.maxTokens || 2000,
+    response_format: { type: 'json_schema', json_schema: { name: params.schemaName, strict: true, schema: params.schema } },
+    messages: [{ role: 'system', content: params.system }, { role: 'user', content: params.user }]
+  } as any);
+  track(textModel, response.usage);
+  return JSON.parse(response.choices[0]?.message?.content || '{}');
+}

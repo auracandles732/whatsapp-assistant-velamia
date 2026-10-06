@@ -3855,6 +3855,87 @@
 
         @media (max-width: 1100px) { .pc-ch .pv, .pc-ch .pv.tall { width: 70%; max-height: 130px; aspect-ratio: 4 / 5; } }
 
+
+        /* ---------- Oficina (agentes como personajes) ---------- */
+        .of-page:not(.mx-page) { padding: 0 0 24px; }
+        .of-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+        .of-stage { min-width: 0; }
+        .of-room { position: relative; width: 100%; aspect-ratio: 1000 / 700; border-radius: 22px; overflow: hidden; background: linear-gradient(180deg, #FBF5EE 0%, #F6ECDF 100%); border: 1px solid #EADFD2; box-shadow: 0 10px 30px rgba(80, 50, 30, .08); }
+        .of-room-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+        .of-screens { pointer-events: none; z-index: 5; }
+        .of-screen .glow { opacity: .55; }
+        .of-screen.on .glow { opacity: 1; animation: ofGlow 1.2s ease-in-out infinite alternate; }
+        @keyframes ofGlow { from { filter: brightness(1); } to { filter: brightness(1.35); } }
+        .of-label { position: absolute; transform: translate(-50%, -100%); display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(255, 255, 255, .92); border: 1px solid #EADFD2; color: #4E3E33; font-size: 11px; font-weight: 700; white-space: nowrap; z-index: 6; pointer-events: none; }
+        .of-char { position: absolute; width: 5.6%; padding: 0; border: none; background: none; cursor: pointer; transform: translate(-50%, -96%); transition: left 2.2s linear, top 2.2s linear; display: flex; flex-direction: column; align-items: center; }
+        .of-char .of-body { display: block; width: 100%; transition: transform .2s; }
+        .of-svg { display: block; width: 100%; height: auto; overflow: visible; animation: ofBob 2.8s ease-in-out infinite; }
+        .of-char.walk .of-svg { animation: ofBob .45s ease-in-out infinite; }
+        .of-svg .of-leg, .of-svg .of-arm { transform-box: fill-box; transform-origin: 50% 8%; }
+        .of-char.walk .of-leg.l, .of-char.walk .of-arm.r { animation: ofStep .45s ease-in-out infinite; }
+        .of-char.walk .of-leg.r, .of-char.walk .of-arm.l { animation: ofStep .45s ease-in-out infinite reverse; }
+        .of-char.typing .of-arm { animation: ofType .28s ease-in-out infinite alternate; }
+        .of-char.sleep .of-svg { animation: none; transform: rotate(-8deg); }
+        @keyframes ofBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3%); } }
+        @keyframes ofStep { 0%, 100% { transform: rotate(18deg); } 50% { transform: rotate(-18deg); } }
+        @keyframes ofType { from { transform: rotate(-25deg); } to { transform: rotate(-45deg); } }
+        .of-char.on .of-tag { background: #B5654A; color: #fff; border-color: #B5654A; }
+        .of-tag { margin-top: 2px; padding: 2px 8px; border-radius: 999px; background: #fff; border: 1px solid #EADFD2; color: #3A2A20; font-size: 10.5px; font-weight: 800; white-space: nowrap; box-shadow: 0 2px 6px rgba(80, 50, 30, .08); }
+        .of-bubble { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); width: max-content; max-width: 170px; padding: 6px 10px; border-radius: 12px; background: #fff; color: #3A2A20; font-size: 11.5px; font-weight: 600; line-height: 1.3; text-align: center; box-shadow: 0 4px 14px rgba(80, 50, 30, .14); }
+        .of-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px; border: 6px solid transparent; border-top-color: #fff; }
+        .of-zzz { position: absolute; top: -6px; right: -18%; color: #8A7868; font-weight: 800; font-size: 13px; animation: ofZzz 2s ease-in-out infinite; }
+        @keyframes ofZzz { 0% { opacity: 0; transform: translateY(6px); } 50% { opacity: 1; } 100% { opacity: 0; transform: translateY(-10px); } }
+        .of-hint { margin: 10px 4px 0; color: #7A6858; font-size: 13px; }
+        .of-side { background: #fff; border: 1px solid #EEE4D9; border-radius: 20px; padding: 16px; box-shadow: 0 8px 26px rgba(80, 50, 30, .06); position: sticky; top: 12px; }
+        .of-side h3 { margin: 2px 4px 12px; font-size: 16px; color: #2B1C14; }
+        .of-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; border: 1px solid #EEE4D9; background: #FFFCF8; cursor: pointer; }
+        .of-card.on, .of-card:hover { border-color: #D9B79A; background: #FBF4EA; }
+        .of-card .av, .of-chat-head .av { width: 38px; height: 46px; flex-shrink: 0; border-radius: 12px; background: #F3E8DA; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+        .of-card .av svg, .of-chat-head .av svg { width: 30px; animation: none; }
+        .of-card .tt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .of-card .tt b { color: #2B1C14; font-size: 14.5px; }
+        .of-card .tt small { color: #7A6858; font-size: 12.5px; }
+        .of-chat { display: flex; flex-direction: column; min-height: 0; }
+        .of-chat-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid #F3ECE3; }
+        .of-chat-head div { flex: 1; display: flex; flex-direction: column; }
+        .of-chat-head b { color: #2B1C14; }
+        .of-chat-head small { color: #7A6858; font-size: 12px; }
+        .of-chat-head .x { border: none; background: none; font-size: 24px; color: #7A6858; cursor: pointer; line-height: 1; }
+        .of-log { display: flex; flex-direction: column; gap: 8px; padding: 12px 2px; max-height: 420px; overflow-y: auto; }
+        .of-msg { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; }
+        .of-msg.agent { align-self: flex-start; background: #F6EFE6; color: #2B1C14; border-top-left-radius: 4px; }
+        .of-msg.owner { align-self: flex-end; background: #B5654A; color: #fff; border-top-right-radius: 4px; }
+        .of-msg.typing { display: flex; gap: 4px; }
+        .of-msg.typing i { width: 6px; height: 6px; border-radius: 50%; background: #B59A84; animation: ofDot 1s infinite; }
+        .of-msg.typing i:nth-child(2) { animation-delay: .15s; } .of-msg.typing i:nth-child(3) { animation-delay: .3s; }
+        @keyframes ofDot { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+        .of-ask { margin-top: 8px; padding: 10px; border-radius: 12px; background: #fff; border: 1px dashed #C9A27E; }
+        .of-ask .q { font-weight: 800; color: #8A4935; font-size: 13px; }
+        .of-ask .what { margin: 4px 0 8px; font-size: 13px; color: #3A2A20; }
+        .of-ask .btns { display: flex; gap: 8px; }
+        .of-ask .btns button { padding: 7px 12px; border-radius: 10px; border: 1px solid #E6DACC; background: #fff; color: #4E3E33; font-weight: 700; cursor: pointer; }
+        .of-ask .btns .yes { background: #B5654A; border-color: #B5654A; color: #fff; }
+        .of-ask .note { font-size: 12.5px; color: #7A6858; font-weight: 600; }
+        .of-ask .note.ok { color: #1E7A44; }
+        .of-suggest { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 8px; }
+        .of-suggest button { padding: 6px 10px; border-radius: 999px; border: 1px solid #EADFD2; background: #FFFCF8; color: #4E3E33; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+        .of-input { display: flex; gap: 8px; align-items: flex-end; }
+        .of-input textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px; padding: 11px 12px; border-radius: 12px; border: 1px solid #E6DACC; font: inherit; font-size: 14px; background: #fff; }
+        .of-input button { width: 46px; height: 46px; border-radius: 12px; border: none; background: #B5654A; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        .of-input button:disabled { opacity: .5; cursor: default; }
+        .of-note { font-size: 13px; color: #7A6858; padding: 8px 2px; }
+        .of-cards { margin-top: 12px; }
+        @media (max-width: 1100px) { .of-wrap { grid-template-columns: 1fr; } .of-side { position: static; } }
+        @media (max-width: 760px) {
+            .of-room { border-radius: 16px; }
+            .of-char { width: 7.5%; }
+            .of-bubble { display: none; }
+            .of-char.on .of-bubble { display: block; font-size: 10px; max-width: 120px; padding: 4px 7px; }
+            .of-tag { font-size: 8.5px; padding: 1px 5px; }
+            .of-label { font-size: 8.5px; padding: 2px 5px; gap: 2px; }
+            .of-label svg { width: 9px; height: 9px; }
+            .of-log { max-height: 46vh; }
+        }
     </style>
 </head>
 <body>
@@ -6652,7 +6733,7 @@
         // Secciones que ocupan el segundo lugar de la barra de abajo cuando están abiertas.
         const MX_SECTIONS = {
             cotizaciones: ['doc', 'Cotizaciones'], catalogo: ['box', 'Catálogo'], estadisticas: ['chart', 'Estadísticas'],
-            publicaciones: ['image', 'Publicaciones'], supervisor: ['bulb', 'Supervisor'], configuracion: ['gear', 'Configuración'], consumo: ['chart', 'Consumo'], claves: ['key', 'Claves']
+            publicaciones: ['image', 'Publicaciones'], oficina: ['users', 'Oficina'], supervisor: ['bulb', 'Supervisor'], configuracion: ['gear', 'Configuración'], consumo: ['chart', 'Consumo'], claves: ['key', 'Claves']
         };
         const MX_QUOTE_STATUS = { pending: 'Pendiente', sent: 'Enviada', accepted: 'Aprobada', expired: 'Vencida' };
 
@@ -7884,7 +7965,7 @@
         }
 
         // La sección abierta queda en la dirección (#/cotizaciones, #/conversaciones/<chat>…): al recargar se vuelve ahí.
-        const APP_TABS = ['conversaciones', 'estadisticas', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'supervisor', 'configuracion', 'consumo', 'claves'];
+        const APP_TABS = ['conversaciones', 'estadisticas', 'oficina', 'cotizaciones', 'pedidos', 'catalogo', 'publicaciones', 'supervisor', 'configuracion', 'consumo', 'claves'];
         function readRoute() {
             const [tab, id] = decodeURIComponent(window.location.hash || '').replace(/^#\/?/, '').split('/');
             return { tab: APP_TABS.includes(tab) ? tab : 'conversaciones', id: /^[0-9a-f-]{36}$/i.test(id || '') ? id : '' };
@@ -7893,6 +7974,7 @@
         // ---------- Computadora: menú lateral café y barra superior (diseño Nexly by VELAMIA) ----------
         const DESK_PAGES = {
             estadisticas: ['Inicio', 'Tu negocio de un vistazo: lo de hoy, lo pendiente y los accesos rápidos'],
+            oficina: ['Oficina', 'Tus agentes trabajando en vivo: mira qué hace cada uno, háblales y dales indicaciones'],
             conversaciones: ['Conversaciones', 'Gestiona todas tus conversaciones en un solo lugar'],
             cotizaciones: ['Cotizaciones', 'Crea, edita y sigue las cotizaciones de tus clientas'],
             pedidos: ['Pedidos', 'Marca el avance de cada pedido'],
@@ -7905,6 +7987,7 @@
         };
         const DESK_NAV = [
             ['estadisticas', 'home', 'Inicio'],
+            ['oficina', 'users', 'Oficina'],
             ['conversaciones', 'chat', 'Conversaciones'],
             ['cotizaciones', 'doc', 'Cotizaciones'],
             ['pedidos', 'bag', 'Pedidos'],
@@ -7914,7 +7997,7 @@
             ['configuracion', 'gear', 'Configuración'],
             ['consumo', 'sparkle', 'Consumo de IA']
         ];
-        const DESK_ICONS = { estadisticas: 'home', cotizaciones: 'doc', pedidos: 'bag', catalogo: 'box', publicaciones: 'calendar', supervisor: 'bulb', configuracion: 'gear', consumo: 'chart', claves: 'key' };
+        const DESK_ICONS = { estadisticas: 'home', oficina: 'users', cotizaciones: 'doc', pedidos: 'bag', catalogo: 'box', publicaciones: 'calendar', supervisor: 'bulb', configuracion: 'gear', consumo: 'chart', claves: 'key' };
 
         // Encabezado de cada sección en la computadora: ícono terracota, título y descripción (y botones si los hay).
         function DeskHero({ tab, children }) {
@@ -9545,6 +9628,7 @@
                 };
 
                 const moreItems = [
+                    ['oficina', 'users', 'Oficina'],
                     ['cotizaciones', 'doc', 'Cotizaciones'],
                     ['catalogo', 'box', 'Catálogo'],
                     ['publicaciones', 'image', 'Publicaciones'],
@@ -9569,6 +9653,7 @@
                             {activeTab === 'catalogo' && <CatalogMobile products={products} biz={biz} legacy={!!session?.business?.legacy} reload={loadProducts} readOnly={!canEdit} conversations={conversations} focus={catalogFocus} onFocusDone={() => goTab('conversaciones')} />}
                             {activeTab === 'publicaciones' && <PostsView canEdit={canEdit} canConfigure={canConfigure} isAdmin={isAdmin} />}
                             {activeTab === 'supervisor' && <SupervisorView canConfigure={canConfigure} openChat={openChatFromQuotation} />}
+                            {activeTab === 'oficina' && <OfficeView canEdit={canEdit} canConfigure={canConfigure} mobile />}
                             {activeTab === 'cotizaciones' && <QuotesMobile quotations={quotations} products={products} conversations={conversations} biz={biz} canEdit={canEdit} filter={quoteFilter} setFilter={setQuoteFilter} openId={mxQuoteId} setOpenId={setMxQuoteId} reload={loadQuotations} openChat={id => { setMxQuoteId(null); openChatFromQuotation(id); }} onCompose={setComposer} />}
                             {activeTab === 'pedidos' && (
                                 <div className="mx-page">
@@ -9619,7 +9704,7 @@
                             onBell={() => { setActiveTab('conversaciones'); chooseChannel('all'); setListFilter('all'); setTagFilter('necesita'); }} />
 
                             <AiProblemBanner problem={aiProblem} />
-                            {['estadisticas', 'cotizaciones', 'pedidos', 'catalogo', 'supervisor', 'consumo', 'claves'].includes(activeTab) && (
+                            {['estadisticas', 'oficina', 'cotizaciones', 'pedidos', 'catalogo', 'supervisor', 'consumo', 'claves'].includes(activeTab) && (
                                 <DeskHero tab={activeTab}>
                                     {activeTab === 'cotizaciones' && canEdit && <button type="button" className="nx-hero-btn" onClick={() => setComposer({ mode: 'quote' })}><PlatIcon name="plus" size={20} color="#fff" /> Nueva cotización</button>}
                                     {activeTab === 'pedidos' && canEdit && <button type="button" className="nx-hero-btn" onClick={() => setComposer({ mode: 'order' })}><PlatIcon name="plus" size={20} color="#fff" /> Crear pedido</button>}
@@ -9970,6 +10055,8 @@
                         )}
 
                         {activeTab === 'supervisor' && <SupervisorView canConfigure={canConfigure} openChat={openChatFromQuotation} />}
+
+                        {activeTab === 'oficina' && <OfficeView canEdit={canEdit} canConfigure={canConfigure} />}
 
                         {activeTab === 'consumo' && (
                         <ConsumptionView />
@@ -13356,6 +13443,400 @@
          * Supervisor de los chats: lo que aprendió de cómo respondió el equipo (para aprobar, editar o descartar), lo que el
          * asistente ya sabe y el reporte de cada día. Nada llega al asistente sin la aprobación de la dueña.
          */
+        // ---------- Oficina: los agentes de la empresa como personajes ----------
+        // Cada personaje es un agente real (la vendedora, el agente de redes y el supervisor): se mueve según lo que está
+        // haciendo de verdad y, al tocarlo, se le habla. Si propone un cambio, nada se aplica sin el "sí" de la dueña.
+
+        // Un punto del piso (u, v de 0 a 1) en el dibujo: el piso es un rombo visto en perspectiva isométrica (1000 × 700).
+        const ofPt = (u, v) => [500 + (u - v) * 460, 200 + (u + v) * 230];
+        const ofPts = list => list.map(([x, y]) => x.toFixed(1) + ',' + y.toFixed(1)).join(' ');
+        const OF_WALK_MS = 2200;
+        const OF_SPOTS = {
+            whatsapp: [0.28, 0.19], instagram: [0.28, 0.45], messenger: [0.28, 0.71],
+            redes: [0.68, 0.27], supervisor: [0.72, 0.73], sofa: [0.83, 0.55],
+            cafe: [0.78, 0.86], ventana: [0.40, 0.10], centro: [0.50, 0.46], estante: [0.88, 0.30], pasillo: [0.46, 0.70]
+        };
+        const OF_WANDER = {
+            seller: ['whatsapp', 'instagram', 'messenger', 'cafe', 'ventana'],
+            social: ['redes', 'centro', 'estante', 'cafe'],
+            supervisor: ['supervisor', 'pasillo', 'centro', 'cafe']
+        };
+        const OF_AGENTS = {
+            seller: { name: 'Vendedora', role: 'Atiende WhatsApp, Instagram y Messenger', look: { skin: '#F2C7A5', hair: '#4A2C1D', shirt: '#B5654A', pants: '#4E3E33', style: 'long' } },
+            social: { name: 'Agente de redes', role: 'Prepara y publica en Instagram y Facebook', look: { skin: '#E8B48E', hair: '#2B1C14', shirt: '#6C8E5E', pants: '#3F4E6B', style: 'bun' } },
+            supervisor: { name: 'Supervisor', role: 'Revisa los chats y te deja el reporte', look: { skin: '#D9A07A', hair: '#3A2A20', shirt: '#3F4E6B', pants: '#2B1C14', style: 'short', glasses: true } }
+        };
+        const OF_SUGGEST = {
+            seller: ['¿Cómo va el día?', '¿Quién está esperando respuesta?', 'Quiero enseñarte algo'],
+            social: ['¿Qué publicas hoy?', '¿Qué tienes programado esta semana?', 'Quiero cambiar la planificación'],
+            supervisor: ['¿Cómo fue ayer?', '¿Qué deberíamos mejorar?', '¿Qué aprendiste?']
+        };
+        const OF_CHANNEL = { whatsapp: 'WhatsApp', instagram: 'Instagram', messenger: 'Messenger' };
+
+        // Caja isométrica (escritorio, mueble): la cara de arriba y las dos que se ven.
+        function OfBox({ u, v, du, dv, h, top, left, right }) {
+            const a = ofPt(u, v), b = ofPt(u + du, v), c = ofPt(u + du, v + dv), d = ofPt(u, v + dv);
+            const up = p => [p[0], p[1] - h];
+            return (
+                <g>
+                    <polygon points={ofPts([up(d), up(c), c, d])} fill={left} />
+                    <polygon points={ofPts([up(b), up(c), c, b])} fill={right} />
+                    <polygon points={ofPts([up(a), up(b), up(c), up(d)])} fill={top} />
+                </g>
+            );
+        }
+
+        // Pantalla sobre un escritorio, con el color del canal; brilla cuando la vendedora atiende por ahí.
+        function OfScreen({ u, v, h, color, on }) {
+            const [x, y] = ofPt(u, v);
+            return (
+                <g className={on ? 'of-screen on' : 'of-screen'}>
+                    <rect x={x - 3} y={y - h - 14} width="6" height="14" fill="#5B4A3E" />
+                    <rect x={x - 26} y={y - h - 48} width="52" height="36" rx="5" fill="#2B1C14" />
+                    <rect x={x - 22} y={y - h - 44} width="44" height="28" rx="3" fill={color} className="glow" />
+                </g>
+            );
+        }
+
+        function OfficeRoom({ business }) {
+            const floor = [ofPt(0, 0), ofPt(1, 0), ofPt(1, 1), ofPt(0, 1)];
+            const lift = (p, h) => [p[0], p[1] - h];
+            const lines = [];
+            for (let k = 1; k < 10; k++) {
+                lines.push(<line key={'u' + k} x1={ofPt(k / 10, 0)[0]} y1={ofPt(k / 10, 0)[1]} x2={ofPt(k / 10, 1)[0]} y2={ofPt(k / 10, 1)[1]} />);
+                lines.push(<line key={'v' + k} x1={ofPt(0, k / 10)[0]} y1={ofPt(0, k / 10)[1]} x2={ofPt(1, k / 10)[0]} y2={ofPt(1, k / 10)[1]} />);
+            }
+            const leftWin = (v1, v2) => ofPts([lift(ofPt(0, v1), 150), lift(ofPt(0, v2), 150), lift(ofPt(0, v2), 70), lift(ofPt(0, v1), 70)]);
+            const [sx, sy] = ofPt(0.18, 0);
+            return (
+                <svg viewBox="0 0 1000 700" className="of-room-svg" aria-hidden="true">
+                    {/* Paredes */}
+                    <polygon points={ofPts([ofPt(0, 1), ofPt(0, 0), lift(ofPt(0, 0), 175), lift(ofPt(0, 1), 175)])} fill="#F3E8DA" />
+                    <polygon points={ofPts([ofPt(0, 0), ofPt(1, 0), lift(ofPt(1, 0), 175), lift(ofPt(0, 0), 175)])} fill="#EADBC8" />
+                    <polygon points={leftWin(0.14, 0.34)} fill="#CFE3EE" stroke="#FFFFFF" strokeWidth="5" />
+                    <polygon points={leftWin(0.48, 0.68)} fill="#CFE3EE" stroke="#FFFFFF" strokeWidth="5" />
+                    {/* Letrero de la oficina en la pared derecha (inclinado como la pared) */}
+                    <g transform={`matrix(1,0.5,0,1,${sx},${sy - 150})`}>
+                        <rect x="0" y="0" width="170" height="52" rx="10" fill="#2B1C14" />
+                        <text x="85" y="23" textAnchor="middle" fill="#E9C9A8" fontSize="15" fontWeight="800" letterSpacing="4">NEXLY</text>
+                        <text x="85" y="42" textAnchor="middle" fill="#FFFFFF" fontSize="13" fontWeight="700">{String(business || '').slice(0, 20)}</text>
+                    </g>
+                    {/* Pizarra del agente de redes */}
+                    <g transform={`matrix(1,0.5,0,1,${ofPt(0.58, 0)[0]},${ofPt(0.58, 0)[1] - 155})`}>
+                        <rect x="0" y="0" width="120" height="74" rx="6" fill="#FFFFFF" stroke="#D8C6B2" strokeWidth="3" />
+                        <rect x="12" y="12" width="26" height="22" fill="#F6C9B8" /><rect x="46" y="12" width="26" height="22" fill="#CDE3C6" /><rect x="80" y="12" width="26" height="22" fill="#F5E2A8" />
+                        <rect x="12" y="42" width="26" height="22" fill="#D6D3F0" /><rect x="46" y="42" width="26" height="22" fill="#F6C9B8" />
+                    </g>
+                    {/* Piso */}
+                    <polygon points={ofPts(floor)} fill="#E7D6C1" />
+                    <g stroke="rgba(90,60,40,.07)" strokeWidth="2">{lines}</g>
+                    <polygon points={ofPts([ofPt(0.38, 0.36), ofPt(0.62, 0.36), ofPt(0.62, 0.62), ofPt(0.38, 0.62)])} fill="#D9B79A" opacity="0.55" />
+                    {/* Escritorios de la vendedora: uno por canal */}
+                    <OfBox u={0.05} v={0.10} du={0.15} dv={0.18} h={36} top="#C89A72" left="#9C7253" right="#B0825F" />
+                    <OfBox u={0.05} v={0.36} du={0.15} dv={0.18} h={36} top="#C89A72" left="#9C7253" right="#B0825F" />
+                    <OfBox u={0.05} v={0.62} du={0.15} dv={0.18} h={36} top="#C89A72" left="#9C7253" right="#B0825F" />
+                    {/* Estudio de redes */}
+                    <OfBox u={0.56} v={0.04} du={0.24} dv={0.12} h={36} top="#C89A72" left="#9C7253" right="#B0825F" />
+                    {/* Escritorio del supervisor */}
+                    <OfBox u={0.62} v={0.52} du={0.20} dv={0.12} h={36} top="#8E6B55" left="#5E4637" right="#735645" />
+                    {/* Sofá y mesa del café */}
+                    <OfBox u={0.90} v={0.42} du={0.08} dv={0.26} h={26} top="#B5654A" left="#8A4935" right="#9C523C" />
+                    <OfBox u={0.84} v={0.72} du={0.08} dv={0.08} h={30} top="#F3E8DA" left="#C9B39C" right="#DCC8B2" />
+                    {/* Estante y planta */}
+                    <OfBox u={0.86} v={0.02} du={0.12} dv={0.06} h={120} top="#B0825F" left="#7E5A42" right="#946A4E" />
+                    <OfBox u={0.02} v={0.90} du={0.05} dv={0.05} h={26} top="#9C7253" left="#7E5A42" right="#8A6248" />
+                    <circle cx={ofPt(0.045, 0.925)[0]} cy={ofPt(0.045, 0.925)[1] - 56} r="26" fill="#6C8E5E" />
+                    <circle cx={ofPt(0.045, 0.925)[0] - 14} cy={ofPt(0.045, 0.925)[1] - 44} r="16" fill="#7FA36F" />
+                    <circle cx={ofPt(0.88, 0.76)[0]} cy={ofPt(0.88, 0.76)[1] - 40} r="9" fill="#FFFFFF" stroke="#B5654A" strokeWidth="3" />
+                </svg>
+            );
+        }
+
+        function OfCharacter({ look }) {
+            const hair = {
+                long: <path d="M8 17C7 5 33 5 32 17L33 33C30 29 29 22 27.5 13.5C22.5 10.5 17.5 10.5 12.5 13.5C11 22 10 29 7 33Z" fill={look.hair} />,
+                bun: <g fill={look.hair}><circle cx="20" cy="3.5" r="4.5" /><path d="M8.5 15C8.5 4.5 31.5 4.5 31.5 15C27 10 13 10 8.5 15Z" /></g>,
+                short: <path d="M8.5 15C8 4 32 4 31.5 15C29 11.5 25 10 20 10.5C15 10 11 11.5 8.5 15Z" fill={look.hair} />
+            }[look.style];
+            return (
+                <svg viewBox="0 0 40 66" className="of-svg">
+                    <ellipse cx="20" cy="63" rx="11" ry="3" fill="rgba(60,40,25,.2)" />
+                    <rect className="of-leg l" x="13" y="45" width="5.5" height="16" rx="2.7" fill={look.pants} />
+                    <rect className="of-leg r" x="21.5" y="45" width="5.5" height="16" rx="2.7" fill={look.pants} />
+                    <rect className="of-arm l" x="5" y="27" width="5.5" height="16" rx="2.7" fill={look.shirt} />
+                    <rect className="of-arm r" x="29.5" y="27" width="5.5" height="16" rx="2.7" fill={look.shirt} />
+                    <rect x="9" y="25" width="22" height="24" rx="8" fill={look.shirt} />
+                    <circle cx="20" cy="16" r="11" fill={look.skin} />
+                    {hair}
+                    <circle cx="16" cy="17" r="1.5" fill="#2B1C14" /><circle cx="24" cy="17" r="1.5" fill="#2B1C14" />
+                    <circle cx="13.5" cy="20.5" r="1.8" fill="#F29C8A" opacity=".55" /><circle cx="26.5" cy="20.5" r="1.8" fill="#F29C8A" opacity=".55" />
+                    <path d="M17.2 21.6q2.8 2.2 5.6 0" stroke="#2B1C14" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+                    {look.glasses && <g fill="none" stroke="#2B1C14" strokeWidth="1.1"><circle cx="16" cy="17" r="3" /><circle cx="24" cy="17" r="3" /><path d="M19 17h2" /></g>}
+                </svg>
+            );
+        }
+
+        const ofHour = iso => { const d = parseTs(iso); return d ? d.toLocaleString('es-EC', { timeZone: BUSINESS_TZ, weekday: 'short', hour: 'numeric', minute: '2-digit' }) : ''; };
+
+        // Qué dice cada uno en su globo (lo que está haciendo de verdad).
+        function ofBubble(agent, s) {
+            if (!s) return '';
+            if (agent === 'seller') {
+                const x = s.seller;
+                if (!x.botOn) return 'Zzz… (bot apagado)';
+                if (x.mode === 'typing') return 'Respondiendo a ' + (x.customer || 'una clienta') + ' por ' + OF_CHANNEL[x.channel || 'whatsapp'];
+                if (x.mode === 'reading') return 'Leyendo un mensaje de ' + (x.customer || 'una clienta');
+                if (x.waiting) return x.waiting + (x.waiting === 1 ? ' chat espera' : ' chats esperan') + ' respuesta';
+                return x.chatsToday ? 'Hoy: ' + x.chatsToday + ' chat' + (x.chatsToday === 1 ? '' : 's') : 'Esperando clientes ☕';
+            }
+            if (agent === 'social') {
+                const x = s.social;
+                if (!x.available) return 'Sin el servicio de redes';
+                if (x.mode === 'publishing') return 'Publicando: ' + x.publishingNow;
+                if (x.mode === 'waiting') return x.drafts + ' por aprobar';
+                if (x.next) return 'Próxima: ' + x.next.theme + ' · ' + ofHour(x.next.at);
+                return 'Sin publicaciones programadas';
+            }
+            const x = s.supervisor;
+            if (x.pendingLessons) return x.pendingLessons + ' aprendizaje' + (x.pendingLessons === 1 ? '' : 's') + ' por aprobar';
+            if (x.lastReport && (x.lastReport.unanswered || x.lastReport.problems)) return 'Reporte: ' + x.lastReport.unanswered + ' sin respuesta';
+            return 'Revisando chats 🔎';
+        }
+
+        // A dónde va cada uno según lo que hace (null = camina por la oficina).
+        function ofTarget(agent, s) {
+            if (!s) return null;
+            if (agent === 'seller') return !s.seller.botOn ? OF_SPOTS.sofa : s.seller.mode !== 'idle' ? OF_SPOTS[s.seller.channel || 'whatsapp'] : null;
+            if (agent === 'social') return ['publishing', 'waiting'].includes(s.social.mode) ? OF_SPOTS.redes : null;
+            return s.supervisor.mode !== 'idle' ? OF_SPOTS.supervisor : null;
+        }
+
+        function ofGreeting(agent, s) {
+            if (!s) return 'Hola 👋';
+            if (agent === 'seller') {
+                const x = s.seller;
+                if (!x.botOn) return 'Hola. Estoy en pausa porque el bot está apagado: no le respondo a nadie hasta que lo enciendas.';
+                return '¡Hola! Soy la vendedora. Hoy llevo ' + x.chatsToday + ' chat' + (x.chatsToday === 1 ? '' : 's') + (x.waiting ? ' y ' + x.waiting + ' esperando respuesta' : '') + '. Pregúntame cómo va todo o enséñame algo y desde ahí lo uso con los clientes.';
+            }
+            if (agent === 'social') {
+                const x = s.social;
+                if (!x.available) return 'Hola. Publicaciones en redes no está activado para tu empresa.';
+                return 'Hola, soy el agente de redes. ' + (x.next ? 'Lo próximo es ' + x.next.theme + ' (' + ofHour(x.next.at) + '). ' : 'No tengo nada programado. ') + 'Pídeme lo que quieres publicar y armo la planificación.';
+            }
+            const x = s.supervisor;
+            return 'Hola, soy el supervisor. ' + (x.pendingLessons ? 'Tengo ' + x.pendingLessons + ' aprendizaje(s) para que apruebes. ' : '') + (x.lastReport ? 'Mi último reporte es del ' + x.lastReport.day + ': ' + x.lastReport.chats + ' chats y ' + x.lastReport.unanswered + ' sin respuesta.' : 'Todavía no tengo reportes.');
+        }
+
+        function OfficeView({ canEdit, canConfigure, mobile }) {
+            const [state, setState] = useState(null);
+            const [error, setError] = useState('');
+            const [selected, setSelected] = useState(null);
+            const [talks, setTalks] = useState({ seller: [], social: [], supervisor: [] });
+            const [thinking, setThinking] = useState(null);
+            const [input, setInput] = useState('');
+            const [pos, setPos] = useState({ seller: OF_SPOTS.whatsapp, social: OF_SPOTS.redes, supervisor: OF_SPOTS.supervisor });
+            const [walking, setWalking] = useState({});
+            const [face, setFace] = useState({});
+            const posRef = useRef(pos);
+            const stateRef = useRef(null);
+            const selectedRef = useRef(null);
+            const logRef = useRef(null);
+            selectedRef.current = selected;
+
+            function moveTo(agent, spot) {
+                const cur = posRef.current[agent];
+                if (!spot || (cur[0] === spot[0] && cur[1] === spot[1])) return;
+                const next = { ...posRef.current, [agent]: spot };
+                posRef.current = next;
+                setPos(next);
+                setFace(f => ({ ...f, [agent]: ofPt(spot[0], spot[1])[0] < ofPt(cur[0], cur[1])[0] ? -1 : 1 }));
+                setWalking(w => ({ ...w, [agent]: true }));
+                setTimeout(() => setWalking(w => ({ ...w, [agent]: false })), OF_WALK_MS);
+            }
+
+            async function load() {
+                try {
+                    const data = await api('/api/office');
+                    stateRef.current = data;
+                    setState(data);
+                    setError('');
+                    Object.keys(OF_AGENTS).forEach(agent => { const t = ofTarget(agent, data); if (t) moveTo(agent, t); });
+                } catch (err) {
+                    setError(err.message);
+                }
+            }
+
+            useEffect(() => {
+                load();
+                const poll = setInterval(whenVisible(load), 15000);
+                // Quien no tiene nada urgente camina por la oficina (menos con quien estás hablando).
+                const wander = setInterval(whenVisible(() => {
+                    const s = stateRef.current;
+                    if (!s) return;
+                    Object.keys(OF_AGENTS).forEach(agent => {
+                        if (ofTarget(agent, s) || selectedRef.current === agent || Math.random() < 0.35) return;
+                        const options = OF_WANDER[agent].map(k => OF_SPOTS[k]).filter(p => p !== posRef.current[agent]);
+                        moveTo(agent, options[Math.floor(Math.random() * options.length)]);
+                    });
+                }), 6000);
+                return () => { clearInterval(poll); clearInterval(wander); };
+            }, []);
+
+            useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [talks, thinking, selected]);
+
+            function open(agent) {
+                setSelected(agent);
+                setInput('');
+            }
+
+            async function send(textArg) {
+                const text = String(textArg ?? input).trim();
+                const agent = selected;
+                if (!text || !agent || thinking) return;
+                const history = talks[agent].map(t => ({ from: t.from, text: t.text }));
+                setTalks(all => ({ ...all, [agent]: [...all[agent], { from: 'owner', text }] }));
+                setInput('');
+                setThinking(agent);
+                try {
+                    const r = await api('/api/office/talk', { method: 'POST', body: JSON.stringify({ agent, text, history }) });
+                    setTalks(all => ({ ...all, [agent]: [...all[agent], { from: 'agent', text: r.reply, action: r.action, actionText: r.actionText, status: r.action ? 'ask' : '' }] }));
+                } catch (err) {
+                    setTalks(all => ({ ...all, [agent]: [...all[agent], { from: 'agent', text: 'No pude responder: ' + err.message }] }));
+                } finally {
+                    setThinking(null);
+                }
+            }
+
+            async function decide(agent, index, yes) {
+                const item = talks[agent][index];
+                const mark = status => setTalks(all => ({ ...all, [agent]: all[agent].map((t, i) => (i === index ? { ...t, status } : t)) }));
+                if (!yes) { mark('no'); return; }
+                mark('working');
+                try {
+                    const r = await api('/api/office/apply', { method: 'POST', body: JSON.stringify({ agent, action: item.action }) });
+                    mark('done');
+                    setTalks(all => ({ ...all, [agent]: [...all[agent], { from: 'agent', text: r.message }] }));
+                    load();
+                } catch (err) {
+                    mark('ask');
+                    alert('No se pudo aplicar: ' + err.message);
+                }
+            }
+
+            const agentCard = agent => {
+                const a = OF_AGENTS[agent];
+                return (
+                    <button key={agent} type="button" className={'of-card' + (selected === agent ? ' on' : '')} onClick={() => open(agent)}>
+                        <span className="av"><OfCharacter look={a.look} /></span>
+                        <span className="tt"><b>{a.name}</b><small>{ofBubble(agent, state) || a.role}</small></span>
+                        <PbIcon name="next" size={18} color="#7A6858" />
+                    </button>
+                );
+            };
+
+            const chat = selected && (
+                <div className="of-chat">
+                    {!mobile && (
+                        <div className="of-chat-head">
+                            <span className="av"><OfCharacter look={OF_AGENTS[selected].look} /></span>
+                            <div><b>{OF_AGENTS[selected].name}</b><small>{OF_AGENTS[selected].role}</small></div>
+                            <button type="button" className="x" aria-label="Cerrar" onClick={() => setSelected(null)}>×</button>
+                        </div>
+                    )}
+                    <div className="of-log" ref={logRef}>
+                        <div className="of-msg agent">{ofGreeting(selected, state)}</div>
+                        {talks[selected].map((t, i) => (
+                            <div key={i} className={'of-msg ' + t.from}>
+                                {t.text}
+                                {t.action && (
+                                    <div className="of-ask">
+                                        <div className="q">¿Lo aplico?</div>
+                                        <div className="what">{t.actionText}</div>
+                                        {t.status === 'ask' && (canConfigure
+                                            ? <div className="btns"><button type="button" className="yes" onClick={() => decide(selected, i, true)}>Sí, aplícalo</button><button type="button" onClick={() => decide(selected, i, false)}>No</button></div>
+                                            : <div className="note">Solo la dueña puede aprobar cambios.</div>)}
+                                        {t.status === 'working' && <div className="note">Aplicando…</div>}
+                                        {t.status === 'done' && <div className="note ok">✅ Aplicado</div>}
+                                        {t.status === 'no' && <div className="note">No se aplicó.</div>}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {thinking === selected && <div className="of-msg agent typing"><i></i><i></i><i></i></div>}
+                    </div>
+                    {canEdit ? (
+                        <>
+                            <div className="of-suggest">{OF_SUGGEST[selected].map(s => <button key={s} type="button" onClick={() => send(s)} disabled={!!thinking}>{s}</button>)}</div>
+                            <div className="of-input">
+                                <textarea rows={1} placeholder={'Escríbele a ' + OF_AGENTS[selected].name.toLowerCase() + '…'} value={input} onChange={e => setInput(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}></textarea>
+                                <button type="button" aria-label="Enviar" onClick={() => send()} disabled={!!thinking || !input.trim()}><PlatIcon name="send" size={20} color="#fff" /></button>
+                            </div>
+                        </>
+                    ) : <div className="of-note">Tu usuario es solo de consulta: puedes ver la oficina, pero no darles indicaciones.</div>}
+                </div>
+            );
+
+            const room = (
+                <div className="of-room">
+                    <OfficeRoom business={state?.business} />
+                    <svg viewBox="0 0 1000 700" className="of-room-svg of-screens" aria-hidden="true">
+                        <OfScreen u={0.10} v={0.19} h={36} color="#25D366" on={state?.seller?.mode !== 'idle' && state?.seller?.channel === 'whatsapp'} />
+                        <OfScreen u={0.10} v={0.45} h={36} color="#E1306C" on={state?.seller?.mode !== 'idle' && state?.seller?.channel === 'instagram'} />
+                        <OfScreen u={0.10} v={0.71} h={36} color="#0084FF" on={state?.seller?.mode !== 'idle' && state?.seller?.channel === 'messenger'} />
+                        <OfScreen u={0.66} v={0.10} h={36} color="#C9A227" on={state?.social?.mode === 'publishing'} />
+                        <OfScreen u={0.70} v={0.58} h={36} color="#8FA6C9" on={!!state?.supervisor?.pendingLessons} />
+                    </svg>
+                    {[['whatsapp', 0.10, 0.19, 'WhatsApp'], ['instagram', 0.10, 0.45, 'Instagram'], ['messenger', 0.10, 0.71, 'Messenger'], ['image', 0.66, 0.10, 'Estudio de redes'], ['bulb', 0.70, 0.58, 'Supervisor'], ['gift', 0.88, 0.76, 'Café']].map(([icon, u, v, label]) => {
+                        const [x, y] = ofPt(u, v);
+                        return <span key={label} className="of-label" style={{ left: x / 10 + '%', top: (y - (label === 'Café' ? 40 : 100)) / 7 + '%' }}><PlatIcon name={icon} size={13} color="#4E3E33" />{label}</span>;
+                    })}
+                    {Object.keys(OF_AGENTS).map(agent => {
+                        const [u, v] = pos[agent];
+                        const [x, y] = ofPt(u, v);
+                        const s = state;
+                        const sleeping = agent === 'seller' && s && !s.seller.botOn;
+                        const busy = thinking === agent ? 'Pensando…' : selected === agent ? 'Te escucho 👂' : ofBubble(agent, s);
+                        const cls = ['of-char', walking[agent] ? 'walk' : '', sleeping ? 'sleep' : '', agent === 'seller' && s?.seller?.mode === 'typing' && !walking[agent] ? 'typing' : '', selected === agent ? 'on' : ''].filter(Boolean).join(' ');
+                        return (
+                            <button key={agent} type="button" className={cls} style={{ left: x / 10 + '%', top: y / 7 + '%', zIndex: Math.round((u + v) * 100) + 10 }}
+                                onClick={() => open(agent)} aria-label={'Hablar con ' + OF_AGENTS[agent].name}>
+                                {busy && <span className="of-bubble">{busy}</span>}
+                                <span className="of-body" style={{ transform: face[agent] === -1 ? 'scaleX(-1)' : 'none' }}><OfCharacter look={OF_AGENTS[agent].look} /></span>
+                                {sleeping && <span className="of-zzz">Zzz</span>}
+                                <span className="of-tag">{OF_AGENTS[agent].name}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            );
+
+            return (
+                <div className={'of-page' + (mobile ? ' mx-page' : '')}>
+                    {mobile && <div className="mx-head"><div className="grow"><h1>Oficina</h1><p>Tus agentes trabajando en vivo. Toca a uno para hablarle.</p></div></div>}
+                    {error && <div className="nx-flash err">No se pudo cargar la oficina: {error}</div>}
+                    <div className="of-wrap">
+                        <div className="of-stage">
+                            {room}
+                            <p className="of-hint">Se mueven con lo que pasa de verdad en tu negocio. Toca a cualquiera para hablarle o darle una indicación: nada cambia sin tu "sí".</p>
+                        </div>
+                        {!mobile && (
+                            <aside className="of-side">
+                                {selected ? chat : (
+                                    <>
+                                        <h3>Tu equipo</h3>
+                                        {Object.keys(OF_AGENTS).map(agentCard)}
+                                    </>
+                                )}
+                            </aside>
+                        )}
+                    </div>
+                    {mobile && <div className="of-cards">{Object.keys(OF_AGENTS).map(agentCard)}</div>}
+                    {mobile && selected && <MxSheet title={OF_AGENTS[selected].name} onClose={() => setSelected(null)}>{chat}</MxSheet>}
+                </div>
+            );
+        }
+
         function SupervisorView({ canConfigure, openChat }) {
             const [data, setData] = useState(null);
             const [report, setReport] = useState(null);
