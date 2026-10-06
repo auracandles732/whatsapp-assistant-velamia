@@ -6,7 +6,7 @@ import './entorno';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { referralFrom, suggestFor, adFieldsFrom, adContext, refCodesIn, webProductName, normalizeAccountId, REF_PATTERN } from '../src/services/ads';
+import { referralFrom, suggestFor, adFieldsFrom, adContext, refCodesIn, webProductName, normalizeAccountId, REF_PATTERN, periodOf } from '../src/services/ads';
 import { tooMany } from '../src/services/adsRoutes';
 import { toWhatsAppShape } from '../src/controllers/socialController';
 
@@ -94,4 +94,18 @@ test('cuenta publicitaria y tope de la ruta pública', () => {
   for (let i = 0; i < 3; i++) assert.equal(tooMany('prueba-ip', 3, t), false);
   assert.equal(tooMany('prueba-ip', 3, t), true);
   assert.equal(tooMany('prueba-ip', 3, t + 61 * 60_000), false, 'pasada la hora vuelve a empezar');
+});
+
+test('el período: últimos días o fechas exactas en la hora del negocio', () => {
+  const now = new Date('2026-10-06T21:00:00Z');
+  const last = periodOf({ days: '7' }, now, 'America/Guayaquil');
+  assert.equal(last.days, 7);
+  assert.equal(now.getTime() - last.from.getTime(), 7 * 86_400_000);
+  const exact = periodOf({ since: '2026-09-01', until: '2026-09-30' }, now, 'America/Guayaquil');
+  assert.equal(exact.from.toISOString(), '2026-09-01T05:00:00.000Z', 'medianoche de Guayaquil');
+  assert.equal(exact.to.toISOString(), '2026-10-01T05:00:00.000Z');
+  assert.equal(exact.days, 30);
+  assert.equal(periodOf({ since: '2026-10-01', until: '2026-10-31' }, now, 'America/Guayaquil').to.toISOString(), now.toISOString(), 'no pasa de hoy');
+  assert.equal(periodOf({ since: '2026-09-30', until: '2026-09-01' }, now, 'America/Guayaquil').days, 30, 'fechas al revés: últimos 30 días');
+  assert.equal(periodOf({ days: '45' }, now).days, 30);
 });

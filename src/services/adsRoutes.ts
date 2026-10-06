@@ -4,11 +4,9 @@ import { runWithTenant, VELAMIA_ID, TenantContext } from './tenant';
 import { loadTenant, getAllProducts } from './supabase';
 import {
   publicAdsSettings, saveAdsSettings, createReportKey, reportKeyValid, syncAds, setAdProducts, listAds, adResults, registerWebRef,
-  BadWebRef, AdRow
+  BadWebRef, AdRow, periodOf
 } from './ads';
 
-const PERIODS = [7, 30, 90];
-const daysOf = (value: unknown) => (PERIODS.includes(Number(value)) ? Number(value) : 30);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Las rutas públicas (las llama la web de la empresa o su app de métricas) tienen tope por dirección.
@@ -56,10 +54,9 @@ export function adsRouter(): Router {
 
   router.get('/api/ads', requireCrmSession, async (req: Request, res: Response) => {
     try {
-      const days = daysOf(req.query.days);
-      const to = new Date();
+      const { from, to, days } = periodOf(req.query as any);
       const [settings, results, ads, catalog] = await Promise.all([
-        publicAdsSettings(), adResults(new Date(to.getTime() - days * 86_400_000), to), listAds(), getAllProducts().catch(() => [])
+        publicAdsSettings(), adResults(from, to), listAds(), getAllProducts().catch(() => [])
       ]);
       res.json({
         days, settings, ...results, ads: ads.map(publicAd),
@@ -139,11 +136,11 @@ export function adsRouter(): Router {
       const key = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
       await runWithTenant(found.tenant, async () => {
         if (!(await reportKeyValid(key))) return res.status(401).json({ error: 'Llave inválida' });
-        const days = daysOf(req.query.days);
-        const to = new Date();
-        const results = await adResults(new Date(to.getTime() - days * 86_400_000), to);
+        // Últimos 7, 30 o 90 días, o un rango exacto (since/until, AAAA-MM-DD) como el de la app de métricas.
+        const { from, to, days } = periodOf(req.query as any);
+        const results = await adResults(from, to);
         res.setHeader('Cache-Control', 'no-store');
-        res.json({ days, generatedAt: to.toISOString(), ...results });
+        res.json({ days, from: from.toISOString(), to: to.toISOString(), generatedAt: new Date().toISOString(), ...results });
       });
     } catch (error: any) {
       fail(res, error, 500);

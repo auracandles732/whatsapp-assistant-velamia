@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { supabase, tenantColumns, tenantOp, tenantValue, parseDbTimestamp, getAllProducts, getConfig, setConfig, getActiveTenants } from './supabase';
 import { encryptSecret, decryptSecret, maskSecret, currentTenant, runWithTenant } from './tenant';
 import { profile } from '../config/businessProfile';
-import { plain, localParts } from '../social/posts';
+import { plain, localParts, zonedTime } from '../social/posts';
 
 /**
  * Atribución de anuncios de Meta (para todas las empresas). Cuando una clienta escribe desde un anuncio que abre
@@ -502,10 +502,35 @@ export interface AdResult {
 const PAID = new Set(['confirmed', 'shipped', 'delivered']);
 const round = (n: number) => Math.round(n * 100) / 100;
 
+const zone = () => profile().business.timezone || 'America/Guayaquil';
+
 const dayIn = (date: Date) => {
-  const p = localParts(date, profile().business.timezone || 'America/Guayaquil');
+  const p = localParts(date, zone());
   return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
 };
+
+const PERIODS = [7, 30, 90];
+
+/**
+ * El período a medir: since/until (días AAAA-MM-DD, en la hora del negocio, hasta un año) o los últimos 7, 30 o 90 días
+ * (30 si no se indica). Sin efectos.
+ */
+export function periodOf(query: { days?: unknown; since?: unknown; until?: unknown }, now = new Date(), timeZone = zone()): { from: Date; to: Date; days: number } {
+  const day = (v: unknown) => {
+    const m = String(v ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const since = day(query.since);
+  const until = day(query.until);
+  if (since && until) {
+    const from = zonedTime(since[0], since[1], since[2], 0, 0, timeZone);
+    const to = zonedTime(until[0], until[1], until[2] + 1, 0, 0, timeZone);
+    const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
+    if (days >= 1 && days <= 400) return { from, to: to > now ? now : to, days };
+  }
+  const days = PERIODS.includes(Number(query.days)) ? Number(query.days) : 30;
+  return { from: new Date(now.getTime() - days * 86_400_000), to: now, days };
+}
 
 const insightsCache = new Map<string, { at: number; rows: any[] }>();
 
