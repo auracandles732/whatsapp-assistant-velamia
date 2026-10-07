@@ -223,7 +223,14 @@ export async function setWebEnabled(enabled: boolean) {
     if (pending) throw new Error(`Faltan ${pending} precio(s) distintos por revisar antes de activar.`);
   }
   await writeSettings({ ...s, enabled, lastError: '' });
-  if (enabled) await pushToWeb();
+  if (!enabled) return;
+  try {
+    await pushToWeb();
+  } catch (error) {
+    // Si la primera vez no salió, queda en pausa: así se ve claro que falta algo.
+    await writeSettings({ ...(await readSettings()), enabled: false });
+    throw error;
+  }
 }
 
 // ---------- Mandar a la web ----------
@@ -237,6 +244,8 @@ async function callWeb(s: WebSettings, method: 'GET' | 'PUT', body?: unknown): P
     signal: AbortSignal.timeout(120_000)
   });
   const data: any = await res.json().catch(() => ({}));
+  if (res.status === 503) throw new Error('La web todavía no tiene la llave: pégala en Render (variable CRM_SYNC_KEY del panel de la web), espera 2 o 3 minutos a que se reinicie y vuelve a intentar.');
+  if (res.status === 401) throw new Error('La llave que tiene la web no coincide: desconecta, vuelve a conectar y pega la llave nueva en Render (CRM_SYNC_KEY).');
   if (!res.ok) throw new Error(data?.error || `La web respondió ${res.status}`);
   return data;
 }
