@@ -12,13 +12,15 @@ import { currentTenant } from '../services/tenant';
  * hecho con la misma foto difuminada: nunca se recorta (el diseño de la foto trae el precio y el nombre en los bordes).
  */
 
-export type ImageKind = 'feed' | 'story';
+export type ImageKind = 'feed' | 'story' | 'square';
 
 const LAYOUT: Record<ImageKind, { width: number; height: number; boxW: number; boxH: number }> = {
   // 4:5, lo más alto que acepta Instagram. La foto va dentro del ancho que se ve en la cuadrícula del perfil (3:4).
   feed: { width: 1080, height: 1350, boxW: 1012, boxH: 1350 },
   // 9:16. Se deja libre arriba y abajo lo que tapan el nombre de la cuenta y la barra para responder.
-  story: { width: 1080, height: 1920, boxW: 1000, boxH: 1480 }
+  story: { width: 1080, height: 1920, boxW: 1000, boxH: 1480 },
+  // 1:1, la medida de cada tarjeta de un carrusel de anuncios.
+  square: { width: 1080, height: 1080, boxW: 1080, boxH: 1080 }
 };
 const MAX_DOWNLOAD = 15 * 1024 * 1024;
 const JPEG_QUALITY = 90;

@@ -2651,6 +2651,105 @@
         .ad-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .ad-form input { border: 1px solid #EADFD2; border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; }
         @media (max-width: 760px) { .ad-form { grid-template-columns: 1fr; } }
+        /* Crear anuncios con IA */
+        .ab-alert { font-size: 14px; }
+        .ab-pick, .ab-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        .ab-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .ab-label { font-size: 13px; font-weight: 800; color: #4E3E33; min-width: 110px; }
+        .ab-row input[type=search] { flex: 1; min-width: 200px; border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; }
+        .ab-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 800; color: #4E3E33; }
+        .ab-field small { font-weight: 500; color: #8A7868; }
+        .ab-field textarea, .ab-field input, .ab-line textarea, .ab-line input, .ab-cardfields input, .ab-add input, .pb .ab-num { border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; font-weight: 400; color: #3A2A20; background: #fff; }
+        .pb .ab-num { width: 76px; }
+        .ab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; max-height: 420px; overflow: auto; padding: 2px; }
+        .pb .ab-prod { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1.5px solid #EFE6DB; border-radius: 12px; background: #fff; cursor: pointer; text-align: left; font: inherit; }
+        .ab-prod img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #F3ECE3; }
+        .ab-prod span { font-size: 12px; font-weight: 700; color: #2B1C14; line-height: 1.25; }
+        .ab-prod small { font-size: 11px; color: #8A7868; }
+        .pb .ab-prod.on { border-color: #B5654A; box-shadow: 0 0 0 2px rgba(181, 101, 74, 0.25); background: #FFF6F0; }
+        .ab-edit { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 22px; align-items: start; }
+        .ab-side { position: sticky; top: 12px; }
+        .ab-why { padding: 10px 12px; border-radius: 12px; background: #F7F1FB; color: #4B3566; font-size: 13.5px; line-height: 1.45; }
+        .ab-issues { display: flex; flex-direction: column; gap: 6px; }
+        .ab-issue { padding: 8px 10px; border-radius: 10px; font-size: 13px; line-height: 1.4; }
+        .ab-issue.error { background: #FDECEC; color: #B42318; }
+        .ab-issue.aviso { background: #FFF6E6; color: #7A5300; }
+        .ab-issue.ok { background: #E6F6EC; color: #1E6B3A; }
+        .ab-block { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid #EFE6DB; border-radius: 14px; background: #FDFBF8; }
+        .ab-block h4 { margin: 0; font-size: 14px; color: #2B1C14; }
+        .ab-line { display: flex; gap: 6px; align-items: center; }
+        .ab-line textarea, .ab-line input { flex: 1; min-width: 0; resize: vertical; }
+        .ab-long { color: #B36B00; font-weight: 800; }
+        .ab-alt textarea { opacity: 0.6; }
+        .pb .ab-x { border: 0; background: #F3ECE3; color: #6B5849; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; flex-shrink: 0; padding: 0; }
+        .ab-thumbs { display: flex; gap: 6px; flex-wrap: wrap; }
+        .pb .ab-thumbs button { padding: 0; border: 2px solid transparent; border-radius: 10px; background: none; cursor: pointer; }
+        .pb .ab-thumbs button.on { border-color: #B5654A; }
+        .ab-thumbs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; display: block; }
+        .ab-cardedit { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px; border-radius: 12px; background: #fff; border: 1px solid #EFE6DB; }
+        .ab-cardfields { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        .ab-cardbtns { display: flex; flex-direction: column; gap: 4px; }
+        .pb .ab-cardbtns button { border: 1px solid #EADFD2; background: #fff; border-radius: 8px; width: 30px; height: 26px; cursor: pointer; padding: 0; }
+        .pb .ab-cardbtns button:disabled { opacity: 0.35; cursor: default; }
+        .ab-add { display: flex; flex-direction: column; gap: 4px; }
+        .pb .ab-addrow { display: flex; align-items: center; gap: 8px; border: 0; background: #fff; padding: 4px 6px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
+        .pb .ab-addrow:hover { background: #FAF2EB; }
+        .ab-addrow img { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; }
+        .ab-chip { display: inline-block; padding: 3px 10px; border-radius: 999px; background: #F3ECE3; color: #6B5849; font-size: 12px; font-weight: 800; }
+        .ab-check { font-size: 13px; color: #4E3E33; display: flex; gap: 8px; align-items: center; }
+        .ad-form select { border: 1px solid #EADFD2; border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; background: #fff; }
+        /* Vista previa del anuncio (como en Facebook / Instagram) */
+        .ab-phone { display: flex; flex-direction: column; gap: 8px; }
+        .ab-post { background: #fff; border: 1px solid #E4E6EB; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.08); font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #050505; }
+        .ab-post-h { display: flex; gap: 8px; align-items: center; padding: 10px 12px 6px; }
+        .ab-post-h b { display: block; font-size: 14px; }
+        .ab-post-h small { color: #65676B; font-size: 12px; }
+        .ab-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #D6A08C, #B5654A); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
+        .ab-text { padding: 2px 12px 10px; font-size: 14px; line-height: 1.38; white-space: pre-wrap; word-break: break-word; }
+        .pb .ab-text button { border: 0; background: none; padding: 0; color: #65676B; font-weight: 700; cursor: pointer; font: inherit; }
+        .ab-img { position: relative; overflow: hidden; background: #EFE6DB; }
+        .ab-img.tall { aspect-ratio: 4 / 5; }
+        .ab-img.sq { aspect-ratio: 1 / 1; }
+        .ab-img .bg { position: absolute; inset: -12%; width: 124%; height: 124%; object-fit: cover; filter: blur(16px); opacity: 0.75; }
+        .ab-img .fg { position: relative; width: 100%; height: 100%; object-fit: contain; display: block; }
+        .ab-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #F0F2F5; }
+        .ab-bar > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .ab-bar small { font-size: 12px; color: #65676B; }
+        .ab-bar b { font-size: 15px; line-height: 1.25; }
+        .ab-cta { display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 6px; background: #E4E6EB; font-size: 13.5px; font-weight: 700; white-space: nowrap; color: #050505; }
+        .ab-carousel { display: flex; gap: 8px; overflow-x: auto; padding: 0 12px 10px; scroll-snap-type: x mandatory; }
+        .ab-card { flex: 0 0 72%; border: 1px solid #E4E6EB; border-radius: 10px; overflow: hidden; scroll-snap-align: start; background: #fff; }
+        .ab-card-b { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+        .ab-card-b > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .ab-card-b b { font-size: 13.5px; line-height: 1.25; }
+        .ab-card-b small { font-size: 12px; color: #65676B; }
+        .ab-card-b .ab-cta { padding: 6px 9px; font-size: 12.5px; }
+        .ab-post-f { display: flex; justify-content: space-around; padding: 8px 12px; border-top: 1px solid #E4E6EB; color: #65676B; font-size: 13px; font-weight: 600; }
+        /* Anuncios creados desde el CRM */
+        .ab-list { display: flex; flex-direction: column; gap: 12px; }
+        .ab-item { border: 1px solid #EFE6DB; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: #FFFCF8; }
+        .ab-item-h { display: flex; gap: 12px; align-items: flex-start; }
+        .ab-item-h img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: #F3ECE3; flex-shrink: 0; }
+        .ab-item-h .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .ab-item-h b { font-size: 14.5px; color: #2B1C14; word-break: break-word; }
+        .ab-item-h small { font-size: 12.5px; color: #8A7868; }
+        .ab-status { flex-shrink: 0; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; background: #EEE8E2; color: #5E5048; }
+        .ab-status.ok { background: #E6F6EC; color: #1E6B3A; }
+        .ab-status.warn { background: #FFF3DC; color: #7A5300; }
+        .ab-status.bad { background: #FDECEC; color: #B42318; }
+        .ab-kpis { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+        .ab-kpis div { border: 1px solid #EADFD3; border-radius: 12px; padding: 8px 10px; background: #fff; display: flex; flex-direction: column; min-width: 0; }
+        .ab-kpis b { font-size: 17px; color: #B5654A; }
+        .ab-kpis small { font-size: 11.5px; color: #857262; }
+        .ab-budget { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .ab-history { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #4E3E33; padding: 8px 10px; border-radius: 10px; background: #F8F3EE; }
+        .ab-history small { color: #8A7868; margin-right: 6px; }
+        .ab-advice { display: flex; flex-direction: column; gap: 8px; }
+        .ab-advice p { margin: 0; font-size: 14px; color: #3A2A20; }
+        .ab-tip { padding: 10px 12px; border-radius: 12px; border: 1px solid #EFE6DB; background: #FFFCF8; font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
+        .ab-tip .ab-chip { align-self: flex-start; background: #FFF3DC; color: #7A5300; }
+        @media (max-width: 1100px) { .ab-edit { grid-template-columns: 1fr; } .ab-side { position: static; max-width: 420px; } .ab-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        @media (max-width: 760px) { .ab-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ab-label { min-width: 0; width: 100%; } .ab-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); } .ab-cardedit { grid-template-columns: 1fr; } .ab-cardbtns { flex-direction: row; } }
         .sv-prompt textarea { width: 100%; min-height: 260px; padding: 12px; border-radius: 12px; border: 1px solid #E6DACC; font: inherit; font-size: 13.5px; line-height: 1.5; background: #fff; resize: vertical; }
         @media (max-width: 760px) { .sv-step { grid-template-columns: 110px 1fr 46px; font-size: 13px; } .sv-table { font-size: 12.5px; } }
         .sv-kpis div { border: 1px solid #EADFD3; border-radius: 14px; padding: 10px 12px; background: #FDFCFB; display: flex; flex-direction: column; }
@@ -14127,6 +14226,452 @@
         const AD_LIVE = ['ACTIVE', 'IN_PROCESS', 'WITH_ISSUES', 'PENDING_REVIEW'];
         const AD_STATUS = { ACTIVE: 'Activo', PAUSED: 'Pausado', CAMPAIGN_PAUSED: 'Campaña pausada', ADSET_PAUSED: 'Conjunto pausado', IN_PROCESS: 'Procesando', WITH_ISSUES: 'Con problemas', PENDING_REVIEW: 'En revisión', DISAPPROVED: 'Rechazado' };
 
+        // ---------- Crear anuncios con IA: la IA arma el anuncio con el Catálogo y se crea en Meta (API oficial) EN PAUSA ----------
+        const AB_GENDER = { mujeres: 'Mujeres', hombres: 'Hombres', todos: 'Todos' };
+        const AB_EVENTS = { ADD_TO_CART: 'Agregar al carrito', INITIATED_CHECKOUT: 'Iniciar pago', PURCHASE: 'Compra' };
+        const AB_LIVE_TONE = { ACTIVE: 'ok', PENDING_REVIEW: 'warn', IN_PROCESS: 'warn', PREAPPROVED: 'ok', DISAPPROVED: 'bad', WITH_ISSUES: 'bad', PENDING_BILLING_INFO: 'bad' };
+        const abMoney = n => (n === null || n === undefined ? '—' : '$' + Number(n).toFixed(2));
+
+        function abMissing(s, destination) {
+            const out = [];
+            if (!s.pageId) out.push('la página de Facebook');
+            if (destination === 'web' && !s.webUrl) out.push('la dirección de tu web');
+            if (destination === 'web' && !s.pixelId) out.push('el píxel de tu web');
+            if (destination === 'whatsapp' && !s.whatsappNumber) out.push('el número de WhatsApp');
+            return out;
+        }
+
+        function AbImage({ src, kind }) {
+            return (
+                <div className={'ab-img ' + kind}>
+                    {src && <img className="bg" src={src} alt="" referrerPolicy="no-referrer" />}
+                    {src && <img className="fg" src={src} alt="" referrerPolicy="no-referrer" />}
+                </div>
+            );
+        }
+
+        // Así se verá en el celular (Facebook / Instagram): texto, foto o carrusel, título y botón.
+        function AdPreview({ draft, pageName, webUrl }) {
+            const [more, setMore] = useState(false);
+            const text = draft.texts[0] || '';
+            const long = text.length > 125;
+            const web = draft.destination === 'web';
+            const cta = web ? 'Comprar' : 'Enviar mensaje';
+            let domain = '';
+            try { domain = webUrl ? new URL(webUrl).host.replace(/^www\./, '').toUpperCase() : ''; } catch { domain = ''; }
+            return (
+                <div className="ab-phone">
+                    <div className="ab-post">
+                        <div className="ab-post-h"><span className="ab-avatar">{(pageName || 'P').slice(0, 1).toUpperCase()}</span><div><b>{pageName || 'Tu página'}</b><small>Publicidad</small></div></div>
+                        <div className="ab-text">{more || !long ? text : text.slice(0, 125) + '… '}{long && !more && <button type="button" onClick={() => setMore(true)}>Ver más</button>}</div>
+                        {draft.format === 'carousel' ? (
+                            <div className="ab-carousel">{draft.cards.map((c, k) => (
+                                <div className="ab-card" key={k}>
+                                    <AbImage src={c.image} kind="sq" />
+                                    <div className="ab-card-b"><div><b>{c.title}</b>{c.description && <small>{c.description}</small>}</div><span className="ab-cta">{cta}</span></div>
+                                </div>
+                            ))}</div>
+                        ) : (
+                            <>
+                                <AbImage src={draft.cards[0] && draft.cards[0].image} kind="tall" />
+                                <div className="ab-bar">
+                                    <div>{web && domain && <small>{domain}</small>}<b>{draft.headlines[0] || ''}</b>{draft.description && <small>{draft.description}</small>}</div>
+                                    <span className="ab-cta">{!web && <PlatIcon name="whatsapp" size={14} />}{cta}</span>
+                                </div>
+                            </>
+                        )}
+                        <div className="ab-post-f"><span>👍 Me gusta</span><span>💬 Comentar</span><span>↗ Compartir</span></div>
+                    </div>
+                    {draft.format === 'single' && (draft.texts.length > 1 || draft.headlines.length > 1) && (
+                        <small className="pb-muted">Meta probará {draft.texts.length} texto(s) y {draft.headlines.length} título(s) y mostrará más los que mejor funcionen.</small>
+                    )}
+                </div>
+            );
+        }
+
+        function AdBuilder({ canEdit, canConfigure }) {
+            const [data, setData] = useState(null);
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            const [busy, setBusy] = useState('');
+            const [step, setStep] = useState('idle');
+            const [form, setForm] = useState({ destination: 'web', format: 'auto', idea: '', products: [] });
+            const [query, setQuery] = useState('');
+            const [draft, setDraft] = useState(null);
+            const [explanation, setExplanation] = useState('');
+            const [review, setReview] = useState({ errors: [], issues: [] });
+            const [addQuery, setAddQuery] = useState('');
+            const [budgetEdit, setBudgetEdit] = useState(null);
+            const [advice, setAdvice] = useState(null);
+            const [showSettings, setShowSettings] = useState(false);
+            const [setup, setSetup] = useState(null);
+            const [found, setFound] = useState(null);
+            const [openHistory, setOpenHistory] = useState('');
+            const load = () => api('/api/ads/builder').then(d => { setData(d); setError(''); }).catch(e => setError(e.message));
+            useEffect(() => {
+                load();
+                const t = setInterval(whenVisible(load), 60000);
+                return () => clearInterval(t);
+            }, []);
+            // Cada cambio del borrador se revisa con las reglas de Meta (sin crear nada).
+            useEffect(() => {
+                if (!draft) return;
+                const t = setTimeout(() => {
+                    api('/api/ads/builder/review', { method: 'POST', body: JSON.stringify({ ...draft, idea: form.idea }) }).then(setReview).catch(() => {});
+                }, 700);
+                return () => clearTimeout(t);
+            }, [draft]);
+
+            async function run(name, fn, ok) {
+                setBusy(name); setError(''); setNotice('');
+                try {
+                    const r = await fn();
+                    if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok);
+                    await load();
+                    return r;
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            }
+
+            if (!data) return error ? <div className="pb-err">{error}</div> : <div className="pb-card"><div className="pb-muted">Cargando creador de anuncios…</div></div>;
+            const s = data.settings || {};
+            const account = data.account;
+            const catalog = data.catalog || [];
+            const byName = new Map(catalog.map(p => [p.name, p]));
+            const byId = new Map(catalog.map(p => [p.id, p]));
+            const productOf = c => byId.get(c.productId) || byName.get(c.product) || {};
+            const blocked = !data.connected || (account && !account.canWrite);
+            const missing = abMissing(s, form.destination);
+            const q = query.trim().toLowerCase();
+            const shown = (q ? catalog.filter(p => (p.name + ' ' + p.category).toLowerCase().includes(q)) : catalog).slice(0, 80);
+            const togglePick = id => setForm(f => ({ ...f, products: f.products.includes(id) ? f.products.filter(n => n !== id) : f.products.length >= 10 ? f.products : [...f.products, id] }));
+            const propose = () => run('propose', async () => {
+                const r = await api('/api/ads/builder/propose', { method: 'POST', body: JSON.stringify(form) });
+                setDraft(r.draft); setReview({ errors: [], issues: r.issues || [] }); setExplanation(r.explanation || ''); setStep('edit');
+                return r;
+            });
+            const patch = changes => setDraft(d => ({ ...d, ...changes }));
+            const setList = (key, i, value) => setDraft(d => ({ ...d, [key]: d[key].map((t, k) => (k === i ? value : t)) }));
+            const dropFrom = (key, i) => setDraft(d => ({ ...d, [key]: d[key].filter((_, k) => k !== i) }));
+            const setCard = (i, changes) => setDraft(d => ({ ...d, cards: d.cards.map((c, k) => (k === i ? { ...c, ...changes } : c)) }));
+            const moveCard = (i, dir) => setDraft(d => {
+                const cards = [...d.cards]; const j = i + dir;
+                if (j < 0 || j >= cards.length) return d;
+                [cards[i], cards[j]] = [cards[j], cards[i]];
+                return { ...d, cards };
+            });
+            const addCard = p => setDraft(d => (d.cards.length >= 10 || d.cards.some(c => c.productId === p.id) ? d : { ...d, cards: [...d.cards, { productId: p.id, product: p.name, image: p.images[0], title: p.name, description: '' }] }));
+            const changeFormat = format => setDraft(d => ({ ...d, format, cards: format === 'single' ? d.cards.slice(0, 1) : d.cards }));
+            const create = () => run('create', async () => {
+                const r = await api('/api/ads/builder/create', { method: 'POST', body: JSON.stringify({ ...draft, idea: form.idea }) });
+                setStep('idle'); setDraft(null); setForm({ destination: 'web', format: 'auto', idea: '', products: [] });
+                return r;
+            }, r => '✅ Creado en Meta EN PAUSA: no gasta nada todavía. Míralo abajo en "Tus anuncios creados desde el CRM" y toca Activar cuando quieras que empiece.' + (r && r.created && r.created.warnings && r.created.warnings.length ? ' Ojo: ' + r.created.warnings.join(' ') : ''));
+            const activate = item => {
+                const total = Number(data.activeDaily || 0) + Number(item.dailyBudget || 0);
+                if (!confirm('¿Activar "' + item.name + '"?\n\nEmpieza a gastar hasta ' + abMoney(item.dailyBudget) + ' por día (todo lo activo desde el CRM sumaría ' + abMoney(total) + ' de tu tope de ' + abMoney(s.maxDaily) + ').\n\nMeta lo revisa antes de mostrarlo (puede tardar hasta 24 horas).')) return;
+                run('st' + item.campaignId, () => api('/api/ads/builder/' + item.campaignId + '/status', { method: 'POST', body: JSON.stringify({ active: true }) }), '▶️ Activado. Meta lo revisa y empieza a mostrarlo (el estado se actualiza aquí solo).');
+            };
+            const pause = item => run('st' + item.campaignId, () => api('/api/ads/builder/' + item.campaignId + '/status', { method: 'POST', body: JSON.stringify({ active: false }) }), '⏸️ Pausado: ya no gasta.');
+            const saveBudget = item => run('b' + item.campaignId, () => api('/api/ads/builder/' + item.campaignId + '/budget', { method: 'PUT', body: JSON.stringify({ daily: budgetEdit.value }) }), () => { setBudgetEdit(null); return 'Presupuesto cambiado. Meta tarda unas horas en ajustarse: mejor no cambiarlo seguido.'; });
+            const askAdvice = () => run('advice', async () => { setAdvice(await api('/api/ads/builder/advice', { method: 'POST', body: '{}' })); });
+            const detect = () => run('detect', async () => {
+                const r = await api('/api/ads/builder/detect', { method: 'POST', body: '{}' });
+                setFound(r); setSetup(r.settings);
+                return r;
+            }, 'Listo: tomé la página, el Instagram, el píxel y el WhatsApp que ya usa tu cuenta. Revisa y guarda.');
+            const saveSetup = () => run('setup', async () => {
+                await api('/api/ads/builder/settings', { method: 'PUT', body: JSON.stringify(setup) });
+                setShowSettings(false);
+            }, 'Ajustes guardados.');
+            const issues = [...(review.errors || []).map(t => ({ level: 'error', where: '', text: t })), ...(review.issues || [])];
+            const hasErrors = issues.some(i => i.level === 'error');
+            const metaUrl = item => 'https://adsmanager.facebook.com/adsmanager/manage/ads?act=' + String(data.accountId || '').replace(/^act_/, '') + '&selected_campaign_ids=' + item.campaignId;
+            const resultName = item => (item.destination === 'whatsapp' ? 'Chats iniciados' : (AB_EVENTS[s.webEvent] || 'Resultados'));
+            const addMatches = addQuery.trim() ? catalog.filter(p => p.name.toLowerCase().includes(addQuery.trim().toLowerCase()) && !(draft && draft.cards.some(c => c.productId === p.id))).slice(0, 8) : [];
+
+            return (
+                <>
+                    {account && account.problem && <div className="pb-err ab-alert"><b>⚠️ Cuenta publicitaria: {account.label}.</b> {account.problem}</div>}
+                    {data.liveError && <div className="pb-muted">No se pudo leer el estado en Meta: {data.liveError}</div>}
+
+                    <section className="pb-card ab">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="sparkle" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>✨ Crear anuncio con IA</h2>
+                                <p>La IA arma el anuncio con tus productos, fotos y precios del Catálogo, revisado con las reglas de publicidad de Meta. Tú lo revisas y se crea en Meta <b>en pausa</b>: no gasta nada hasta que toques Activar.</p>
+                            </div>
+                            {step === 'idle' && canEdit && <button type="button" className="pb-btn main" disabled={!data.connected} onClick={() => { setStep('pick'); setNotice(''); }}>✨ Crear anuncio nuevo</button>}
+                        </div>
+                        {error && <div className="pb-err">{error}</div>}
+                        {notice && <div className="pb-notice ok">{notice}</div>}
+                        {!data.connected && <div className="pb-muted">Primero conecta la cuenta publicitaria de Meta (más abajo, en "Cuenta publicitaria de Meta").</div>}
+                        {data.connected && !data.ai.configured && <div className="pb-muted">La IA usa la clave del agente de redes: agrégala en Publicaciones → Cerebro IA.</div>}
+                        {step === 'idle' && data.connected && <div className="pb-muted">Hoy: {data.limits.createdToday} de {data.limits.perDay} anuncios nuevos (para cuidar tu cuenta, no más de {data.limits.perDay} por día).</div>}
+
+                        {step === 'pick' && (
+                            <div className="ab-pick">
+                                <div className="ab-row">
+                                    <span className="ab-label">¿A dónde lleva?</span>
+                                    <div className="sv-days">
+                                        <button type="button" className={form.destination === 'web' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, destination: 'web' }))}>🛒 A la página web</button>
+                                        <button type="button" className={form.destination === 'whatsapp' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, destination: 'whatsapp' }))}>💬 A WhatsApp</button>
+                                    </div>
+                                </div>
+                                <div className="ab-row">
+                                    <span className="ab-label">Formato</span>
+                                    <div className="sv-days">{[['auto', 'Que decida la IA'], ['single', 'Una foto'], ['carousel', 'Carrusel']].map(([k, t]) => <button key={k} type="button" className={form.format === k ? 'on' : ''} onClick={() => setForm(f => ({ ...f, format: k }))}>{t}</button>)}</div>
+                                </div>
+                                {missing.length > 0 && <div className="pb-notice">Para anuncios {form.destination === 'web' ? 'a la web' : 'a WhatsApp'} falta en Ajustes (abajo): {missing.join(', ')}.</div>}
+                                <label className="ab-field">¿Qué quieres anunciar? <small>(opcional: la IA lo usa para el texto y, si no eliges productos, para buscarlos)</small>
+                                    <textarea rows={2} maxLength={600} placeholder="Ej.: Halloween para fiestas infantiles: calabazas y fantasmitas" value={form.idea} onChange={e => setForm(f => ({ ...f, idea: e.target.value }))} />
+                                </label>
+                                <div className="ab-row"><span className="ab-label">Productos ({form.products.length} de 10)</span><input type="search" placeholder="Buscar en el catálogo…" value={query} onChange={e => setQuery(e.target.value)} /></div>
+                                <div className="ab-grid">{shown.map(p => (
+                                    <button type="button" key={p.id} className={'ab-prod' + (form.products.includes(p.id) ? ' on' : '')} onClick={() => togglePick(p.id)}>
+                                        <img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                                        <span>{p.name}</span><small>{abMoney(p.price)} · {p.category}</small>
+                                    </button>
+                                ))}</div>
+                                <div className="sv-actions">
+                                    <button type="button" className="pb-btn main" disabled={!!busy || (!form.products.length && !form.idea.trim())} onClick={propose}>{busy === 'propose' ? '✨ Preparando…' : '✨ Que la IA lo prepare'}</button>
+                                    <button type="button" className="pb-btn sm" onClick={() => setStep('idle')}>Cancelar</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 'edit' && draft && (
+                            <div className="ab-edit">
+                                <div className="ab-form">
+                                    {explanation && <div className="ab-why">🤖 {explanation}</div>}
+                                    {issues.length > 0 ? (
+                                        <div className="ab-issues">{issues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.where && <b>{i.where}: </b>}{i.text}</div>)}</div>
+                                    ) : <div className="ab-issue ok">✅ Revisado con las reglas de publicidad de Meta: sin problemas.</div>}
+
+                                    <div className="ab-row">
+                                        <span className="ab-label">Formato</span>
+                                        <div className="sv-days">
+                                            <button type="button" className={draft.format === 'single' ? 'on' : ''} onClick={() => changeFormat('single')}>Una foto</button>
+                                            <button type="button" className={draft.format === 'carousel' ? 'on' : ''} onClick={() => changeFormat('carousel')}>Carrusel</button>
+                                        </div>
+                                        <span className="ab-chip">{draft.destination === 'web' ? '🛒 Lleva a la web' : '💬 Abre WhatsApp'}</span>
+                                    </div>
+
+                                    <div className="ab-block">
+                                        <h4>Texto principal {draft.format === 'carousel' ? '(el carrusel lleva uno: el primero)' : '(Meta prueba hasta 5)'}</h4>
+                                        {draft.texts.map((t, i) => (
+                                            <div className={'ab-line' + (draft.format === 'carousel' && i > 0 ? ' ab-alt' : '')} key={i}>
+                                                <textarea rows={3} maxLength={600} value={t} onChange={e => setList('texts', i, e.target.value)} />
+                                                {draft.format === 'carousel' && i > 0 && <button type="button" className="sv-link" onClick={() => setDraft(d => ({ ...d, texts: [d.texts[i], ...d.texts.filter((_, k) => k !== i)] }))}>Usar este</button>}
+                                                {draft.texts.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('texts', i)}>✕</button>}
+                                            </div>
+                                        ))}
+                                        {draft.texts.length < 5 && <button type="button" className="sv-link" onClick={() => patch({ texts: [...draft.texts, ''] })}>+ Agregar texto</button>}
+                                    </div>
+
+                                    {draft.format === 'single' ? (
+                                        <div className="ab-block">
+                                            <h4>Títulos (debajo de la foto, máximo 40 letras)</h4>
+                                            {draft.headlines.map((t, i) => (
+                                                <div className="ab-line" key={i}>
+                                                    <input type="text" maxLength={80} value={t} onChange={e => setList('headlines', i, e.target.value)} /><small className={t.length > 40 ? 'ab-long' : ''}>{t.length}</small>
+                                                    {draft.headlines.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('headlines', i)}>✕</button>}
+                                                </div>
+                                            ))}
+                                            {draft.headlines.length < 5 && <button type="button" className="sv-link" onClick={() => patch({ headlines: [...draft.headlines, ''] })}>+ Agregar título</button>}
+                                            <label className="ab-field">Descripción corta<input type="text" maxLength={80} value={draft.description} onChange={e => patch({ description: e.target.value })} /></label>
+                                            {draft.cards[0] && (
+                                                <div className="ab-photo">
+                                                    <span className="ab-label">Foto de {draft.cards[0].product}</span>
+                                                    <div className="ab-thumbs">{(productOf(draft.cards[0]).images || []).map(u => (
+                                                        <button type="button" key={u} className={u === draft.cards[0].image ? 'on' : ''} onClick={() => setCard(0, { image: u })}><img src={u} alt="" referrerPolicy="no-referrer" /></button>
+                                                    ))}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="ab-block">
+                                            <h4>Tarjetas del carrusel ({draft.cards.length})</h4>
+                                            {draft.cards.map((c, i) => (
+                                                <div className="ab-cardedit" key={c.productId || c.product}>
+                                                    <div className="ab-thumbs">{(productOf(c).images || []).map(u => (
+                                                        <button type="button" key={u} className={u === c.image ? 'on' : ''} onClick={() => setCard(i, { image: u })}><img src={u} alt="" referrerPolicy="no-referrer" /></button>
+                                                    ))}</div>
+                                                    <div className="ab-cardfields">
+                                                        <small className="pb-muted">{i + 1}. {c.product}</small>
+                                                        <input type="text" maxLength={80} placeholder="Título" value={c.title} onChange={e => setCard(i, { title: e.target.value })} />
+                                                        <input type="text" maxLength={80} placeholder="Descripción" value={c.description} onChange={e => setCard(i, { description: e.target.value })} />
+                                                    </div>
+                                                    <div className="ab-cardbtns">
+                                                        <button type="button" disabled={i === 0} onClick={() => moveCard(i, -1)}>▲</button>
+                                                        <button type="button" disabled={i === draft.cards.length - 1} onClick={() => moveCard(i, 1)}>▼</button>
+                                                        <button type="button" disabled={draft.cards.length <= 2} onClick={() => dropFrom('cards', i)}>✕</button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {draft.cards.length < 10 && (
+                                                <div className="ab-add">
+                                                    <input type="search" placeholder="+ Agregar otro producto…" value={addQuery} onChange={e => setAddQuery(e.target.value)} />
+                                                    {addMatches.map(p => <button type="button" key={p.id} className="ab-addrow" onClick={() => { addCard(p); setAddQuery(''); }}><img src={p.images[0]} alt="" referrerPolicy="no-referrer" />{p.name} <small>{abMoney(p.price)}</small></button>)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="ab-block">
+                                        <h4>Público y presupuesto</h4>
+                                        <div className="ab-row">
+                                            <span className="ab-label">Edad</span>
+                                            <input className="ab-num" type="number" min={18} max={64} value={draft.audience.ageMin} onChange={e => patch({ audience: { ...draft.audience, ageMin: Number(e.target.value) } })} />
+                                            <span>a</span>
+                                            <input className="ab-num" type="number" min={19} max={65} value={draft.audience.ageMax} disabled={draft.audience.advantage} onChange={e => patch({ audience: { ...draft.audience, ageMax: Number(e.target.value) } })} />
+                                            <div className="sv-days">{Object.keys(AB_GENDER).map(g => <button key={g} type="button" className={draft.audience.gender === g ? 'on' : ''} onClick={() => patch({ audience: { ...draft.audience, gender: g } })}>{AB_GENDER[g]}</button>)}</div>
+                                        </div>
+                                        <label className="sv-check ab-check"><input type="checkbox" checked={!!draft.audience.advantage} onChange={e => patch({ audience: { ...draft.audience, advantage: e.target.checked } })} /> Dejar que Meta busque más allá de este público (Advantage+). Apagado = solo este público.</label>
+                                        <div className="ab-row">
+                                            <span className="ab-label">Presupuesto por día</span>
+                                            <span>$</span><input className="ab-num" type="number" min={1} max={s.maxDaily} step={0.5} value={draft.dailyBudget} onChange={e => patch({ dailyBudget: Number(e.target.value) })} />
+                                            <small className="pb-muted">≈ {abMoney(draft.dailyBudget * 30)} al mes · tu tope: {abMoney(s.maxDaily)} por día</small>
+                                        </div>
+                                        <label className="ab-field">Nombre (tema de la campaña)<input type="text" maxLength={40} value={draft.theme} onChange={e => patch({ theme: e.target.value })} /></label>
+                                    </div>
+
+                                    <div className="sv-actions">
+                                        {canConfigure && <button type="button" className="pb-btn main" disabled={!!busy || hasErrors || blocked || abMissing(s, draft.destination).length > 0} onClick={create}>{busy === 'create' ? 'Creando en Meta…' : '🚀 Crear en Meta (en pausa)'}</button>}
+                                        <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setStep('pick')}>← Cambiar productos</button>
+                                        <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => { if (confirm('¿Descartar este borrador?')) { setDraft(null); setStep('idle'); } }}>Descartar</button>
+                                    </div>
+                                    {!canConfigure && <div className="pb-muted">Solo la dueña puede crearlo en Meta.</div>}
+                                    {blocked && account && account.problem && <div className="pb-muted">No se puede crear mientras la cuenta tenga ese problema (ver aviso arriba).</div>}
+                                    {abMissing(s, draft.destination).length > 0 && <div className="pb-muted">Falta en Ajustes: {abMissing(s, draft.destination).join(', ')}.</div>}
+                                </div>
+                                <div className="ab-side"><AdPreview draft={draft} pageName={s.pageName} webUrl={s.webUrl} /></div>
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="chart" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>📈 Tus anuncios creados desde el CRM</h2>
+                                <p>Estado en Meta, gasto y lo que vendió cada uno (chats y ventas del CRM). Se actualiza solo cada minuto. Activo ahora: <b>{abMoney(data.activeDaily)}</b> por día de tu tope de <b>{abMoney(s.maxDaily)}</b>.</p>
+                            </div>
+                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => run('reload', load)}>🔄 Actualizar</button>
+                        </div>
+                        {data.created.length === 0 ? <div className="pb-muted">Todavía no has creado anuncios desde aquí. Los que crees aparecen en esta lista con su estado y sus resultados.</div> : (
+                            <div className="ab-list">{data.created.map(item => {
+                                const l = item.live;
+                                const tone = l ? (AB_LIVE_TONE[l.status] || 'off') : 'off';
+                                return (
+                                    <div className="ab-item" key={item.campaignId}>
+                                        <div className="ab-item-h">
+                                            <img src={item.image} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                                            <div className="grow">
+                                                <b>{item.name}</b>
+                                                <small>{item.destination === 'web' ? '🛒 Web' : '💬 WhatsApp'} · {item.format === 'carousel' ? 'Carrusel' : 'Una foto'} · creado {formatDateTime(item.createdAt)}</small>
+                                                <small>🕯️ {item.products.join(', ')}</small>
+                                            </div>
+                                            <span className={'ab-status ' + tone}>{l ? l.statusLabel : (item.status === 'ACTIVE' ? 'Activo' : 'Pausado')}</span>
+                                        </div>
+                                        {l && l.reasons.length > 0 && <div className="pb-err">Meta lo rechazó: {l.reasons.join(' ')}</div>}
+                                        {l && l.issues.length > 0 && <div className="pb-err">Problema en Meta: {l.issues.join(' ')}</div>}
+                                        {item.warnings && item.warnings.length > 0 && <div className="pb-muted">⚠️ {item.warnings.join(' ')}</div>}
+                                        <div className="ab-kpis">
+                                            <div><b>{abMoney(item.dailyBudget)}</b><small>Por día</small></div>
+                                            <div><b>{l ? abMoney(l.spendToday) : '—'}</b><small>Gastado hoy</small></div>
+                                            <div><b>{l ? abMoney(l.spendTotal) : '—'}</b><small>Gastado total</small></div>
+                                            <div><b>{l ? l.results : '—'}</b><small>{resultName(item)}</small></div>
+                                            <div><b>{item.crm.chats}</b><small>Chats</small></div>
+                                            <div><b>{item.crm.sales}</b><small>Ventas</small></div>
+                                            <div><b>{abMoney(item.crm.revenue)}</b><small>Ingresos{item.roas !== null ? ' · ' + item.roas + 'x' : ''}</small></div>
+                                        </div>
+                                        <div className="sv-actions">
+                                            {canConfigure && (item.status === 'ACTIVE'
+                                                ? <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => pause(item)}>{busy === 'st' + item.campaignId ? 'Pausando…' : '⏸️ Pausar'}</button>
+                                                : <button type="button" className="pb-btn sm main" disabled={!!busy || blocked} onClick={() => activate(item)}>{busy === 'st' + item.campaignId ? 'Activando…' : '▶️ Activar'}</button>)}
+                                            {canConfigure && (budgetEdit && budgetEdit.campaignId === item.campaignId ? (
+                                                <span className="ab-budget">$<input className="ab-num" type="number" min={1} max={s.maxDaily} step={0.5} value={budgetEdit.value} onChange={e => setBudgetEdit({ ...budgetEdit, value: e.target.value })} />
+                                                    <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={() => saveBudget(item)}>{busy === 'b' + item.campaignId ? 'Guardando…' : 'Guardar'}</button>
+                                                    <button type="button" className="pb-btn sm" onClick={() => setBudgetEdit(null)}>Cancelar</button></span>
+                                            ) : <button type="button" className="pb-btn sm" disabled={!!busy || blocked} onClick={() => setBudgetEdit({ campaignId: item.campaignId, value: item.dailyBudget })}>💵 Cambiar presupuesto</button>)}
+                                            {data.accountId && <a className="sv-link" href={metaUrl(item)} target="_blank" rel="noopener noreferrer">Ver en Meta</a>}
+                                            <button type="button" className="sv-link" onClick={() => setOpenHistory(openHistory === item.campaignId ? '' : item.campaignId)}>{openHistory === item.campaignId ? 'Ocultar historial' : 'Historial'}</button>
+                                        </div>
+                                        {openHistory === item.campaignId && <div className="ab-history">{item.history.map((h, k) => <div key={k}><small>{formatDateTime(h.at)}</small> {h.detail}</div>)}</div>}
+                                    </div>
+                                );
+                            })}</div>
+                        )}
+                    </section>
+
+                    <section className="pb-card">
+                        <div className="pb-card-h">
+                            <div className="pb-tile"><PlatIcon name="bulb" size={22} color="#B5654A" /></div>
+                            <div className="grow">
+                                <h2>🧠 Consejos de la IA</h2>
+                                <p>Lee el gasto en Meta y las ventas del CRM de los últimos 30 días y te dice qué hacer con cada anuncio. No cambia nada sola: tú decides.</p>
+                            </div>
+                            {canEdit && <button type="button" className="pb-btn sm" disabled={!!busy || !data.ai.configured} onClick={askAdvice}>{busy === 'advice' ? 'Analizando…' : '🧠 Pedir consejo'}</button>}
+                        </div>
+                        {advice ? (
+                            <div className="ab-advice">
+                                <p>{advice.resumen}</p>
+                                {advice.consejos.map((c, k) => <div key={k} className="ab-tip"><b>{c.anuncio}</b><span className="ab-chip">{c.accion}</span><div>{c.por_que}</div></div>)}
+                            </div>
+                        ) : <div className="pb-muted">Toca "Pedir consejo" cuando tus anuncios lleven unos días activos.</div>}
+                    </section>
+
+                    {canConfigure && (
+                        <section className="pb-card">
+                            <div className="pb-card-h">
+                                <div className="pb-tile"><PlatIcon name="key" size={22} color="#B5654A" /></div>
+                                <div className="grow">
+                                    <h2>⚙️ Ajustes para crear anuncios</h2>
+                                    <p>{s.pageId ? 'Página ' + (s.pageName || s.pageId) + (s.instagramName ? ' · Instagram @' + s.instagramName : '') + (s.pixelId ? ' · píxel ' + (s.pixelName || s.pixelId) : '') + (s.whatsappNumber ? ' · WhatsApp ' + s.whatsappNumber : '') + (s.webUrl ? ' · ' + s.webUrl : '') + ' · tope ' + abMoney(s.maxDaily) + ' por día.' : 'Falta elegir la página de Facebook, el píxel y el número de WhatsApp de tus anuncios.'}</p>
+                                </div>
+                                {!showSettings && <button type="button" className="pb-btn sm" onClick={() => { setSetup({ ...s }); setShowSettings(true); }}>Cambiar ajustes</button>}
+                            </div>
+                            {showSettings && setup && (
+                                <div className="sv-form">
+                                    <div className="sv-actions"><button type="button" className="pb-btn sm" disabled={!!busy || !data.connected} onClick={detect}>{busy === 'detect' ? 'Buscando…' : '🔎 Detectar desde mi cuenta de Meta'}</button></div>
+                                    <div className="ad-form">
+                                        <label>Página de Facebook
+                                            {found && found.pages.length > 1
+                                                ? <select value={setup.pageId} onChange={e => { const p = found.pages.find(x => x.id === e.target.value) || {}; setSetup({ ...setup, pageId: p.id, pageName: p.name, instagramId: p.instagramId, instagramName: p.instagramName }); }}>{found.pages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                                : <input type="text" value={setup.pageId} placeholder="Número de la página" onChange={e => setSetup({ ...setup, pageId: e.target.value })} />}
+                                        </label>
+                                        <label>Instagram (número de la cuenta)<input type="text" value={setup.instagramId} onChange={e => setSetup({ ...setup, instagramId: e.target.value })} /></label>
+                                        <label>Píxel de la web
+                                            {found && found.pixels.length > 1
+                                                ? <select value={setup.pixelId} onChange={e => { const p = found.pixels.find(x => x.id === e.target.value) || {}; setSetup({ ...setup, pixelId: p.id, pixelName: p.name }); }}>{found.pixels.map(p => <option key={p.id} value={p.id}>{p.name}{p.lastFired ? ' (activo)' : ''}</option>)}</select>
+                                                : <input type="text" value={setup.pixelId} onChange={e => setSetup({ ...setup, pixelId: e.target.value })} />}
+                                        </label>
+                                        <label>Qué busca el anuncio en la web<select value={setup.webEvent} onChange={e => setSetup({ ...setup, webEvent: e.target.value })}>{Object.keys(AB_EVENTS).map(k => <option key={k} value={k}>{AB_EVENTS[k]}</option>)}</select></label>
+                                        <label>Tu página web<input type="text" value={setup.webUrl} placeholder="https://www.mitienda.com" onChange={e => setSetup({ ...setup, webUrl: e.target.value })} /></label>
+                                        <label>WhatsApp de los anuncios<input type="text" value={setup.whatsappNumber} placeholder="593991234567" onChange={e => setSetup({ ...setup, whatsappNumber: e.target.value })} /></label>
+                                        <label>País (2 letras)<input type="text" maxLength={2} value={setup.country} onChange={e => setSetup({ ...setup, country: e.target.value.toUpperCase() })} /></label>
+                                        <label>Tope de gasto por día (todo lo activo desde el CRM)<input type="number" min={1} max={500} value={setup.maxDaily} onChange={e => setSetup({ ...setup, maxDaily: Number(e.target.value) })} /></label>
+                                        <label>Público de siempre: edad<span className="ab-row"><input className="ab-num" type="number" min={18} max={64} value={setup.audience.ageMin} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, ageMin: Number(e.target.value) } })} /> a <input className="ab-num" type="number" min={19} max={65} value={setup.audience.ageMax} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, ageMax: Number(e.target.value) } })} /></span></label>
+                                        <label>Público de siempre: quién<select value={setup.audience.gender} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, gender: e.target.value } })}>{Object.keys(AB_GENDER).map(g => <option key={g} value={g}>{AB_GENDER[g]}</option>)}</select></label>
+                                    </div>
+                                    <small className="pb-muted">El número de WhatsApp tiene que estar unido a tu página de Facebook (así lo pide Meta para los anuncios que abren WhatsApp).</small>
+                                    <div className="sv-actions">
+                                        <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={saveSetup}>{busy === 'setup' ? 'Guardando…' : 'Guardar'}</button>
+                                        <button type="button" className="pb-btn sm" onClick={() => setShowSettings(false)}>Cancelar</button>
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+                    )}
+                </>
+            );
+        }
+
         function AdsView({ canEdit, canConfigure }) {
             const [days, setDays] = useState(30);
             const [data, setData] = useState(null);
@@ -14185,7 +14730,7 @@
                         <div className="pb-hero-ic"><PlatIcon name="dollar" size={30} color="#fff" /></div>
                         <div className="pb-hero-tt">
                             <h1>Anuncios</h1>
-                            <p>Cuando una clienta escribe desde un anuncio de Meta (o desde tu web), el chat queda unido a ese anuncio y la vendedora sabe qué producto vio. Aquí ves qué anuncio trae chats, cotizaciones y ventas de verdad, no solo clics.</p>
+                            <p>Crea anuncios con IA (se crean en pausa, con la API oficial de Meta) y mira qué anuncio trae chats, cotizaciones y ventas de verdad, no solo clics. Cuando una clienta escribe desde un anuncio (o desde tu web), la vendedora sabe qué producto vio.</p>
                         </div>
                         {canEdit && s.connected && (
                             <div className="pb-hero-actions">
@@ -14196,6 +14741,8 @@
                     {error && <div className="pb-err">{error}</div>}
                     {notice && <div className="pb-notice ok">{notice}</div>}
                     {!data.available && <div className="pb-err">Falta activar la medición de anuncios: hay que aplicar una actualización en la base de datos (migración 027). Mientras tanto todo funciona normal.</div>}
+
+                    <AdBuilder canEdit={canEdit} canConfigure={canConfigure} />
 
                     <section className="pb-card">
                         <div className="pb-card-h">
@@ -14295,7 +14842,7 @@
                             <div className="sv-form">
                                 <div className="ad-form">
                                     <label>Cuenta publicitaria<input type="text" placeholder="act_123456789" value={form.accountId} onChange={e => setForm(f => ({ ...f, accountId: e.target.value }))} /></label>
-                                    <label>Token de Meta (con permiso ads_read){s.connected && <small className="pb-muted">Vacío = se queda el actual</small>}<input type="password" autoComplete="off" value={form.token} onChange={e => setForm(f => ({ ...f, token: e.target.value }))} /></label>
+                                    <label>Token de Meta (con permiso ads_read; para crear anuncios, también ads_management){s.connected && <small className="pb-muted">Vacío = se queda el actual</small>}<input type="password" autoComplete="off" value={form.token} onChange={e => setForm(f => ({ ...f, token: e.target.value }))} /></label>
                                 </div>
                                 <div className="sv-actions">
                                     <button type="button" className="pb-btn sm main" disabled={!!busy || !form.accountId} onClick={connect}>{busy === 'connect' ? 'Probando…' : 'Conectar'}</button>

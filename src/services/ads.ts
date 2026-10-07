@@ -177,7 +177,7 @@ export interface AdRow {
   product_source: string; created_at: string; updated_at: string;
 }
 
-type AdFields = Partial<Pick<AdRow, 'ad_name' | 'campaign_id' | 'campaign_name' | 'adset_id' | 'adset_name' | 'destination' | 'status' | 'headline' | 'body' | 'image_url'>> & { extraText?: string };
+export type AdFields = Partial<Pick<AdRow, 'ad_name' | 'campaign_id' | 'campaign_name' | 'adset_id' | 'adset_name' | 'destination' | 'status' | 'headline' | 'body' | 'image_url'>> & { extraText?: string };
 
 async function adRow(adId: string): Promise<AdRow | null> {
   const { data } = await supabase.from(REGISTRY).select('*').filter('business_id', tenantOp(), tenantValue()).eq('ad_id', adId).maybeSingle();
@@ -301,6 +301,21 @@ export async function setAdProducts(adId: string, input: { products?: unknown; c
   const { data, error } = await supabase.from(REGISTRY).update({ products, category, product_source: 'confirmado', updated_at: new Date().toISOString() }).eq('id', row.id).select().maybeSingle();
   if (error) throw new Error(`Error guardando el anuncio: ${error.message}`);
   return data as AdRow;
+}
+
+/** Token y cuenta publicitaria conectados (para crear anuncios desde el CRM). null = sin conectar. */
+export async function adsAccess(): Promise<{ token: string; accountId: string } | null> {
+  const s = await readSettings();
+  const token = tokenOf(s);
+  return token && s.accountId ? { token, accountId: s.accountId } : null;
+}
+
+/** Un anuncio recién creado desde el CRM queda registrado con su producto ya confirmado (no hay que adivinarlo). */
+export async function rememberCreatedAd(adId: string, fields: AdFields, products: string[], category: string): Promise<void> {
+  if (!(await adsAvailable())) return;
+  const row = await upsertAd(adId, fields, 'replace');
+  if (!row) return;
+  await supabase.from(REGISTRY).update({ products, category, product_source: 'confirmado', updated_at: new Date().toISOString() }).eq('id', row.id);
 }
 
 export async function listAds(): Promise<AdRow[]> {

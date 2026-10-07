@@ -102,6 +102,7 @@ import { startFollowUpScheduler } from './services/followups';
 import { startSupervisor } from './services/supervisor';
 import { startSalesWatch } from './services/salesWatch';
 import { adsRouter } from './services/adsRoutes';
+import { adBuilderRouter } from './services/adBuilderRoutes';
 import { startAdsSync, originsOf } from './services/ads';
 import { webCatalogRouter } from './services/webCatalogRoutes';
 import { startWebCatalogSync, scheduleWebPush } from './services/webCatalog';
@@ -450,6 +451,7 @@ app.use(supervisorRouter());
 
 // ---------- Anuncios de Meta: de qué anuncio (o de la web) llegó cada chat y qué ventas dejó ----------
 
+app.use(adBuilderRouter());
 app.use(adsRouter());
 
 // ---------- Catálogo de la página web: el CRM manda y la web se actualiza sola ----------
