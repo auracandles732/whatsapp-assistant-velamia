@@ -78,8 +78,8 @@ export async function readState(): Promise<ReviewState> {
     s = {};
   }
   return {
-    // VELAMIA la tiene prendida; las demás empresas la prenden ellas (gasta de su IA y cambia su catálogo).
-    enabled: typeof s.enabled === 'boolean' ? s.enabled : !currentTenant(), autoFix: typeof s.autoFix === 'boolean' ? s.autoFix : !currentTenant(), lastRunAt: String(s.lastRunAt || ''), lastError: String(s.lastError || ''),
+    // Apagada para todas: gasta IA, así que se revisa con "Revisar ahora" cuando la dueña quiera o se prende la revisión cada hora.
+    enabled: s.enabled === true, autoFix: typeof s.autoFix === 'boolean' ? s.autoFix : !currentTenant(), lastRunAt: String(s.lastRunAt || ''), lastError: String(s.lastError || ''),
     checked: s.checked && typeof s.checked === 'object' ? s.checked : {}, checkedCategories: Array.isArray(s.checkedCategories) ? s.checkedCategories : [],
     words: s.words && typeof s.words === 'object' ? s.words : {}, findings: Array.isArray(s.findings) ? s.findings : []
   };

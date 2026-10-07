@@ -14925,7 +14925,7 @@
                 const x = r.result;
                 return '🔎 Revisé ' + x.checkedTexts + ' textos y ' + x.checkedPhotos + ' fotos: ' + (x.found ? x.found + ' cosa(s) para revisar' : 'nada nuevo')
                     + (x.applied ? '. Corregí ' + x.applied + ' tilde(s) yo solo (puedes deshacerlo abajo)' : '') + '.'
-                    + (x.remaining ? ' Faltan ' + x.remaining + ' productos: sigo en la próxima revisión (cada hora).' : '');
+                    + (x.remaining ? ' Faltan ' + x.remaining + ' productos: ' + (data?.enabled ? 'sigo en la próxima revisión (cada hora).' : 'toca "Revisar ahora" otra vez para seguir.') : '');
             });
             const decide = (id, action, ok) => run(id + action, () => api('/api/supervisor/catalog/' + id + '/' + action, { method: 'POST', body: '{}' }), ok);
             const toggleAuto = on => run('auto', () => api('/api/supervisor/catalog/auto', { method: 'PUT', body: JSON.stringify({ on }) }));
