@@ -303,6 +303,17 @@ export async function setAdProducts(adId: string, input: { products?: unknown; c
   return data as AdRow;
 }
 
+/** Un producto cambió de nombre: los anuncios que lo muestran pasan al nombre nuevo (la vendedora lo sigue encontrando). */
+export async function renameProductInAds(oldName: string, newName: string): Promise<void> {
+  catalogCache = null;
+  if (!oldName || !newName || oldName === newName || !(await adsAvailable())) return;
+  // Se filtra aquí (un nombre con coma o comillas rompería el filtro de listas de la base).
+  const { data } = await supabase.from(REGISTRY).select('id, products').filter('business_id', tenantOp(), tenantValue()).limit(2000);
+  for (const row of ((data || []) as { id: string; products: string[] }[]).filter(r => (r.products || []).includes(oldName))) {
+    await supabase.from(REGISTRY).update({ products: (row.products || []).map(n => (n === oldName ? newName : n)) }).eq('id', row.id);
+  }
+}
+
 /** Token y cuenta publicitaria conectados (para crear anuncios desde el CRM). null = sin conectar. */
 export async function adsAccess(): Promise<{ token: string; accountId: string } | null> {
   const s = await readSettings();

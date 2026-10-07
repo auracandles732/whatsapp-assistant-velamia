@@ -6,6 +6,7 @@ import {
   supervisorSpentToday, localDayOf, SUPERVISOR_DAILY_BUDGET, HANDOFF_LABELS, supervisorPrompt, saveSupervisorPrompt, SUPERVISOR_PROMPT_MAX, LOSS_REASONS
 } from './supervisor';
 import { salesFunnel, followUpPerformance, recentAlerts, FUNNEL_LABELS } from './salesWatch';
+import { catalogOverview, reviewCatalog, decideFinding, setAutoFix } from './catalogReview';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -120,6 +121,49 @@ export function supervisorRouter(): Router {
     try {
       await deleteLesson(req.params.id);
       res.json({ deleted: true });
+    } catch (error: any) {
+      fail(res, error);
+    }
+  });
+
+  // ---------- Revisión del catálogo (escritura y fotos) ----------
+
+  router.get('/api/supervisor/catalog', requireCrmSession, async (_req: Request, res: Response) => {
+    try {
+      res.json(await catalogOverview());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** Revisa ya lo nuevo o cambiado del catálogo (full = todo de nuevo). */
+  router.post('/api/supervisor/catalog/review', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+    try {
+      const result = await reviewCatalog({ full: req.body?.full === true });
+      res.json({ result, ...(await catalogOverview()) });
+    } catch (error: any) {
+      fail(res, error);
+    }
+  });
+
+  router.put('/api/supervisor/catalog/auto', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+    try {
+      const current = await catalogOverview();
+      await setAutoFix(req.body?.on === undefined ? current.autoFix : req.body.on === true, typeof req.body?.enabled === 'boolean' ? req.body.enabled : undefined);
+      res.json(await catalogOverview());
+    } catch (error: any) {
+      fail(res, error);
+    }
+  });
+
+  /** Aplicar, ignorar, marcar como resuelto o deshacer una cosa ("todas" = todas las de escritura pendientes). */
+  router.post('/api/supervisor/catalog/:id/:action', requireCrmSession, requireOwnerRole, async (req: Request, res: Response) => {
+    const { id, action } = req.params;
+    if (id !== 'todas' && !UUID.test(id)) return res.status(400).json({ error: 'No válido' });
+    if (!['aplicar', 'ignorar', 'deshacer', 'resuelto'].includes(action)) return res.status(400).json({ error: 'Acción no válida' });
+    try {
+      await decideFinding(id, action as any);
+      res.json(await catalogOverview());
     } catch (error: any) {
       fail(res, error);
     }

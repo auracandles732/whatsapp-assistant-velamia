@@ -51,10 +51,15 @@ function track(purpose: string, model: string, response: any) {
  */
 export async function askJson<T>(params: {
   purpose: string; system: string; user: string; schemaName: string; schema: Record<string, unknown>; maxTokens?: number; profile?: BusinessProfile;
+  /** Fotos para que la IA las mire (en baja resolución: alcanza para leer textos grandes y reconocer la figura). */
+  images?: { label: string; url: string }[];
 }): Promise<T> {
   const p = params.profile || profile();
   const client = getOpenAIClient(p);
   const model = getOpenAIModel(p);
+  const user: any = params.images?.length
+    ? [{ type: 'text', text: withoutBrokenChars(params.user) }, ...params.images.flatMap(i => [{ type: 'text', text: i.label }, { type: 'image_url', image_url: { url: i.url, detail: 'low' } }])]
+    : withoutBrokenChars(params.user);
   const response = await client.chat.completions.create({
     model,
     ...reasoningFor(model),
@@ -62,9 +67,9 @@ export async function askJson<T>(params: {
     response_format: { type: 'json_schema', json_schema: { name: params.schemaName, strict: true, schema: params.schema } },
     messages: [
       { role: 'system', content: withoutBrokenChars(params.system) },
-      { role: 'user', content: withoutBrokenChars(params.user) }
+      { role: 'user', content: user }
     ]
-  });
+  } as any);
   track(params.purpose, model, response);
   return JSON.parse(response.choices[0]?.message?.content || '{}');
 }

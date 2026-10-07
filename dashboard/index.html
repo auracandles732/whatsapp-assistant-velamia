@@ -2697,6 +2697,22 @@
         .ab-addrow img { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; }
         .ab-chip { display: inline-block; padding: 3px 10px; border-radius: 999px; background: #F3ECE3; color: #6B5849; font-size: 12px; font-weight: 800; }
         .ab-check { font-size: 13px; color: #4E3E33; display: flex; gap: 8px; align-items: center; }
+        .cr-auto { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; font-size: 13.5px; font-weight: 600; color: #4E3E33; }
+        .cr-group { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+        .cr-group-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .cr-group-h h3 { margin: 0; font-size: 15px; color: #2B1C14; flex: 1; }
+        .cr-item { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px; border: 1px solid #EEE4D9; background: #FFFCF8; }
+        .cr-item.done { opacity: 0.85; background: #FAF7F3; }
+        .cr-head { display: flex; gap: 10px; align-items: center; }
+        .cr-head img, .cr-noimg { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: #F3ECE3; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .cr-head .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .cr-head b { font-size: 14px; color: #2B1C14; word-break: break-word; }
+        .cr-head small { font-size: 12.5px; color: #8A7868; }
+        .cr-change { font-size: 14px; color: #3A2A20; word-break: break-word; }
+        .cr-change s { color: #A9573C; }
+        .cr-change span { color: #8A7868; margin: 0 4px; }
+        .cr-change b { color: #1E6B3A; }
+        .cr-detail { font-size: 13.5px; color: #4E3E33; }
         .ad-form select { border: 1px solid #EADFD2; border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; background: #fff; }
         /* Vista previa del anuncio (como en Facebook / Instagram) */
         .ab-phone { display: flex; flex-direction: column; gap: 8px; }
@@ -14878,6 +14894,131 @@
             );
         }
 
+        // ---------- Revisión del catálogo (la hace el supervisor): escritura, fotos y precio escrito en la foto ----------
+        const CR_KIND = { ortografia: '✍️ Escritura', foto: '🖼️ Foto', precio_foto: '💲 Precio en la foto', nombre_repetido: '👯 Nombre repetido', foto_repetida: '👯 Foto repetida', sin_foto: '📷 Sin foto' };
+        const CR_FIELD = { name: 'Nombre', 'web.name': 'Nombre en la web', 'web.description': 'Texto de la web', category: 'Categoría (todos sus productos)' };
+        const CR_DONE = { aplicado: 'Corregido', ignorado: 'Ignorado', deshecho: 'Deshecho' };
+
+        function CatalogReviewCard({ canConfigure }) {
+            const [data, setData] = useState(null);
+            const [busy, setBusy] = useState('');
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            const [showDone, setShowDone] = useState(false);
+            useEffect(() => { api('/api/supervisor/catalog').then(setData).catch(e => setError(e.message)); }, []);
+            const run = async (name, fn, ok) => {
+                setBusy(name); setError(''); setNotice('');
+                try {
+                    const r = await fn();
+                    setData(r);
+                    if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok);
+                } catch (e) {
+                    setError(e.message);
+                } finally {
+                    setBusy('');
+                }
+            };
+            if (!data) return <section className="pb-card"><div className={error ? 'pb-err' : 'pb-muted'}>{error || 'Cargando la revisión del catálogo…'}</div></section>;
+            const spelling = data.pending.filter(f => f.kind === 'ortografia');
+            const others = data.pending.filter(f => f.kind !== 'ortografia');
+            const review = () => run('review', () => api('/api/supervisor/catalog/review', { method: 'POST', body: '{}' }), r => {
+                const x = r.result;
+                return '🔎 Revisé ' + x.checkedTexts + ' textos y ' + x.checkedPhotos + ' fotos: ' + (x.found ? x.found + ' cosa(s) para revisar' : 'nada nuevo')
+                    + (x.applied ? '. Corregí ' + x.applied + ' tilde(s) yo solo (puedes deshacerlo abajo)' : '') + '.'
+                    + (x.remaining ? ' Faltan ' + x.remaining + ' productos: sigo en la próxima revisión (cada hora).' : '');
+            });
+            const decide = (id, action, ok) => run(id + action, () => api('/api/supervisor/catalog/' + id + '/' + action, { method: 'POST', body: '{}' }), ok);
+            const toggleAuto = on => run('auto', () => api('/api/supervisor/catalog/auto', { method: 'PUT', body: JSON.stringify({ on }) }));
+            const toggleEnabled = enabled => run('auto', () => api('/api/supervisor/catalog/auto', { method: 'PUT', body: JSON.stringify({ enabled }) }));
+            const head = f => (
+                <div className="cr-head">
+                    {f.image ? <img src={f.image} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cr-noimg">🕯️</span>}
+                    <div className="grow">
+                        <b>{f.product}</b>
+                        <small><span className="ad-tag">{CR_KIND[f.kind] || f.kind}</span>{f.field ? ' ' + (CR_FIELD[f.field] || f.field) : ''}</small>
+                    </div>
+                </div>
+            );
+            const change = f => (f.kind === 'ortografia' ? <div className="cr-change"><s>{f.current}</s> <span>→</span> <b>{f.suggested}</b></div> : null);
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="box" size={22} color="#B5654A" /></div>
+                        <div className="grow">
+                            <h2>🕯️ Revisión del catálogo ({data.pending.length})</h2>
+                            <p>El supervisor revisa cada producto nuevo o que cambia: la escritura (nombre, textos de la web y categorías), que la foto muestre ese producto y que el precio escrito en la foto sea el del catálogo. {data.autoFix ? 'Las tildes, ñ y ü las corrige solo (puedes deshacerlo); ' : ''}lo demás te lo deja aquí.</p>
+                        </div>
+                        {canConfigure && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={review}>{busy === 'review' ? '🔎 Revisando…' : '🔎 Revisar ahora'}</button>}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {notice && <div className="pb-notice ok">{notice}</div>}
+                    {data.lastError && <div className="pb-err">Última revisión con error: {data.lastError}</div>}
+                    <div className="pb-muted">
+                        {data.total - data.remaining} de {data.total} productos revisados{data.lastRunAt ? ' · última revisión ' + formatDateTime(data.lastRunAt) : ' · todavía no se revisa'} · gasto de hoy ${Number(data.spentToday || 0).toFixed(3)} de ${Number(data.dailyBudget).toFixed(2)}
+                    </div>
+                    {canConfigure && <label className="sv-check cr-auto"><input type="checkbox" checked={!!data.enabled} disabled={!!busy} onChange={e => toggleEnabled(e.target.checked)} /> Revisar el catálogo solo, cada hora (solo lo nuevo o lo que cambia)</label>}
+                    {canConfigure && <label className="sv-check cr-auto"><input type="checkbox" checked={!!data.autoFix} disabled={!!busy} onChange={e => toggleAuto(e.target.checked)} /> Corregir tildes, ñ y ü sin preguntarme</label>}
+
+                    {spelling.length > 0 && (
+                        <div className="cr-group">
+                            <div className="cr-group-h">
+                                <h3>✍️ Escritura por corregir ({spelling.length})</h3>
+                                {canConfigure && spelling.length > 1 && <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={() => decide('todas', 'aplicar', 'Listo: corregí todo. Los cambios ya salen en la web.')}>{busy === 'todasaplicar' ? 'Corrigiendo…' : '✅ Corregir todas'}</button>}
+                            </div>
+                            {spelling.map(f => (
+                                <div className="cr-item" key={f.id}>
+                                    {head(f)}
+                                    {change(f)}
+                                    {f.detail && <small className="pb-muted">{f.detail}</small>}
+                                    {canConfigure && (
+                                        <div className="sv-actions">
+                                            <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={() => decide(f.id, 'aplicar', 'Corregido.')}>{busy === f.id + 'aplicar' ? 'Corrigiendo…' : 'Corregir'}</button>
+                                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => decide(f.id, 'ignorar')}>Está bien así</button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {others.length > 0 && (
+                        <div className="cr-group">
+                            <div className="cr-group-h"><h3>🖼️ Para revisar tú ({others.length})</h3></div>
+                            <small className="pb-muted">La foto o el precio los decides tú: cámbialos en Catálogo y toca "Ya lo corregí".</small>
+                            {others.map(f => (
+                                <div className="cr-item" key={f.id}>
+                                    {head(f)}
+                                    <div className="cr-detail">{f.detail}</div>
+                                    {canConfigure && (
+                                        <div className="sv-actions">
+                                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => decide(f.id, 'resuelto')}>Ya lo corregí</button>
+                                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => decide(f.id, 'ignorar')}>Está bien así</button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {data.pending.length === 0 && <div className="pb-notice ok">✅ No hay nada pendiente en el catálogo.</div>}
+
+                    {data.done.length > 0 && (
+                        <div className="cr-group">
+                            <button type="button" className="sv-link" onClick={() => setShowDone(v => !v)}>{showDone ? 'Ocultar lo ya corregido' : 'Ver lo ya corregido (' + data.done.length + ')'}</button>
+                            {showDone && data.done.map(f => (
+                                <div className="cr-item done" key={f.id}>
+                                    {head(f)}
+                                    {change(f)}
+                                    <small className="pb-muted">{CR_DONE[f.status] || f.status}{f.auto ? ' solo por el supervisor' : ''}{f.decidedAt ? ' · ' + formatDateTime(f.decidedAt) : ''}</small>
+                                    {canConfigure && f.status === 'aplicado' && <div className="sv-actions"><button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => decide(f.id, 'deshacer', 'Deshecho: quedó como estaba.')}>↩️ Deshacer</button></div>}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            );
+        }
+
         function SupervisorView({ canConfigure, openChat }) {
             const [data, setData] = useState(null);
             const [report, setReport] = useState(null);
@@ -15090,6 +15231,8 @@
                         )}
                     </section>
 
+                    <CatalogReviewCard canConfigure={canConfigure} />
+
                     <section className="pb-card">
                         <div className="pb-card-h">
                             <div className="pb-tile"><PlatIcon name="bulb" size={22} color="#B5654A" /></div>
@@ -15237,7 +15380,7 @@
             if (loading) return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando consumo...</div>;
             if (!usage) return <div style={{ padding: '40px', textAlign: 'center' }}>Error al cargar el consumo</div>;
 
-            const purposeLabels = { respuesta: 'Respuestas', foto: 'Fotos', audio: 'Audio', pedido: 'Pedidos', otro: 'Otro' };
+            const purposeLabels = { respuesta: 'Respuestas', foto: 'Fotos', audio: 'Audio', pedido: 'Pedidos', otro: 'Otro', catalogo: 'Revisión del catálogo' };
 
             return (
                 <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>

@@ -11,6 +11,7 @@ import { localParts, zonedTime } from '../social/posts';
 import { sendTextMessage } from './whatsapp';
 import { registerStaffTopic, registerStaffReplies, notifyStaff, ownerPhone, StaffMessage } from './staffChat';
 import { salesFunnel, followUpPerformance, Funnel, FollowUpStats, Stage, STAGE_ORDER } from './salesWatch';
+import { catalogTick, pendingCatalogCount } from './catalogReview';
 
 /**
  * Supervisor de los chats. Aprende de lo que respondió el equipo cuando el bot pasó el chat a una persona y cada día
@@ -878,7 +879,8 @@ async function tellWhatMatters(now: Date) {
   const tellReport = !!report && reportWorthTelling(report);
   if (!tellReport) return;
   const m = report!.metrics;
-  await tellOwner(`sv:report:${yesterday}`, '📊 Tu reporte del día está listo', `${m.chats} chats · ${m.unanswered.length} sin respuesta · ${report!.problems.length} cosas por mejorar${report!.lost?.length ? ` · ${report!.lost.length} oportunidades perdidas` : ''}`);
+  const catalog = await pendingCatalogCount().catch(() => 0);
+  await tellOwner(`sv:report:${yesterday}`, '📊 Tu reporte del día está listo', `${m.chats} chats · ${m.unanswered.length} sin respuesta · ${report!.problems.length} cosas por mejorar${report!.lost?.length ? ` · ${report!.lost.length} oportunidades perdidas` : ''}${catalog ? ` · ${catalog} cosas del catálogo por revisar` : ''}`);
   const stillPending = new Set(pending.map(l => l.id));
   await setConfig(TOLD_KEY, JSON.stringify({
     reports: [...new Set([yesterday, ...told.reports])].slice(0, 30),
@@ -917,6 +919,8 @@ async function tickForCurrent(now: Date) {
       console.log(`🧑‍🏫 Supervisor: reporte del ${yesterday} listo (${report.metrics.chats} chats, ${report.problems.length} problemas)`);
     }
   }
+  // Revisión del catálogo (escritura y fotos), una vez por hora: solo lo nuevo o lo que cambió.
+  await catalogTick(now);
   // Los mensajes a la dueña van aparte: de día, una vez y solo si hay algo que hacer.
   await tellWhatMatters(now);
 }
