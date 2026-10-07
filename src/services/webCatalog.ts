@@ -265,11 +265,16 @@ export async function setWebEnabled(enabled: boolean) {
 // ---------- Mandar a la web ----------
 
 /** Esperas entre intentos cuando la web no contesta (se pueden cambiar en las pruebas). */
-export const webRetry = { waitsMs: [20_000, 40_000] };
+export const webRetry = { waitsMs: [20_000, 40_000, 60_000] };
 
 export async function callWeb(s: WebSettings, method: 'GET' | 'PUT', body?: unknown): Promise<any> {
+  // Cada intento queda anotado (método, respuesta, segundos y lo que dice Render) para saber por qué falló.
+  const tries: string[] = [];
+  const trace = () => (tries.length ? ` [${tries.join('; ')}]` : '');
   for (let attempt = 0; ; attempt++) {
     const again = attempt < webRetry.waitsMs.length;
+    const started = Date.now();
+    const secs = () => `${Math.round((Date.now() - started) / 1000)}s`;
     let res: Response;
     try {
       res = await fetch(`${s.url}/api/sync/productos`, {
@@ -280,11 +285,13 @@ export async function callWeb(s: WebSettings, method: 'GET' | 'PUT', body?: unkn
         signal: AbortSignal.timeout(120_000)
       });
     } catch (error: any) {
-      if (!again) throw new Error(`La web no respondió (${error.message}).`);
+      tries.push(`${method} ${error?.cause?.code || error.name} ${secs()}`);
+      if (!again) throw new Error(`La web no respondió (${error.message}).${trace()}`);
       await new Promise(r => setTimeout(r, webRetry.waitsMs[attempt]));
       continue;
     }
     const data: any = await res.json().catch(() => null);
+    if (!res.ok) tries.push(`${method} ${res.status} ${secs()} ${res.headers.get('x-render-routing') || ''}`.trim());
     // Mientras el panel despierta o se reinicia, Render contesta 502/503/504 sin respuesta del panel: se espera y se repite
     // (mandar la lista otra vez no duplica nada, cada producto va con su id del CRM).
     if ([502, 503, 504].includes(res.status) && !data?.error && again) {
@@ -293,7 +300,7 @@ export async function callWeb(s: WebSettings, method: 'GET' | 'PUT', body?: unkn
     }
     if (res.status === 503 && data?.error) throw new Error('La web todavía no tiene la llave: pégala en Render (variable CRM_SYNC_KEY del panel de la web), espera 2 o 3 minutos a que se reinicie y vuelve a intentar.');
     if (res.status === 401) throw new Error('La llave que tiene la web no coincide: desconecta, vuelve a conectar y pega la llave nueva en Render (CRM_SYNC_KEY).');
-    if (!res.ok) throw new Error(data?.error || `La web respondió ${res.status}`);
+    if (!res.ok) throw new Error(`${data?.error || `La web respondió ${res.status}`}${trace()}`);
     return data || {};
   }
 }
@@ -328,7 +335,7 @@ export async function pushToWeb(): Promise<{ count: number }> {
     await writeSettings({ ...(await readSettings()), lastSyncAt: new Date().toISOString(), lastError: '', lastCount: list.length });
     return { count: list.length };
   } catch (error: any) {
-    await writeSettings({ ...(await readSettings()), lastError: String(error.message).slice(0, 220) }).catch(() => undefined);
+    await writeSettings({ ...(await readSettings()), lastError: String(error.message).slice(0, 400) }).catch(() => undefined);
     throw error;
   }
 }
