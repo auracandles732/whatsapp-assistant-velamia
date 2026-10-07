@@ -6645,7 +6645,7 @@
         }
 
         const webTitle = name => String(name || '').toLowerCase().split(/\s+/).filter(Boolean)
-            .map((w, i) => (i > 0 && ['de', 'del', 'la', 'el', 'los', 'las', 'en', 'con', 'y', 'o', 'a', 'para', 'por', 'al'].includes(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
+            .map((w, i) => (/\d/.test(w) || /^[ivx]{2,}$/.test(w) ? w.toUpperCase() : i > 0 && ['de', 'del', 'la', 'el', 'los', 'las', 'en', 'con', 'y', 'o', 'a', 'para', 'por', 'al'].includes(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
 
         // Conexión con la web, precios distintos por revisar y activar o pausar.
         function WebCatalogPanel({ overview, reload, reloadProducts, canEdit }) {

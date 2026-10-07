@@ -7,7 +7,7 @@ import { toInstagramJpeg, ImageKind, isOwnStorageUrl } from '../social/images';
 import { askSocialJson, getSocialAi } from '../social/ai';
 import { unitOf } from './openai';
 import { adsAccess, rememberCreatedAd, adResults } from './ads';
-import { slugOf, slugMapFrom, titleCase } from './webCatalog';
+import { slugOf, slugMapFrom, webDisplayName } from './webCatalog';
 
 /**
  * Crear anuncios de Meta desde el CRM (para todas las empresas), solo con la API oficial de Meta (Marketing API) y el
@@ -261,7 +261,7 @@ export async function adCatalog(): Promise<PickProduct[]> {
   return products.filter(x => x?.name && Number(x.price) > 0).map(x => {
     const images = [...new Set([String(x.image_url || ''), ...((x.web?.images as string[]) || [])])].filter(photoOk).slice(0, 6);
     return {
-      id: String(x.id), name: String(x.name), displayName: short(x.web?.name, 120) || titleCase(String(x.name)), price: Number(x.price), unit: unitOf(x, p),
+      id: String(x.id), name: String(x.name), displayName: webDisplayName(x), price: Number(x.price), unit: unitOf(x, p),
       category: String(x.category || ''), description: short(x.description, 200),
       images, webId: x.web && Number.isFinite(Number(x.web.id)) && x.web.id !== null ? Number(x.web.id) : null,
       webCategory: x.web ? (x.web.category || slugOf(String(x.category || ''), slugs)) : slugOf(String(x.category || ''), slugs)

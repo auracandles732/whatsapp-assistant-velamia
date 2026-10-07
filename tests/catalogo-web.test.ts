@@ -6,7 +6,7 @@ import './entorno';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { titleCase, slugOf, slugMapFrom, toWebProduct, priceConflict, normalizeWebUrl } from '../src/services/webCatalog';
+import { titleCase, slugOf, slugMapFrom, toWebProduct, priceConflict, normalizeWebUrl, webDisplayName, webNameFollowsCrm, callWeb, webRetry } from '../src/services/webCatalog';
 
 const web = (over: any = {}) => ({ id: 12, visible: true, name: 'Leon Baby Shower Cajita', description: 'Con cajita y lazo', category: 'baby-shower', images: ['https://web/leon.webp'], baseImage: 'https://crm/leon.jpeg', price: 30, priceOk: true, ...over });
 
@@ -43,4 +43,38 @@ test('la web se conecta solo con https', () => {
   assert.equal(normalizeWebUrl('http://otra.com'), '');
   assert.equal(normalizeWebUrl('panel'), '');
   assert.equal(normalizeWebUrl('http://localhost:3005'), 'http://localhost:3005');
+});
+
+test('el nombre de la web: escrito todo en mayúsculas se ve como el resto de la tienda; si era copia del CRM, sigue al nombre nuevo', () => {
+  assert.equal(webDisplayName({ name: 'VELA LOLA BUNNY', web: { name: 'VELA LOLA BUNNY' } }), 'Vela Lola Bunny');
+  assert.equal(webDisplayName({ name: 'OSITO PROMOCIÓN 2X1', web: { name: '' } }), 'Osito Promoción 2X1');
+  assert.equal(webDisplayName({ name: 'VELA COPA XV FLORAL', web: null }), 'Vela Copa XV Floral');
+  assert.equal(webDisplayName({ name: 'VELA BUBBLE', web: { name: 'Paloma en Cajita Mi Bautismo' } }), 'Paloma en Cajita Mi Bautismo', 'un nombre propio de la web no se toca');
+  assert.equal(webNameFollowsCrm({ name: 'Demonio de Tasmania en Frasco' }, 'DEMONIO DE TASMANIA EN FRASCO'), true);
+  assert.equal(webNameFollowsCrm({ name: 'Leon Baby Shower Cajita' }, 'VELA DE LEONCITO'), false);
+  assert.equal(webNameFollowsCrm({ name: '' }, 'VELA DE LEONCITO'), false);
+});
+
+test('si la web está despertando (502 de Render) se espera y se repite; un error del panel no se repite', async () => {
+  const original = globalThis.fetch;
+  const waits = webRetry.waitsMs;
+  webRetry.waitsMs = [1, 1];
+  const s = { url: 'https://panel.test', key: 'llave', enabled: true, lastSyncAt: '', lastError: '', lastCount: 0 };
+  try {
+    let calls = 0;
+    globalThis.fetch = (async () => (++calls < 3 ? new Response('<html>Bad Gateway</html>', { status: 502 }) : Response.json({ ok: true, ids: {} }))) as any;
+    assert.deepEqual(await callWeb(s, 'PUT', { productos: [] }), { ok: true, ids: {} });
+    assert.equal(calls, 3);
+    calls = 0;
+    globalThis.fetch = (async () => { calls++; return new Response('Bad Gateway', { status: 502 }); }) as any;
+    await assert.rejects(callWeb(s, 'PUT', { productos: [] }), /La web respondió 502/);
+    assert.equal(calls, 3, 'tres intentos y se rinde');
+    calls = 0;
+    globalThis.fetch = (async () => { calls++; return Response.json({ error: 'La sincronización con el CRM no está configurada' }, { status: 503 }); }) as any;
+    await assert.rejects(callWeb(s, 'GET'), /CRM_SYNC_KEY/);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+    webRetry.waitsMs = waits;
+  }
 });

@@ -105,7 +105,7 @@ import { adsRouter } from './services/adsRoutes';
 import { adBuilderRouter } from './services/adBuilderRoutes';
 import { startAdsSync, originsOf } from './services/ads';
 import { webCatalogRouter } from './services/webCatalogRoutes';
-import { startWebCatalogSync, scheduleWebPush } from './services/webCatalog';
+import { startWebCatalogSync, scheduleWebPush, crmNameOf, followCrmRename } from './services/webCatalog';
 import { supervisorRouter } from './services/supervisorRoutes';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
@@ -1637,9 +1637,11 @@ app.put('/api/products/:id', requireCrmSession, requireUuidParam, requireEditorR
       updates.price = parsedPrice;
     }
 
+    const oldName = updates.name ? await crmNameOf(req.params.id) : '';
     const updated = await updateProduct(req.params.id, updates);
     if (!updated) return res.status(404).json({ error: 'Producto no encontrado' });
     // Si está en la web, el cambio (precio, foto, nombre) sale allá en un momento.
+    if (oldName) await followCrmRename(req.params.id, oldName).catch(error => console.warn('⚠️ Nombre en la web:', error.message));
     scheduleWebPush();
     res.json(updated);
   } catch (error: any) {

@@ -48,7 +48,7 @@ export async function webCatalogAvailable(): Promise<boolean> {
 
 // ---------- Conexión ----------
 
-interface WebSettings { url: string; key: string; enabled: boolean; lastSyncAt: string; lastError: string; lastCount: number }
+export interface WebSettings { url: string; key: string; enabled: boolean; lastSyncAt: string; lastError: string; lastCount: number }
 
 async function readSettings(): Promise<WebSettings> {
   let s: any = {};
@@ -104,11 +104,22 @@ export async function disconnectWeb() {
 
 const SMALL = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'en', 'con', 'y', 'o', 'a', 'para', 'por', 'al']);
 
-/** "VELA DE ANGELITO CON ROSARIO" → "Vela de Angelito con Rosario". */
+/** "VELA DE ANGELITO CON ROSARIO" → "Vela de Angelito con Rosario" ("XV" y "2X1" se quedan así). */
 export function titleCase(name: string): string {
   return String(name || '').toLowerCase().split(/\s+/).filter(Boolean)
-    .map((w, i) => (i > 0 && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
+    .map((w, i) => (/\d/.test(w) || /^[ivx]{2,}$/.test(w) ? w.toUpperCase() : i > 0 && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
 }
+
+/** Nombre que se ve en la web: el propio de la web (si se escribió todo en mayúsculas, como el resto de la tienda) o el del CRM. */
+export function webDisplayName(p: { name?: string; web?: { name?: string } | null }): string {
+  const own = String(p.web?.name || '').replace(/\s+/g, ' ').trim();
+  return ((own && !/\p{Ll}/u.test(own) ? titleCase(own) : own) || titleCase(String(p.name || ''))).slice(0, 120);
+}
+
+const sameName = (a: unknown, b: unknown) => plain(a).replace(/\s+/g, ' ').trim() === plain(b).replace(/\s+/g, ' ').trim();
+
+/** El nombre de la web era el mismo del CRM (copiado, con otras mayúsculas o sin tildes): al cambiar el nombre del CRM, lo sigue. */
+export const webNameFollowsCrm = (web: { name?: string } | null | undefined, oldName: string) => !!web?.name && sameName(web.name, oldName);
 
 /** Categoría del CRM → categoría de la web: la que ya usan sus productos en la web o, si no hay, "baby-shower". */
 export function slugOf(category: string, known: Map<string, string> = new Map()): string {
@@ -147,7 +158,7 @@ export function toWebProduct(p: any, slugs: Map<string, string>, unitSingular = 
   return {
     crm_id: String(p.id),
     id: Number.isFinite(Number(web.id)) && web.id !== null ? Number(web.id) : null,
-    nombre: (web.name || titleCase(p.name)).slice(0, 120),
+    nombre: webDisplayName(p),
     descripcion: String(web.description || '').slice(0, 600),
     precio: Math.round(Number(p.price) * 100) / 100,
     categoria: web.category || slugOf(p.category || '', slugs),
@@ -179,6 +190,24 @@ export async function setProductWeb(productId: string, input: { visible?: unknow
   await saveWeb(productId, web);
   scheduleWebPush();
   return web;
+}
+
+/** Nombre del producto en el Catálogo (antes de cambiarlo). */
+export async function crmNameOf(productId: string): Promise<string> {
+  const { data } = await supabase.from('products').select('name').eq('id', productId).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
+  return String(data?.name || '');
+}
+
+/**
+ * Después de cambiar el nombre en el Catálogo: si el nombre de la web era una copia del nombre viejo, se deja vacío para que
+ * la web muestre el nuevo. Un nombre propio de la web ("Ositos Rosa y Azul Gender Reveal") no se toca.
+ */
+export async function followCrmRename(productId: string, oldName: string) {
+  if (!oldName || !(await webCatalogAvailable())) return;
+  // Se vuelve a leer: entre el cambio de nombre y ahora la sincronización pudo guardar el id de la web.
+  const { data: p } = await supabase.from('products').select('id, name, web').eq('id', productId).filter('business_id', tenantOp(), tenantValue()).maybeSingle();
+  if (!p?.web || p.name === oldName || !webNameFollowsCrm(p.web, oldName)) return;
+  await saveWeb(productId, { ...p.web, name: '' });
 }
 
 /** Precio distinto al unir: se queda el de la web (cambia el del CRM) o el del CRM (la web pasa a ese). */
@@ -235,19 +264,38 @@ export async function setWebEnabled(enabled: boolean) {
 
 // ---------- Mandar a la web ----------
 
-async function callWeb(s: WebSettings, method: 'GET' | 'PUT', body?: unknown): Promise<any> {
-  const res = await fetch(`${s.url}/api/sync/productos`, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'X-Sync-Key': keyOf(s) },
-    body: body ? JSON.stringify(body) : undefined,
-    // El panel puede estar dormido (Render gratis tarda en despertar).
-    signal: AbortSignal.timeout(120_000)
-  });
-  const data: any = await res.json().catch(() => ({}));
-  if (res.status === 503) throw new Error('La web todavía no tiene la llave: pégala en Render (variable CRM_SYNC_KEY del panel de la web), espera 2 o 3 minutos a que se reinicie y vuelve a intentar.');
-  if (res.status === 401) throw new Error('La llave que tiene la web no coincide: desconecta, vuelve a conectar y pega la llave nueva en Render (CRM_SYNC_KEY).');
-  if (!res.ok) throw new Error(data?.error || `La web respondió ${res.status}`);
-  return data;
+/** Esperas entre intentos cuando la web no contesta (se pueden cambiar en las pruebas). */
+export const webRetry = { waitsMs: [20_000, 40_000] };
+
+export async function callWeb(s: WebSettings, method: 'GET' | 'PUT', body?: unknown): Promise<any> {
+  for (let attempt = 0; ; attempt++) {
+    const again = attempt < webRetry.waitsMs.length;
+    let res: Response;
+    try {
+      res = await fetch(`${s.url}/api/sync/productos`, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': keyOf(s) },
+        body: body ? JSON.stringify(body) : undefined,
+        // El panel puede estar dormido (Render gratis tarda en despertar).
+        signal: AbortSignal.timeout(120_000)
+      });
+    } catch (error: any) {
+      if (!again) throw new Error(`La web no respondió (${error.message}).`);
+      await new Promise(r => setTimeout(r, webRetry.waitsMs[attempt]));
+      continue;
+    }
+    const data: any = await res.json().catch(() => null);
+    // Mientras el panel despierta o se reinicia, Render contesta 502/503/504 sin respuesta del panel: se espera y se repite
+    // (mandar la lista otra vez no duplica nada, cada producto va con su id del CRM).
+    if ([502, 503, 504].includes(res.status) && !data?.error && again) {
+      await new Promise(r => setTimeout(r, webRetry.waitsMs[attempt]));
+      continue;
+    }
+    if (res.status === 503 && data?.error) throw new Error('La web todavía no tiene la llave: pégala en Render (variable CRM_SYNC_KEY del panel de la web), espera 2 o 3 minutos a que se reinicie y vuelve a intentar.');
+    if (res.status === 401) throw new Error('La llave que tiene la web no coincide: desconecta, vuelve a conectar y pega la llave nueva en Render (CRM_SYNC_KEY).');
+    if (!res.ok) throw new Error(data?.error || `La web respondió ${res.status}`);
+    return data || {};
+  }
 }
 
 /** Lo que tiene hoy la web (para unir productos). */
@@ -269,6 +317,8 @@ export async function pushToWeb(): Promise<{ count: number }> {
     const slugs = slugMapFrom(products);
     const unitSingular = profile().sales.unitSingular || 'docena';
     const list = products.filter((p: any) => p.web && p.price > 0).map((p: any) => toWebProduct(p, slugs, unitSingular));
+    // Primero una lectura corta para despertar el panel: dormido, Render rechazaba el envío con 502.
+    await callWeb(s, 'GET');
     const result = await callWeb(s, 'PUT', { productos: list });
     const ids: Record<string, number> = result?.ids || {};
     for (const p of products.filter((x: any) => x.web)) {
