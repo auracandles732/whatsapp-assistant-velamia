@@ -386,15 +386,26 @@ export async function planWithAi(request: AiPlanRequest, p: BusinessProfile = pr
 }
 
 /** Una respuesta en JSON con la IA del agente (su clave y su modelo). La usa la oficina para hablar con el agente de redes. */
-export async function askSocialJson<T>(params: { system: string; user: string; schemaName: string; schema: Record<string, unknown>; maxTokens?: number }): Promise<T> {
+export async function askSocialJson<T>(params: { system: string; user: string; schemaName: string; schema: Record<string, unknown>; maxTokens?: number; images?: { label: string; url: string }[] }): Promise<T> {
   const { client, textModel } = await socialAi();
-  const response = await client.chat.completions.create({
+  // Las fotos (o portadas de video) van con su etiqueta para que la IA sepa qué muestra cada una.
+  const images = (params.images || []).filter(i => /^https?:\/\//.test(i.url));
+  const content: any = images.length
+    ? [{ type: 'text', text: params.user }, ...images.flatMap(i => [{ type: 'text', text: i.label }, { type: 'image_url', image_url: { url: i.url, detail: 'low' } }])]
+    : params.user;
+  const ask = (c: any) => client.chat.completions.create({
     model: textModel,
     ...reasoningFor(textModel),
     max_completion_tokens: params.maxTokens || 2000,
     response_format: { type: 'json_schema', json_schema: { name: params.schemaName, strict: true, schema: params.schema } },
-    messages: [{ role: 'system', content: params.system }, { role: 'user', content: params.user }]
+    messages: [{ role: 'system', content: params.system }, { role: 'user', content: c }]
   } as any);
+  const response = await ask(content).catch((error: any) => {
+    // Si el modelo no acepta imágenes (o una no se pudo leer), se pide igual sin ellas.
+    if (!images.length) throw error;
+    console.warn('⚠️ La IA del agente no pudo ver las imágenes:', error.message);
+    return ask(params.user);
+  });
   track(textModel, response.usage);
   return JSON.parse(response.choices[0]?.message?.content || '{}');
 }

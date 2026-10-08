@@ -987,15 +987,143 @@ export async function searchTargeting(type: 'interes' | 'ciudad', q: string): Pr
 
 const CTA_WORDS: Record<Cta, string> = { SHOP_NOW: 'Comprar', ORDER_NOW: 'Pedir ahora', BUY_NOW: 'Comprar ya', LEARN_MORE: 'Más información', WHATSAPP_MESSAGE: 'Enviar mensaje', NONE: 'Sin botón' };
 
-interface AiAd {
-  formato: AdFormat; nombre: string; angulo: string; producto: string; biblioteca_id: string; textos: string[]; titulos: string[]; descripcion: string; boton: string;
-  tarjetas: { producto: string; biblioteca_id: string; titulo: string; descripcion: string }[];
+/** Una foto o video para los anuncios (de la ficha de un producto o de la Biblioteca) con lo que muestra. */
+export interface Piece { id: string; kind: 'image' | 'video'; media: Media; productId: string; product: string; title: string; note: string; textInImage: string }
+
+export const pieceFromProduct = (p: PickProduct): Piece => ({
+  id: `p:${p.id}`, kind: 'image', media: { kind: 'image', url: p.images[0], source: 'catalogo', assetId: '', thumb: p.images[0] },
+  productId: p.id, product: p.name, title: p.displayName || p.name, note: '', textInImage: ''
+});
+
+export function pieceFromAsset(a: LibraryItem, catalog: PickProduct[]): Piece {
+  const tagged = a.product ? catalog.find(c => plain(c.name) === plain(a.product)) : undefined;
+  return {
+    id: `b:${a.id}`, kind: a.kind, media: { kind: a.kind, url: a.url, source: 'biblioteca', assetId: a.id, thumb: a.thumb },
+    productId: tagged?.id || '', product: tagged?.name || '', title: a.title, note: '', textInImage: ''
+  };
 }
+
+const NOTES_KEY = 'ad_media_notes';
+interface MediaNote { muestra: string; producto: string; seguro: boolean; texto: string; at: string }
+
+async function readNotes(): Promise<Record<string, MediaNote>> {
+  try {
+    const raw = await getConfig(NOTES_KEY);
+    const v = raw ? JSON.parse(raw) : {};
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/** La imagen que mira la IA: la foto, o la portada si es un video (sin portada todavía, no hay imagen). */
+const lookAt = (p: Piece) => (p.kind === 'video' ? p.media.thumb : p.media.url);
+
+/**
+ * Qué muestra cada foto o video de la Biblioteca: la IA lo mira una vez (la foto o la portada del video) y se guarda.
+ * Si coincide con seguridad con un producto del Catálogo, la pieza queda unida a ese producto (y a su precio).
+ */
+export async function noteLibraryPieces(pieces: Piece[], catalog: PickProduct[]): Promise<void> {
+  const lib = pieces.filter(p => p.media.source === 'biblioteca' && p.media.assetId);
+  if (!lib.length) return;
+  const notes = await readNotes();
+  const missing = [...new Map(lib.filter(p => !notes[p.media.assetId] && lookAt(p)).map(p => [p.media.assetId, p])).values()].slice(0, 32);
+  const b = profile().business;
+  for (let i = 0; i < missing.length; i += 8) {
+    const batch = missing.slice(i, i + 8);
+    try {
+      const schema = {
+        type: 'object', additionalProperties: false, required: ['piezas'],
+        properties: { piezas: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['n', 'muestra', 'producto', 'seguro', 'texto_en_imagen'], properties: { n: { type: 'integer' }, muestra: { type: 'string' }, producto: { type: 'string' }, seguro: { type: 'boolean' }, texto_en_imagen: { type: 'string' } } } } }
+      };
+      const out = await askSocialJson<{ piezas: { n: number; muestra: string; producto: string; seguro: boolean; texto_en_imagen: string }[] }>({
+        system: [
+          `Miras fotos y portadas de videos de ${b.name}, ${b.description}, para usarlas en anuncios.`,
+          '- "muestra": en una frase, qué se ve (la figura o producto, colores, empaque, para qué ocasión parece). Solo lo que se ve.',
+          '- "producto": el nombre EXACTO del producto del catálogo dado que se ve en la imagen, solo si la figura coincide claramente (misma forma y detalles); si no, vacío. "seguro": true solo si no hay duda.',
+          '- "texto_en_imagen": el texto que se lee en la imagen (por ejemplo un precio o un nombre), o vacío.'
+        ].join('\n'),
+        user: JSON.stringify({ catalogo: catalog.slice(0, 400).map(c => `${c.name} (${c.category})`), piezas: batch.map((p, k) => ({ n: k + 1, tipo: p.kind === 'video' ? 'portada de un video' : 'foto', titulo_del_archivo: p.title })) }),
+        schemaName: 'piezas', schema, maxTokens: 2500,
+        images: batch.map((p, k) => ({ label: `Pieza ${k + 1}:`, url: lookAt(p) }))
+      });
+      for (const x of out.piezas || []) {
+        const p = batch[x.n - 1];
+        if (p) notes[p.media.assetId] = { muestra: short(x.muestra, 240), producto: short(x.producto, 120), seguro: x.seguro === true, texto: short(x.texto_en_imagen, 160), at: new Date().toISOString() };
+      }
+    } catch (error: any) {
+      console.warn('⚠️ No se pudo mirar las fotos de la Biblioteca:', error.message);
+    }
+  }
+  if (missing.length) {
+    const entries = Object.entries(notes).sort((x, y) => y[1].at.localeCompare(x[1].at)).slice(0, 800);
+    await setConfig(NOTES_KEY, JSON.stringify(Object.fromEntries(entries))).catch(() => undefined);
+  }
+  for (const p of lib) {
+    const n = notes[p.media.assetId];
+    if (!n) continue;
+    p.note = n.muestra;
+    p.textInImage = n.texto;
+    if (!p.productId && n.producto && n.seguro) {
+      const prod = catalog.find(c => plain(c.name) === plain(n.producto));
+      if (prod) { p.productId = prod.id; p.product = prod.name; }
+    }
+  }
+}
+
+/** Un anuncio por armar: su formato y sus piezas (una, o de 2 a 10 si es carrusel). */
+export interface Slot { format: AdFormat; pieces: Piece[] }
+export interface Mix { image: number; video: number; carousel: number }
+
+/** Las piezas de un conjunto, en anuncios: según la mezcla pedida o una por anuncio (lo que sobra va en un carrusel). */
+function slotsFor(list: Piece[], nAds: number, mix: Mix | null): Slot[] {
+  const out: Slot[] = [];
+  if (mix) {
+    const videos = list.filter(p => p.kind === 'video');
+    const photos = list.filter(p => p.kind === 'image');
+    for (let i = 0; i < mix.video && videos.length; i++) out.push({ format: 'video', pieces: [videos.shift()!] });
+    for (let i = 0; i < mix.image && photos.length; i++) out.push({ format: 'image', pieces: [photos.shift()!] });
+    const rest = [...photos, ...videos];
+    for (let i = 0; i < mix.carousel && rest.length >= 2; i++) {
+      const take = rest.splice(0, Math.min(10, Math.max(2, Math.ceil(rest.length / (mix.carousel - i)))));
+      out.push({ format: 'carousel', pieces: take });
+    }
+    // Nada de lo elegido se queda fuera: lo que sobra va suelto o, si ya no cabe, en un carrusel.
+    while (rest.length && out.length < MAX_ADS_PER_ADSET - 1) { const p = rest.shift()!; out.push({ format: p.kind === 'video' ? 'video' : 'image', pieces: [p] }); }
+    if (rest.length === 1 && out.length < MAX_ADS_PER_ADSET) out.push({ format: rest[0].kind === 'video' ? 'video' : 'image', pieces: [rest.shift()!] });
+    if (rest.length >= 2) out.push({ format: 'carousel', pieces: rest.splice(0, 10) });
+    return out;
+  }
+  const singles = list.length <= nAds ? list : list.slice(0, Math.max(0, nAds - 1));
+  for (const p of singles) out.push({ format: p.kind === 'video' ? 'video' : 'image', pieces: [p] });
+  const rest = list.slice(singles.length);
+  if (rest.length) out.push({ format: 'carousel', pieces: rest.slice(0, 10) });
+  return out;
+}
+
+/**
+ * Reparte las piezas elegidas en conjuntos y anuncios. Si alcanzan para un conjunto, todos los conjuntos llevan las mismas
+ * (así se comparan públicos con los mismos anuncios); si son más, se reparten entre los conjuntos. Sin efectos.
+ */
+export function assignSlots(pieces: Piece[], nSets: number, nAds: number, mix: Mix | null): Slot[][] {
+  if (!pieces.length) return [];
+  const sets = Math.max(1, nSets);
+  const capacity = mix ? Math.max(1, mix.image + mix.video + mix.carousel) : nAds;
+  let groups: Piece[][];
+  if (pieces.length <= capacity || sets === 1) groups = Array.from({ length: sets }, () => pieces);
+  else {
+    const size = Math.ceil(pieces.length / sets);
+    groups = Array.from({ length: sets }, (_, i) => pieces.slice(i * size, (i + 1) * size)).filter(g => g.length);
+  }
+  return groups.map(g => slotsFor(g, nAds, mix)).filter(s => s.length);
+}
+
+interface AiAd { n: number; nombre: string; angulo: string; textos: string[]; titulos: string[]; descripcion: string; boton: string; tarjetas: { titulo: string; descripcion: string }[] }
 interface AiAdset { nombre: string; enfoque: string; edad_min: number; edad_max: number; genero: Gender; intereses: string[]; ciudades: string[]; presupuesto: number; anuncios: AiAd[] }
 interface AiCampaign { tema: string; hipotesis: string; explicacion: string; conjuntos: AiAdset[] }
 
 export interface ProposeCampaignInput {
-  objective?: unknown; destination?: unknown; idea?: unknown; products?: unknown; assets?: unknown; adsets?: unknown; adsPerAdset?: unknown;
+  pieces?: unknown; objective?: unknown; destination?: unknown; idea?: unknown; products?: unknown; assets?: unknown; adsets?: unknown; adsPerAdset?: unknown;
   mix?: unknown; budget?: unknown;
 }
 
@@ -1009,7 +1137,38 @@ const destinationGuide = (objective: Objective, destination: Destination) => {
     : 'Busca reacciones, comentarios o reproducciones en el mismo anuncio: textos cercanos que hagan detenerse a mirar (sin pedir que comenten ni compartan).';
 };
 
-/** La IA del agente de redes arma la campaña completa con el Catálogo, la Biblioteca y lo aprendido de campañas anteriores. */
+/** Cómo se describe una pieza para la IA: qué muestra y, si tiene, su producto con el precio exacto. */
+function pieceForAi(p: Piece, catalog: PickProduct[], label: string) {
+  const prof = profile();
+  const prod = p.productId ? catalog.find(c => c.id === p.productId) : undefined;
+  return {
+    pieza: label, tipo: p.kind === 'video' ? 'video' : 'foto',
+    muestra: p.note || (prod ? `el producto ${prod.displayName || prod.name}` : p.title || 'ver la imagen'),
+    producto: prod ? `${prod.displayName || prod.name} · $${prod.price % 1 ? prod.price.toFixed(2) : prod.price} ${prod.unit === prof.sales.unitSingular ? prof.sales.priceSuffix : `c/${prod.unit}`}` : 'sin producto: NO menciones precios',
+    texto_en_la_imagen: p.textInImage || ''
+  };
+}
+
+/** La IA elige qué mostrar cuando la empresa no eligió fotos ni videos: productos del Catálogo y videos de la Biblioteca. */
+async function choosePieces(candidates: Piece[], catalog: PickProduct[], o: { objective: Objective; destination: Destination; idea: string; count: number }): Promise<Piece[]> {
+  const b = profile().business;
+  const labels = new Map(candidates.map((p, i) => [`C${i + 1}`, p]));
+  const out = await askSocialJson<{ piezas: string[] }>({
+    system: [
+      `Eliges qué mostrar en una campaña de Meta de ${b.name}, ${b.description}. Objetivo: ${OBJECTIVES[o.objective].label}, destino: ${DESTINATION_LABEL[o.destination]}.`,
+      `- Devuelve en "piezas" de 2 a ${o.count} códigos de la lista (por ejemplo "C12"), los que mejor encajan con la idea de la empresa. Incluye al menos un video si hay alguno que encaje.`
+    ].join('\n'),
+    user: JSON.stringify({ idea: o.idea || '(sin idea: lo que mejor se vende ahora)', lista: [...labels].map(([label, p]) => ({ codigo: label, ...pieceForAi(p, catalog, label), categoria: catalog.find(c => c.id === p.productId)?.category || '' })) }),
+    schemaName: 'eleccion', schema: { type: 'object', additionalProperties: false, required: ['piezas'], properties: { piezas: { type: 'array', items: { type: 'string' } } } }, maxTokens: 1500
+  });
+  const picked = [...new Set(out.piezas || [])].map(c => labels.get(String(c).trim().toUpperCase())).filter(Boolean) as Piece[];
+  return picked.slice(0, Math.max(1, o.count));
+}
+
+/**
+ * La IA arma la campaña. Si la empresa eligió fotos y videos, se usan EXACTAMENTE esos (la IA no los cambia): se reparten en
+ * conjuntos y anuncios y la IA solo pone públicos y textos, mirando cada foto o portada de video para hablar de lo que se ve.
+ */
 export async function proposeCampaign(input: ProposeCampaignInput) {
   const s = await readBuilderSettings();
   const [catalog, library] = await Promise.all([adCatalog(), adLibrary()]);
@@ -1018,50 +1177,85 @@ export async function proposeCampaign(input: ProposeCampaignInput) {
   const idea = short(input.idea, 800);
   const nSets = clampInt(input.adsets, 1, MAX_ADSETS, 1);
   const nAds = clampInt(input.adsPerAdset, 1, MAX_ADS_PER_ADSET, 4);
-  const mix = input.mix && typeof input.mix === 'object' ? input.mix as any : null;
+  const rawMix = input.mix && typeof input.mix === 'object' ? input.mix as any : null;
+  const mix: Mix | null = rawMix ? { image: clampInt(rawMix.image, 0, MAX_ADS_PER_ADSET, 0), video: clampInt(rawMix.video, 0, MAX_ADS_PER_ADSET, 0), carousel: clampInt(rawMix.carousel, 0, MAX_ADS_PER_ADSET, 0) } : null;
   const budget = money(input.budget, 1, s.maxDaily, Math.min(3, s.maxDaily));
   const find = finder(catalog);
-  const chosen = [...new Set((Array.isArray(input.products) ? input.products : []).map(n => find(n)).filter(Boolean) as PickProduct[])].filter(p => p.images.length).slice(0, 30);
-  const chosenAssets = (Array.isArray(input.assets) ? input.assets : []).map(id => library.find(a => a.id === id)).filter(Boolean) as LibraryItem[];
-  if (!chosen.length && !idea) throw new Error('Elige productos del Catálogo o escribe la idea de la campaña.');
-  const p = profile();
-  const b = p.business;
+  const chosenProducts = [...new Set((Array.isArray(input.products) ? input.products : []).map(n => find(n)).filter(Boolean) as PickProduct[])].filter(p => p.images.length).slice(0, 30);
+  const chosenAssets = [...new Set((Array.isArray(input.assets) ? input.assets : []).map(id => library.find(a => a.id === id)).filter(Boolean) as LibraryItem[])].slice(0, 30);
+  if (!chosenProducts.length && !chosenAssets.length && !(Array.isArray(input.pieces) && input.pieces.length) && !idea) throw new Error('Elige fotos o videos (del Catálogo o la Biblioteca) o escribe la idea de la campaña.');
+  // Lo elegido, en el orden en que se eligió (productos y fotos o videos de la Biblioteca, mezclados).
+  const ordered = (Array.isArray(input.pieces) ? input.pieces : []).slice(0, 30).map((p: any) => {
+    if (p?.t === 'p') { const prod = find(p.id); return prod && prod.images.length ? pieceFromProduct(prod) : null; }
+    if (p?.t === 'b') { const a = library.find(x => x.id === p.id); return a ? pieceFromAsset(a, catalog) : null; }
+    return null;
+  }).filter(Boolean) as Piece[];
+  let pieces: Piece[] = ordered.length ? [...new Map(ordered.map(p => [p.id, p])).values()] : [...chosenAssets.map(a => pieceFromAsset(a, catalog)), ...chosenProducts.map(pieceFromProduct)];
+  await noteLibraryPieces(pieces, catalog);
+  if (!pieces.length) {
+    const videos = library.filter(a => a.kind === 'video').slice(0, 20).map(a => pieceFromAsset(a, catalog));
+    await noteLibraryPieces(videos, catalog);
+    const candidates = [...videos, ...catalog.filter(p => p.images.length).slice(0, 250).map(pieceFromProduct)];
+    pieces = await choosePieces(candidates, catalog, { objective, destination, idea, count: Math.min(12, nSets * (mix ? mix.image + mix.video + mix.carousel * 3 : nAds)) });
+    if (!pieces.length) throw new Error('La IA no encontró fotos ni videos para esa idea. Elige los productos o videos en la lista.');
+  }
+  const slots = assignSlots(pieces, nSets, nAds, mix);
+  const ai = await writeCampaign(slots, catalog, { objective, destination, idea, budget });
+  // Intereses y ciudades se buscan en Meta por su nombre (solo los que existen de verdad).
+  const resolve = async (type: 'interes' | 'ciudad', names: string[]) => {
+    const out: any[] = [];
+    for (const n of names.slice(0, 4)) {
+      const found = await searchTargeting(type, n).catch(() => []);
+      const best = found.find((x: any) => plain(x.name) === plain(n)) || found[0];
+      if (best && !out.some(o => (o.id || o.key) === (best.id || best.key))) out.push(type === 'interes' ? { id: best.id, name: best.name } : { key: best.key, name: best.name, radius: 25 });
+    }
+    return out;
+  };
+  const sets = [];
+  for (const set of (ai.conjuntos || []).slice(0, slots.length)) {
+    sets.push({ ...set, _interests: await resolve('interes', set.intereses || []), _cities: await resolve('ciudad', set.ciudades || []) });
+  }
+  return { ...buildCampaignProposal({ ...ai, conjuntos: sets }, { objective, destination, slots, catalog, settings: s, idea, budget }), explanation: short(ai.explicacion, 600) };
+}
+
+/** La IA escribe públicos y textos para los anuncios ya armados, mirando las fotos y portadas de cada pieza. */
+async function writeCampaign(slots: Slot[][], catalog: PickProduct[], o: { objective: Objective; destination: Destination; idea: string; budget: number }): Promise<AiCampaign> {
+  const b = profile().business;
   const social = await getSocialAi().catch(() => null);
   const now = localParts(new Date(), builderZone());
   const learned = await learningsForPrompt().catch(() => '');
-  const productLine = (x: PickProduct) => ({ nombre: x.name, como_decirlo: x.displayName || x.name, precio: `$${x.price % 1 ? x.price.toFixed(2) : x.price} ${x.unit === p.sales.unitSingular ? p.sales.priceSuffix : `c/${x.unit}`}`, categoria: x.category });
-  const libLine = (a: LibraryItem) => ({ id: a.id, tipo: a.kind === 'video' ? 'video' : 'foto', titulo: a.title, producto: a.product, segundos: a.duration, veces_usado: a.usedCount });
-  const library4ai = [...chosenAssets, ...library.filter(a => !chosenAssets.includes(a))].slice(0, 80);
-  const mixText = mix ? `En cada conjunto: ${Number(mix.image) || 0} de foto, ${Number(mix.video) || 0} de video y ${Number(mix.carousel) || 0} carrusel(es).` : 'Mezcla formatos: casi siempre al menos un video (si hay videos en la Biblioteca) y fotos de productos; carrusel cuando varios productos lucen juntos.';
-  const ctas = CTAS[destination].map(c => `${c} (${CTA_WORDS[c]})`).join(', ');
+  const unique = [...new Map(slots.flat().flatMap(s => s.pieces).map(p => [p.id, p])).values()];
+  const label = new Map(unique.map((p, i) => [p.id, `P${i + 1}`]));
+  const ctas = CTAS[o.destination].map(c => `${c} (${CTA_WORDS[c]})`).join(', ');
   const system = [
-    `Eres quien planifica y escribe las campañas pagadas de Meta (Facebook e Instagram) de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. Escribe en español natural y cálido, como una persona de la marca.`,
-    `- Objetivo: ${OBJECTIVES[objective].label}. ${destinationGuide(objective, destination)}`,
-    `- Arma ${nSets} conjunto(s) de anuncios con ${nAds} anuncio(s) cada uno. ${mixText}`,
-    '- Cada conjunto prueba UNA cosa distinta (un público, una ocasión o un tipo de producto) y lo dice en "enfoque". Dentro del conjunto, cada anuncio prueba un ángulo distinto ("angulo": precio, ocasión, hecho a mano, testimonio, regalo, detalle del producto…).',
-    '- "intereses": de 1 a 4 intereses de Meta en español por conjunto (por ejemplo "Fiestas premamá", "Maternidad", "Halloween"). "ciudades": vacío salvo que la idea pida ciudades. "presupuesto": dólares por día del conjunto.',
-    `- "formato": "image" (una foto del producto), "video" (un video de la Biblioteca: pon su id en "biblioteca_id") o "carousel" (de 2 a 10 tarjetas, cada una con su producto o foto de la Biblioteca y su propio título y descripción). Usa solo ids de la Biblioteca dada y nombres exactos de productos dados.`,
-    '- Para "image": pon el "producto" (nombre exacto) o, si es una foto de la Biblioteca, su "biblioteca_id". En "video" el producto es opcional (si el video muestra uno).',
-    '- "textos": 5 textos principales distintos (90 a 220 letras): el primero engancha con el ángulo del anuncio; menciona productos con su precio exacto cuando sirva; cierra con una invitación clara. "titulos": 5 de máximo 40 letras. "descripcion": máximo 30 letras.',
-    '- Nombra los productos de forma natural (usa "como_decirlo" o algo más corto), nunca en MAYÚSCULAS. En "producto" sí va el nombre exacto para identificarlo.',
+    `Escribes las campañas pagadas de Meta (Facebook e Instagram) de ${b.name}, ${b.description}${b.city ? ` en ${b.city}` : ''}. Español natural y cálido, como una persona de la marca.`,
+    `- Objetivo: ${OBJECTIVES[o.objective].label}. ${destinationGuide(o.objective, o.destination)}`,
+    '- Los anuncios YA están armados con las fotos y videos que eligió la dueña: no los cambies ni propongas otros. Devuelve un conjunto por cada conjunto dado y un anuncio por cada anuncio dado, en el mismo orden y con su "n".',
+    '- MUY IMPORTANTE: cada anuncio habla SOLO de lo que muestra SU foto o video. Mira la imagen de cada pieza (P1, P2…) y su descripción ("muestra"). Nunca nombres un producto que no se ve en esa pieza. Si la pieza dice "sin producto", no menciones precios ni nombres de productos: habla de lo que se ve.',
+    '- Si la pieza tiene producto, puedes nombrarlo de forma natural (nunca en MAYÚSCULAS) con su precio exacto.',
+    '- Cada conjunto prueba UNA cosa (un público o una ocasión) y lo dice en "enfoque"; "intereses": de 1 a 4 intereses de Meta en español que encajen con lo que muestran sus anuncios; "ciudades": vacío salvo que la idea las pida; "presupuesto": dólares por día del conjunto.',
+    '- En cada anuncio: "nombre" de 2 a 4 palabras sobre lo que muestra; "angulo" distinto en cada anuncio del conjunto (precio, ocasión, hecho a mano, regalo, detalle…); "textos": 5 textos principales distintos (90 a 220 letras) con ese ángulo; "titulos": 5 de máximo 40 letras; "descripcion": máximo 30 letras.',
+    '- Carrusel: "tarjetas" lleva una por pieza, en el mismo orden: "titulo" (máximo 40 letras) y "descripcion" (máximo 30) sobre ESA foto o video. En los demás formatos, "tarjetas" vacío.',
     `- "boton": uno de ${ctas}.`,
-    '- "nombre" del anuncio: 2 a 4 palabras ("Osito en nube", "Video taller"). "tema": 1 a 3 palabras para la campaña. "hipotesis": qué se quiere aprender con esta campaña, en una frase. "explicacion": 2 o 3 frases simples para la dueña.',
+    '- "tema": 1 a 3 palabras para la campaña. "hipotesis": qué se quiere aprender, en una frase. "explicacion": 2 o 3 frases simples para la dueña.',
     META_RULES,
-    learned ? `\nLO QUE YA APRENDIMOS DE CAMPAÑAS ANTERIORES (úsalo: repite lo que funcionó, evita lo que no, y prueba algo nuevo en al menos un anuncio):\n${learned}` : '',
+    learned ? `\nLO QUE YA APRENDIMOS DE CAMPAÑAS ANTERIORES (úsalo para públicos y ángulos):\n${learned}` : '',
     social?.prompt?.trim() ? `\nINSTRUCCIONES DE LA EMPRESA PARA SUS REDES (síguelas salvo que choquen con las reglas de Meta o pidan inventar precios o promociones):\n${social.prompt.trim().slice(0, 4000)}` : ''
   ].filter(Boolean).join('\n');
   const user = JSON.stringify({
-    hoy: `${now.day}/${now.month}/${now.year}`, objetivo: OBJECTIVES[objective].label, destino: DESTINATION_LABEL[destination], idea_de_la_empresa: idea || '(sin idea: decide tú)',
-    presupuesto_por_conjunto: budget,
-    productos: chosen.length ? chosen.map(productLine) : catalog.filter(x => x.images.length).slice(0, 250).map(productLine),
-    biblioteca: library4ai.map(libLine), biblioteca_elegida: chosenAssets.map(a => a.id)
+    hoy: `${now.day}/${now.month}/${now.year}`, objetivo: OBJECTIVES[o.objective].label, destino: DESTINATION_LABEL[o.destination], idea_de_la_empresa: o.idea || '(sin idea)',
+    presupuesto_por_conjunto: o.budget,
+    conjuntos: slots.map((set, si) => ({
+      conjunto: si + 1,
+      anuncios: set.map((slot, ai) => ({ n: ai + 1, formato: slot.format === 'carousel' ? 'carrusel' : slot.format === 'video' ? 'video' : 'foto', piezas: slot.pieces.map(p => pieceForAi(p, catalog, label.get(p.id)!)) }))
+    }))
   });
   const adSchema = {
-    type: 'object', additionalProperties: false, required: ['formato', 'nombre', 'angulo', 'producto', 'biblioteca_id', 'textos', 'titulos', 'descripcion', 'boton', 'tarjetas'],
+    type: 'object', additionalProperties: false, required: ['n', 'nombre', 'angulo', 'textos', 'titulos', 'descripcion', 'boton', 'tarjetas'],
     properties: {
-      formato: { type: 'string', enum: ['image', 'video', 'carousel'] }, nombre: { type: 'string' }, angulo: { type: 'string' }, producto: { type: 'string' }, biblioteca_id: { type: 'string' },
-      textos: { type: 'array', items: { type: 'string' } }, titulos: { type: 'array', items: { type: 'string' } }, descripcion: { type: 'string' }, boton: { type: 'string' },
-      tarjetas: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['producto', 'biblioteca_id', 'titulo', 'descripcion'], properties: { producto: { type: 'string' }, biblioteca_id: { type: 'string' }, titulo: { type: 'string' }, descripcion: { type: 'string' } } } }
+      n: { type: 'integer' }, nombre: { type: 'string' }, angulo: { type: 'string' }, textos: { type: 'array', items: { type: 'string' } }, titulos: { type: 'array', items: { type: 'string' } },
+      descripcion: { type: 'string' }, boton: { type: 'string' },
+      tarjetas: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['titulo', 'descripcion'], properties: { titulo: { type: 'string' }, descripcion: { type: 'string' } } } }
     }
   };
   const schema = {
@@ -1079,88 +1273,54 @@ export async function proposeCampaign(input: ProposeCampaignInput) {
       }
     }
   };
-  const ai = await askSocialJson<AiCampaign>({ system, user, schemaName: 'campana', schema, maxTokens: 16000 });
-  // Intereses y ciudades se buscan en Meta por su nombre (solo los que existen de verdad).
-  const resolve = async (type: 'interes' | 'ciudad', names: string[]) => {
-    const out: any[] = [];
-    for (const n of names.slice(0, 4)) {
-      const found = await searchTargeting(type, n).catch(() => []);
-      const best = found.find((x: any) => plain(x.name) === plain(n)) || found[0];
-      if (best && !out.some(o => (o.id || o.key) === (best.id || best.key))) out.push(type === 'interes' ? { id: best.id, name: best.name } : { key: best.key, name: best.name, radius: 25 });
-    }
-    return out;
-  };
-  const sets = [];
-  for (const set of (ai.conjuntos || []).slice(0, nSets)) {
-    sets.push({ ...set, _interests: await resolve('interes', set.intereses || []), _cities: await resolve('ciudad', set.ciudades || []) });
-  }
-  return { ...buildCampaignProposal({ ...ai, conjuntos: sets }, { objective, destination, chosen, catalog, library, settings: s, idea, budget, nAds }), explanation: short(ai.explicacion, 600) };
+  // Cada pieza se ve una vez (la foto o la portada del video), con su etiqueta.
+  const images = unique.filter(lookAt).slice(0, 24).map(p => ({ label: `Pieza ${label.get(p.id)}:`, url: lookAt(p) }));
+  return askSocialJson<AiCampaign>({ system, user, schemaName: 'campana', schema, maxTokens: 16000, images });
 }
 
-/** Del JSON de la IA al borrador: solo productos, fotos y videos reales, textos que pasan las reglas y límites de la empresa. */
+/** Del JSON de la IA al borrador: los anuncios son los armados (con sus fotos y videos); de la IA solo salen públicos y textos. */
 export function buildCampaignProposal(ai: Omit<AiCampaign, 'conjuntos'> & { conjuntos: (AiAdset & { _interests?: Interest[]; _cities?: City[] })[] }, o: {
-  objective: Objective; destination: Destination; chosen: PickProduct[]; catalog: PickProduct[]; library: LibraryItem[]; settings: BuilderSettings; idea: string; budget: number; nAds: number;
+  objective: Objective; destination: Destination; slots: Slot[][]; catalog: PickProduct[]; settings: BuilderSettings; idea: string; budget: number;
 }) {
-  const chosenByName = new Map(o.chosen.map(p => [plain(p.name), p]));
-  const find = finder(o.catalog);
-  const product = (name: string) => chosenByName.get(plain(name)) || find(undefined, name);
-  const asset = (id: string) => o.library.find(a => a.id === id);
   const ctaList = CTAS[o.destination];
-  const toMedia = (a: LibraryItem): Media => ({ kind: a.kind, url: a.url, source: 'biblioteca', assetId: a.id, thumb: a.thumb });
-  const photoOf = (p: PickProduct): Media => ({ kind: 'image', url: p.images[0], source: 'catalogo', assetId: '', thumb: p.images[0] });
   const plan: CampaignPlan = {
     objective: o.objective, destination: o.destination, webEvent: o.settings.webEvent, attributionDays: o.settings.attributionDays,
     theme: short(ai.tema, 40) || 'Campaña', hypothesis: short(ai.hipotesis, 300), budgetMode: 'conjunto', campaignBudget: 0, startDate: '', endDate: '',
-    adsets: (ai.conjuntos || []).map((set, si) => {
+    adsets: o.slots.map((slots, si) => {
+      const set = (ai.conjuntos || [])[si];
       const audience: AdsetAudience = {
-        ...normalizeAudience({ ageMin: set.edad_min, ageMax: set.edad_max, gender: set.genero, advantage: false }, o.settings.audience),
-        cities: set._cities || [], interests: set._interests || []
+        ...normalizeAudience(set ? { ageMin: set.edad_min, ageMax: set.edad_max, gender: set.genero, advantage: false } : {}, o.settings.audience),
+        cities: set?._cities || [], interests: set?._interests || []
       };
-      const ads: CampaignAd[] = [];
-      for (const a of (set.anuncios || []).slice(0, o.nAds)) {
-        let format: AdFormat = ['image', 'video', 'carousel'].includes(a.formato) ? a.formato : 'image';
-        const p = a.producto ? product(a.producto) : undefined;
-        const lib = a.biblioteca_id ? asset(a.biblioteca_id) : undefined;
-        let media: Media | null = null;
-        const cards: CampaignCard[] = [];
-        if (format === 'video') {
-          const video = lib?.kind === 'video' ? lib : o.library.find(x => x.kind === 'video');
-          if (video) media = toMedia(video); else format = 'image';
-        }
-        if (format === 'carousel') {
-          for (const t of (a.tarjetas || []).slice(0, 10)) {
-            const cp = t.producto ? product(t.producto) : undefined;
-            const cl = t.biblioteca_id ? asset(t.biblioteca_id) : undefined;
-            const m = cl ? toMedia(cl) : cp?.images.length ? photoOf(cp) : null;
-            if (!m || cards.some(c => c.media.url === m.url)) continue;
-            cards.push({ media: m, productId: cp?.id || '', product: cp?.name || '', title: short(t.titulo, 80) || cp?.displayName || cp?.name || '', description: short(t.descripcion, 80) });
-          }
-          if (cards.length < 2) format = 'image';
-        }
-        if (format === 'image') {
-          media = lib?.kind === 'image' ? toMedia(lib) : p?.images.length ? photoOf(p) : o.chosen[ads.length % Math.max(1, o.chosen.length)] ? photoOf(o.chosen[ads.length % o.chosen.length]) : null;
-          if (!media) continue;
-        }
-        const ownProduct = p || (format === 'image' && media?.source === 'catalogo' ? o.catalog.find(x => x.images.includes(media!.url)) : undefined);
-        ads.push({
-          format, name: short(a.nombre, 60), angle: short(a.angulo, 80), media: format === 'carousel' ? null : media,
-          productId: ownProduct?.id || '', product: ownProduct?.name || '',
-          texts: textList(a.textos, 5, 600),
-          // Una foto o un video sin título (por ejemplo, un carrusel que quedó como foto) toma el nombre del producto.
-          headlines: textList(a.titulos, 5, 80).length || format === 'carousel' ? textList(a.titulos, 5, 80) : [short(ownProduct?.displayName || ownProduct?.name || a.nombre || ai.tema, 80)].filter(Boolean),
+      const ads: CampaignAd[] = slots.map((slot, ai_) => {
+        const a: Partial<AiAd> = (set?.anuncios || []).find(x => x.n === ai_ + 1) || (set?.anuncios || [])[ai_] || {};
+        const first = slot.pieces[0];
+        const prod = first.productId ? o.catalog.find(c => c.id === first.productId) : undefined;
+        const cards: CampaignCard[] = slot.format === 'carousel' ? slot.pieces.map((p, k) => {
+          const t = (a.tarjetas || [])[k];
+          const cp = p.productId ? o.catalog.find(c => c.id === p.productId) : undefined;
+          return { media: p.media, productId: p.productId, product: p.product, title: short(t?.titulo, 80) || cp?.displayName || cp?.name || '', description: short(t?.descripcion, 80) };
+        }) : [];
+        const headlines = textList(a.titulos, 5, 80);
+        return {
+          format: slot.format, name: short(a.nombre, 60) || (prod?.displayName || first.title || ''), angle: short(a.angulo, 80),
+          media: slot.format === 'carousel' ? null : first.media,
+          productId: slot.format === 'carousel' ? '' : first.productId, product: slot.format === 'carousel' ? '' : first.product,
+          texts: textList(a.textos, 5, 600).length ? textList(a.textos, 5, 600) : [''],
+          headlines: headlines.length || slot.format === 'carousel' ? headlines : [short(prod?.displayName || prod?.name || a.nombre || ai.tema, 80)].filter(Boolean),
           description: short(a.descripcion, 80),
-          cta: ctaList.includes(a.boton as Cta) ? a.boton as Cta : ctaList[0], link: ownProduct ? 'producto' : 'categoria',
-          cards: format === 'carousel' ? cards : []
-        });
-      }
+          cta: ctaList.includes(a.boton as Cta) ? a.boton as Cta : ctaList[0],
+          link: slot.format !== 'carousel' && first.productId ? 'producto' : 'categoria',
+          cards
+        };
+      });
       return {
-        name: short(set.nombre, 50) || `Conjunto ${si + 1}`, focus: short(set.enfoque, 200), audience,
-        dailyBudget: money(set.presupuesto, 1, o.settings.maxDaily, o.budget), placements: { ...PLACEMENTS_AUTO },
+        name: short(set?.nombre, 50) || `Conjunto ${si + 1}`, focus: short(set?.enfoque, 200), audience,
+        dailyBudget: money(set?.presupuesto, 1, o.settings.maxDaily, o.budget), placements: { ...PLACEMENTS_AUTO },
         optimization: 'interacciones' as const, ads
       };
-    }).filter(set => set.ads.length)
+    })
   };
-  if (!plan.adsets.length) throw new Error('La IA no pudo armar anuncios con fotos o videos reales. Elige productos con foto o sube videos a la Biblioteca.');
   // Los textos que no pasan las reglas se quitan (si quedan otros).
   const toWeb = o.destination !== 'whatsapp';
   for (const set of plan.adsets) {
@@ -1171,6 +1331,7 @@ export function buildCampaignProposal(ai: Omit<AiCampaign, 'conjuntos'> & { conj
       if (texts.length) ad.texts = texts;
       const titles = ad.headlines.filter(ok);
       if (titles.length) ad.headlines = titles;
+      for (const c of ad.cards) if (!ok(`${c.title}\n${c.description}`)) { c.title = short(o.catalog.find(x => x.id === c.productId)?.displayName || c.title.replace(/\$\s?\d+([.,]\d+)?/g, '').trim(), 80); }
     }
   }
   // El presupuesto de la IA se ajusta al tope de la empresa.
@@ -1180,26 +1341,41 @@ export function buildCampaignProposal(ai: Omit<AiCampaign, 'conjuntos'> & { conj
   return { plan, issues: reviewPlan(plan, o.catalog, o.idea) };
 }
 
-/** Textos nuevos con la IA: para un anuncio (5 textos, 5 títulos y descripción) o para una tarjeta del carrusel (3 opciones). */
+/**
+ * Textos nuevos con la IA para un anuncio (5 textos, 5 títulos y descripción) o una tarjeta del carrusel (3 opciones),
+ * mirando la foto o portada del video que lleva.
+ */
 export async function writeTexts(input: any) {
-  const s = await readBuilderSettings();
   const catalog = await adCatalog();
+  const library = await adLibrary();
   const find = finder(catalog);
   const objective: Objective = (Object.keys(OBJECTIVES) as Objective[]).includes(input?.objective) ? input.objective : 'ventas';
   const destination: Destination = OBJECTIVES[objective].destinations.includes(input?.destination) ? input.destination : OBJECTIVES[objective].destinations[0];
   const idea = short(input?.idea, 600);
   const mode = input?.mode === 'tarjeta' ? 'tarjeta' : 'anuncio';
-  const products = (Array.isArray(input?.products) ? input.products : []).map((n: unknown) => find(n)).filter(Boolean).slice(0, 10) as PickProduct[];
-  const p = profile();
-  const b = p.business;
+  // Las piezas que muestra (fotos o videos del Catálogo o la Biblioteca) con su producto, si tienen.
+  const pieces: Piece[] = [];
+  for (const m of (Array.isArray(input?.pieces) ? input.pieces : []).slice(0, 10)) {
+    const product = find(m?.productId);
+    const media = resolveMedia(m?.media, product, { catalog, library, settings: await readBuilderSettings() }, true);
+    if (!media) continue;
+    const lib = media.assetId ? library.find(a => a.id === media.assetId) : undefined;
+    const piece = lib ? pieceFromAsset(lib, catalog) : { ...pieceFromProduct(product || catalog.find(c => c.images.includes(media.url))!), media };
+    if (!piece.media) continue;
+    if (product) { piece.productId = product.id; piece.product = product.name; }
+    pieces.push(piece);
+  }
+  await noteLibraryPieces(pieces, catalog);
+  const b = profile().business;
   const social = await getSocialAi().catch(() => null);
   const learned = await learningsForPrompt().catch(() => '');
-  const lines = products.map(x => ({ nombre: x.name, como_decirlo: x.displayName || x.name, precio: `$${x.price % 1 ? x.price.toFixed(2) : x.price} ${x.unit === p.sales.unitSingular ? p.sales.priceSuffix : `c/${x.unit}`}`, categoria: x.category, descripcion: x.description }));
+  const label = new Map(pieces.map((p, i) => [p.id + i, `P${i + 1}`]));
   const system = [
     `Escribes textos de anuncios pagados de Meta de ${b.name}, ${b.description}. Español natural y cálido.`,
     `- Objetivo: ${OBJECTIVES[objective].label}. ${destinationGuide(objective, destination)}`,
+    '- MUY IMPORTANTE: escribe SOLO sobre lo que muestra la foto o video (mira la imagen de cada pieza y su descripción). Nunca nombres un producto que no se ve. Si dice "sin producto", no menciones precios ni nombres de productos.',
     mode === 'tarjeta'
-      ? '- Escribe 3 opciones distintas para UNA tarjeta de carrusel: "titulo" de máximo 40 letras (puede llevar el precio exacto) y "descripcion" de máximo 30 letras.'
+      ? '- Escribe 3 opciones distintas para UNA tarjeta de carrusel: "titulo" de máximo 40 letras y "descripcion" de máximo 30 letras.'
       : '- Escribe 5 "textos" principales distintos (90 a 220 letras) con el ángulo pedido, 5 "titulos" de máximo 40 letras y una "descripcion" de máximo 30 letras.',
     '- Nombra los productos de forma natural (nunca en MAYÚSCULAS). Precios exactamente como vienen.',
     META_RULES,
@@ -1208,19 +1384,49 @@ export async function writeTexts(input: any) {
   ].filter(Boolean).join('\n');
   const user = JSON.stringify({
     formato: input?.format === 'video' ? 'video' : input?.format === 'carousel' ? 'carrusel' : 'foto', angulo: short(input?.angle, 80), idea: idea || '(sin idea)',
-    productos: lines, foto_o_video: short(input?.mediaTitle, 120), textos_actuales: textList(input?.current, 5, 600)
+    piezas: pieces.map((p, i) => pieceForAi(p, catalog, label.get(p.id + i)!)), textos_actuales: textList(input?.current, 5, 600)
   });
-  const prices = allowedPrices(catalog, products.map(x => x.name), idea);
+  const images = pieces.filter(lookAt).slice(0, 10).map((p, i) => ({ label: `Pieza ${label.get(p.id + i)}:`, url: lookAt(p) }));
+  const prices = allowedPrices(catalog, pieces.map(p => p.product).filter(Boolean), idea);
   const toWeb = destination !== 'whatsapp';
   const ok = (t: string) => !textIssues(t, '', { toWeb, prices, idea }).some(i => i.level === 'error');
   if (mode === 'tarjeta') {
     const schema = { type: 'object', additionalProperties: false, required: ['opciones'], properties: { opciones: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['titulo', 'descripcion'], properties: { titulo: { type: 'string' }, descripcion: { type: 'string' } } } } } };
-    const out = await askSocialJson<{ opciones: { titulo: string; descripcion: string }[] }>({ system, user, schemaName: 'tarjeta', schema, maxTokens: 1500 });
-    return { options: (out.opciones || []).map(x => ({ title: short(x.titulo, 80), description: short(x.descripcion, 80) })).filter(x => x.title && ok(`${x.title}\n${x.description}`)).slice(0, 3) };
+    const out = await askSocialJson<{ opciones: { titulo: string; descripcion: string }[] }>({ system, user, schemaName: 'tarjeta', schema, maxTokens: 1500, images });
+    return { options: (out.opciones || []).map(x => ({ title: short(x.titulo, 80), description: short(x.descripcion, 80) })).filter(x => x.title && ok(`${x.title}\n${x.description}`)).slice(0, 3), notes: pieces.map(p => p.note).filter(Boolean) };
   }
   const schema = { type: 'object', additionalProperties: false, required: ['textos', 'titulos', 'descripcion'], properties: { textos: { type: 'array', items: { type: 'string' } }, titulos: { type: 'array', items: { type: 'string' } }, descripcion: { type: 'string' } } };
-  const out = await askSocialJson<{ textos: string[]; titulos: string[]; descripcion: string }>({ system, user, schemaName: 'textos', schema, maxTokens: 3000 });
-  return { texts: textList(out.textos, 5, 600).filter(ok), headlines: textList(out.titulos, 5, 80).filter(ok), description: ok(out.descripcion || '') ? short(out.descripcion, 80) : '' };
+  const out = await askSocialJson<{ textos: string[]; titulos: string[]; descripcion: string }>({ system, user, schemaName: 'textos', schema, maxTokens: 3000, images });
+  return { texts: textList(out.textos, 5, 600).filter(ok), headlines: textList(out.titulos, 5, 80).filter(ok), description: ok(out.descripcion || '') ? short(out.descripcion, 80) : '', notes: pieces.map(p => p.note).filter(Boolean) };
+}
+
+// ---------- Borrador guardado ----------
+
+const DRAFT_KEY = 'ad_campaign_draft';
+
+/** El borrador de campaña guardado (uno por empresa), para seguir después. */
+export async function readDraft(): Promise<any | null> {
+  try {
+    const raw = await getConfig(DRAFT_KEY);
+    const v = raw ? JSON.parse(raw) : null;
+    return v && v.plan ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveDraft(input: any, who = ''): Promise<{ savedAt: string }> {
+  const plan = input?.plan;
+  if (!plan || typeof plan !== 'object' || !Array.isArray(plan.adsets)) throw new Error('No hay campaña para guardar.');
+  const savedAt = new Date().toISOString();
+  const value = JSON.stringify({ plan, form: input?.form || null, explanation: short(input?.explanation, 600), savedAt, by: who });
+  if (value.length > 400_000) throw new Error('El borrador es demasiado grande para guardarlo.');
+  await setConfig(DRAFT_KEY, value);
+  return { savedAt };
+}
+
+export async function deleteDraft(): Promise<void> {
+  await setConfig(DRAFT_KEY, '');
 }
 
 /** Todo lo que necesita el creador en el CRM: ajustes, catálogo con fotos, biblioteca y las opciones de objetivos. */

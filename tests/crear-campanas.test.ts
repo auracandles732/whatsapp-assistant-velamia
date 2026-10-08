@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { normalizeSettings, PickProduct } from '../src/services/adBuilder';
 import {
   normalizePlan, reviewPlan, campaignParams, adsetParams, creativeParams, linkFor, campaignNames, zonedMidnight, buildCampaignProposal, fromLegacy,
-  activeDailyOf, dailyTotal, LibraryItem, Uploaded, CampaignPlan
+  activeDailyOf, dailyTotal, LibraryItem, Uploaded, CampaignPlan, assignSlots, pieceFromProduct, pieceFromAsset
 } from '../src/services/adCampaigns';
 import { describeAd, resultOf, summarize, MemoryAd } from '../src/services/adMemory';
 
@@ -165,31 +165,47 @@ test('la revisión marca cada problema en su conjunto y anuncio', () => {
   assert.ok(reviewPlan(many, catalog).some(i => i.where === 'Conjunto 1' && /Más de 6 anuncios/.test(i.text)));
 });
 
-test('la propuesta de la IA solo usa productos, fotos y videos reales y respeta el tope', () => {
+test('lo que elige la empresa se respeta: cada foto o video elegido va en un anuncio, nada se cambia', () => {
+  const leon = pieceFromProduct(catalog[0]);
+  const ele = pieceFromProduct(catalog[1]);
+  const video = pieceFromAsset(library[0], catalog);
+  const mesa = pieceFromAsset(library[1], catalog);
+  const ids = (sets: any[][]) => sets.map(set => set.map((s: any) => `${s.format}:${s.pieces.map((p: any) => p.id).join('+')}`));
+  // Pocas piezas: cada conjunto lleva las mismas (para comparar públicos).
+  assert.deepEqual(ids(assignSlots([video, leon, ele], 2, 4, null)), [['video:b:v1', 'image:p:1', 'image:p:2'], ['video:b:v1', 'image:p:1', 'image:p:2']]);
+  // Más piezas que anuncios: se reparten entre conjuntos.
+  assert.deepEqual(ids(assignSlots([video, leon, ele, mesa], 2, 1, null)), [['carousel:b:v1+p:1'], ['carousel:p:2+b:i1']]);
+  // Un solo conjunto con más piezas que anuncios: lo que sobra va en un carrusel (nada se pierde).
+  assert.deepEqual(ids(assignSlots([video, leon, ele, mesa], 1, 3, null)), [['video:b:v1', 'image:p:1', 'carousel:p:2+b:i1']]);
+  // Mezcla pedida: videos, fotos y carruseles con lo elegido; lo que sobra no se pierde.
+  assert.deepEqual(ids(assignSlots([video, leon, ele, mesa], 1, 4, { image: 1, video: 1, carousel: 1 })), [['video:b:v1', 'image:p:1', 'carousel:p:2+b:i1']]);
+  assert.deepEqual(ids(assignSlots([leon, ele, mesa], 1, 4, { image: 1, video: 0, carousel: 0 })), [['image:p:1', 'image:p:2', 'image:b:i1']]);
+});
+
+test('la propuesta usa exactamente las piezas armadas; de la IA solo salen públicos y textos que pasan las reglas', () => {
+  const leon = pieceFromProduct(catalog[0]);
+  const mesa = { ...pieceFromAsset(library[1], catalog), note: 'mesa de dulces con velas de colores' };
+  const video = pieceFromAsset(library[0], catalog);
+  const slots = assignSlots([video, leon, mesa], 1, 2, null);
   const ai = {
     tema: 'Baby Shower', hipotesis: '¿video o foto?', explicacion: 'x', conjuntos: [{
       nombre: 'Mamás', enfoque: 'baby shower', edad_min: 22, edad_max: 45, genero: 'mujeres' as const, intereses: [], ciudades: [], presupuesto: 9,
       _interests: [{ id: '6003321277514', name: 'Fiestas premamá' }],
       anuncios: [
-        { formato: 'image' as const, nombre: 'Leoncito', angulo: 'precio', producto: 'VELA LEONCITO', biblioteca_id: '', textos: ['Leoncito a $99 la docena', 'Leoncito $30 la docena, hecho a mano'], titulos: ['Leoncito $30'], descripcion: '', boton: 'ORDER_NOW', tarjetas: [] },
-        { formato: 'video' as const, nombre: 'Taller', angulo: 'proceso', producto: '', biblioteca_id: 'v1', textos: ['Hechas a mano'], titulos: ['A mano'], descripcion: '', boton: 'NADA', tarjetas: [] },
-        { formato: 'carousel' as const, nombre: 'Uno solo', angulo: '', producto: '', biblioteca_id: '', textos: ['Colección'], titulos: [], descripcion: '', boton: '', tarjetas: [{ producto: 'VELA ELEFANTITO', biblioteca_id: '', titulo: 'Elefantito', descripcion: '' }] },
-        { formato: 'image' as const, nombre: 'Inventado', angulo: '', producto: 'VELA QUE NO EXISTE', biblioteca_id: '', textos: ['x'], titulos: ['x'], descripcion: '', boton: '', tarjetas: [] }
+        { n: 1, nombre: 'Taller', angulo: 'proceso', textos: ['Así hacemos cada vela a mano'], titulos: ['A mano'], descripcion: '', boton: 'NADA', tarjetas: [] },
+        { n: 2, nombre: 'Leoncito y mesa', angulo: 'precio', textos: ['Leoncito a $99 la docena', 'Leoncito $30 la docena, hecho a mano'], titulos: [], descripcion: '', boton: 'ORDER_NOW', tarjetas: [{ titulo: 'Leoncito $30', descripcion: 'Con empaque' }, { titulo: 'Mesa de dulces $45', descripcion: '' }] }
       ]
-    }, {
-      nombre: 'Abierto', enfoque: '', edad_min: 18, edad_max: 65, genero: 'todos' as const, intereses: [], ciudades: [], presupuesto: 9,
-      anuncios: [{ formato: 'image' as const, nombre: 'Mesa', angulo: '', producto: '', biblioteca_id: 'i1', textos: ['Mesa de dulces'], titulos: ['Mesa'], descripcion: '', boton: '', tarjetas: [] }]
     }]
   };
-  const { plan } = buildCampaignProposal(ai, { objective: 'ventas', destination: 'web', chosen: [catalog[0], catalog[1]], catalog, library, settings, idea: '', budget: 3, nAds: 8 });
+  const { plan } = buildCampaignProposal(ai, { objective: 'ventas', destination: 'web', slots, catalog, settings, idea: '', budget: 3 });
   const ads = plan.adsets[0].ads;
-  assert.deepEqual(ads[0].texts, ['Leoncito $30 la docena, hecho a mano'], 'el texto con un precio inventado se quita');
-  assert.equal(ads[0].cta, 'ORDER_NOW');
-  assert.equal(ads[1].media?.assetId, 'v1');
-  assert.equal(ads[1].cta, 'SHOP_NOW', 'un botón que no existe vuelve al primero');
-  assert.equal(ads[2].format, 'image', 'un carrusel de una tarjeta queda como foto');
-  assert.ok(ads[3].media && catalog.some(p => p.images.includes(ads[3].media!.url)), 'un producto inventado usa una foto de los elegidos');
-  assert.equal(plan.adsets[1].ads[0].media?.assetId, 'i1');
+  assert.equal(ads[0].format, 'video');
+  assert.equal(ads[0].media?.assetId, 'v1', 'el video elegido no cambia');
+  assert.equal(ads[0].cta, 'SHOP_NOW', 'un botón que no existe vuelve al primero');
+  assert.equal(ads[1].format, 'carousel');
+  assert.deepEqual(ads[1].cards.map(c => c.media.url), ['https://crm/leon.jpg', 'https://crm/social/mesa.jpg'], 'las fotos elegidas, en su orden');
+  assert.deepEqual(ads[1].texts, ['Leoncito $30 la docena, hecho a mano'], 'el texto con un precio inventado se quita');
+  assert.equal(ads[1].cards[1].title, 'Mesa de dulces', 'una tarjeta sin producto no puede llevar precio');
   assert.deepEqual(plan.adsets[0].audience.interests, [{ id: '6003321277514', name: 'Fiestas premamá' }]);
   assert.ok(dailyTotal(plan) <= 10, 'el presupuesto de la IA se ajusta al tope');
   assert.deepEqual(normalizePlan(plan, ctx).errors, [], 'la propuesta pasa la misma revisión que lo que se edita');

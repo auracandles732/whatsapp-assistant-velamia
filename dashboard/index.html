@@ -2775,24 +2775,7 @@
         .cs-edit { display: flex; flex-direction: column; gap: 14px; }
         .cs-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; align-items: start; }
         .cs-two select, .cs-edit input[type=date] { border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; background: #fff; }
-        .cs-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 2px solid #EFE6DB; padding-bottom: 6px; }
-        .pb .cs-tabs button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border: 1.5px solid #EFE6DB; border-radius: 12px; background: #fff; cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 800; color: #4E3E33; }
-        .cs-tabs button small { font-size: 11.5px; font-weight: 500; color: #8A7868; }
-        .pb .cs-tabs button.on { border-color: #B5654A; background: #FFF6F0; color: #8C3F27; }
-        .pb .cs-tabs button.bad { border-color: #E5A49B; }
-        .cs-set { display: flex; flex-direction: column; gap: 12px; }
         .cs-sub { margin: 6px 0 0; font-size: 14.5px; color: #2B1C14; }
-        .cs-ad { border: 1px solid #EADFD2; border-radius: 16px; background: #fff; overflow: hidden; }
-        .cs-ad.bad { border-color: #E5A49B; }
-        .cs-ad-h { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #FDFBF8; }
-        .cs-ad-h .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-        .cs-ad-h b { font-size: 14px; color: #2B1C14; }
-        .cs-ad-h small { font-size: 12.5px; color: #8A7868; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .pb .cs-fold { border: 0; background: none; font-size: 16px; cursor: pointer; color: #6B5849; padding: 0 2px; }
-        .cs-thumb img, .cs-thumb .cs-novid { width: 42px; height: 42px; border-radius: 10px; object-fit: cover; display: flex; align-items: center; justify-content: center; background: #F3ECE3; }
-        .cs-ad-btns { display: flex; gap: 4px; }
-        .pb .cs-ad-btns button { border: 1px solid #EADFD2; background: #fff; border-radius: 8px; min-width: 30px; height: 28px; cursor: pointer; padding: 0 6px; }
-        .pb .cs-ad-btns button:disabled { opacity: 0.35; cursor: default; }
         .cs-ad-b { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; padding: 12px 14px 14px; align-items: start; }
         .cs-mainmedia { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
         .pb .cs-mediabtn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px; border: 1.5px dashed #D9C8B6; border-radius: 12px; background: #fff; cursor: pointer; font: inherit; }
@@ -2824,7 +2807,6 @@
         .pb .cs-chip button { border: 0; background: none; cursor: pointer; color: #8A7868; padding: 0 2px; font-size: 12px; }
         .pb .cs-radius { width: 52px; border: 1px solid #EADFD2; border-radius: 8px; padding: 1px 4px; font: inherit; font-size: 12px; }
         .cs-over { background: #FDECEC; color: #B42318; }
-        .cs-final { position: sticky; bottom: 8px; box-shadow: 0 6px 22px rgba(60, 40, 20, 0.12); background: #FFFCF8; z-index: 2; }
         .cs-video { width: 100%; display: block; background: #000; object-fit: contain; }
         .cs-video.tall { aspect-ratio: 4 / 5; }
         .cs-video.sq { aspect-ratio: 1 / 1; }
@@ -2854,8 +2836,113 @@
         .cs-todo { margin: 0; padding-left: 20px; font-size: 13.5px; color: #3A2A20; display: flex; flex-direction: column; gap: 4px; }
         .cs-memad { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; border: 1px solid #EFE6DB; background: #fff; margin-bottom: 6px; font-size: 13px; }
         .cs-memad small { color: #6B5849; }
+        /* Creador de campañas (diseño en paneles: información, conjuntos con tabla de anuncios, resumen y vistas previas) */
+        .nx-hover { position: fixed; z-index: 9999; pointer-events: none; background: #111; border-radius: 14px; overflow: hidden; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; }
+        .nx-hover img, .nx-hover video { width: 100%; max-height: 380px; object-fit: contain; display: block; background: #111; }
+        .nx-hover small { color: #fff; font-size: 12px; padding: 6px 10px; background: rgba(0, 0, 0, 0.75); }
+        .cs-page { display: flex; flex-direction: column; gap: 14px; }
+        .cs-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .cs-top h2 { margin: 0; font-size: 22px; color: #2B1C14; }
+        .pb .cs-back { width: 38px; height: 38px; border-radius: 10px; border: 1px solid #EADFD2; background: #fff; cursor: pointer; font-size: 18px; }
+        .cs-state { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 800; white-space: nowrap; }
+        .cs-state.ok { background: #E6F6EC; color: #1E6B3A; }
+        .cs-state.warn { background: #FFF3DC; color: #7A5300; }
+        .cs-state.bad { background: #FDECEC; color: #B42318; }
+        .pb .cs-outline { background: #fff; border: 1.5px solid #D9A28D; color: #A9573C; }
+        .cs-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+        .cs-main, .cs-aside { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+        .cs-aside { position: sticky; top: 10px; }
+        .cs-panel { border: 1px solid #EADFD2; border-radius: 16px; background: #fff; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+        .cs-panel-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .cs-panel-h h3 { margin: 0; font-size: 16px; color: #2B1C14; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .cs-num { width: 26px; height: 26px; border-radius: 50%; background: #B5654A; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+        .cs-info-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
+        .pb .cs-info-row .sv-days button, .pb .cs-plat button { white-space: nowrap; }
+        .cs-info-row .cs-wide { grid-column: span 2; }
+        .cs-info-row select, .cs-box select, .cs-panel input[type=date] { border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; background: #fff; }
+        .cs-setrow2 { border: 1px solid #EADFD2; border-radius: 14px; background: #FFFCF8; }
+        .cs-setrow2.open { border-color: #D9A28D; box-shadow: 0 0 0 2px rgba(181, 101, 74, 0.12); }
+        .cs-setrow2.bad { border-color: #E5A49B; }
+        .cs-setrow2-h { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; }
+        .cs-setrow2-h .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .cs-setrow2-h b { font-size: 14.5px; color: #2B1C14; }
+        .cs-setrow2-h small { font-size: 12.5px; color: #8A7868; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cs-caret { color: #8A7868; width: 12px; }
+        .cs-dot { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; color: #fff; flex-shrink: 0; }
+        .cs-dot.ok { background: #3C9A5F; }
+        .cs-dot.bad { background: #D64B3C; }
+        .cs-rel { position: relative; }
+        .pb .cs-dots { width: 32px; height: 30px; border: 1px solid #EADFD2; border-radius: 8px; background: #fff; cursor: pointer; font-size: 16px; line-height: 1; color: #4E3E33; }
+        .cs-setrow2-b { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+        .cs-setgrid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; }
+        .cs-box { border: 1px solid #EFE6DB; border-radius: 12px; background: #fff; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .cs-box h4 { margin: 2px 0 0; font-size: 13.5px; color: #2B1C14; }
+        .cs-lbl { font-size: 12.5px; font-weight: 800; color: #6B5849; min-width: 62px; }
+        .cs-radio { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; cursor: pointer; }
+        .cs-radio span { display: flex; flex-direction: column; }
+        .cs-radio small { color: #8A7868; font-size: 12px; }
+        .cs-ads-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .cs-ads-h h4 { margin: 0; font-size: 14.5px; color: #2B1C14; }
+        .cs-adtable tbody tr { cursor: pointer; }
+        .cs-adtable tbody tr:hover { background: #FFF6F0; }
+        .cs-adtable td { vertical-align: middle; }
+        .cs-adtable td b { display: block; font-size: 13.5px; color: #2B1C14; }
+        .cs-adtable td small { color: #8A7868; font-size: 11.5px; }
+        .cs-n { color: #8A7868; font-weight: 800; width: 22px; }
+        .cs-vista { position: relative; display: inline-block; }
+        .cs-vista img, .cs-vista .cs-novid { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; display: flex; align-items: center; justify-content: center; }
+        .cs-vista i { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 10px; font-style: normal; display: flex; align-items: center; justify-content: center; }
+        .cs-fmt { white-space: nowrap; }
+        .cs-angle { color: #4E3E33; font-size: 12.5px; max-width: 180px; }
+        .cs-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .cs-stats div { border: 1px solid #EFE6DB; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; background: #FFFCF8; }
+        .cs-stats b { font-size: 20px; color: #2B1C14; }
+        .cs-stats b.ok { color: #1E6B3A; }
+        .cs-stats b.bad { color: #B42318; }
+        .cs-stats small { font-size: 12px; color: #8A7868; line-height: 1.3; }
+        .cs-plat { flex-wrap: nowrap; }
+        .cs-strip-wrap { display: flex; align-items: center; gap: 4px; }
+        .cs-strip { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 4px 2px 8px; flex: 1; min-width: 0; }
+        .pb .cs-strip-item { flex: 0 0 210px; scroll-snap-align: start; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 4px; font: inherit; }
+        .cs-strip-item > small { font-size: 12px; color: #6B5849; font-weight: 700; padding: 0 2px; }
+        .pb .cs-arrow { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #EADFD2; background: #fff; cursor: pointer; font-size: 18px; line-height: 1; flex-shrink: 0; }
+        .cs-compact .ab-post { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); border-radius: 12px; }
+        .cs-compact .ab-text { font-size: 12px; padding: 2px 10px 8px; }
+        .cs-compact .ab-post-h { padding: 8px 10px 4px; }
+        .cs-compact .ab-post-h b { font-size: 12.5px; }
+        .cs-compact .ab-avatar { width: 28px; height: 28px; font-size: 12px; }
+        .cs-compact .ab-bar { padding: 7px 10px; }
+        .cs-compact .ab-bar b { font-size: 12.5px; }
+        .cs-compact .ab-cta { padding: 5px 8px; font-size: 11.5px; }
+        .cs-compact .ab-card { flex-basis: 80%; }
+        .cs-compact .ab-card-b b { font-size: 12px; }
+        .cs-ig .ab-post-h small { color: #8E8E8E; }
+        .cs-ig-cta { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: #EFF5FF; color: #0064E0; font-size: 13.5px; font-weight: 700; }
+        .cs-ig-icons { padding: 8px 12px 0; font-size: 16px; letter-spacing: 6px; }
+        .cs-modal { position: fixed; inset: 0; z-index: 400; background: rgba(43, 28, 20, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 3vh 16px; overflow-y: auto; }
+        .cs-modal-box { width: min(1180px, 100%); background: #FFFCF8; border-radius: 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3); display: flex; flex-direction: column; }
+        .cs-modal-h { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid #EFE6DB; position: sticky; top: 0; background: #FFFCF8; border-radius: 18px 18px 0 0; z-index: 2; flex-wrap: wrap; }
+        .cs-modal-h .grow { flex: 1; min-width: 160px; display: flex; flex-direction: column; }
+        .cs-modal-h b { font-size: 16px; color: #2B1C14; }
+        .cs-modal-h small { font-size: 12.5px; color: #8A7868; }
+        .cs-modal-b .cs-ad-b { padding: 14px 18px 18px; }
+        .cs-modal-b .ab-side { display: flex; flex-direction: column; gap: 8px; }
+        .cs-note { display: block; padding: 6px 10px; border-radius: 10px; background: #F4F0FB; color: #4B3566; font-size: 12.5px; }
+        .cs-chosen { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px; border: 1.5px dashed #D9C8B6; border-radius: 14px; background: #FFFCF8; min-height: 64px; align-items: center; }
+        .cs-chosen-item { position: relative; width: 76px; display: flex; flex-direction: column; gap: 2px; }
+        .cs-chosen-item img, .cs-chosen-item .cs-novid { width: 76px; height: 76px; border-radius: 10px; object-fit: cover; }
+        .cs-chosen-item i { position: absolute; left: 4px; top: 4px; min-width: 18px; height: 18px; border-radius: 9px; background: #B5654A; color: #fff; font-size: 11px; font-style: normal; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+        .cs-chosen-item em { position: absolute; left: 50%; top: 38px; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 10px; font-style: normal; display: flex; align-items: center; justify-content: center; }
+        .pb .cs-chosen-item button { position: absolute; right: 2px; top: 2px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.92); cursor: pointer; font-size: 11px; padding: 0; }
+        .cs-chosen-item small { font-size: 10.5px; color: #6B5849; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cs-pick2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+        .cs-pick2 > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .cs-pick2 .cs-search { width: auto; flex: 1; min-width: 120px; }
+        @media (max-width: 1180px) { .cs-layout { grid-template-columns: 1fr; } .cs-aside { position: static; } }
+        @media (max-width: 860px) { .cs-setgrid, .cs-pick2 { grid-template-columns: 1fr; } .cs-adtable .cs-angle, .cs-adtable th:nth-child(6) { display: none; } }
+        @media (max-width: 760px) { .cs-info-row .cs-wide { grid-column: auto; } .cs-modal { padding: 0; } .cs-modal-box { border-radius: 0; min-height: 100%; } .cs-modal-h { border-radius: 0; } .cs-top h2 { font-size: 18px; } .pb .cs-top .pb-btn { white-space: normal; } .cs-adtable .cs-fmt, .cs-adtable th:nth-child(4) { display: none; } }
         @media (max-width: 1100px) { .cs-ad-b { grid-template-columns: 1fr; } .cs-ad-b .ab-side { position: static; max-width: 420px; } }
-        @media (max-width: 760px) { .cs-card { grid-template-columns: 1fr; } .cs-kpis4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cs-objs { grid-template-columns: 1fr; } .cs-final { position: static; box-shadow: none; } .pb .cs-final .pb-btn, .pb .ab-pick .pb-btn { white-space: normal; text-align: center; } .cs-ad-h { flex-wrap: wrap; } .cs-ad-h .grow { flex-basis: calc(100% - 110px); } .cs-ad-btns { margin-left: auto; } .cs-ad-b { padding: 10px; } }
+        @media (max-width: 760px) { .cs-card { grid-template-columns: 1fr; } .cs-kpis4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cs-objs { grid-template-columns: 1fr; } .pb .ab-pick .pb-btn { white-space: normal; text-align: center; } .cs-ad-b { padding: 10px; } }
         .sv-prompt textarea { width: 100%; min-height: 260px; padding: 12px; border-radius: 12px; border: 1px solid #E6DACC; font: inherit; font-size: 13.5px; line-height: 1.5; background: #fff; resize: vertical; }
         @media (max-width: 760px) { .sv-step { grid-template-columns: 110px 1fr 46px; font-size: 13px; } .sv-table { font-size: 12.5px; } }
         .sv-kpis div { border: 1px solid #EADFD3; border-radius: 14px; padding: 10px 12px; background: #FDFCFB; display: flex; flex-direction: column; }
@@ -11962,6 +12049,7 @@
 
             return (
                 <div className="lb">
+                    <HoverPreview />
                     <div className="lb-hero">
                         <div className="tile"><PlatIcon name="image" size={30} color="#fff" /></div>
                         <div className="txt"><h1>Biblioteca de contenido</h1><p>Organiza, visualiza y reutiliza tus fotos y videos para tus publicaciones. Marca qué producto muestra cada uno y el agente los usa solo.</p></div>
@@ -12037,7 +12125,7 @@
                         <div className={view === 'grid' ? 'lb-grid' : 'lb-list'}>
                             {page.map(a => (
                                 <div key={a.id} className={'lb-item' + (selected.includes(a.id) ? ' sel' : '')}>
-                                    <button type="button" className="pic" onClick={() => { setError(''); setOpen(a); }} aria-label={'Abrir ' + (a.title || 'archivo')}>
+                                    <button type="button" className="pic" {...hoverProps({ kind: a.kind, url: a.url, thumb: a.thumb_url, title: a.title })} onClick={() => { setError(''); setOpen(a); }} aria-label={'Abrir ' + (a.title || 'archivo')}>
                                         <PbMediaThumb item={{ type: a.kind, url: a.url, asset_id: a.id, thumb: a.thumb_url }} />
                                         <span className="kind">{a.kind === 'video' ? '▶ Video' : '🖼 Foto'}</span>
                                         {a.kind === 'video' && a.duration_seconds > 0 && <span className="dur">▶ {Math.floor(a.duration_seconds / 60)}:{String(Math.round(a.duration_seconds % 60)).padStart(2, '0')}</span>}
@@ -14356,7 +14444,7 @@
             );
         }
 
-        // ---------- Creador de campañas de Meta: objetivo y destino, varios conjuntos y anuncios (foto, video o carrusel), IA y memoria ----------
+        // ---------- Creador de campañas de Meta: objetivo y destino, conjuntos y anuncios (foto, video o carrusel), IA y memoria ----------
         const CS_OBJ = {
             ventas: { icon: '🛒', help: 'Busca compras: en tu web (con el píxel) o chats para vender por WhatsApp.' },
             interaccion: { icon: '💬', help: 'Busca conversaciones por WhatsApp, visitas a tus productos en la web, o reacciones y reproducciones en el mismo anuncio.' },
@@ -14373,51 +14461,97 @@
         const CS_DIMENSIONS = ['Formato', 'Objetivo', 'Categoría', 'Ángulo', 'Segmentación', 'Interés', 'Público', 'Edades', 'Ciudad'];
         const csUid = () => Math.random().toString(36).slice(2, 10);
         const csAuto = () => ({ mode: 'auto', facebook: true, instagram: true, feed: true, stories: true, reels: true });
-        const csEmptyAd = (format, cta) => ({ _k: csUid(), _open: true, format: format || 'image', name: '', angle: '', media: null, productId: '', product: '', texts: [''], headlines: [''], description: '', cta: cta || '', link: 'producto', cards: [] });
+        const csEmptyAd = (format, cta) => ({ _k: csUid(), format: format || 'image', name: '', angle: '', media: null, productId: '', product: '', texts: [''], headlines: [''], description: '', cta: cta || '', link: 'producto', cards: [] });
         const csEmptySet = (s, n, ads, budget) => ({ _k: csUid(), name: 'Conjunto ' + n, focus: '', audience: { ...(s.audience || { ageMin: 18, ageMax: 65, gender: 'todos', advantage: false }), cities: [], interests: [] }, dailyBudget: budget || 3, placements: csAuto(), optimization: 'interacciones', ads: ads || [] });
         // Las claves _k solo sirven en la pantalla (para no perder lo que se edita al mover cosas).
         const csKeys = plan => ({ ...plan, adsets: plan.adsets.map(set => ({ ...set, _k: set._k || csUid(), ads: set.ads.map(ad => ({ ...ad, _k: ad._k || csUid(), cards: (ad.cards || []).map(c => ({ ...c, _k: c._k || csUid() })) })) })) });
         const csMonthly = n => abMoney(Number(n || 0) * 30);
         const csAudience = a => (AB_GENDER[a.gender] || 'Todos') + ' ' + a.ageMin + '-' + a.ageMax + (a.cities && a.cities.length ? ' · ' + a.cities.map(c => c.name).join(', ') : '') + (a.interests && a.interests.length ? ' · ' + a.interests.map(i => i.name).join(', ') : '') + (a.advantage ? ' · abierto (Advantage+)' : '');
+        const csMediaOf = ad => (ad.format === 'carousel' ? (ad.cards[0] || {}).media : ad.media) || null;
+        const csThumb = m => (m ? (m.kind === 'video' ? m.thumb || '' : m.url) : '');
 
-        // Así se verá en el celular (Facebook / Instagram): texto, foto, video o carrusel, título y botón.
-        function CsPreview({ plan, ad, s, ctaLabel }) {
+        // Vista rápida al pasar el mouse por una foto o video (Biblioteca y elegir fotos): se ve más grande y el video se reproduce.
+        const HOVER_OK = typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+        function hoverProps(item) {
+            if (!HOVER_OK || !item || !item.url) return {};
+            return {
+                onMouseEnter: e => window.dispatchEvent(new CustomEvent('nx-hover', { detail: { item, rect: e.currentTarget.getBoundingClientRect() } })),
+                onMouseLeave: () => window.dispatchEvent(new CustomEvent('nx-hover', { detail: null }))
+            };
+        }
+        function HoverPreview() {
+            const [h, setH] = useState(null);
+            useEffect(() => {
+                let t;
+                const on = e => { clearTimeout(t); if (!e.detail) { setH(null); return; } t = setTimeout(() => setH(e.detail), 220); };
+                const off = () => { clearTimeout(t); setH(null); };
+                window.addEventListener('nx-hover', on);
+                window.addEventListener('scroll', off, true);
+                window.addEventListener('pointerdown', off, true);
+                return () => { clearTimeout(t); window.removeEventListener('nx-hover', on); window.removeEventListener('scroll', off, true); window.removeEventListener('pointerdown', off, true); };
+            }, []);
+            if (!h) return null;
+            const W = 300, H = 400, r = h.rect;
+            const left = r.right + 12 + W < window.innerWidth ? r.right + 12 : Math.max(8, r.left - W - 12);
+            const top = Math.min(Math.max(8, r.top + r.height / 2 - H / 2), Math.max(8, window.innerHeight - H - 8));
+            const it = h.item;
+            return (
+                <div className="nx-hover" style={{ left, top, width: W }}>
+                    {it.kind === 'video'
+                        ? <video src={it.url} poster={it.thumb || undefined} autoPlay muted loop playsInline />
+                        : <img src={it.url} alt="" referrerPolicy="no-referrer" />}
+                    {it.title && <small>{it.kind === 'video' ? '🎬 ' : ''}{it.title}</small>}
+                </div>
+            );
+        }
+
+        // Así se verá en el celular, en Facebook o en Instagram: texto, foto, video o carrusel, título y botón.
+        function CsPreview({ plan, ad, s, ctaLabel, platform = 'facebook', compact = false }) {
             const [more, setMore] = useState(false);
             const text = ad.texts[0] || '';
-            const long = text.length > 125;
-            const toWeb = plan.destination !== 'whatsapp';
+            const cut = compact ? 90 : 125;
+            const long = text.length > cut;
+            const shown = more || !long ? text : text.slice(0, cut) + '… ';
             const cta = plan.destination === 'whatsapp' ? 'Enviar mensaje' : ad.cta === 'NONE' ? '' : ctaLabel || 'Comprar';
             let domain = '';
             try { domain = s.webUrl ? new URL(s.webUrl).host.replace(/^www\./, '').toUpperCase() : ''; } catch { domain = ''; }
             const media = (m, kind) => !m ? <AbImage src="" kind={kind} /> : m.kind === 'video'
-                ? <video className={'cs-video ' + kind} src={m.url} poster={m.thumb || undefined} controls muted playsInline preload="metadata" />
+                ? <video className={'cs-video ' + kind} src={m.url} poster={m.thumb || undefined} controls={!compact} muted playsInline preload="metadata" />
                 : <AbImage src={m.url} kind={kind} />;
+            const ig = platform === 'instagram';
+            const body = ad.format === 'carousel' ? (
+                <div className="ab-carousel">{ad.cards.map(c => (
+                    <div className="ab-card" key={c._k || c.media.url}>
+                        {media(c.media, 'sq')}
+                        {!ig && <div className="ab-card-b"><div><b>{c.title}</b>{c.description && <small>{c.description}</small>}</div>{cta && <span className="ab-cta">{cta}</span>}</div>}
+                    </div>
+                ))}</div>
+            ) : media(ad.media, ig ? 'sq' : 'tall');
             return (
-                <div className="ab-phone">
-                    <div className="ab-post">
-                        <div className="ab-post-h"><span className="ab-avatar">{(s.pageName || 'P').slice(0, 1).toUpperCase()}</span><div><b>{s.pageName || 'Tu página'}</b><small>Publicidad</small></div></div>
-                        <div className="ab-text">{more || !long ? text : text.slice(0, 125) + '… '}{long && !more && <button type="button" onClick={() => setMore(true)}>Ver más</button>}</div>
-                        {ad.format === 'carousel' ? (
-                            <div className="ab-carousel">{ad.cards.map(c => (
-                                <div className="ab-card" key={c._k || c.media.url}>
-                                    {media(c.media, 'sq')}
-                                    <div className="ab-card-b"><div><b>{c.title}</b>{c.description && <small>{c.description}</small>}</div>{cta && <span className="ab-cta">{cta}</span>}</div>
-                                </div>
-                            ))}</div>
+                <div className={'ab-phone' + (compact ? ' cs-compact' : '')}>
+                    <div className={'ab-post' + (ig ? ' cs-ig' : '')}>
+                        <div className="ab-post-h"><span className="ab-avatar">{(s.pageName || 'P').slice(0, 1).toUpperCase()}</span><div><b>{s.instagramName && ig ? s.instagramName : s.pageName || 'Tu página'}</b><small>{ig ? 'Patrocinado' : 'Publicidad'}</small></div></div>
+                        {!ig && <div className="ab-text">{shown}{long && !more && !compact && <button type="button" onClick={() => setMore(true)}>Ver más</button>}</div>}
+                        {body}
+                        {ig ? (
+                            <>
+                                {cta && <div className="cs-ig-cta">{cta}<span>›</span></div>}
+                                <div className="cs-ig-icons">♡ 💬 ➤</div>
+                                <div className="ab-text"><b>{s.instagramName || s.pageName || 'tu_cuenta'}</b> {shown}</div>
+                            </>
                         ) : (
                             <>
-                                {media(ad.media, 'tall')}
-                                {(ad.headlines[0] || cta) && (
+                                {ad.format !== 'carousel' && (ad.headlines[0] || cta) && (
                                     <div className="ab-bar">
-                                        <div>{toWeb && domain && plan.destination !== 'anuncio' && <small>{domain}</small>}<b>{ad.headlines[0] || ''}</b>{ad.description && <small>{ad.description}</small>}</div>
+                                        <div>{plan.destination === 'web' && domain && <small>{domain}</small>}<b>{ad.headlines[0] || ''}</b>{ad.description && !compact && <small>{ad.description}</small>}</div>
                                         {cta && <span className="ab-cta">{plan.destination === 'whatsapp' && <PlatIcon name="whatsapp" size={14} />}{cta}</span>}
                                     </div>
                                 )}
+                                {!compact && <div className="ab-post-f"><span>👍 Me gusta</span><span>💬 Comentar</span><span>↗ Compartir</span></div>}
                             </>
                         )}
-                        <div className="ab-post-f"><span>👍 Me gusta</span><span>💬 Comentar</span><span>↗ Compartir</span></div>
                     </div>
-                    {ad.format !== 'carousel' && (ad.texts.length > 1 || ad.headlines.length > 1) && <small className="pb-muted">Meta probará {ad.texts.length} texto(s) y {ad.headlines.length} título(s) y mostrará más los que mejor funcionen.</small>}
+                    {!compact && ad.format !== 'carousel' && (ad.texts.length > 1 || ad.headlines.length > 1) && <small className="pb-muted">Meta probará {ad.texts.length} texto(s) y {ad.headlines.length} título(s) y mostrará más los que mejor funcionen.</small>}
                 </div>
             );
         }
@@ -14431,8 +14565,8 @@
             const q = query.trim().toLowerCase();
             const photoOf = (p, url) => ({ media: { kind: 'image', url, source: 'catalogo', assetId: '', thumb: url }, product: p });
             const fromLib = a => ({ media: { kind: a.kind, url: a.url, source: 'biblioteca', assetId: a.id, thumb: a.thumb || '' }, product: null });
-            const catalogPhotos = tab === 'catalogo' ? ctx.catalog.filter(p => !q || (p.name + ' ' + p.category).toLowerCase().includes(q)).slice(0, 48) : [];
-            const lib = ctx.library.filter(a => (want === 'any' || a.kind === want) && (!q || (a.title + ' ' + a.product).toLowerCase().includes(q))).slice(0, 80);
+            const catalogPhotos = tab === 'catalogo' ? ctx.catalog.filter(p => !q || (p.name + ' ' + p.category).toLowerCase().includes(q)).slice(0, 60) : [];
+            const lib = ctx.library.filter(a => (want === 'any' || a.kind === want) && (!q || (a.title + ' ' + a.product).toLowerCase().includes(q))).slice(0, 90);
             async function upload(e) {
                 const file = e.target.files && e.target.files[0];
                 e.target.value = '';
@@ -14460,16 +14594,16 @@
                         <button type="button" className="ab-x" title="Cerrar" onClick={onClose}>✕</button>
                     </div>
                     {(tab === 'catalogo' || tab === 'biblioteca') && <input type="search" className="cs-search" placeholder="Buscar…" value={query} onChange={e => setQuery(e.target.value)} />}
-                    {tab === 'producto' && product && <div className="cs-pgrid">{product.images.map(u => <button type="button" key={u} onClick={() => onPick(photoOf(product, u))}><img src={u} alt="" loading="lazy" referrerPolicy="no-referrer" /></button>)}</div>}
+                    {tab === 'producto' && product && <div className="cs-pgrid">{product.images.map(u => <button type="button" key={u} {...hoverProps({ kind: 'image', url: u, title: product.name })} onClick={() => onPick(photoOf(product, u))}><img src={u} alt="" loading="lazy" referrerPolicy="no-referrer" /></button>)}</div>}
                     {tab === 'catalogo' && <div className="cs-pgrid">{catalogPhotos.map(p => (
-                        <button type="button" key={p.id} title={p.name} onClick={() => onPick(photoOf(p, p.images[0]))}><img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" /><small>{p.name}</small></button>
+                        <button type="button" key={p.id} {...hoverProps({ kind: 'image', url: p.images[0], title: p.name + ' · ' + abMoney(p.price) })} onClick={() => onPick(photoOf(p, p.images[0]))}><img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" /><small>{p.name}</small></button>
                     ))}</div>}
                     {tab === 'biblioteca' && (lib.length ? <div className="cs-pgrid">{lib.map(a => (
-                        <button type="button" key={a.id} title={a.title} onClick={() => onPick(fromLib(a))}>
+                        <button type="button" key={a.id} {...hoverProps({ kind: a.kind, url: a.url, thumb: a.thumb, title: a.title })} onClick={() => onPick(fromLib(a))}>
                             {a.thumb ? <img src={a.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>}
-                            <small>{a.kind === 'video' ? '🎬 ' + (a.duration ? Math.round(a.duration) + ' s · ' : '') : ''}{a.title || 'Sin nombre'}{a.usedCount ? ' · usado ' + a.usedCount : ''}</small>
+                            <small>{a.kind === 'video' ? '🎬 ' + (a.duration ? Math.round(a.duration) + ' s · ' : '') : ''}{a.title || 'Sin nombre'}</small>
                         </button>
-                    ))}</div> : <div className="pb-muted">No hay {want === 'video' ? 'videos' : 'archivos'} en la Biblioteca. Súbelos en la pestaña "Subir" (o en Publicaciones → Biblioteca).</div>)}
+                    ))}</div> : <div className="pb-muted">No hay {want === 'video' ? 'videos' : 'archivos'} en la Biblioteca. Súbelos en "Subir" (o en Publicaciones → Biblioteca).</div>)}
                     {tab === 'subir' && (
                         <div className="cs-upload">
                             <label className="pb-btn sm main">{want === 'video' ? '🎬 Elegir video (MP4 o MOV, hasta 50 MB)' : want === 'image' ? '🖼️ Elegir foto (JPG o PNG)' : '⬆️ Elegir foto o video'}
@@ -14515,7 +14649,7 @@
             const matches = q.trim() ? ctx.catalog.filter(x => (x.name + ' ' + x.category).toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8) : [];
             return (
                 <div className="cs-prodsel">
-                    {p ? <span className="cs-chip"><img src={p.images[0]} alt="" referrerPolicy="no-referrer" />{p.name} · {abMoney(p.price)}{allowNone && <button type="button" onClick={() => onChange(null)}>✕</button>}</span> : <span className="pb-muted">{allowNone ? 'Sin producto (por ejemplo, un video de la marca)' : 'Elige el producto'}</span>}
+                    {p ? <span className="cs-chip"><img src={p.images[0]} alt="" referrerPolicy="no-referrer" />{p.name} · {abMoney(p.price)}{allowNone && <button type="button" title="Quitar producto" onClick={() => onChange(null)}>✕</button>}</span> : <span className="pb-muted">{allowNone ? 'Sin producto (no menciona precios)' : 'Elige el producto'}</span>}
                     <input type="search" className="cs-search" placeholder={p ? 'Cambiar producto…' : 'Buscar producto…'} value={q} onChange={e => setQ(e.target.value)} />
                     {matches.length > 0 && <div className="cs-results">{matches.map(x => <button type="button" key={x.id} onClick={() => { onChange(x); setQ(''); }}><b>{x.name}</b><small>{abMoney(x.price)} · {x.category}</small></button>)}</div>}
                 </div>
@@ -14523,12 +14657,14 @@
         }
 
 
-        // Un anuncio: formato, foto o video (o tarjetas del carrusel), textos, botón y enlace; con su vista previa.
-        function CsAdEditor({ ad, index, total, plan, ctx, set, issues, onChange, onRemove, onDuplicate, onMove }) {
+        // Editar un anuncio (en su ventana): formato, foto o video (o tarjetas del carrusel), textos, botón y enlace, con su vista previa.
+        function CsAdForm({ ad, plan, ctx, issues, onChange }) {
             const [picker, setPicker] = useState(null);
             const [busy, setBusy] = useState('');
             const [cardIdeas, setCardIdeas] = useState({});
+            const [notes, setNotes] = useState([]);
             const [err, setErr] = useState('');
+            const [platform, setPlatform] = useState('facebook');
             const ctaList = ctx.ctas[plan.destination] || [];
             const ctaLabel = (ctaList.find(c => c.id === ad.cta) || ctaList[0] || {}).label;
             const toWeb = plan.destination !== 'whatsapp';
@@ -14537,11 +14673,10 @@
             const dropFrom = (key, i) => patch(a => ({ [key]: a[key].filter((_, k) => k !== i) }));
             const setCard = (i, changes) => patch(a => ({ cards: a.cards.map((c, k) => (k === i ? { ...c, ...changes } : c)) }));
             const moveCard = (i, dir) => patch(a => { const cards = [...a.cards]; const j = i + dir; if (j < 0 || j >= cards.length) return {}; [cards[i], cards[j]] = [cards[j], cards[i]]; return { cards }; });
-            const productNames = () => [ad.product, ...ad.cards.map(c => c.product)].filter(Boolean);
             const changeFormat = format => patch(a => {
                 if (format === a.format) return {};
                 if (format === 'carousel') {
-                    const first = a.media && a.media.kind ? [{ _k: csUid(), media: a.media, productId: a.productId, product: a.product, title: a.headlines[0] || a.product, description: a.description }] : [];
+                    const first = a.media ? [{ _k: csUid(), media: a.media, productId: a.productId, product: a.product, title: a.headlines[0] || a.name, description: a.description }] : [];
                     return { format, cards: a.cards.length ? a.cards : first, media: null };
                 }
                 const keep = a.format === 'carousel' && a.cards[0] ? a.cards[0] : null;
@@ -14549,16 +14684,21 @@
                 return { format, media: media && (format === 'video' ? media.kind === 'video' : media.kind === 'image') ? media : null, productId: keep ? keep.productId : a.productId, product: keep ? keep.product : a.product, headlines: a.headlines.length ? a.headlines : [''] };
             });
             const pick = ({ media, product }) => {
-                if (picker === 'main') patch(a => ({ media, ...(product ? { productId: product.id, product: product.name } : {}) }));
+                // Una foto de la Biblioteca no trae producto: se quita el anterior para no hablar de otro producto.
+                const prod = product ? { productId: product.id, product: product.name } : media.source === 'biblioteca' ? { productId: '', product: '' } : {};
+                if (picker === 'main') patch({ media, ...prod });
                 else if (picker === 'new-card') patch(a => ({ cards: a.cards.length >= 10 || a.cards.some(c => c.media.url === media.url) ? a.cards : [...a.cards, { _k: csUid(), media, productId: product ? product.id : '', product: product ? product.name : '', title: product ? (product.displayName || product.name) : '', description: '' }] }));
-                else if (typeof picker === 'number') setCard(picker, { media, ...(product ? { productId: product.id, product: product.name } : {}) });
+                else if (typeof picker === 'number') setCard(picker, { media, ...prod });
                 setPicker(null);
             };
+            const pieceOf = (media, productId) => ({ media, productId });
             async function rewrite() {
                 if (ad.texts.some(t => t.trim()) && !confirm('¿Reemplazar los textos de este anuncio por textos nuevos de la IA?')) return;
                 setBusy('texts'); setErr('');
                 try {
-                    const r = await api('/api/ads/campaigns/texts', { method: 'POST', body: JSON.stringify({ mode: 'anuncio', objective: plan.objective, destination: plan.destination, format: ad.format, angle: ad.angle, idea: ctx.idea, products: productNames(), mediaTitle: ad.media && ad.media.source === 'biblioteca' ? (ctx.library.find(x => x.id === ad.media.assetId) || {}).title : '', current: ad.texts }) });
+                    const pieces = ad.format === 'carousel' ? ad.cards.map(c => pieceOf(c.media, c.productId)) : [pieceOf(ad.media, ad.productId)];
+                    const r = await api('/api/ads/campaigns/texts', { method: 'POST', body: JSON.stringify({ mode: 'anuncio', objective: plan.objective, destination: plan.destination, format: ad.format, angle: ad.angle, idea: ctx.idea, pieces: pieces.filter(p => p.media), current: ad.texts }) });
+                    setNotes(r.notes || []);
                     patch({ texts: r.texts.length ? r.texts : ad.texts, headlines: ad.format === 'carousel' ? ad.headlines : (r.headlines.length ? r.headlines : ad.headlines), description: r.description || ad.description });
                 } catch (e) { setErr(e.message); } finally { setBusy(''); }
             }
@@ -14566,222 +14706,307 @@
                 const c = ad.cards[i];
                 setBusy('card' + i); setErr('');
                 try {
-                    const r = await api('/api/ads/campaigns/texts', { method: 'POST', body: JSON.stringify({ mode: 'tarjeta', objective: plan.objective, destination: plan.destination, format: 'carousel', angle: ad.angle, idea: ctx.idea, products: c.product ? [c.product] : productNames(), mediaTitle: c.media.source === 'biblioteca' ? (ctx.library.find(x => x.id === c.media.assetId) || {}).title : c.product }) });
+                    const r = await api('/api/ads/campaigns/texts', { method: 'POST', body: JSON.stringify({ mode: 'tarjeta', objective: plan.objective, destination: plan.destination, format: 'carousel', angle: ad.angle, idea: ctx.idea, pieces: [pieceOf(c.media, c.productId)] }) });
                     setCardIdeas(m => ({ ...m, [c._k]: r.options }));
                 } catch (e) { setErr(e.message); } finally { setBusy(''); }
             }
-            const errors = issues.filter(i => i.level === 'error').length;
-            const thumbOf = m => (m ? (m.kind === 'video' ? (m.thumb ? <img src={m.thumb} alt="" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>) : <img src={m.url} alt="" referrerPolicy="no-referrer" />) : <span className="cs-novid">＋</span>);
+            const thumbOf = m => (m ? (csThumb(m) ? <img src={csThumb(m)} alt="" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>) : <span className="cs-novid">＋</span>);
+            const hoverOf = m => (m ? hoverProps({ kind: m.kind, url: m.url, thumb: m.thumb }) : {});
             return (
-                <div className={'cs-ad' + (errors ? ' bad' : '')}>
-                    <div className="cs-ad-h">
-                        <button type="button" className="cs-fold" onClick={() => patch({ _open: !ad._open })}>{ad._open ? '▾' : '▸'}</button>
-                        <span className="cs-thumb">{thumbOf(ad.format === 'carousel' ? (ad.cards[0] || {}).media : ad.media)}</span>
-                        <div className="grow">
-                            <b>Anuncio {index + 1} · {CS_FORMAT[ad.format]}</b>
-                            <small>{ad.name || ad.product || (ad.format === 'carousel' ? ad.cards.length + ' tarjetas' : 'Sin nombre')}{ad.angle ? ' · prueba: ' + ad.angle : ''}{errors ? ' · ⛔ ' + errors + ' por corregir' : issues.length ? ' · ⚠️ ' + issues.length : ''}</small>
+                <div className="cs-ad-b">
+                    <div className="ab-form">
+                        <div className="ab-row">
+                            <span className="ab-label">Formato</span>
+                            <div className="sv-days">{Object.keys(CS_FORMAT).map(f => <button key={f} type="button" className={ad.format === f ? 'on' : ''} onClick={() => changeFormat(f)}>{CS_FORMAT[f]}</button>)}</div>
                         </div>
-                        <div className="cs-ad-btns">
-                            <button type="button" disabled={index === 0} title="Subir" onClick={() => onMove(-1)}>▲</button>
-                            <button type="button" disabled={index === total - 1} title="Bajar" onClick={() => onMove(1)}>▼</button>
-                            <button type="button" title="Duplicar" onClick={onDuplicate}>⧉</button>
-                            <button type="button" title="Quitar" disabled={total <= 1} onClick={() => { if (confirm('¿Quitar este anuncio?')) onRemove(); }}>✕</button>
+                        <div className="cs-two">
+                            <label className="ab-field">Nombre del anuncio<input type="text" maxLength={60} placeholder="Ej.: Osito en nube" value={ad.name} onChange={e => patch({ name: e.target.value })} /></label>
+                            <label className="ab-field">¿Qué prueba este anuncio? <small>(gancho o enfoque)</small><input type="text" maxLength={80} placeholder="Ej.: precio, testimonio, hecho a mano" value={ad.angle} onChange={e => patch({ angle: e.target.value })} /></label>
+                        </div>
+
+                        {ad.format !== 'carousel' ? (
+                            <div className="ab-block">
+                                <h4>{ad.format === 'video' ? '🎬 Video' : '🖼️ Foto'} y producto <small className="pb-muted">los textos hablan de lo que se ve aquí</small></h4>
+                                <div className="cs-mainmedia">
+                                    <button type="button" className="cs-mediabtn" {...hoverOf(ad.media)} onClick={() => setPicker(picker === 'main' ? null : 'main')}>{thumbOf(ad.media)}<small>{ad.media ? 'Cambiar' : 'Elegir'}</small></button>
+                                    <CsProductSelect ctx={ctx} value={ad.productId} allowNone onChange={p => patch(a => ({ productId: p ? p.id : '', product: p ? p.name : '', ...(p && a.format === 'image' && (!a.media || a.media.source === 'catalogo') ? { media: { kind: 'image', url: p.images[0], source: 'catalogo', assetId: '', thumb: p.images[0] } } : {}) }))} />
+                                </div>
+                                {picker === 'main' && <CsMediaPicker ctx={ctx} want={ad.format === 'video' ? 'video' : 'image'} productId={ad.productId} onPick={pick} onClose={() => setPicker(null)} />}
+                            </div>
+                        ) : (
+                            <div className="ab-block">
+                                <h4>🎠 Tarjetas del carrusel ({ad.cards.length} de 10) <small className="pb-muted">cada una con su foto o video y su propio texto</small></h4>
+                                {ad.cards.map((c, i) => (
+                                    <div className="cs-card" key={c._k}>
+                                        <button type="button" className="cs-mediabtn sm" {...hoverOf(c.media)} onClick={() => setPicker(picker === i ? null : i)}>{thumbOf(c.media)}<small>Cambiar</small></button>
+                                        <div className="ab-cardfields">
+                                            <small className="pb-muted">{i + 1}. {c.product || (c.media.kind === 'video' ? 'Video' : 'Foto') + ' de la Biblioteca'}</small>
+                                            <input type="text" maxLength={80} placeholder="Título de la tarjeta" value={c.title} onChange={e => setCard(i, { title: e.target.value })} />
+                                            <input type="text" maxLength={80} placeholder="Descripción corta" value={c.description} onChange={e => setCard(i, { description: e.target.value })} />
+                                            <div className="ab-row">
+                                                <button type="button" className="sv-link" disabled={!!busy || !ctx.aiReady} onClick={() => ideasFor(i)}>{busy === 'card' + i ? '✨ Mirando la foto…' : '✨ Ideas de texto para esta foto'}</button>
+                                                <CsProductSelect ctx={ctx} value={c.productId} allowNone onChange={p => setCard(i, { productId: p ? p.id : '', product: p ? p.name : '' })} />
+                                            </div>
+                                            {(cardIdeas[c._k] || []).length > 0 && <div className="cs-ideas">{cardIdeas[c._k].map((o, k) => <button type="button" key={k} onClick={() => setCard(i, { title: o.title, description: o.description })}><b>{o.title}</b><small>{o.description}</small></button>)}</div>}
+                                            {picker === i && <CsMediaPicker ctx={ctx} want="any" productId={c.productId} onPick={pick} onClose={() => setPicker(null)} />}
+                                        </div>
+                                        <div className="ab-cardbtns">
+                                            <button type="button" disabled={i === 0} onClick={() => moveCard(i, -1)}>▲</button>
+                                            <button type="button" disabled={i === ad.cards.length - 1} onClick={() => moveCard(i, 1)}>▼</button>
+                                            <button type="button" onClick={() => dropFrom('cards', i)}>✕</button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {ad.cards.length < 10 && <button type="button" className="sv-link" onClick={() => setPicker(picker === 'new-card' ? null : 'new-card')}>+ Agregar tarjeta (foto o video)</button>}
+                                {picker === 'new-card' && <CsMediaPicker ctx={ctx} want="any" productId="" onPick={pick} onClose={() => setPicker(null)} />}
+                            </div>
+                        )}
+
+                        <div className="ab-block">
+                            <div className="ab-row"><h4 className="grow">Texto principal {ad.format === 'carousel' ? '(el carrusel lleva el primero)' : '(Meta prueba hasta 5)'}</h4>
+                                <button type="button" className="pb-btn sm" disabled={!!busy || !ctx.aiReady || (!ad.media && !ad.cards.length)} onClick={rewrite}>{busy === 'texts' ? '✨ Mirando la foto y escribiendo…' : '✨ Escribir textos con IA'}</button></div>
+                            {notes.length > 0 && <small className="cs-note">👁️ La IA vio: {notes.join(' · ')}</small>}
+                            {ad.texts.map((t, i) => (
+                                <div className={'ab-line' + (ad.format === 'carousel' && i > 0 ? ' ab-alt' : '')} key={i}>
+                                    <textarea rows={3} maxLength={600} value={t} onChange={e => setList('texts', i, e.target.value)} />
+                                    {ad.format === 'carousel' && i > 0 && <button type="button" className="sv-link" onClick={() => patch(a => ({ texts: [a.texts[i], ...a.texts.filter((_, k) => k !== i)] }))}>Usar este</button>}
+                                    {ad.texts.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('texts', i)}>✕</button>}
+                                </div>
+                            ))}
+                            {ad.texts.length < 5 && <button type="button" className="sv-link" onClick={() => patch(a => ({ texts: [...a.texts, ''] }))}>+ Agregar texto</button>}
+                        </div>
+
+                        {ad.format !== 'carousel' && (
+                            <div className="ab-block">
+                                <h4>Títulos {plan.destination === 'anuncio' ? '(opcional)' : ''} <small className="pb-muted">debajo de la foto o video, máximo 40 letras</small></h4>
+                                {ad.headlines.map((t, i) => (
+                                    <div className="ab-line" key={i}>
+                                        <input type="text" maxLength={80} value={t} onChange={e => setList('headlines', i, e.target.value)} /><small className={t.length > 40 ? 'ab-long' : ''}>{t.length}</small>
+                                        {ad.headlines.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('headlines', i)}>✕</button>}
+                                    </div>
+                                ))}
+                                {ad.headlines.length < 5 && <button type="button" className="sv-link" onClick={() => patch(a => ({ headlines: [...a.headlines, ''] }))}>+ Agregar título</button>}
+                                <label className="ab-field">Descripción corta<input type="text" maxLength={80} value={ad.description} onChange={e => patch({ description: e.target.value })} /></label>
+                            </div>
+                        )}
+
+                        <div className="cs-two">
+                            {ctaList.length > 1 && <label className="ab-field">Botón<select value={ad.cta || ctaList[0].id} onChange={e => patch({ cta: e.target.value })}>{ctaList.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
+                            {toWeb && (plan.destination === 'web' || ctx.s.webUrl) && <label className="ab-field">Lleva a<select value={ad.link} onChange={e => patch({ link: e.target.value })}>{Object.keys(CS_LINK).map(k => <option key={k} value={k}>{CS_LINK[k]}</option>)}</select></label>}
+                        </div>
+                        {err && <div className="pb-err">{err}</div>}
+                        {issues.length > 0 && <div className="ab-issues">{issues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
+                    </div>
+                    <div className="ab-side">
+                        <div className="sv-days cs-plat"><button type="button" className={platform === 'facebook' ? 'on' : ''} onClick={() => setPlatform('facebook')}>Facebook</button><button type="button" className={platform === 'instagram' ? 'on' : ''} onClick={() => setPlatform('instagram')}>Instagram</button></div>
+                        <CsPreview plan={plan} ad={ad} s={ctx.s} ctaLabel={ctaLabel} platform={platform} />
+                    </div>
+                </div>
+            );
+        }
+
+        // La ventana para editar un anuncio (no ocupa la página: se abre encima y se cierra con "Listo").
+        function CsAdModal({ plan, ctx, si, ai, issuesFor, onChange, onClose, onNav }) {
+            const set = plan.adsets[si];
+            const ad = set && set.ads[ai];
+            useEffect(() => {
+                const esc = e => { if (e.key === 'Escape') onClose(); };
+                document.addEventListener('keydown', esc);
+                return () => document.removeEventListener('keydown', esc);
+            }, []);
+            if (!ad) return null;
+            const issues = issuesFor('Conjunto ' + (si + 1) + ' · Anuncio ' + (ai + 1));
+            const errors = issues.filter(i => i.level === 'error').length;
+            return (
+                <div className="cs-modal" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+                    <div className="cs-modal-box">
+                        <div className="cs-modal-h">
+                            <div className="grow"><b>Anuncio {ai + 1} de {set.ads.length}</b><small>{set.name} · {CS_FORMAT[ad.format]}{errors ? ' · ⛔ ' + errors + ' por corregir' : ' · ✅ listo'}</small></div>
+                            <button type="button" className="pb-btn sm" disabled={ai === 0} onClick={() => onNav(-1)}>← Anterior</button>
+                            <button type="button" className="pb-btn sm" disabled={ai === set.ads.length - 1} onClick={() => onNav(1)}>Siguiente →</button>
+                            <button type="button" className="pb-btn sm main" onClick={onClose}>Listo</button>
+                        </div>
+                        <div className="cs-modal-b"><CsAdForm key={ad._k} ad={ad} plan={plan} ctx={ctx} issues={issues} onChange={onChange} /></div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Un conjunto (fila que se abre): su público, ubicaciones, presupuesto y la tabla de sus anuncios.
+        function CsSetRow({ set, si, plan, ctx, open, onToggle, issuesFor, onChange, onRemove, onDuplicate, onEditAd }) {
+            const [menu, setMenu] = useState('');
+            const [addMenu, setAddMenu] = useState(false);
+            const patch = changes => onChange(x => ({ ...x, ...(typeof changes === 'function' ? changes(x) : changes) }));
+            const aud = changes => patch(x => ({ audience: { ...x.audience, ...changes } }));
+            const place = changes => patch(x => ({ placements: { ...x.placements, ...changes } }));
+            const moveAd = (i, dir) => patch(x => { const ads = [...x.ads]; const j = i + dir; if (j < 0 || j >= ads.length) return {}; [ads[i], ads[j]] = [ads[j], ads[i]]; return { ads }; });
+            const ctaDefault = (ctx.ctas[plan.destination] || [])[0];
+            const addAd = format => { setAddMenu(false); if (set.ads.length >= ctx.limits.maxAdsPerAdset) return; patch(x => ({ ads: [...x.ads, csEmptyAd(format, ctaDefault && ctaDefault.id)] })); onEditAd(set.ads.length); };
+            const a = set.audience;
+            const adIssues = i => issuesFor('Conjunto ' + (si + 1) + ' · Anuncio ' + (i + 1));
+            const setIssues = issuesFor('Conjunto ' + (si + 1), true);
+            const bad = setIssues.some(i => i.level === 'error') || set.ads.some((_, i) => adIssues(i).some(x => x.level === 'error'));
+            const ages = Array.from({ length: 48 }, (_, i) => 18 + i);
+            return (
+                <div className={'cs-setrow2' + (open ? ' open' : '') + (bad ? ' bad' : '')}>
+                    <div className="cs-setrow2-h" onClick={onToggle}>
+                        <span className="cs-caret">{open ? '▾' : '▸'}</span>
+                        <span className={'cs-dot ' + (bad ? 'bad' : 'ok')}>{bad ? '!' : '✓'}</span>
+                        <div className="grow"><b>{set.name || 'Conjunto ' + (si + 1)}</b><small>{set.ads.length} anuncio(s){plan.budgetMode === 'conjunto' ? ' · ' + abMoney(set.dailyBudget) + '/día' : ''}{set.focus ? ' · ' + set.focus : ''}</small></div>
+                        <div className="cs-rel" onClick={e => e.stopPropagation()}>
+                            <button type="button" className="nx-menu-btn cs-dots" aria-label="Opciones" onClick={() => setMenu(menu ? '' : 'set')}>⋯</button>
+                            {menu === 'set' && <DeskPop onClose={() => setMenu('')}>
+                                <button type="button" className="nx-menu-item" onClick={() => { setMenu(''); onDuplicate(); }}>⧉ Duplicar conjunto (otro público, mismos anuncios)</button>
+                                <button type="button" className="nx-menu-item danger" onClick={() => { setMenu(''); onRemove(); }}>✕ Quitar conjunto</button>
+                            </DeskPop>}
                         </div>
                     </div>
-                    {ad._open && (
-                        <div className="cs-ad-b">
-                            <div className="ab-form">
-                                <div className="ab-row">
-                                    <span className="ab-label">Formato</span>
-                                    <div className="sv-days">{Object.keys(CS_FORMAT).map(f => <button key={f} type="button" className={ad.format === f ? 'on' : ''} onClick={() => changeFormat(f)}>{CS_FORMAT[f]}</button>)}</div>
-                                </div>
-                                <div className="cs-two">
-                                    <label className="ab-field">Nombre del anuncio<input type="text" maxLength={60} placeholder="Ej.: Osito en nube" value={ad.name} onChange={e => patch({ name: e.target.value })} /></label>
-                                    <label className="ab-field">¿Qué prueba este anuncio? <small>(gancho o enfoque)</small><input type="text" maxLength={80} placeholder="Ej.: precio, testimonio, hecho a mano" value={ad.angle} onChange={e => patch({ angle: e.target.value })} /></label>
-                                </div>
-
-                                {ad.format !== 'carousel' ? (
-                                    <div className="ab-block">
-                                        <h4>{ad.format === 'video' ? '🎬 Video' : '🖼️ Foto'} y producto</h4>
-                                        <div className="cs-mainmedia">
-                                            <button type="button" className="cs-mediabtn" onClick={() => setPicker(picker === 'main' ? null : 'main')}>{thumbOf(ad.media)}<small>{ad.media ? 'Cambiar' : 'Elegir'}</small></button>
-                                            <CsProductSelect ctx={ctx} value={ad.productId} allowNone={ad.format === 'video' || (ad.media && ad.media.source === 'biblioteca')} onChange={p => patch(a => ({ productId: p ? p.id : '', product: p ? p.name : '', ...(p && a.format === 'image' && (!a.media || a.media.source === 'catalogo') ? { media: { kind: 'image', url: p.images[0], source: 'catalogo', assetId: '', thumb: p.images[0] } } : {}) }))} />
-                                        </div>
-                                        {picker === 'main' && <CsMediaPicker ctx={ctx} want={ad.format === 'video' ? 'video' : 'image'} productId={ad.productId} onPick={pick} onClose={() => setPicker(null)} />}
-                                    </div>
-                                ) : (
-                                    <div className="ab-block">
-                                        <h4>🎠 Tarjetas del carrusel ({ad.cards.length} de 10) <small className="pb-muted">cada una con su foto o video y su propio texto</small></h4>
-                                        {ad.cards.map((c, i) => (
-                                            <div className="cs-card" key={c._k}>
-                                                <button type="button" className="cs-mediabtn sm" onClick={() => setPicker(picker === i ? null : i)}>{thumbOf(c.media)}<small>Cambiar</small></button>
-                                                <div className="ab-cardfields">
-                                                    <small className="pb-muted">{i + 1}. {c.product || (c.media.kind === 'video' ? 'Video' : 'Foto') + ' de la Biblioteca'}</small>
-                                                    <input type="text" maxLength={80} placeholder="Título de la tarjeta" value={c.title} onChange={e => setCard(i, { title: e.target.value })} />
-                                                    <input type="text" maxLength={80} placeholder="Descripción corta" value={c.description} onChange={e => setCard(i, { description: e.target.value })} />
-                                                    <div className="ab-row">
-                                                        <button type="button" className="sv-link" disabled={!!busy || !ctx.aiReady} onClick={() => ideasFor(i)}>{busy === 'card' + i ? '✨ Pensando…' : '✨ Ideas de texto para esta foto'}</button>
-                                                        <CsProductSelect ctx={ctx} value={c.productId} allowNone onChange={p => setCard(i, { productId: p ? p.id : '', product: p ? p.name : '' })} />
-                                                    </div>
-                                                    {(cardIdeas[c._k] || []).length > 0 && <div className="cs-ideas">{cardIdeas[c._k].map((o, k) => <button type="button" key={k} onClick={() => setCard(i, { title: o.title, description: o.description })}><b>{o.title}</b><small>{o.description}</small></button>)}</div>}
-                                                    {picker === i && <CsMediaPicker ctx={ctx} want="any" productId={c.productId} onPick={pick} onClose={() => setPicker(null)} />}
-                                                </div>
-                                                <div className="ab-cardbtns">
-                                                    <button type="button" disabled={i === 0} onClick={() => moveCard(i, -1)}>▲</button>
-                                                    <button type="button" disabled={i === ad.cards.length - 1} onClick={() => moveCard(i, 1)}>▼</button>
-                                                    <button type="button" onClick={() => dropFrom('cards', i)}>✕</button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {ad.cards.length < 10 && <button type="button" className="sv-link" onClick={() => setPicker(picker === 'new-card' ? null : 'new-card')}>+ Agregar tarjeta (foto o video)</button>}
-                                        {picker === 'new-card' && <CsMediaPicker ctx={ctx} want="any" productId="" onPick={pick} onClose={() => setPicker(null)} />}
-                                    </div>
-                                )}
-
-                                <div className="ab-block">
-                                    <div className="ab-row"><h4 className="grow">Texto principal {ad.format === 'carousel' ? '(el carrusel lleva el primero)' : '(Meta prueba hasta 5)'}</h4>
-                                        <button type="button" className="pb-btn sm" disabled={!!busy || !ctx.aiReady} onClick={rewrite}>{busy === 'texts' ? '✨ Escribiendo…' : '✨ Escribir textos con IA'}</button></div>
-                                    {ad.texts.map((t, i) => (
-                                        <div className={'ab-line' + (ad.format === 'carousel' && i > 0 ? ' ab-alt' : '')} key={i}>
-                                            <textarea rows={3} maxLength={600} value={t} onChange={e => setList('texts', i, e.target.value)} />
-                                            {ad.format === 'carousel' && i > 0 && <button type="button" className="sv-link" onClick={() => patch(a => ({ texts: [a.texts[i], ...a.texts.filter((_, k) => k !== i)] }))}>Usar este</button>}
-                                            {ad.texts.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('texts', i)}>✕</button>}
-                                        </div>
-                                    ))}
-                                    {ad.texts.length < 5 && <button type="button" className="sv-link" onClick={() => patch(a => ({ texts: [...a.texts, ''] }))}>+ Agregar texto</button>}
-                                </div>
-
-                                {ad.format !== 'carousel' && (
-                                    <div className="ab-block">
-                                        <h4>Títulos {plan.destination === 'anuncio' ? '(opcional)' : ''} <small className="pb-muted">debajo de la foto o video, máximo 40 letras</small></h4>
-                                        {ad.headlines.map((t, i) => (
-                                            <div className="ab-line" key={i}>
-                                                <input type="text" maxLength={80} value={t} onChange={e => setList('headlines', i, e.target.value)} /><small className={t.length > 40 ? 'ab-long' : ''}>{t.length}</small>
-                                                {ad.headlines.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('headlines', i)}>✕</button>}
-                                            </div>
-                                        ))}
-                                        {ad.headlines.length < 5 && <button type="button" className="sv-link" onClick={() => patch(a => ({ headlines: [...a.headlines, ''] }))}>+ Agregar título</button>}
-                                        <label className="ab-field">Descripción corta<input type="text" maxLength={80} value={ad.description} onChange={e => patch({ description: e.target.value })} /></label>
-                                    </div>
-                                )}
-
-                                <div className="cs-two">
-                                    {ctaList.length > 1 && <label className="ab-field">Botón<select value={ad.cta || ctaList[0].id} onChange={e => patch({ cta: e.target.value })}>{ctaList.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
-                                    {toWeb && (plan.destination === 'web' || ctx.s.webUrl) && <label className="ab-field">Lleva a<select value={ad.link} onChange={e => patch({ link: e.target.value })}>{Object.keys(CS_LINK).map(k => <option key={k} value={k}>{CS_LINK[k]}</option>)}</select></label>}
-                                </div>
-                                {err && <div className="pb-err">{err}</div>}
-                                {issues.length > 0 && <div className="ab-issues">{issues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
+                    {open && (
+                        <div className="cs-setrow2-b">
+                            <div className="cs-two">
+                                <label className="ab-field">Nombre del conjunto<input type="text" maxLength={50} value={set.name} onChange={e => patch({ name: e.target.value })} /></label>
+                                <label className="ab-field">¿Qué prueba este conjunto? <small>(público o tema)</small><input type="text" maxLength={200} placeholder="Ej.: mamás interesadas en baby shower" value={set.focus} onChange={e => patch({ focus: e.target.value })} /></label>
                             </div>
-                            <div className="ab-side"><CsPreview plan={plan} ad={ad} s={ctx.s} ctaLabel={ctaLabel} /></div>
+                            <div className="cs-setgrid">
+                                <div className="cs-box">
+                                    <h4>👥 Público</h4>
+                                    <div className="ab-row"><span className="cs-lbl">Edad</span>
+                                        <select value={a.ageMin} onChange={e => aud({ ageMin: Number(e.target.value) })}>{ages.slice(0, 47).map(n => <option key={n} value={n}>{n}</option>)}</select><span>a</span>
+                                        <select value={a.ageMax} disabled={a.advantage} onChange={e => aud({ ageMax: Number(e.target.value) })}>{ages.slice(1).map(n => <option key={n} value={n}>{n === 65 ? '65+' : n}</option>)}</select>
+                                    </div>
+                                    <div className="ab-row"><span className="cs-lbl">Género</span><div className="sv-days">{Object.keys(AB_GENDER).map(g => <button key={g} type="button" className={a.gender === g ? 'on' : ''} onClick={() => aud({ gender: g })}>{AB_GENDER[g]}</button>)}</div></div>
+                                    <div className="ab-row"><span className="cs-lbl">Dónde</span>
+                                        {a.cities.length ? a.cities.map((c, i) => <span className="cs-chip" key={c.key}>{c.name} · <input className="cs-radius" type="number" min={1} max={80} value={c.radius} onChange={e => aud({ cities: a.cities.map((x, k) => (k === i ? { ...x, radius: Number(e.target.value) } : x)) })} /> km<button type="button" onClick={() => aud({ cities: a.cities.filter((_, k) => k !== i) })}>✕</button></span>) : <span className="pb-muted">Todo el país ({ctx.s.country})</span>}
+                                    </div>
+                                    {a.cities.length < 10 && <CsTargetSearch type="ciudad" placeholder="+ Ciudad (por ejemplo Guayaquil)" onAdd={r => aud({ cities: a.cities.some(c => c.key === r.key) ? a.cities : [...a.cities, { key: r.key, name: r.name, radius: 25 }] })} />}
+                                    <div className="ab-row"><span className="cs-lbl">Intereses</span>
+                                        {a.interests.length ? a.interests.map((it, i) => <span className="cs-chip" key={it.id}>{it.name}<button type="button" onClick={() => aud({ interests: a.interests.filter((_, k) => k !== i) })}>✕</button></span>) : <span className="pb-muted">Sin intereses</span>}
+                                    </div>
+                                    {a.interests.length < 10 && <CsTargetSearch type="interes" placeholder="+ Interés (baby shower, maternidad…)" onAdd={r => aud({ interests: a.interests.some(x => x.id === r.id) ? a.interests : [...a.interests, { id: r.id, name: r.name }] })} />}
+                                    <label className="sv-check ab-check"><input type="checkbox" checked={!!a.advantage} onChange={e => aud({ advantage: e.target.checked, ...(e.target.checked ? { ageMax: 65 } : {}) })} /> Dejar que Meta busque más allá (Advantage+)</label>
+                                </div>
+                                <div className="cs-box">
+                                    <h4>📍 Ubicaciones</h4>
+                                    <label className="cs-radio"><input type="radio" checked={set.placements.mode === 'auto'} onChange={() => patch({ placements: csAuto() })} /><span><b>Automático (recomendado)</b><small>Meta elige dónde mostrarlo</small></span></label>
+                                    <label className="cs-radio"><input type="radio" checked={set.placements.mode === 'manual'} onChange={() => place({ mode: 'manual' })} /><span><b>Elegir ubicaciones</b><small>Facebook, Instagram, historias, reels</small></span></label>
+                                    {set.placements.mode === 'manual' && <div className="ab-row">{[['facebook', 'Facebook'], ['instagram', 'Instagram'], ['feed', 'Feed'], ['stories', 'Historias'], ['reels', 'Reels']].map(([k, t]) => <label key={k} className="sv-check ab-check"><input type="checkbox" checked={!!set.placements[k]} onChange={e => place({ [k]: e.target.checked })} /> {t}</label>)}</div>}
+                                    {plan.budgetMode === 'conjunto' && (<>
+                                        <h4>💵 Presupuesto por día</h4>
+                                        <div className="ab-row">$<input className="ab-num" type="number" min={1} step={0.5} value={set.dailyBudget} onChange={e => patch({ dailyBudget: Number(e.target.value) })} /><small className="pb-muted">USD · ≈ {csMonthly(set.dailyBudget)} al mes</small></div>
+                                    </>)}
+                                    {plan.objective === 'interaccion' && plan.destination === 'anuncio' && (
+                                        <label className="ab-field">Qué busca<select value={set.optimization} onChange={e => patch({ optimization: e.target.value })}><option value="interacciones">Reacciones y comentarios</option><option value="reproducciones">Reproducciones (solo videos)</option></select></label>
+                                    )}
+                                </div>
+                            </div>
+                            {setIssues.length > 0 && <div className="ab-issues">{setIssues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
+
+                            <div className="cs-ads-h">
+                                <h4>Anuncios de este conjunto ({set.ads.length})</h4>
+                                <div className="cs-rel">
+                                    <button type="button" className="pb-btn sm cs-outline" disabled={set.ads.length >= ctx.limits.maxAdsPerAdset} onClick={() => setAddMenu(!addMenu)}>+ Agregar anuncio</button>
+                                    {addMenu && <DeskPop onClose={() => setAddMenu(false)}>{Object.keys(CS_FORMAT).map(f => <button key={f} type="button" className="nx-menu-item" onClick={() => addAd(f)}>{CS_FORMAT[f]}</button>)}</DeskPop>}
+                                </div>
+                            </div>
+                            <div className="cs-table-wrap"><table className="cs-table cs-adtable">
+                                <thead><tr><th>#</th><th>Vista</th><th>Nombre del anuncio</th><th>Formato</th><th>Estado</th><th>¿Qué prueba?</th><th></th></tr></thead>
+                                <tbody>{set.ads.map((ad, i) => {
+                                    const iss = adIssues(i);
+                                    const err = iss.filter(x => x.level === 'error').length;
+                                    const m = csMediaOf(ad);
+                                    return (
+                                        <tr key={ad._k} onClick={() => onEditAd(i)}>
+                                            <td className="cs-n">{i + 1}</td>
+                                            <td><span className="cs-vista" {...(m ? hoverProps({ kind: m.kind, url: m.url, thumb: m.thumb }) : {})}>{csThumb(m) ? <img src={csThumb(m)} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid">{m ? '🎬' : '＋'}</span>}{m && m.kind === 'video' && <i>▶</i>}</span></td>
+                                            <td><b>{ad.name || ad.product || 'Sin nombre'}</b><small>{(ad.texts[0] || '').slice(0, 60)}</small></td>
+                                            <td className="cs-fmt">{CS_FORMAT[ad.format]}{ad.format === 'carousel' ? ' (' + ad.cards.length + ')' : ''}</td>
+                                            <td><span className={'cs-state ' + (err ? 'bad' : iss.length ? 'warn' : 'ok')}>{err ? 'Por corregir' : iss.length ? 'Revisar' : 'Listo'}</span></td>
+                                            <td className="cs-angle">{ad.angle || '—'}</td>
+                                            <td onClick={e => e.stopPropagation()} className="cs-rel">
+                                                <button type="button" className="nx-menu-btn cs-dots" aria-label="Opciones" onClick={() => setMenu(menu === ad._k ? '' : ad._k)}>⋯</button>
+                                                {menu === ad._k && <DeskPop onClose={() => setMenu('')}>
+                                                    <button type="button" className="nx-menu-item" onClick={() => { setMenu(''); onEditAd(i); }}>✏️ Editar</button>
+                                                    <button type="button" className="nx-menu-item" disabled={set.ads.length >= ctx.limits.maxAdsPerAdset} onClick={() => { setMenu(''); patch(x => ({ ads: [...x.ads.slice(0, i + 1), { ...JSON.parse(JSON.stringify(ad)), _k: csUid(), name: (ad.name ? ad.name + ' ' : '') + '(copia)' }, ...x.ads.slice(i + 1)] })); }}>⧉ Duplicar</button>
+                                                    <button type="button" className="nx-menu-item" disabled={i === 0} onClick={() => { setMenu(''); moveAd(i, -1); }}>▲ Subir</button>
+                                                    <button type="button" className="nx-menu-item" disabled={i === set.ads.length - 1} onClick={() => { setMenu(''); moveAd(i, 1); }}>▼ Bajar</button>
+                                                    <button type="button" className="nx-menu-item danger" disabled={set.ads.length <= 1} onClick={() => { setMenu(''); if (confirm('¿Quitar este anuncio?')) patch(x => ({ ads: x.ads.filter((_, k) => k !== i) })); }}>✕ Quitar</button>
+                                                </DeskPop>}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}</tbody>
+                            </table></div>
                         </div>
                     )}
                 </div>
             );
         }
 
-        // Un conjunto de anuncios: público (edad, género, ciudades, intereses), ubicaciones, presupuesto y sus anuncios.
-        function CsAdsetEditor({ set, si, plan, ctx, issuesFor, onChange, onRemove, onDuplicate }) {
-            const patch = changes => onChange(x => ({ ...x, ...(typeof changes === 'function' ? changes(x) : changes) }));
-            const aud = changes => patch(x => ({ audience: { ...x.audience, ...changes } }));
-            const place = changes => patch(x => ({ placements: { ...x.placements, ...changes } }));
-            const setAd = (i, fn) => patch(x => ({ ads: x.ads.map((a, k) => (k === i ? fn(a) : a)) }));
-            const moveAd = (i, dir) => patch(x => { const ads = [...x.ads]; const j = i + dir; if (j < 0 || j >= ads.length) return {}; [ads[i], ads[j]] = [ads[j], ads[i]]; return { ads }; });
-            const ctaDefault = (ctx.ctas[plan.destination] || [])[0];
-            const addAd = format => patch(x => ({ ads: x.ads.length >= ctx.limits.maxAdsPerAdset ? x.ads : [...x.ads.map(a => ({ ...a, _open: false })), csEmptyAd(format, ctaDefault && ctaDefault.id)] }));
-            const a = set.audience;
-            const setIssues = issuesFor('Conjunto ' + (si + 1), true);
+        // Vistas previas de los anuncios (Facebook o Instagram), una al lado de la otra.
+        function CsPreviewStrip({ plan, ctx, ads, onOpen }) {
+            const [platform, setPlatform] = useState('facebook');
+            const ref = useRef(null);
+            const scroll = dir => { if (ref.current) ref.current.scrollBy({ left: dir * 250, behavior: 'smooth' }); };
+            const ctaList = ctx.ctas[plan.destination] || [];
             return (
-                <div className="cs-set">
-                    <div className="cs-two">
-                        <label className="ab-field">Nombre del conjunto<input type="text" maxLength={50} value={set.name} onChange={e => patch({ name: e.target.value })} /></label>
-                        <label className="ab-field">¿Qué prueba este conjunto? <small>(público o tema)</small><input type="text" maxLength={200} placeholder="Ej.: mamás interesadas en baby shower" value={set.focus} onChange={e => patch({ focus: e.target.value })} /></label>
+                <div className="cs-panel">
+                    <div className="cs-panel-h"><h3>👁️ Vista previa de anuncios ({ads.length})</h3>
+                        <div className="sv-days cs-plat"><button type="button" className={platform === 'facebook' ? 'on' : ''} onClick={() => setPlatform('facebook')}>Facebook</button><button type="button" className={platform === 'instagram' ? 'on' : ''} onClick={() => setPlatform('instagram')}>Instagram</button></div>
                     </div>
-                    <div className="ab-block">
-                        <h4>👥 Público</h4>
-                        <div className="ab-row">
-                            <span className="ab-label">Edad</span>
-                            <input className="ab-num" type="number" min={18} max={64} value={a.ageMin} onChange={e => aud({ ageMin: Number(e.target.value) })} /><span>a</span>
-                            <input className="ab-num" type="number" min={19} max={65} value={a.ageMax} disabled={a.advantage} onChange={e => aud({ ageMax: Number(e.target.value) })} />
-                            <div className="sv-days">{Object.keys(AB_GENDER).map(g => <button key={g} type="button" className={a.gender === g ? 'on' : ''} onClick={() => aud({ gender: g })}>{AB_GENDER[g]}</button>)}</div>
+                    {ads.length ? (
+                        <div className="cs-strip-wrap">
+                            <button type="button" className="cs-arrow" onClick={() => scroll(-1)}>‹</button>
+                            <div className="cs-strip" ref={ref}>{ads.map(x => (
+                                <button type="button" key={x.ad._k} className="cs-strip-item" onClick={() => onOpen(x.si, x.ai)}>
+                                    <CsPreview plan={plan} ad={x.ad} s={ctx.s} ctaLabel={(ctaList.find(c => c.id === x.ad.cta) || ctaList[0] || {}).label} platform={platform} compact />
+                                    <small>{x.label}</small>
+                                </button>
+                            ))}</div>
+                            <button type="button" className="cs-arrow" onClick={() => scroll(1)}>›</button>
                         </div>
-                        <div className="ab-row"><span className="ab-label">Dónde</span>
-                            {a.cities.length ? a.cities.map((c, i) => <span className="cs-chip" key={c.key}>{c.name} · <input className="cs-radius" type="number" min={1} max={80} value={c.radius} onChange={e => aud({ cities: a.cities.map((x, k) => (k === i ? { ...x, radius: Number(e.target.value) } : x)) })} /> km<button type="button" onClick={() => aud({ cities: a.cities.filter((_, k) => k !== i) })}>✕</button></span>) : <span className="pb-muted">Todo el país ({ctx.s.country})</span>}
-                        </div>
-                        {a.cities.length < 10 && <CsTargetSearch type="ciudad" placeholder="+ Agregar ciudad (por ejemplo Guayaquil)" onAdd={r => aud({ cities: a.cities.some(c => c.key === r.key) ? a.cities : [...a.cities, { key: r.key, name: r.name, radius: 25 }] })} />}
-                        <div className="ab-row"><span className="ab-label">Intereses</span>
-                            {a.interests.length ? a.interests.map((it, i) => <span className="cs-chip" key={it.id}>{it.name}<button type="button" onClick={() => aud({ interests: a.interests.filter((_, k) => k !== i) })}>✕</button></span>) : <span className="pb-muted">Sin intereses (llega a todo el público de esa edad y género)</span>}
-                        </div>
-                        {a.interests.length < 10 && <CsTargetSearch type="interes" placeholder="+ Agregar interés (por ejemplo baby shower, maternidad, Halloween)" onAdd={r => aud({ interests: a.interests.some(x => x.id === r.id) ? a.interests : [...a.interests, { id: r.id, name: r.name }] })} />}
-                        <label className="sv-check ab-check"><input type="checkbox" checked={!!a.advantage} onChange={e => aud({ advantage: e.target.checked, ...(e.target.checked ? { ageMax: 65 } : {}) })} /> Dejar que Meta busque más allá de este público (Advantage+). Apagado = solo este público.</label>
-                    </div>
-                    <div className="ab-block">
-                        <h4>📍 Dónde se muestra</h4>
-                        <div className="sv-days">
-                            <button type="button" className={set.placements.mode === 'auto' ? 'on' : ''} onClick={() => patch({ placements: csAuto() })}>Automático (recomendado)</button>
-                            <button type="button" className={set.placements.mode === 'manual' ? 'on' : ''} onClick={() => place({ mode: 'manual' })}>Elegir</button>
-                        </div>
-                        {set.placements.mode === 'manual' && (
-                            <div className="ab-row">
-                                {[['facebook', 'Facebook'], ['instagram', 'Instagram'], ['feed', 'Feed'], ['stories', 'Historias'], ['reels', 'Reels']].map(([k, t]) => <label key={k} className="sv-check ab-check"><input type="checkbox" checked={!!set.placements[k]} onChange={e => place({ [k]: e.target.checked })} /> {t}</label>)}
-                            </div>
-                        )}
-                    </div>
-                    <div className="cs-two">
-                        {plan.budgetMode === 'conjunto' && (
-                            <label className="ab-field">Presupuesto por día de este conjunto
-                                <span className="ab-row">$<input className="ab-num" type="number" min={1} step={0.5} value={set.dailyBudget} onChange={e => patch({ dailyBudget: Number(e.target.value) })} /><small className="pb-muted">≈ {csMonthly(set.dailyBudget)} al mes</small></span>
-                            </label>
-                        )}
-                        {plan.objective === 'interaccion' && plan.destination === 'anuncio' && (
-                            <label className="ab-field">Qué busca<select value={set.optimization} onChange={e => patch({ optimization: e.target.value })}><option value="interacciones">Reacciones y comentarios</option><option value="reproducciones">Reproducciones (solo videos)</option></select></label>
-                        )}
-                    </div>
-                    {setIssues.length > 0 && <div className="ab-issues">{setIssues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
-
-                    <h4 className="cs-sub">Anuncios de este conjunto ({set.ads.length} de {ctx.limits.maxAdsPerAdset})</h4>
-                    {set.ads.map((ad, i) => (
-                        <CsAdEditor key={ad._k} ad={ad} index={i} total={set.ads.length} plan={plan} ctx={ctx} set={set} issues={issuesFor('Conjunto ' + (si + 1) + ' · Anuncio ' + (i + 1))}
-                            onChange={fn => setAd(i, fn)} onMove={dir => moveAd(i, dir)}
-                            onRemove={() => patch(x => ({ ads: x.ads.filter((_, k) => k !== i) }))}
-                            onDuplicate={() => patch(x => ({ ads: x.ads.length >= ctx.limits.maxAdsPerAdset ? x.ads : [...x.ads.slice(0, i + 1), { ...JSON.parse(JSON.stringify(ad)), _k: csUid(), name: (ad.name ? ad.name + ' ' : '') + '(copia)' }, ...x.ads.slice(i + 1)] }))} />
-                    ))}
-                    {set.ads.length < ctx.limits.maxAdsPerAdset && <div className="ab-row"><span className="ab-label">+ Agregar anuncio</span><div className="sv-days">{Object.keys(CS_FORMAT).map(f => <button key={f} type="button" onClick={() => addAd(f)}>{CS_FORMAT[f]}</button>)}</div></div>}
-                    <div className="sv-actions">
-                        <button type="button" className="sv-link" onClick={onDuplicate}>⧉ Duplicar este conjunto (para probar otro público con los mismos anuncios)</button>
-                        <button type="button" className="sv-link" onClick={onRemove}>✕ Quitar este conjunto</button>
-                    </div>
+                    ) : <div className="pb-muted">Abre un conjunto para ver sus anuncios.</div>}
+                    <small className="pb-muted">Toca una vista previa para editar ese anuncio.</small>
                 </div>
             );
         }
 
 
-        // El creador: objetivo y destino → la IA (o tú) arma la campaña → revisas cada conjunto y anuncio → se crea en Meta en pausa.
+        // El creador: objetivo y destino → eliges fotos y videos → la IA (o tú) arma la campaña → revisas → se crea en Meta en pausa.
         function CsBuilder({ data, reload, canEdit, canConfigure, seed, onSeedUsed }) {
             const s = data.settings || {};
             const [step, setStep] = useState('idle');
-            const [form, setForm] = useState({ objective: 'ventas', destination: 'web', idea: '', products: [], assets: [], adsets: 1, adsPerAdset: 4, mixMode: 'auto', mix: { image: 3, video: 1, carousel: 0 }, budget: 3 });
+            const [form, setForm] = useState({ objective: 'ventas', destination: 'web', idea: '', pieces: [], adsets: 1, adsPerAdset: 4, mixMode: 'auto', mix: { image: 3, video: 1, carousel: 0 }, budget: 3 });
             const [query, setQuery] = useState('');
             const [libQuery, setLibQuery] = useState('');
+            const [libKind, setLibKind] = useState('all');
             const [plan, setPlan] = useState(null);
             const [explanation, setExplanation] = useState('');
             const [review, setReview] = useState({ errors: [], issues: [], daily: 0, ads: 0 });
-            const [active, setActive] = useState(0);
+            const [openSet, setOpenSet] = useState(0);
+            const [editing, setEditing] = useState(null);
             const [busy, setBusy] = useState('');
             const [error, setError] = useState('');
             const [notice, setNotice] = useState('');
+            const [draft, setDraft] = useState(null);
+            const [savedAt, setSavedAt] = useState('');
             const [library, setLibrary] = useState(data.library || []);
+            const dirty = useRef(false);
             useEffect(() => { setLibrary(data.library || []); }, [data.library]);
+            useEffect(() => { if (canEdit) api('/api/ads/campaigns/draft').then(r => setDraft(r.draft)).catch(() => {}); }, []);
             // Una estrategia de la memoria abre el creador con su idea.
             useEffect(() => {
                 if (!seed) return;
                 setForm(f => ({ ...f, idea: seed })); setStep('pick'); setNotice(''); onSeedUsed();
             }, [seed]);
+            // Revisión con las reglas de Meta y guardado automático del borrador mientras se edita.
             useEffect(() => {
                 if (!plan) return;
                 const t = setTimeout(() => {
                     api('/api/ads/campaigns/review', { method: 'POST', body: JSON.stringify({ ...plan, idea: form.idea }) }).then(setReview).catch(() => {});
-                }, 800);
-                return () => clearTimeout(t);
+                }, 700);
+                const t2 = dirty.current ? setTimeout(() => saveDraft(true), 5000) : null;
+                dirty.current = true;
+                return () => { clearTimeout(t); if (t2) clearTimeout(t2); };
             }, [plan]);
             const objectives = data.objectives || [];
             const destinationsFor = id => ((objectives.find(o => o.id === id) || {}).destinations || []);
@@ -14804,39 +15029,49 @@
                     setBusy('');
                 }
             }
+            async function saveDraft(silent) {
+                if (!plan) return;
+                try {
+                    const r = await api('/api/ads/campaigns/draft', { method: 'PUT', body: JSON.stringify({ plan, form, explanation }) });
+                    setSavedAt(r.savedAt);
+                    if (!silent) setNotice('💾 Borrador guardado: puedes seguir después desde aquí.');
+                } catch (e) { if (!silent) setError(e.message); }
+            }
+            const openEdit = (p, expl) => { dirty.current = false; setPlan(csKeys(p)); setExplanation(expl || ''); setReview({ errors: [], issues: [], daily: 0, ads: 0 }); setOpenSet(0); setEditing(null); setStep('edit'); };
+            const resumeDraft = () => { setForm(f => ({ ...f, ...(draft.form || {}) })); openEdit(draft.plan, draft.explanation); setSavedAt(draft.savedAt); setDraft(null); };
+            const dropDraft = () => { if (!confirm('¿Borrar el borrador guardado?')) return; api('/api/ads/campaigns/draft', { method: 'DELETE' }).catch(() => {}); setDraft(null); };
             const chooseObjective = id => setForm(f => ({ ...f, objective: id, destination: destinationsFor(id).includes(f.destination) ? f.destination : destinationsFor(id)[0] }));
-            const toggle = (key, id, max) => setForm(f => ({ ...f, [key]: f[key].includes(id) ? f[key].filter(x => x !== id) : f[key].length >= max ? f[key] : [...f[key], id] }));
-            const mixList = () => {
-                if (form.mixMode === 'auto') return Array.from({ length: form.adsPerAdset }, (_, i) => (i === form.adsPerAdset - 1 && form.adsPerAdset > 1 ? 'video' : 'image'));
-                return [...Array(form.mix.image).fill('image'), ...Array(form.mix.video).fill('video'), ...Array(form.mix.carousel).fill('carousel')];
+            // Lo elegido, en el orden en que se eligió: productos (su foto del Catálogo) y fotos o videos de la Biblioteca.
+            const has = (t, id) => form.pieces.some(p => p.t === t && p.id === id);
+            const togglePiece = (t, id) => setForm(f => ({ ...f, pieces: has(t, id) ? f.pieces.filter(p => !(p.t === t && p.id === id)) : f.pieces.length >= 30 ? f.pieces : [...f.pieces, { t, id }] }));
+            const pieceView = p => {
+                if (p.t === 'p') { const x = catalog.find(c => c.id === p.id); return x && { thumb: x.images[0], url: x.images[0], kind: 'image', title: x.name }; }
+                const a = library.find(l => l.id === p.id); return a && { thumb: a.thumb, url: a.url, kind: a.kind, title: a.title || (a.kind === 'video' ? 'Video' : 'Foto') };
             };
             const propose = () => run('propose', async () => {
-                const body = { ...form, mix: form.mixMode === 'manual' ? form.mix : null, adsPerAdset: form.mixMode === 'manual' ? Math.max(1, form.mix.image + form.mix.video + form.mix.carousel) : form.adsPerAdset };
+                const body = { ...form, pieces: form.pieces.map(p => ({ t: p.t, id: p.id })), products: form.pieces.filter(p => p.t === 'p').map(p => p.id), assets: form.pieces.filter(p => p.t === 'b').map(p => p.id), mix: form.mixMode === 'manual' ? form.mix : null };
                 const r = await api('/api/ads/campaigns/propose', { method: 'POST', body: JSON.stringify(body) });
-                const p = csKeys(r.plan);
-                p.adsets.forEach(set => set.ads.forEach((ad, i) => { ad._open = i === 0; }));
-                setPlan(p); setExplanation(r.explanation || ''); setReview({ errors: [], issues: r.issues || [], daily: 0, ads: 0 }); setActive(0); setStep('edit');
+                openEdit(r.plan, r.explanation);
             });
             const manual = () => {
-                const cta = ((data.ctas || {})[form.destination] || [])[0];
-                const kinds = mixList();
-                const sets = Array.from({ length: form.adsets }, (_, n) => csEmptySet(s, n + 1, kinds.map((k, i) => ({ ...csEmptyAd(k, cta && cta.id), _open: i === 0 })), form.budget));
-                // Los productos elegidos llenan los anuncios de foto (uno por anuncio).
-                const picked = form.products.map(id => catalog.find(p => p.id === id)).filter(Boolean);
-                sets.forEach(set => set.ads.forEach((ad, i) => {
-                    const p = picked[i % Math.max(1, picked.length)];
-                    if (p && ad.format === 'image') Object.assign(ad, { productId: p.id, product: p.name, media: { kind: 'image', url: p.images[0], source: 'catalogo', assetId: '', thumb: p.images[0] }, name: p.displayName || p.name });
-                    if (p && ad.format === 'carousel') ad.cards = picked.slice(0, 10).map(x => ({ _k: csUid(), media: { kind: 'image', url: x.images[0], source: 'catalogo', assetId: '', thumb: x.images[0] }, productId: x.id, product: x.name, title: x.displayName || x.name, description: '' }));
-                }));
-                setPlan({ objective: form.objective, destination: form.destination, webEvent: s.webEvent, attributionDays: s.attributionDays || 7, theme: form.idea.slice(0, 40), hypothesis: '', budgetMode: 'conjunto', campaignBudget: form.budget * form.adsets, startDate: '', endDate: '', adsets: sets });
-                setExplanation(''); setReview({ errors: [], issues: [], daily: 0, ads: 0 }); setActive(0); setStep('edit');
+                const cta = (((data.ctas || {})[form.destination] || [])[0] || {}).id;
+                const toAd = p => {
+                    if (p.t === 'p') { const x = catalog.find(c => c.id === p.id); return x && { ...csEmptyAd('image', cta), productId: x.id, product: x.name, name: x.displayName || x.name, media: { kind: 'image', url: x.images[0], source: 'catalogo', assetId: '', thumb: x.images[0] } }; }
+                    const a = library.find(l => l.id === p.id); return a && { ...csEmptyAd(a.kind === 'video' ? 'video' : 'image', cta), name: a.title || '', media: { kind: a.kind, url: a.url, source: 'biblioteca', assetId: a.id, thumb: a.thumb || '' } };
+                };
+                const chosen = form.pieces.map(toAd).filter(Boolean);
+                const ads = () => (chosen.length ? chosen.map(a => ({ ...JSON.parse(JSON.stringify(a)), _k: csUid() })) : [csEmptyAd('image', cta)]);
+                const sets = Array.from({ length: form.adsets }, (_, n) => csEmptySet(s, n + 1, ads(), form.budget));
+                openEdit({ objective: form.objective, destination: form.destination, webEvent: s.webEvent, attributionDays: s.attributionDays || 7, theme: form.idea.slice(0, 40), hypothesis: '', budgetMode: 'conjunto', campaignBudget: form.budget * form.adsets, startDate: '', endDate: '', adsets: sets }, '');
             };
             const setPlanField = changes => setPlan(p => ({ ...p, ...changes }));
             const setSet = (i, fn) => setPlan(p => ({ ...p, adsets: p.adsets.map((x, k) => (k === i ? fn(x) : x)) }));
+            const setAd = (si, ai, fn) => setSet(si, x => ({ ...x, ads: x.ads.map((a, k) => (k === ai ? fn(a) : a)) }));
             const create = () => run('create', async () => {
                 const r = await api('/api/ads/campaigns/create', { method: 'POST', body: JSON.stringify({ ...plan, idea: form.idea }) });
-                setStep('idle'); setPlan(null);
-                setForm(f => ({ ...f, idea: '', products: [], assets: [] }));
+                api('/api/ads/campaigns/draft', { method: 'DELETE' }).catch(() => {});
+                setStep('idle'); setPlan(null); setEditing(null); setSavedAt('');
+                setForm(f => ({ ...f, idea: '', pieces: [] }));
                 await reload();
                 return r;
             }, r => '✅ Campaña creada en Meta EN PAUSA (' + r.created.adsets.length + ' conjunto(s), ' + r.created.adsets.reduce((n, a) => n + a.ads.length, 0) + ' anuncio(s)): no gasta nada todavía. Mírala abajo y toca Activar cuando quieras.' + (r.created.warnings && r.created.warnings.length ? ' Ojo: ' + r.created.warnings.join(' ') : ''));
@@ -14848,10 +15083,83 @@
             const q = query.trim().toLowerCase();
             const shown = (q ? catalog.filter(p => (p.name + ' ' + p.category).toLowerCase().includes(q)) : catalog).slice(0, 80);
             const lq = libQuery.trim().toLowerCase();
-            const libShown = library.filter(a => !lq || (a.title + ' ' + a.product).toLowerCase().includes(lq)).slice(0, 60);
+            const libShown = library.filter(a => (libKind === 'all' || a.kind === libKind) && (!lq || (a.title + ' ' + a.product).toLowerCase().includes(lq))).slice(0, 80);
             const daily = plan ? (plan.budgetMode === 'campana' ? Number(plan.campaignBudget || 0) : plan.adsets.reduce((t, x) => t + Number(x.dailyBudget || 0), 0)) : 0;
             const totalAds = plan ? plan.adsets.reduce((n, x) => n + x.ads.length, 0) : 0;
             const objLabel = id => (objectives.find(o => o.id === id) || {}).label || id;
+            const stripAds = plan ? (plan.adsets[openSet] ? plan.adsets[openSet].ads.map((ad, ai) => ({ ad, si: openSet, ai, label: 'Anuncio ' + (ai + 1) + (ad.name ? ' · ' + ad.name : '') })) : []) : [];
+
+            if (step === 'edit' && plan) return (
+                <section className="pb-card ab cs-page">
+                    <div className="cs-top">
+                        <button type="button" className="cs-back" title="Volver" disabled={!!busy} onClick={() => setStep('pick')}>←</button>
+                        <h2 className="grow">Crear campaña</h2>
+                        <span className={'cs-state ' + (errorsCount ? 'bad' : 'ok')}>{errorsCount ? '⛔ ' + errorsCount + ' por corregir' : '● Lista para crear'}</span>
+                        {savedAt && <small className="pb-muted">Borrador guardado {formatDateTime(savedAt)}</small>}
+                        <button type="button" className="pb-btn sm cs-outline" disabled={!!busy} onClick={() => saveDraft(false)}>Guardar borrador</button>
+                        {canConfigure && <button type="button" className="pb-btn main" disabled={!!busy || errorsCount > 0 || blocked} onClick={() => { if (confirm('¿Crear la campaña en Meta?\n\n' + plan.adsets.length + ' conjunto(s) y ' + totalAds + ' anuncio(s), en PAUSA (no gasta hasta que la actives). Meta sube las fotos y videos: puede tardar unos minutos.')) create(); }}>{busy === 'create' ? 'Creando en Meta…' : '🚀 Crear campaña en Meta'}</button>}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {notice && <div className="pb-notice ok">{notice}</div>}
+                    {explanation && <div className="ab-why">🤖 {explanation}</div>}
+                    <div className="cs-layout">
+                        <div className="cs-main">
+                            <div className="cs-panel">
+                                <div className="cs-panel-h"><h3><span className="cs-num">1</span> Información de la campaña</h3>
+                                    <div className="ab-row"><span className="ab-chip">{(CS_OBJ[plan.objective] || {}).icon} {objLabel(plan.objective)}</span><span className="ab-chip">{CS_DEST[plan.destination].icon} {CS_DEST[plan.destination].label}</span><span className={'ab-chip' + (daily > s.maxDaily ? ' cs-over' : '')}>{abMoney(daily)} por día · {csMonthly(daily)} al mes</span></div>
+                                </div>
+                                <div className="cs-two">
+                                    <label className="ab-field">Nombre de la campaña (tema)<input type="text" maxLength={40} value={plan.theme} onChange={e => setPlanField({ theme: e.target.value })} /></label>
+                                    <label className="ab-field">¿Qué quieres aprender con esta campaña?<input type="text" maxLength={300} placeholder="Ej.: ¿el video vende más que las fotos?" value={plan.hypothesis} onChange={e => setPlanField({ hypothesis: e.target.value })} /></label>
+                                </div>
+                                <div className="cs-info-row">
+                                    <label className="ab-field cs-wide">Presupuesto
+                                        <div className="sv-days"><button type="button" className={plan.budgetMode === 'conjunto' ? 'on' : ''} onClick={() => setPlanField({ budgetMode: 'conjunto' })}>Por conjunto</button><button type="button" className={plan.budgetMode === 'campana' ? 'on' : ''} onClick={() => setPlanField({ budgetMode: 'campana', campaignBudget: plan.campaignBudget || daily || 3 })}>De campaña (Meta reparte)</button></div>
+                                    </label>
+                                    {plan.budgetMode === 'campana' && <label className="ab-field">Por día<span className="ab-row">$<input className="ab-num" type="number" min={1} step={0.5} value={plan.campaignBudget} onChange={e => setPlanField({ campaignBudget: Number(e.target.value) })} /></span></label>}
+                                    <label className="ab-field">Empieza <small>(vacío = al activar)</small><input type="date" value={plan.startDate} onChange={e => setPlanField({ startDate: e.target.value })} /></label>
+                                    <label className="ab-field">Termina <small>(opcional)</small><input type="date" value={plan.endDate} onChange={e => setPlanField({ endDate: e.target.value })} /></label>
+                                    {plan.objective === 'ventas' && plan.destination === 'web' && <label className="ab-field">Busca en la web<select value={plan.webEvent} onChange={e => setPlanField({ webEvent: e.target.value })}>{Object.keys(AB_EVENTS).map(k => <option key={k} value={k}>{AB_EVENTS[k]}</option>)}</select></label>}
+                                    {plan.destination === 'web' && plan.objective !== 'trafico' && <label className="ab-field">La compra cuenta<select value={plan.attributionDays} onChange={e => setPlanField({ attributionDays: Number(e.target.value) })}><option value={1}>1 día después del clic</option><option value={7}>7 días después del clic</option></select></label>}
+                                </div>
+                                {general.length > 0 && <div className="ab-issues">{general.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
+                            </div>
+
+                            <div className="cs-panel">
+                                <div className="cs-panel-h"><h3><span className="cs-num">2</span> Conjuntos de anuncios <small className="pb-muted">cada uno con su público, ubicaciones y presupuesto</small></h3>
+                                    {plan.adsets.length < ctx.limits.maxAdsets && <button type="button" className="pb-btn sm cs-outline" onClick={() => { const cta = (((data.ctas || {})[plan.destination] || [])[0] || {}).id; setPlan(p => ({ ...p, adsets: [...p.adsets, csEmptySet(s, p.adsets.length + 1, [csEmptyAd('image', cta)], form.budget)] })); setOpenSet(plan.adsets.length); }}>+ Agregar conjunto</button>}
+                                </div>
+                                {plan.adsets.map((set, si) => (
+                                    <CsSetRow key={set._k} set={set} si={si} plan={plan} ctx={ctx} open={openSet === si} onToggle={() => setOpenSet(openSet === si ? -1 : si)} issuesFor={issuesFor}
+                                        onChange={fn => setSet(si, fn)} onEditAd={ai => { setOpenSet(si); setEditing({ si, ai }); }}
+                                        onRemove={() => { if (plan.adsets.length > 1 && confirm('¿Quitar este conjunto y sus anuncios?')) { setPlan(p => ({ ...p, adsets: p.adsets.filter((_, k) => k !== si) })); setOpenSet(0); } }}
+                                        onDuplicate={() => { if (plan.adsets.length < ctx.limits.maxAdsets) { setPlan(p => ({ ...p, adsets: [...p.adsets, csKeys({ adsets: [{ ...JSON.parse(JSON.stringify(p.adsets[si])), _k: '', name: p.adsets[si].name + ' (copia)', ads: p.adsets[si].ads.map(a => ({ ...JSON.parse(JSON.stringify(a)), _k: '' })) }] }).adsets[0]] })); setOpenSet(plan.adsets.length); } }} />
+                                ))}
+                            </div>
+                        </div>
+                        <aside className="cs-aside">
+                            <div className="cs-panel">
+                                <div className="cs-panel-h"><h3>✨ Resumen de la campaña</h3></div>
+                                <div className="cs-stats">
+                                    <div><b>{abMoney(daily)}</b><small>Presupuesto diario<br />≈ {csMonthly(daily)} al mes</small></div>
+                                    <div><b>{plan.adsets.length}</b><small>Conjuntos de anuncios</small></div>
+                                    <div><b>{totalAds}</b><small>Anuncios en total</small></div>
+                                    <div><b className={errorsCount ? 'bad' : 'ok'}>{errorsCount ? errorsCount : '✓'}</b><small>{errorsCount ? 'Por corregir' : 'Lista para crear'}</small></div>
+                                </div>
+                                {daily > s.maxDaily && <div className="ab-issue error">Pasa tu tope de {abMoney(s.maxDaily)} por día.</div>}
+                            </div>
+                            <CsPreviewStrip plan={plan} ctx={ctx} ads={stripAds} onOpen={(si, ai) => setEditing({ si, ai })} />
+                        </aside>
+                    </div>
+                    {!canConfigure && <div className="pb-muted">Solo la dueña puede crearla en Meta.</div>}
+                    {blocked && data.account && data.account.problem && <div className="pb-muted">No se puede crear mientras la cuenta tenga ese problema (ver aviso arriba).</div>}
+                    {editing && plan.adsets[editing.si] && (
+                        <CsAdModal plan={plan} ctx={ctx} si={editing.si} ai={editing.ai} issuesFor={issuesFor} onClose={() => setEditing(null)}
+                            onNav={dir => setEditing(e => ({ ...e, ai: Math.max(0, Math.min(plan.adsets[e.si].ads.length - 1, e.ai + dir)) }))}
+                            onChange={fn => setAd(editing.si, editing.ai, fn)} />
+                    )}
+                </section>
+            );
 
             return (
                 <section className="pb-card ab">
@@ -14859,12 +15167,13 @@
                         <div className="pb-tile"><PlatIcon name="sparkle" size={22} color="#B5654A" /></div>
                         <div className="grow">
                             <h2>✨ Crear campaña</h2>
-                            <p>Elige el objetivo y a dónde lleva; la IA arma la campaña con tus productos, tus videos de la Biblioteca y lo aprendido de campañas anteriores. Puedes tener varios conjuntos (públicos) y varios anuncios por conjunto: foto, video o carrusel. Se crea en Meta <b>en pausa</b>: no gasta nada hasta que toques Activar.</p>
+                            <p>Elige el objetivo, a dónde lleva y las fotos y videos que quieres usar: la IA arma conjuntos y anuncios con <b>exactamente</b> lo que elijas, y escribe los textos mirando cada foto o video. Se crea en Meta <b>en pausa</b>: no gasta nada hasta que toques Activar.</p>
                         </div>
                         {step === 'idle' && canEdit && <button type="button" className="pb-btn main" disabled={!data.connected} onClick={() => { setStep('pick'); setNotice(''); }}>✨ Nueva campaña</button>}
                     </div>
                     {error && <div className="pb-err">{error}</div>}
                     {notice && <div className="pb-notice ok">{notice}</div>}
+                    {step === 'idle' && draft && <div className="pb-notice">💾 Tienes una campaña sin terminar ({(draft.plan.theme || 'sin nombre')}, guardada {formatDateTime(draft.savedAt)}). <button type="button" className="sv-link" onClick={resumeDraft}>Continuar</button> · <button type="button" className="sv-link" onClick={dropDraft}>Borrar</button></div>}
                     {!data.connected && <div className="pb-muted">Primero conecta la cuenta publicitaria de Meta (más abajo, en "Cuenta publicitaria de Meta").</div>}
                     {data.connected && !ctx.aiReady && <div className="pb-muted">La IA usa la clave del agente de redes: agrégala en Publicaciones → Cerebro IA. Sin ella puedes armar la campaña a mano.</div>}
                     {step === 'idle' && data.connected && <div className="pb-muted">Hoy: {data.limits.campaignsToday} de {data.limits.campaignsPerDay} campañas nuevas y {data.limits.adsToday} de {data.limits.adsPerDay} anuncios (para cuidar tu cuenta con Meta).</div>}
@@ -14884,8 +15193,8 @@
                                 </button>
                             ))}</div>
                             {missing.length > 0 && <div className="pb-notice">Para esta campaña falta en Ajustes (abajo): {missing.join(', ')}.</div>}
-                            <label className="ab-field">3. ¿Qué quieres anunciar? <small>(la IA lo usa para los textos y, si no eliges productos, para buscarlos)</small>
-                                <textarea rows={2} maxLength={800} placeholder="Ej.: Halloween para fiestas infantiles: calabazas y fantasmitas; probar video contra fotos" value={form.idea} onChange={e => setForm(f => ({ ...f, idea: e.target.value }))} />
+                            <label className="ab-field">3. ¿Qué quieres anunciar? <small>(la IA lo usa para los textos y los públicos)</small>
+                                <textarea rows={2} maxLength={800} placeholder="Ej.: Baby shower de ositos: probar video contra fotos" value={form.idea} onChange={e => setForm(f => ({ ...f, idea: e.target.value }))} />
                             </label>
                             <span className="ab-label">4. Estructura</span>
                             <div className="ab-row">
@@ -14894,91 +15203,53 @@
                             </div>
                             <div className="ab-row">
                                 <span>Anuncios por conjunto:</span>
-                                <div className="sv-days"><button type="button" className={form.mixMode === 'auto' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, mixMode: 'auto' }))}>Que decida la IA</button><button type="button" className={form.mixMode === 'manual' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, mixMode: 'manual' }))}>Elegir cuántos de cada uno</button></div>
+                                <div className="sv-days"><button type="button" className={form.mixMode === 'auto' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, mixMode: 'auto' }))}>Uno por cada foto o video</button><button type="button" className={form.mixMode === 'manual' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, mixMode: 'manual' }))}>Elegir cuántos de cada uno</button></div>
                                 {form.mixMode === 'auto'
-                                    ? <><input className="ab-num" type="number" min={1} max={ctx.limits.maxAdsPerAdset} value={form.adsPerAdset} onChange={e => setForm(f => ({ ...f, adsPerAdset: Math.max(1, Math.min(ctx.limits.maxAdsPerAdset, Number(e.target.value) || 1)) }))} /><small className="pb-muted">anuncios</small></>
+                                    ? <><span>máximo</span><input className="ab-num" type="number" min={1} max={ctx.limits.maxAdsPerAdset} value={form.adsPerAdset} onChange={e => setForm(f => ({ ...f, adsPerAdset: Math.max(1, Math.min(ctx.limits.maxAdsPerAdset, Number(e.target.value) || 1)) }))} /><small className="pb-muted">(lo que sobra va en un carrusel)</small></>
                                     : ['image', 'video', 'carousel'].map(k => <span key={k} className="ab-row">{CS_FORMAT[k]}<input className="ab-num" type="number" min={0} max={ctx.limits.maxAdsPerAdset} value={form.mix[k]} onChange={e => setForm(f => ({ ...f, mix: { ...f.mix, [k]: Math.max(0, Math.min(ctx.limits.maxAdsPerAdset, Number(e.target.value) || 0)) } }))} /></span>)}
                             </div>
-                            <div className="ab-row"><span className="ab-label">5. Productos ({form.products.length} de 30)</span><input type="search" placeholder="Buscar en el catálogo…" value={query} onChange={e => setQuery(e.target.value)} /></div>
-                            <div className="ab-grid">{shown.map(p => (
-                                <button type="button" key={p.id} className={'ab-prod' + (form.products.includes(p.id) ? ' on' : '')} onClick={() => toggle('products', p.id, 30)}>
-                                    <img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                                    <span>{p.name}</span><small>{abMoney(p.price)} · {p.category}</small>
-                                </button>
-                            ))}</div>
-                            <div className="ab-row"><span className="ab-label">6. Videos y fotos de la Biblioteca ({form.assets.length}) <small className="pb-muted">opcional: los que quieres que use</small></span><input type="search" placeholder="Buscar en la Biblioteca…" value={libQuery} onChange={e => setLibQuery(e.target.value)} /></div>
-                            {libShown.length ? <div className="ab-grid">{libShown.map(a => (
-                                <button type="button" key={a.id} className={'ab-prod' + (form.assets.includes(a.id) ? ' on' : '')} onClick={() => toggle('assets', a.id, 20)}>
-                                    {a.thumb ? <img src={a.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid big">🎬</span>}
-                                    <span>{a.kind === 'video' ? '🎬 ' : '🖼️ '}{a.title || 'Sin nombre'}</span><small>{a.kind === 'video' && a.duration ? Math.round(a.duration) + ' s · ' : ''}{a.usedCount ? 'usado ' + a.usedCount + ' veces' : 'sin usar'}</small>
-                                </button>
-                            ))}</div> : <div className="pb-muted">La Biblioteca está vacía: puedes subir videos y fotos dentro de cada anuncio o en Publicaciones → Biblioteca.</div>}
+
+                            <span className="ab-label">5. Fotos y videos para los anuncios <small className="pb-muted">la IA usa exactamente estos, en este orden (si no eliges, elige según tu idea)</small></span>
+                            <div className="cs-chosen">{form.pieces.length ? form.pieces.map((p, i) => { const v = pieceView(p); return v && (
+                                <span key={p.t + p.id} className="cs-chosen-item" {...hoverProps(v)}>
+                                    {v.thumb ? <img src={v.thumb} alt="" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>}
+                                    <i>{i + 1}</i>{v.kind === 'video' && <em>▶</em>}
+                                    <button type="button" title="Quitar" onClick={() => togglePiece(p.t, p.id)}>✕</button>
+                                    <small>{v.title}</small>
+                                </span>
+                            ); }) : <span className="pb-muted">Todavía no eliges nada. Toca fotos de productos o de la Biblioteca abajo.</span>}</div>
+                            <div className="cs-pick2">
+                                <div>
+                                    <div className="ab-row"><b className="grow">🛍️ Productos del Catálogo</b><input type="search" className="cs-search" placeholder="Buscar producto…" value={query} onChange={e => setQuery(e.target.value)} /></div>
+                                    <div className="ab-grid">{shown.map(p => (
+                                        <button type="button" key={p.id} className={'ab-prod' + (has('p', p.id) ? ' on' : '')} {...hoverProps({ kind: 'image', url: p.images[0], title: p.name + ' · ' + abMoney(p.price) })} onClick={() => togglePiece('p', p.id)}>
+                                            <img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                                            <span>{p.name}</span><small>{abMoney(p.price)} · {p.category}</small>
+                                        </button>
+                                    ))}</div>
+                                </div>
+                                <div>
+                                    <div className="ab-row"><b className="grow">🎬 Biblioteca</b>
+                                        <div className="sv-days">{[['all', 'Todo'], ['video', 'Videos'], ['image', 'Fotos']].map(([k, t]) => <button key={k} type="button" className={libKind === k ? 'on' : ''} onClick={() => setLibKind(k)}>{t}</button>)}</div>
+                                        <input type="search" className="cs-search" placeholder="Buscar…" value={libQuery} onChange={e => setLibQuery(e.target.value)} /></div>
+                                    {libShown.length ? <div className="ab-grid">{libShown.map(a => (
+                                        <button type="button" key={a.id} className={'ab-prod' + (has('b', a.id) ? ' on' : '')} {...hoverProps({ kind: a.kind, url: a.url, thumb: a.thumb, title: a.title })} onClick={() => togglePiece('b', a.id)}>
+                                            {a.thumb ? <img src={a.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid big">🎬</span>}
+                                            <span>{a.kind === 'video' ? '🎬 ' : '🖼️ '}{a.title || 'Sin nombre'}</span><small>{a.kind === 'video' && a.duration ? Math.round(a.duration) + ' s · ' : ''}{a.usedCount ? 'usado ' + a.usedCount + ' veces' : 'sin usar'}</small>
+                                        </button>
+                                    ))}</div> : <div className="pb-muted">Nada en la Biblioteca con este filtro: puedes subir videos y fotos en Publicaciones → Biblioteca o dentro de cada anuncio.</div>}
+                                </div>
+                            </div>
                             <div className="sv-actions">
-                                <button type="button" className="pb-btn main" disabled={!!busy || !ctx.aiReady || (!form.products.length && !form.idea.trim())} onClick={propose}>{busy === 'propose' ? '✨ Armando la campaña (puede tardar un minuto)…' : '✨ Que la IA arme la campaña'}</button>
+                                <button type="button" className="pb-btn main" disabled={!!busy || !ctx.aiReady || (!form.pieces.length && !form.idea.trim())} onClick={propose}>{busy === 'propose' ? '✨ La IA está mirando tus fotos y videos (puede tardar un minuto)…' : '✨ Que la IA arme la campaña'}</button>
                                 <button type="button" className="pb-btn sm" disabled={!!busy} onClick={manual}>✏️ Armarla yo</button>
                                 <button type="button" className="pb-btn sm" onClick={() => setStep('idle')}>Cancelar</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 'edit' && plan && (
-                        <div className="cs-edit">
-                            {explanation && <div className="ab-why">🤖 {explanation}</div>}
-                            <div className="ab-block">
-                                <h4>📋 Campaña</h4>
-                                <div className="ab-row">
-                                    <span className="ab-chip">{(CS_OBJ[plan.objective] || {}).icon} {objLabel(plan.objective)}</span>
-                                    <span className="ab-chip">{CS_DEST[plan.destination].icon} {CS_DEST[plan.destination].label}</span>
-                                    <span className="ab-chip">{plan.adsets.length} conjunto(s) · {totalAds} anuncio(s)</span>
-                                    <span className={'ab-chip' + (daily > s.maxDaily ? ' cs-over' : '')}>{abMoney(daily)} por día ≈ {csMonthly(daily)} al mes · tope {abMoney(s.maxDaily)}</span>
-                                </div>
-                                <div className="cs-two">
-                                    <label className="ab-field">Nombre (tema)<input type="text" maxLength={40} value={plan.theme} onChange={e => setPlanField({ theme: e.target.value })} /></label>
-                                    <label className="ab-field">¿Qué quieres aprender con esta campaña? <small>(queda en la memoria)</small><input type="text" maxLength={300} placeholder="Ej.: ¿el video vende más que las fotos?" value={plan.hypothesis} onChange={e => setPlanField({ hypothesis: e.target.value })} /></label>
-                                </div>
-                                <div className="cs-two">
-                                    {plan.objective === 'ventas' && plan.destination === 'web' && <label className="ab-field">Qué busca en la web<select value={plan.webEvent} onChange={e => setPlanField({ webEvent: e.target.value })}>{Object.keys(AB_EVENTS).map(k => <option key={k} value={k}>{AB_EVENTS[k]}</option>)}</select></label>}
-                                    {plan.destination === 'web' && plan.objective !== 'trafico' && <label className="ab-field">Cuenta la compra si pasa dentro de<select value={plan.attributionDays} onChange={e => setPlanField({ attributionDays: Number(e.target.value) })}><option value={1}>1 día después del clic</option><option value={7}>7 días después del clic</option></select></label>}
-                                    <label className="ab-field">Presupuesto
-                                        <div className="sv-days"><button type="button" className={plan.budgetMode === 'conjunto' ? 'on' : ''} onClick={() => setPlanField({ budgetMode: 'conjunto' })}>Por conjunto</button><button type="button" className={plan.budgetMode === 'campana' ? 'on' : ''} onClick={() => setPlanField({ budgetMode: 'campana', campaignBudget: plan.campaignBudget || daily || 3 })}>De campaña (Meta reparte)</button></div>
-                                    </label>
-                                    {plan.budgetMode === 'campana' && <label className="ab-field">Presupuesto de la campaña por día<span className="ab-row">$<input className="ab-num" type="number" min={1} step={0.5} value={plan.campaignBudget} onChange={e => setPlanField({ campaignBudget: Number(e.target.value) })} /></span></label>}
-                                    <label className="ab-field">Empieza <small>(vacío = al activar)</small><input type="date" value={plan.startDate} onChange={e => setPlanField({ startDate: e.target.value })} /></label>
-                                    <label className="ab-field">Termina <small>(opcional)</small><input type="date" value={plan.endDate} onChange={e => setPlanField({ endDate: e.target.value })} /></label>
-                                </div>
-                                {general.length > 0 && <div className="ab-issues">{general.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
-                            </div>
-
-                            <div className="cs-tabs">
-                                {plan.adsets.map((x, i) => {
-                                    const bad = issuesFor('Conjunto ' + (i + 1)).some(it => it.level === 'error') || issuesFor('Conjunto ' + (i + 1), true).some(it => it.level === 'error');
-                                    return <button type="button" key={x._k} className={(active === i ? 'on' : '') + (bad ? ' bad' : '')} onClick={() => setActive(i)}>{bad ? '⛔ ' : ''}{x.name || 'Conjunto ' + (i + 1)}<small>{x.ads.length} anuncio(s){plan.budgetMode === 'conjunto' ? ' · ' + abMoney(x.dailyBudget) : ''}</small></button>;
-                                })}
-                                {plan.adsets.length < ctx.limits.maxAdsets && <button type="button" onClick={() => { setPlan(p => ({ ...p, adsets: [...p.adsets, csEmptySet(s, p.adsets.length + 1, [csEmptyAd('image', (((data.ctas || {})[p.destination] || [])[0] || {}).id)], form.budget)] })); setActive(plan.adsets.length); }}>+ Conjunto</button>}
-                            </div>
-                            {plan.adsets[active] && (
-                                <CsAdsetEditor key={plan.adsets[active]._k} set={plan.adsets[active]} si={active} plan={plan} ctx={ctx} issuesFor={issuesFor}
-                                    onChange={fn => setSet(active, fn)}
-                                    onRemove={() => { if (plan.adsets.length > 1 && confirm('¿Quitar este conjunto y sus anuncios?')) { setPlan(p => ({ ...p, adsets: p.adsets.filter((_, k) => k !== active) })); setActive(0); } }}
-                                    onDuplicate={() => { if (plan.adsets.length < ctx.limits.maxAdsets) { setPlan(p => ({ ...p, adsets: [...p.adsets, csKeys({ adsets: [{ ...JSON.parse(JSON.stringify(p.adsets[active])), _k: '', name: p.adsets[active].name + ' (copia)', ads: p.adsets[active].ads.map(a => ({ ...JSON.parse(JSON.stringify(a)), _k: '', _open: false })) }] }).adsets[0]] })); setActive(plan.adsets.length); } }} />
-                            )}
-
-                            <div className="ab-block cs-final">
-                                {errorsCount ? <div className="ab-issue error">⛔ Hay {errorsCount} cosa(s) por corregir (marcadas en cada conjunto y anuncio).</div> : <div className="ab-issue ok">✅ Revisada con las reglas de publicidad de Meta: lista para crear.</div>}
-                                <div className="sv-actions">
-                                    {canConfigure && <button type="button" className="pb-btn main" disabled={!!busy || errorsCount > 0 || blocked} onClick={() => { if (confirm('¿Crear la campaña en Meta?\n\n' + plan.adsets.length + ' conjunto(s) y ' + totalAds + ' anuncio(s), en PAUSA (no gasta hasta que la actives). Meta sube las fotos y videos: puede tardar unos minutos.')) create(); }}>{busy === 'create' ? 'Creando en Meta (subiendo fotos y videos)…' : '🚀 Crear campaña en Meta (en pausa)'}</button>}
-                                    <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setStep('pick')}>← Volver</button>
-                                    <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => { if (confirm('¿Descartar esta campaña?')) { setPlan(null); setStep('idle'); } }}>Descartar</button>
-                                </div>
-                                {!canConfigure && <div className="pb-muted">Solo la dueña puede crearla en Meta.</div>}
-                                {blocked && data.account && data.account.problem && <div className="pb-muted">No se puede crear mientras la cuenta tenga ese problema (ver aviso arriba).</div>}
                             </div>
                         </div>
                     )}
                 </section>
             );
         }
-
 
         // Las campañas creadas desde el CRM: estado en Meta, gasto, resultados y ventas por conjunto y por anuncio.
         function CsCampaigns({ data, reload, canConfigure }) {
@@ -15301,6 +15572,7 @@
                     <CsMemory canEdit={canEdit} aiReady={aiReady} onUseStrategy={idea => { setSeed(idea); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
                     <CsAdvice canEdit={canEdit} aiReady={aiReady} />
                     {canConfigure && <CsSettings data={data} reload={load} />}
+                    <HoverPreview />
                 </>
             );
         }

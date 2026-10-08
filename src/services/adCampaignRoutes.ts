@@ -3,7 +3,7 @@ import { requireCrmSession, requireOwnerRole, requireEditorRole, getCrmSession }
 import { readBuilderSettings, adCatalog } from './adBuilder';
 import {
   campaignsOverview, builderOptions, proposeCampaign, normalizePlan, reviewPlan, writeTexts, searchTargeting, createCampaign, setCampaignActive,
-  setAdActive, setCampaignBudget, adLibrary, dailyTotal, adCount
+  setAdActive, setCampaignBudget, adLibrary, dailyTotal, adCount, readDraft, saveDraft, deleteDraft
 } from './adCampaigns';
 import { memoryOverview, refreshMemory, analyzeMemory } from './adMemory';
 
@@ -62,6 +62,32 @@ export function adCampaignRouter(): Router {
     try {
       const type = req.query.type === 'ciudad' ? 'ciudad' : 'interes';
       res.json({ results: await searchTargeting(type, String(req.query.q || '')) });
+    } catch (error: any) {
+      fail(res, error);
+    }
+  });
+
+  // Borrador guardado de la campaña (uno por empresa).
+  router.get('/api/ads/campaigns/draft', requireCrmSession, requireEditorRole, async (_req: Request, res: Response) => {
+    try {
+      res.json({ draft: await readDraft() });
+    } catch (error: any) {
+      fail(res, error, 500);
+    }
+  });
+
+  router.put('/api/ads/campaigns/draft', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
+    try {
+      res.json(await saveDraft(req.body || {}, who(req)));
+    } catch (error: any) {
+      fail(res, error);
+    }
+  });
+
+  router.delete('/api/ads/campaigns/draft', requireCrmSession, requireEditorRole, async (_req: Request, res: Response) => {
+    try {
+      await deleteDraft();
+      res.json({ ok: true });
     } catch (error: any) {
       fail(res, error);
     }
