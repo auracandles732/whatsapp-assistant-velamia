@@ -64,6 +64,8 @@ export interface BuilderSettings {
   webUrl: string;
   /** Lo que se optimiza en los anuncios a la web (evento del píxel). */
   webEvent: typeof WEB_EVENTS[number];
+  /** Días después del clic en que una compra en la web cuenta para el anuncio (1 o 7). */
+  attributionDays: 1 | 7;
   country: string;
   /** Tope por día (US$) de todo lo activo creado desde el CRM. */
   maxDaily: number;
@@ -114,7 +116,7 @@ export function normalizeSettings(raw: any): BuilderSettings {
   return {
     pageId: digitsOf(r.pageId, 5, 30), pageName: short(r.pageName, 120), instagramId: digitsOf(r.instagramId, 5, 30), instagramName: short(r.instagramName, 120),
     pixelId: digitsOf(r.pixelId, 5, 30), pixelName: short(r.pixelName, 120), whatsappNumber: digitsOf(r.whatsappNumber, 8, 15),
-    webUrl: normalizeShopUrl(r.webUrl), webEvent: WEB_EVENTS.includes(r.webEvent) ? r.webEvent : 'ADD_TO_CART', country,
+    webUrl: normalizeShopUrl(r.webUrl), webEvent: WEB_EVENTS.includes(r.webEvent) ? r.webEvent : 'ADD_TO_CART', attributionDays: Number(r.attributionDays) === 1 ? 1 : 7, country,
     maxDaily: money(r.maxDaily, 1, 500, 10), audience: normalizeAudience(r.audience)
   };
 }
@@ -352,39 +354,54 @@ const EMOJI = /\p{Extended_Pictographic}/gu;
 
 const pricesIn = (text: string) => [...text.matchAll(/\$\s?(\d{1,5}(?:[.,]\d{1,2})?)/g)].map(m => Number(m[1].replace(',', '.')));
 
+/** Precios permitidos en un texto: los de esos productos del Catálogo y los que escribió la empresa en su idea (en centavos). */
+export function allowedPrices(catalog: PickProduct[], productNames: string[], idea = ''): Set<number> {
+  const inAd = new Set(productNames.map(plain));
+  return new Set<number>([...catalog.filter(p => inAd.has(plain(p.name))).map(p => p.price), ...pricesIn(idea)].map(n => Math.round(n * 100)));
+}
+
+/**
+ * Las reglas de publicidad de Meta y de la empresa para un texto de anuncio. "error" impide crearlo; "aviso" se muestra para
+ * que la empresa decida. Sin efectos.
+ */
+export function textIssues(text: string, where: string, o: { toWeb: boolean; prices: Set<number>; idea?: string }): Issue[] {
+  const idea = o.idea || '';
+  const out: Issue[] = [];
+  const add = (level: Issue['level'], t: string) => out.push({ level, where, text: t });
+  if (PERSONAL.some(re => re.test(text))) add('error', 'Meta no permite suponer algo personal de quien ve el anuncio (embarazo, salud, religión, estado civil, dinero…). Habla del producto o de la ocasión.');
+  if (BAIT.test(text)) add('error', 'Meta castiga pedir que comenten, compartan, etiqueten o den like. Invita a ver o pedir el producto.');
+  if (o.toWeb && WHATSAPP_WORDS.test(text)) add('error', 'Este anuncio lleva a la web: no menciones WhatsApp.');
+  for (const price of pricesIn(text)) {
+    if (!o.prices.has(Math.round(price * 100))) add('error', `El precio $${price} no es de ningún producto de este anuncio en el Catálogo.`);
+  }
+  if (PROMO.test(text) && !PROMO.test(idea)) add('aviso', 'Habla de una promoción o descuento: confirma que es real (Meta rechaza anuncios engañosos).');
+  if (URGENCY.test(text) && !URGENCY.test(idea)) add('aviso', 'Usa urgencia ("últimas unidades", "solo hoy"): úsala solo si es verdad.');
+  if (ABSOLUTE.test(text)) add('aviso', 'Las promesas absolutas ("garantizado", "el mejor") pueden ser rechazadas por Meta.');
+  if (META_BRANDS.test(text)) add('aviso', 'Mejor no nombrar Facebook, Instagram ni Meta en el texto.');
+  if ((text.match(/\b[A-ZÁÉÍÓÚÑ]{4,}\b/g) || []).length >= 3) add('aviso', 'Muchas palabras en MAYÚSCULAS: Meta lo ve poco profesional.');
+  if (/[!?¡¿]{3,}/.test(text)) add('aviso', 'Demasiados signos seguidos (!!!).');
+  if ((text.match(EMOJI) || []).length > 6) add('aviso', 'Demasiados emojis.');
+  return out;
+}
+
 /**
  * Revisa los textos del anuncio con las reglas de publicidad de Meta y las de la empresa. Los "error" impiden crearlo; los
  * "aviso" se muestran para que la empresa decida. Sin efectos.
  */
 export function reviewDraft(d: AdDraft, catalog: PickProduct[], idea = ''): Issue[] {
   const issues: Issue[] = [];
-  const add = (level: Issue['level'], where: string, text: string) => {
-    if (!issues.some(i => i.where === where && i.text === text)) issues.push({ level, where, text });
+  const add = (i: Issue) => {
+    if (!issues.some(x => x.where === i.where && x.text === i.text)) issues.push(i);
   };
-  const inAd = new Set(d.cards.map(c => plain(c.product)));
-  const allowed = new Set<number>([...catalog.filter(p => inAd.has(plain(p.name))).map(p => p.price), ...pricesIn(idea)].map(n => Math.round(n * 100)));
+  const prices = allowedPrices(catalog, d.cards.map(c => c.product), idea);
   const pieces: [string, string][] = [
     ...d.texts.map((t, i): [string, string] => [`Texto ${i + 1}`, t]),
     ...(d.format === 'single' ? d.headlines.map((t, i): [string, string] => [`Título ${i + 1}`, t]) : []),
     ...(d.format === 'single' && d.description ? [['Descripción', d.description] as [string, string]] : []),
     ...(d.format === 'carousel' ? d.cards.flatMap((c, i): [string, string][] => [[`Tarjeta ${i + 1}`, `${c.title}\n${c.description}`]]) : [])
   ];
-  for (const [where, text] of pieces) {
-    if (PERSONAL.some(re => re.test(text))) add('error', where, 'Meta no permite suponer algo personal de quien ve el anuncio (embarazo, salud, religión, estado civil, dinero…). Habla del producto o de la ocasión.');
-    if (BAIT.test(text)) add('error', where, 'Meta castiga pedir que comenten, compartan, etiqueten o den like. Invita a ver o pedir el producto.');
-    if (d.destination === 'web' && WHATSAPP_WORDS.test(text)) add('error', where, 'Este anuncio lleva a la web: no menciones WhatsApp.');
-    for (const price of pricesIn(text)) {
-      if (!allowed.has(Math.round(price * 100))) add('error', where, `El precio $${price} no es de ningún producto de este anuncio en el Catálogo.`);
-    }
-    if (PROMO.test(text) && !PROMO.test(idea)) add('aviso', where, 'Habla de una promoción o descuento: confirma que es real (Meta rechaza anuncios engañosos).');
-    if (URGENCY.test(text) && !URGENCY.test(idea)) add('aviso', where, 'Usa urgencia ("últimas unidades", "solo hoy"): úsala solo si es verdad.');
-    if (ABSOLUTE.test(text)) add('aviso', where, 'Las promesas absolutas ("garantizado", "el mejor") pueden ser rechazadas por Meta.');
-    if (META_BRANDS.test(text)) add('aviso', where, 'Mejor no nombrar Facebook, Instagram ni Meta en el texto.');
-    if ((text.match(/\b[A-ZÁÉÍÓÚÑ]{4,}\b/g) || []).length >= 3) add('aviso', where, 'Muchas palabras en MAYÚSCULAS: Meta lo ve poco profesional.');
-    if (/[!?¡¿]{3,}/.test(text)) add('aviso', where, 'Demasiados signos seguidos (!!!).');
-    if ((text.match(EMOJI) || []).length > 6) add('aviso', where, 'Demasiados emojis.');
-  }
-  if (d.format === 'single') d.headlines.forEach((t, i) => { if (t.length > 40) add('aviso', `Título ${i + 1}`, 'Pasa de 40 letras: en el celular se puede cortar.'); });
+  for (const [where, text] of pieces) textIssues(text, where, { toWeb: d.destination === 'web', prices, idea }).forEach(add);
+  if (d.format === 'single') d.headlines.forEach((t, i) => { if (t.length > 40) add({ level: 'aviso', where: `Título ${i + 1}`, text: 'Pasa de 40 letras: en el celular se puede cortar.' }); });
   return issues;
 }
 
@@ -438,7 +455,7 @@ export function adsetParams(d: AdDraft, s: BuilderSettings, campaignId: string, 
     bid_strategy: 'LOWEST_COST_WITHOUT_CAP', targeting
   };
   return d.destination === 'web'
-    ? { ...base, optimization_goal: 'OFFSITE_CONVERSIONS', promoted_object: { pixel_id: s.pixelId, custom_event_type: s.webEvent }, attribution_spec: [{ event_type: 'CLICK_THROUGH', window_days: 7 }] }
+    ? { ...base, optimization_goal: 'OFFSITE_CONVERSIONS', promoted_object: { pixel_id: s.pixelId, custom_event_type: s.webEvent }, attribution_spec: [{ event_type: 'CLICK_THROUGH', window_days: s.attributionDays }] }
     : { ...base, optimization_goal: 'CONVERSATIONS', destination_type: 'WHATSAPP', promoted_object: { page_id: s.pageId, whatsapp_phone_number: s.whatsappNumber } };
 }
 
@@ -939,3 +956,9 @@ export async function adviceForAds() {
   });
   return { resumen: short(out.resumen, 600), consejos: (out.consejos || []).slice(0, 6).map(c => ({ anuncio: short(c.anuncio, 160), accion: short(c.accion, 40), por_que: short(c.por_que, 400) })) };
 }
+
+// Piezas que usa el creador de campañas (adCampaigns.ts).
+export {
+  call as metaCall, graphGet as metaGet, graphPost as metaPost, access as metaAccess, readAccount, withLock, adImageBytes, featuresSpec, photoOk, short,
+  money, clampInt, LIMITS, uniqueTexts, MONTHS, STATUS_LABEL, RESULT_ACTIONS, actionValue, META_RULES, zone as builderZone, readCreated, overviewCache
+};

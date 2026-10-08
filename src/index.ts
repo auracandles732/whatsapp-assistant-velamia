@@ -103,6 +103,8 @@ import { startSupervisor } from './services/supervisor';
 import { startSalesWatch } from './services/salesWatch';
 import { adsRouter } from './services/adsRoutes';
 import { adBuilderRouter } from './services/adBuilderRoutes';
+import { adCampaignRouter } from './services/adCampaignRoutes';
+import { startAdMemory } from './services/adMemory';
 import { startAdsSync, originsOf } from './services/ads';
 import { webCatalogRouter } from './services/webCatalogRoutes';
 import { startWebCatalogSync, scheduleWebPush, crmNameOf, followCrmRename } from './services/webCatalog';
@@ -451,6 +453,7 @@ app.use(supervisorRouter());
 
 // ---------- Anuncios de Meta: de qué anuncio (o de la web) llegó cada chat y qué ventas dejó ----------
 
+app.use(adCampaignRouter());
 app.use(adBuilderRouter());
 app.use(adsRouter());
 
@@ -2308,6 +2311,7 @@ async function start() {
   startSupervisor();
   startSalesWatch();
   startAdsSync();
+  startAdMemory();
   startWebCatalogSync();
   startRetention();
   startPhotoNudgeScheduler();

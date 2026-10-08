@@ -2766,6 +2766,96 @@
         .ab-tip .ab-chip { align-self: flex-start; background: #FFF3DC; color: #7A5300; }
         @media (max-width: 1100px) { .ab-edit { grid-template-columns: 1fr; } .ab-side { position: static; max-width: 420px; } .ab-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
         @media (max-width: 760px) { .ab-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ab-label { min-width: 0; width: 100%; } .ab-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); } .ab-cardedit { grid-template-columns: 1fr; } .ab-cardbtns { flex-direction: row; } }
+        /* Creador de campañas */
+        .cs-objs { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+        .pb .cs-obj { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1.5px solid #EFE6DB; border-radius: 14px; background: #fff; cursor: pointer; text-align: left; font: inherit; color: #3A2A20; }
+        .cs-obj span { font-size: 14.5px; }
+        .cs-obj small { font-size: 12.5px; color: #8A7868; line-height: 1.35; }
+        .pb .cs-obj.on { border-color: #B5654A; box-shadow: 0 0 0 2px rgba(181, 101, 74, 0.25); background: #FFF6F0; }
+        .cs-edit { display: flex; flex-direction: column; gap: 14px; }
+        .cs-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; align-items: start; }
+        .cs-two select, .cs-edit input[type=date] { border: 1px solid #EADFD2; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; background: #fff; }
+        .cs-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 2px solid #EFE6DB; padding-bottom: 6px; }
+        .pb .cs-tabs button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border: 1.5px solid #EFE6DB; border-radius: 12px; background: #fff; cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 800; color: #4E3E33; }
+        .cs-tabs button small { font-size: 11.5px; font-weight: 500; color: #8A7868; }
+        .pb .cs-tabs button.on { border-color: #B5654A; background: #FFF6F0; color: #8C3F27; }
+        .pb .cs-tabs button.bad { border-color: #E5A49B; }
+        .cs-set { display: flex; flex-direction: column; gap: 12px; }
+        .cs-sub { margin: 6px 0 0; font-size: 14.5px; color: #2B1C14; }
+        .cs-ad { border: 1px solid #EADFD2; border-radius: 16px; background: #fff; overflow: hidden; }
+        .cs-ad.bad { border-color: #E5A49B; }
+        .cs-ad-h { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #FDFBF8; }
+        .cs-ad-h .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .cs-ad-h b { font-size: 14px; color: #2B1C14; }
+        .cs-ad-h small { font-size: 12.5px; color: #8A7868; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pb .cs-fold { border: 0; background: none; font-size: 16px; cursor: pointer; color: #6B5849; padding: 0 2px; }
+        .cs-thumb img, .cs-thumb .cs-novid { width: 42px; height: 42px; border-radius: 10px; object-fit: cover; display: flex; align-items: center; justify-content: center; background: #F3ECE3; }
+        .cs-ad-btns { display: flex; gap: 4px; }
+        .pb .cs-ad-btns button { border: 1px solid #EADFD2; background: #fff; border-radius: 8px; min-width: 30px; height: 28px; cursor: pointer; padding: 0 6px; }
+        .pb .cs-ad-btns button:disabled { opacity: 0.35; cursor: default; }
+        .cs-ad-b { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; padding: 12px 14px 14px; align-items: start; }
+        .cs-mainmedia { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+        .pb .cs-mediabtn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px; border: 1.5px dashed #D9C8B6; border-radius: 12px; background: #fff; cursor: pointer; font: inherit; }
+        .cs-mediabtn img, .cs-mediabtn .cs-novid { width: 96px; height: 96px; border-radius: 9px; object-fit: cover; display: flex; align-items: center; justify-content: center; background: #F3ECE3; font-size: 26px; }
+        .cs-mediabtn.sm img, .cs-mediabtn.sm .cs-novid { width: 70px; height: 70px; }
+        .cs-mediabtn small { font-size: 11.5px; color: #8A7868; }
+        .cs-novid { display: flex; align-items: center; justify-content: center; background: #F3ECE3; border-radius: 8px; min-width: 42px; min-height: 42px; }
+        .cs-novid.big { width: 100%; aspect-ratio: 1; font-size: 28px; }
+        .cs-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 8px; border-radius: 12px; background: #fff; border: 1px solid #EFE6DB; }
+        .cs-ideas { display: flex; flex-direction: column; gap: 4px; }
+        .pb .cs-ideas button { display: flex; flex-direction: column; text-align: left; gap: 1px; border: 1px dashed #D9C8B6; background: #FFFCF8; border-radius: 10px; padding: 6px 8px; cursor: pointer; font: inherit; font-size: 13px; }
+        .cs-ideas small { color: #8A7868; }
+        .cs-picker { border: 1px solid #EADFD2; border-radius: 14px; padding: 10px; background: #FFFCF8; display: flex; flex-direction: column; gap: 8px; }
+        .cs-picker-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .cs-pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; max-height: 300px; overflow: auto; }
+        .pb .cs-pgrid button { display: flex; flex-direction: column; gap: 3px; padding: 4px; border: 1.5px solid #EFE6DB; border-radius: 10px; background: #fff; cursor: pointer; text-align: left; font: inherit; }
+        .pb .cs-pgrid button:hover { border-color: #B5654A; }
+        .cs-pgrid img, .cs-pgrid .cs-novid { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 7px; font-size: 22px; }
+        .cs-pgrid small { font-size: 11px; color: #6B5849; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .cs-upload { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+        .cs-search { border: 1px solid #EADFD2; border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13.5px; min-width: 0; width: 100%; background: #fff; }
+        .cs-target, .cs-prodsel { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 200px; flex: 1; }
+        .cs-results { display: flex; flex-direction: column; border: 1px solid #EADFD2; border-radius: 10px; background: #fff; max-height: 240px; overflow: auto; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06); }
+        .pb .cs-results button { display: flex; flex-direction: column; gap: 1px; text-align: left; border: 0; border-bottom: 1px solid #F3ECE3; background: #fff; padding: 7px 10px; cursor: pointer; font: inherit; font-size: 13.5px; }
+        .pb .cs-results button:hover { background: #FAF2EB; }
+        .cs-results small { font-size: 11.5px; color: #8A7868; }
+        .cs-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: #F3ECE3; color: #4E3E33; font-size: 12.5px; font-weight: 700; }
+        .cs-chip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+        .pb .cs-chip button { border: 0; background: none; cursor: pointer; color: #8A7868; padding: 0 2px; font-size: 12px; }
+        .pb .cs-radius { width: 52px; border: 1px solid #EADFD2; border-radius: 8px; padding: 1px 4px; font: inherit; font-size: 12px; }
+        .cs-over { background: #FDECEC; color: #B42318; }
+        .cs-final { position: sticky; bottom: 8px; box-shadow: 0 6px 22px rgba(60, 40, 20, 0.12); background: #FFFCF8; z-index: 2; }
+        .cs-video { width: 100%; display: block; background: #000; object-fit: contain; }
+        .cs-video.tall { aspect-ratio: 4 / 5; }
+        .cs-video.sq { aspect-ratio: 1 / 1; }
+        .cs-setrow { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: #fff; border: 1px solid #EFE6DB; }
+        .cs-table-wrap { overflow-x: auto; }
+        .cs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .cs-table th { text-align: left; font-size: 11.5px; color: #857262; font-weight: 800; padding: 6px 8px; border-bottom: 1px solid #EFE6DB; white-space: nowrap; }
+        .cs-table td { padding: 6px 8px; border-bottom: 1px solid #F5EEE6; vertical-align: top; }
+        .cs-adname { display: flex; align-items: center; gap: 8px; }
+        .cs-adname img, .cs-adname .cs-novid { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+        .cs-adname span { display: flex; flex-direction: column; }
+        .cs-adname small { color: #8A7868; font-size: 11.5px; }
+        .cs-kpis4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .cs-journal { display: flex; flex-direction: column; gap: 8px; }
+        .cs-journal h3 { margin: 8px 0 0; font-size: 15px; color: #2B1C14; }
+        .cs-journal p { margin: 0; font-size: 14px; color: #3A2A20; line-height: 1.45; }
+        .cs-learns { display: flex; flex-direction: column; gap: 6px; }
+        .cs-learn { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; font-size: 13.5px; }
+        .cs-learn div { display: flex; flex-direction: column; gap: 2px; }
+        .cs-learn small { color: #6B5849; }
+        .cs-learn.ok { background: #E6F6EC; }
+        .cs-learn.bad { background: #FDECEC; }
+        .cs-learn.warn { background: #FFF6E6; }
+        .cs-strategy { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; border: 1px solid #E7DCF3; background: #FBF8FE; font-size: 13.5px; }
+        .cs-strategy small { color: #4E3E33; line-height: 1.4; }
+        .cs-p-alta { background: #FDE8D8; color: #8C3F27; }
+        .cs-todo { margin: 0; padding-left: 20px; font-size: 13.5px; color: #3A2A20; display: flex; flex-direction: column; gap: 4px; }
+        .cs-memad { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; border: 1px solid #EFE6DB; background: #fff; margin-bottom: 6px; font-size: 13px; }
+        .cs-memad small { color: #6B5849; }
+        @media (max-width: 1100px) { .cs-ad-b { grid-template-columns: 1fr; } .cs-ad-b .ab-side { position: static; max-width: 420px; } }
+        @media (max-width: 760px) { .cs-card { grid-template-columns: 1fr; } .cs-kpis4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cs-objs { grid-template-columns: 1fr; } .cs-final { position: static; box-shadow: none; } .pb .cs-final .pb-btn, .pb .ab-pick .pb-btn { white-space: normal; text-align: center; } .cs-ad-h { flex-wrap: wrap; } .cs-ad-h .grow { flex-basis: calc(100% - 110px); } .cs-ad-btns { margin-left: auto; } .cs-ad-b { padding: 10px; } }
         .sv-prompt textarea { width: 100%; min-height: 260px; padding: 12px; border-radius: 12px; border: 1px solid #E6DACC; font: inherit; font-size: 13.5px; line-height: 1.5; background: #fff; resize: vertical; }
         @media (max-width: 760px) { .sv-step { grid-template-columns: 110px 1fr 46px; font-size: 13px; } .sv-table { font-size: 12.5px; } }
         .sv-kpis div { border: 1px solid #EADFD3; border-radius: 14px; padding: 10px 12px; background: #FDFCFB; display: flex; flex-direction: column; }
@@ -14266,84 +14356,447 @@
             );
         }
 
-        // Así se verá en el celular (Facebook / Instagram): texto, foto o carrusel, título y botón.
-        function AdPreview({ draft, pageName, webUrl }) {
+        // ---------- Creador de campañas de Meta: objetivo y destino, varios conjuntos y anuncios (foto, video o carrusel), IA y memoria ----------
+        const CS_OBJ = {
+            ventas: { icon: '🛒', help: 'Busca compras: en tu web (con el píxel) o chats para vender por WhatsApp.' },
+            interaccion: { icon: '💬', help: 'Busca conversaciones por WhatsApp, visitas a tus productos en la web, o reacciones y reproducciones en el mismo anuncio.' },
+            trafico: { icon: '🌐', help: 'Lleva la mayor cantidad de visitas a tu página web.' },
+            reconocimiento: { icon: '📣', help: 'Que mucha gente vea tu marca (alcance), sin pedir una acción.' }
+        };
+        const CS_DEST = {
+            web: { icon: '🛒', label: 'Página web', help: 'Lleva a tu web (a la ficha del producto, su categoría o el inicio).' },
+            whatsapp: { icon: '💬', label: 'WhatsApp', help: 'Abre un chat de WhatsApp con tu negocio.' },
+            anuncio: { icon: '👀', label: 'En el anuncio', help: 'Las personas reaccionan, comentan o ven el video en el mismo anuncio.' }
+        };
+        const CS_FORMAT = { image: '🖼️ Foto', video: '🎬 Video', carousel: '🎠 Carrusel' };
+        const CS_LINK = { producto: 'Ficha del producto', categoria: 'Categoría del producto', inicio: 'Inicio de la web' };
+        const CS_DIMENSIONS = ['Formato', 'Objetivo', 'Categoría', 'Ángulo', 'Segmentación', 'Interés', 'Público', 'Edades', 'Ciudad'];
+        const csUid = () => Math.random().toString(36).slice(2, 10);
+        const csAuto = () => ({ mode: 'auto', facebook: true, instagram: true, feed: true, stories: true, reels: true });
+        const csEmptyAd = (format, cta) => ({ _k: csUid(), _open: true, format: format || 'image', name: '', angle: '', media: null, productId: '', product: '', texts: [''], headlines: [''], description: '', cta: cta || '', link: 'producto', cards: [] });
+        const csEmptySet = (s, n, ads, budget) => ({ _k: csUid(), name: 'Conjunto ' + n, focus: '', audience: { ...(s.audience || { ageMin: 18, ageMax: 65, gender: 'todos', advantage: false }), cities: [], interests: [] }, dailyBudget: budget || 3, placements: csAuto(), optimization: 'interacciones', ads: ads || [] });
+        // Las claves _k solo sirven en la pantalla (para no perder lo que se edita al mover cosas).
+        const csKeys = plan => ({ ...plan, adsets: plan.adsets.map(set => ({ ...set, _k: set._k || csUid(), ads: set.ads.map(ad => ({ ...ad, _k: ad._k || csUid(), cards: (ad.cards || []).map(c => ({ ...c, _k: c._k || csUid() })) })) })) });
+        const csMonthly = n => abMoney(Number(n || 0) * 30);
+        const csAudience = a => (AB_GENDER[a.gender] || 'Todos') + ' ' + a.ageMin + '-' + a.ageMax + (a.cities && a.cities.length ? ' · ' + a.cities.map(c => c.name).join(', ') : '') + (a.interests && a.interests.length ? ' · ' + a.interests.map(i => i.name).join(', ') : '') + (a.advantage ? ' · abierto (Advantage+)' : '');
+
+        // Así se verá en el celular (Facebook / Instagram): texto, foto, video o carrusel, título y botón.
+        function CsPreview({ plan, ad, s, ctaLabel }) {
             const [more, setMore] = useState(false);
-            const text = draft.texts[0] || '';
+            const text = ad.texts[0] || '';
             const long = text.length > 125;
-            const web = draft.destination === 'web';
-            const cta = web ? 'Comprar' : 'Enviar mensaje';
+            const toWeb = plan.destination !== 'whatsapp';
+            const cta = plan.destination === 'whatsapp' ? 'Enviar mensaje' : ad.cta === 'NONE' ? '' : ctaLabel || 'Comprar';
             let domain = '';
-            try { domain = webUrl ? new URL(webUrl).host.replace(/^www\./, '').toUpperCase() : ''; } catch { domain = ''; }
+            try { domain = s.webUrl ? new URL(s.webUrl).host.replace(/^www\./, '').toUpperCase() : ''; } catch { domain = ''; }
+            const media = (m, kind) => !m ? <AbImage src="" kind={kind} /> : m.kind === 'video'
+                ? <video className={'cs-video ' + kind} src={m.url} poster={m.thumb || undefined} controls muted playsInline preload="metadata" />
+                : <AbImage src={m.url} kind={kind} />;
             return (
                 <div className="ab-phone">
                     <div className="ab-post">
-                        <div className="ab-post-h"><span className="ab-avatar">{(pageName || 'P').slice(0, 1).toUpperCase()}</span><div><b>{pageName || 'Tu página'}</b><small>Publicidad</small></div></div>
+                        <div className="ab-post-h"><span className="ab-avatar">{(s.pageName || 'P').slice(0, 1).toUpperCase()}</span><div><b>{s.pageName || 'Tu página'}</b><small>Publicidad</small></div></div>
                         <div className="ab-text">{more || !long ? text : text.slice(0, 125) + '… '}{long && !more && <button type="button" onClick={() => setMore(true)}>Ver más</button>}</div>
-                        {draft.format === 'carousel' ? (
-                            <div className="ab-carousel">{draft.cards.map((c, k) => (
-                                <div className="ab-card" key={k}>
-                                    <AbImage src={c.image} kind="sq" />
-                                    <div className="ab-card-b"><div><b>{c.title}</b>{c.description && <small>{c.description}</small>}</div><span className="ab-cta">{cta}</span></div>
+                        {ad.format === 'carousel' ? (
+                            <div className="ab-carousel">{ad.cards.map(c => (
+                                <div className="ab-card" key={c._k || c.media.url}>
+                                    {media(c.media, 'sq')}
+                                    <div className="ab-card-b"><div><b>{c.title}</b>{c.description && <small>{c.description}</small>}</div>{cta && <span className="ab-cta">{cta}</span>}</div>
                                 </div>
                             ))}</div>
                         ) : (
                             <>
-                                <AbImage src={draft.cards[0] && draft.cards[0].image} kind="tall" />
-                                <div className="ab-bar">
-                                    <div>{web && domain && <small>{domain}</small>}<b>{draft.headlines[0] || ''}</b>{draft.description && <small>{draft.description}</small>}</div>
-                                    <span className="ab-cta">{!web && <PlatIcon name="whatsapp" size={14} />}{cta}</span>
-                                </div>
+                                {media(ad.media, 'tall')}
+                                {(ad.headlines[0] || cta) && (
+                                    <div className="ab-bar">
+                                        <div>{toWeb && domain && plan.destination !== 'anuncio' && <small>{domain}</small>}<b>{ad.headlines[0] || ''}</b>{ad.description && <small>{ad.description}</small>}</div>
+                                        {cta && <span className="ab-cta">{plan.destination === 'whatsapp' && <PlatIcon name="whatsapp" size={14} />}{cta}</span>}
+                                    </div>
+                                )}
                             </>
                         )}
                         <div className="ab-post-f"><span>👍 Me gusta</span><span>💬 Comentar</span><span>↗ Compartir</span></div>
                     </div>
-                    {draft.format === 'single' && (draft.texts.length > 1 || draft.headlines.length > 1) && (
-                        <small className="pb-muted">Meta probará {draft.texts.length} texto(s) y {draft.headlines.length} título(s) y mostrará más los que mejor funcionen.</small>
+                    {ad.format !== 'carousel' && (ad.texts.length > 1 || ad.headlines.length > 1) && <small className="pb-muted">Meta probará {ad.texts.length} texto(s) y {ad.headlines.length} título(s) y mostrará más los que mejor funcionen.</small>}
+                </div>
+            );
+        }
+
+        // Elegir foto o video: fotos del producto, todo el Catálogo, la Biblioteca o subir uno nuevo.
+        function CsMediaPicker({ ctx, want, productId, onPick, onClose }) {
+            const product = productId ? ctx.catalog.find(p => p.id === productId) : null;
+            const [tab, setTab] = useState(product && want !== 'video' ? 'producto' : want === 'video' ? 'biblioteca' : 'catalogo');
+            const [query, setQuery] = useState('');
+            const [uploading, setUploading] = useState('');
+            const q = query.trim().toLowerCase();
+            const photoOf = (p, url) => ({ media: { kind: 'image', url, source: 'catalogo', assetId: '', thumb: url }, product: p });
+            const fromLib = a => ({ media: { kind: a.kind, url: a.url, source: 'biblioteca', assetId: a.id, thumb: a.thumb || '' }, product: null });
+            const catalogPhotos = tab === 'catalogo' ? ctx.catalog.filter(p => !q || (p.name + ' ' + p.category).toLowerCase().includes(q)).slice(0, 48) : [];
+            const lib = ctx.library.filter(a => (want === 'any' || a.kind === want) && (!q || (a.title + ' ' + a.product).toLowerCase().includes(q))).slice(0, 80);
+            async function upload(e) {
+                const file = e.target.files && e.target.files[0];
+                e.target.value = '';
+                if (!file) return;
+                setUploading('Subiendo ' + file.name + '…');
+                try {
+                    const asset = await uploadToLibrary(file);
+                    await ctx.reloadLibrary();
+                    onPick({ media: { kind: asset.kind, url: asset.url, source: 'biblioteca', assetId: asset.id, thumb: asset.kind === 'image' ? asset.url : '' }, product: null });
+                } catch (err) {
+                    setUploading('⚠️ ' + err.message);
+                    return;
+                }
+                setUploading('');
+            }
+            return (
+                <div className="cs-picker">
+                    <div className="cs-picker-h">
+                        <div className="sv-days">
+                            {product && want !== 'video' && <button type="button" className={tab === 'producto' ? 'on' : ''} onClick={() => setTab('producto')}>Fotos de este producto</button>}
+                            {want !== 'video' && <button type="button" className={tab === 'catalogo' ? 'on' : ''} onClick={() => setTab('catalogo')}>Catálogo</button>}
+                            <button type="button" className={tab === 'biblioteca' ? 'on' : ''} onClick={() => setTab('biblioteca')}>Biblioteca{want === 'video' ? ' (videos)' : ''}</button>
+                            <button type="button" className={tab === 'subir' ? 'on' : ''} onClick={() => setTab('subir')}>⬆️ Subir</button>
+                        </div>
+                        <button type="button" className="ab-x" title="Cerrar" onClick={onClose}>✕</button>
+                    </div>
+                    {(tab === 'catalogo' || tab === 'biblioteca') && <input type="search" className="cs-search" placeholder="Buscar…" value={query} onChange={e => setQuery(e.target.value)} />}
+                    {tab === 'producto' && product && <div className="cs-pgrid">{product.images.map(u => <button type="button" key={u} onClick={() => onPick(photoOf(product, u))}><img src={u} alt="" loading="lazy" referrerPolicy="no-referrer" /></button>)}</div>}
+                    {tab === 'catalogo' && <div className="cs-pgrid">{catalogPhotos.map(p => (
+                        <button type="button" key={p.id} title={p.name} onClick={() => onPick(photoOf(p, p.images[0]))}><img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" /><small>{p.name}</small></button>
+                    ))}</div>}
+                    {tab === 'biblioteca' && (lib.length ? <div className="cs-pgrid">{lib.map(a => (
+                        <button type="button" key={a.id} title={a.title} onClick={() => onPick(fromLib(a))}>
+                            {a.thumb ? <img src={a.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>}
+                            <small>{a.kind === 'video' ? '🎬 ' + (a.duration ? Math.round(a.duration) + ' s · ' : '') : ''}{a.title || 'Sin nombre'}{a.usedCount ? ' · usado ' + a.usedCount : ''}</small>
+                        </button>
+                    ))}</div> : <div className="pb-muted">No hay {want === 'video' ? 'videos' : 'archivos'} en la Biblioteca. Súbelos en la pestaña "Subir" (o en Publicaciones → Biblioteca).</div>)}
+                    {tab === 'subir' && (
+                        <div className="cs-upload">
+                            <label className="pb-btn sm main">{want === 'video' ? '🎬 Elegir video (MP4 o MOV, hasta 50 MB)' : want === 'image' ? '🖼️ Elegir foto (JPG o PNG)' : '⬆️ Elegir foto o video'}
+                                <input type="file" accept={want === 'video' ? 'video/mp4,video/quicktime' : want === 'image' ? 'image/jpeg,image/png' : 'image/jpeg,image/png,video/mp4,video/quicktime'} hidden onChange={upload} /></label>
+                            <small className="pb-muted">Queda guardado en la Biblioteca para usarlo otra vez. Mejor videos verticales y cortos (6 a 15 segundos).</small>
+                            {uploading && <div className="pb-muted">{uploading}</div>}
+                        </div>
                     )}
                 </div>
             );
         }
 
-        function AdBuilder({ canEdit, canConfigure }) {
-            const [data, setData] = useState(null);
+        // Buscar intereses o ciudades con la búsqueda oficial de Meta.
+        function CsTargetSearch({ type, onAdd, placeholder }) {
+            const [q, setQ] = useState('');
+            const [results, setResults] = useState([]);
+            const [busy, setBusy] = useState(false);
+            useEffect(() => {
+                if (q.trim().length < 2) { setResults([]); return; }
+                const t = setTimeout(() => {
+                    setBusy(true);
+                    api('/api/ads/campaigns/targeting?type=' + type + '&q=' + encodeURIComponent(q.trim())).then(r => setResults(r.results || [])).catch(() => setResults([])).finally(() => setBusy(false));
+                }, 450);
+                return () => clearTimeout(t);
+            }, [q]);
+            return (
+                <div className="cs-target">
+                    <input type="search" className="cs-search" placeholder={placeholder} value={q} onChange={e => setQ(e.target.value)} />
+                    {busy && <small className="pb-muted">Buscando en Meta…</small>}
+                    {results.length > 0 && <div className="cs-results">{results.map(r => (
+                        <button type="button" key={r.id || r.key} onClick={() => { onAdd(r); setQ(''); setResults([]); }}>
+                            <b>{r.name}</b>{type === 'interes' ? <small>{r.path || ''}{r.size ? ' · ' + Number(r.size).toLocaleString('es') + ' personas' : ''}</small> : <small>{r.region}</small>}
+                        </button>
+                    ))}</div>}
+                </div>
+            );
+        }
+
+        // Elegir un producto del Catálogo (para el anuncio o una tarjeta del carrusel).
+        function CsProductSelect({ ctx, value, onChange, allowNone }) {
+            const [q, setQ] = useState('');
+            const p = value ? ctx.catalog.find(x => x.id === value) : null;
+            const matches = q.trim() ? ctx.catalog.filter(x => (x.name + ' ' + x.category).toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8) : [];
+            return (
+                <div className="cs-prodsel">
+                    {p ? <span className="cs-chip"><img src={p.images[0]} alt="" referrerPolicy="no-referrer" />{p.name} · {abMoney(p.price)}{allowNone && <button type="button" onClick={() => onChange(null)}>✕</button>}</span> : <span className="pb-muted">{allowNone ? 'Sin producto (por ejemplo, un video de la marca)' : 'Elige el producto'}</span>}
+                    <input type="search" className="cs-search" placeholder={p ? 'Cambiar producto…' : 'Buscar producto…'} value={q} onChange={e => setQ(e.target.value)} />
+                    {matches.length > 0 && <div className="cs-results">{matches.map(x => <button type="button" key={x.id} onClick={() => { onChange(x); setQ(''); }}><b>{x.name}</b><small>{abMoney(x.price)} · {x.category}</small></button>)}</div>}
+                </div>
+            );
+        }
+
+
+        // Un anuncio: formato, foto o video (o tarjetas del carrusel), textos, botón y enlace; con su vista previa.
+        function CsAdEditor({ ad, index, total, plan, ctx, set, issues, onChange, onRemove, onDuplicate, onMove }) {
+            const [picker, setPicker] = useState(null);
+            const [busy, setBusy] = useState('');
+            const [cardIdeas, setCardIdeas] = useState({});
+            const [err, setErr] = useState('');
+            const ctaList = ctx.ctas[plan.destination] || [];
+            const ctaLabel = (ctaList.find(c => c.id === ad.cta) || ctaList[0] || {}).label;
+            const toWeb = plan.destination !== 'whatsapp';
+            const patch = changes => onChange(a => ({ ...a, ...(typeof changes === 'function' ? changes(a) : changes) }));
+            const setList = (key, i, value) => patch(a => ({ [key]: a[key].map((t, k) => (k === i ? value : t)) }));
+            const dropFrom = (key, i) => patch(a => ({ [key]: a[key].filter((_, k) => k !== i) }));
+            const setCard = (i, changes) => patch(a => ({ cards: a.cards.map((c, k) => (k === i ? { ...c, ...changes } : c)) }));
+            const moveCard = (i, dir) => patch(a => { const cards = [...a.cards]; const j = i + dir; if (j < 0 || j >= cards.length) return {}; [cards[i], cards[j]] = [cards[j], cards[i]]; return { cards }; });
+            const productNames = () => [ad.product, ...ad.cards.map(c => c.product)].filter(Boolean);
+            const changeFormat = format => patch(a => {
+                if (format === a.format) return {};
+                if (format === 'carousel') {
+                    const first = a.media && a.media.kind ? [{ _k: csUid(), media: a.media, productId: a.productId, product: a.product, title: a.headlines[0] || a.product, description: a.description }] : [];
+                    return { format, cards: a.cards.length ? a.cards : first, media: null };
+                }
+                const keep = a.format === 'carousel' && a.cards[0] ? a.cards[0] : null;
+                const media = keep ? keep.media : a.media;
+                return { format, media: media && (format === 'video' ? media.kind === 'video' : media.kind === 'image') ? media : null, productId: keep ? keep.productId : a.productId, product: keep ? keep.product : a.product, headlines: a.headlines.length ? a.headlines : [''] };
+            });
+            const pick = ({ media, product }) => {
+                if (picker === 'main') patch(a => ({ media, ...(product ? { productId: product.id, product: product.name } : {}) }));
+                else if (picker === 'new-card') patch(a => ({ cards: a.cards.length >= 10 || a.cards.some(c => c.media.url === media.url) ? a.cards : [...a.cards, { _k: csUid(), media, productId: product ? product.id : '', product: product ? product.name : '', title: product ? (product.displayName || product.name) : '', description: '' }] }));
+                else if (typeof picker === 'number') setCard(picker, { media, ...(product ? { productId: product.id, product: product.name } : {}) });
+                setPicker(null);
+            };
+            async function rewrite() {
+                if (ad.texts.some(t => t.trim()) && !confirm('¿Reemplazar los textos de este anuncio por textos nuevos de la IA?')) return;
+                setBusy('texts'); setErr('');
+                try {
+                    const r = await api('/api/ads/campaigns/texts', { method: 'POST', body: JSON.stringify({ mode: 'anuncio', objective: plan.objective, destination: plan.destination, format: ad.format, angle: ad.angle, idea: ctx.idea, products: productNames(), mediaTitle: ad.media && ad.media.source === 'biblioteca' ? (ctx.library.find(x => x.id === ad.media.assetId) || {}).title : '', current: ad.texts }) });
+                    patch({ texts: r.texts.length ? r.texts : ad.texts, headlines: ad.format === 'carousel' ? ad.headlines : (r.headlines.length ? r.headlines : ad.headlines), description: r.description || ad.description });
+                } catch (e) { setErr(e.message); } finally { setBusy(''); }
+            }
+            async function ideasFor(i) {
+                const c = ad.cards[i];
+                setBusy('card' + i); setErr('');
+                try {
+                    const r = await api('/api/ads/campaigns/texts', { method: 'POST', body: JSON.stringify({ mode: 'tarjeta', objective: plan.objective, destination: plan.destination, format: 'carousel', angle: ad.angle, idea: ctx.idea, products: c.product ? [c.product] : productNames(), mediaTitle: c.media.source === 'biblioteca' ? (ctx.library.find(x => x.id === c.media.assetId) || {}).title : c.product }) });
+                    setCardIdeas(m => ({ ...m, [c._k]: r.options }));
+                } catch (e) { setErr(e.message); } finally { setBusy(''); }
+            }
+            const errors = issues.filter(i => i.level === 'error').length;
+            const thumbOf = m => (m ? (m.kind === 'video' ? (m.thumb ? <img src={m.thumb} alt="" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>) : <img src={m.url} alt="" referrerPolicy="no-referrer" />) : <span className="cs-novid">＋</span>);
+            return (
+                <div className={'cs-ad' + (errors ? ' bad' : '')}>
+                    <div className="cs-ad-h">
+                        <button type="button" className="cs-fold" onClick={() => patch({ _open: !ad._open })}>{ad._open ? '▾' : '▸'}</button>
+                        <span className="cs-thumb">{thumbOf(ad.format === 'carousel' ? (ad.cards[0] || {}).media : ad.media)}</span>
+                        <div className="grow">
+                            <b>Anuncio {index + 1} · {CS_FORMAT[ad.format]}</b>
+                            <small>{ad.name || ad.product || (ad.format === 'carousel' ? ad.cards.length + ' tarjetas' : 'Sin nombre')}{ad.angle ? ' · prueba: ' + ad.angle : ''}{errors ? ' · ⛔ ' + errors + ' por corregir' : issues.length ? ' · ⚠️ ' + issues.length : ''}</small>
+                        </div>
+                        <div className="cs-ad-btns">
+                            <button type="button" disabled={index === 0} title="Subir" onClick={() => onMove(-1)}>▲</button>
+                            <button type="button" disabled={index === total - 1} title="Bajar" onClick={() => onMove(1)}>▼</button>
+                            <button type="button" title="Duplicar" onClick={onDuplicate}>⧉</button>
+                            <button type="button" title="Quitar" disabled={total <= 1} onClick={() => { if (confirm('¿Quitar este anuncio?')) onRemove(); }}>✕</button>
+                        </div>
+                    </div>
+                    {ad._open && (
+                        <div className="cs-ad-b">
+                            <div className="ab-form">
+                                <div className="ab-row">
+                                    <span className="ab-label">Formato</span>
+                                    <div className="sv-days">{Object.keys(CS_FORMAT).map(f => <button key={f} type="button" className={ad.format === f ? 'on' : ''} onClick={() => changeFormat(f)}>{CS_FORMAT[f]}</button>)}</div>
+                                </div>
+                                <div className="cs-two">
+                                    <label className="ab-field">Nombre del anuncio<input type="text" maxLength={60} placeholder="Ej.: Osito en nube" value={ad.name} onChange={e => patch({ name: e.target.value })} /></label>
+                                    <label className="ab-field">¿Qué prueba este anuncio? <small>(gancho o enfoque)</small><input type="text" maxLength={80} placeholder="Ej.: precio, testimonio, hecho a mano" value={ad.angle} onChange={e => patch({ angle: e.target.value })} /></label>
+                                </div>
+
+                                {ad.format !== 'carousel' ? (
+                                    <div className="ab-block">
+                                        <h4>{ad.format === 'video' ? '🎬 Video' : '🖼️ Foto'} y producto</h4>
+                                        <div className="cs-mainmedia">
+                                            <button type="button" className="cs-mediabtn" onClick={() => setPicker(picker === 'main' ? null : 'main')}>{thumbOf(ad.media)}<small>{ad.media ? 'Cambiar' : 'Elegir'}</small></button>
+                                            <CsProductSelect ctx={ctx} value={ad.productId} allowNone={ad.format === 'video' || (ad.media && ad.media.source === 'biblioteca')} onChange={p => patch(a => ({ productId: p ? p.id : '', product: p ? p.name : '', ...(p && a.format === 'image' && (!a.media || a.media.source === 'catalogo') ? { media: { kind: 'image', url: p.images[0], source: 'catalogo', assetId: '', thumb: p.images[0] } } : {}) }))} />
+                                        </div>
+                                        {picker === 'main' && <CsMediaPicker ctx={ctx} want={ad.format === 'video' ? 'video' : 'image'} productId={ad.productId} onPick={pick} onClose={() => setPicker(null)} />}
+                                    </div>
+                                ) : (
+                                    <div className="ab-block">
+                                        <h4>🎠 Tarjetas del carrusel ({ad.cards.length} de 10) <small className="pb-muted">cada una con su foto o video y su propio texto</small></h4>
+                                        {ad.cards.map((c, i) => (
+                                            <div className="cs-card" key={c._k}>
+                                                <button type="button" className="cs-mediabtn sm" onClick={() => setPicker(picker === i ? null : i)}>{thumbOf(c.media)}<small>Cambiar</small></button>
+                                                <div className="ab-cardfields">
+                                                    <small className="pb-muted">{i + 1}. {c.product || (c.media.kind === 'video' ? 'Video' : 'Foto') + ' de la Biblioteca'}</small>
+                                                    <input type="text" maxLength={80} placeholder="Título de la tarjeta" value={c.title} onChange={e => setCard(i, { title: e.target.value })} />
+                                                    <input type="text" maxLength={80} placeholder="Descripción corta" value={c.description} onChange={e => setCard(i, { description: e.target.value })} />
+                                                    <div className="ab-row">
+                                                        <button type="button" className="sv-link" disabled={!!busy || !ctx.aiReady} onClick={() => ideasFor(i)}>{busy === 'card' + i ? '✨ Pensando…' : '✨ Ideas de texto para esta foto'}</button>
+                                                        <CsProductSelect ctx={ctx} value={c.productId} allowNone onChange={p => setCard(i, { productId: p ? p.id : '', product: p ? p.name : '' })} />
+                                                    </div>
+                                                    {(cardIdeas[c._k] || []).length > 0 && <div className="cs-ideas">{cardIdeas[c._k].map((o, k) => <button type="button" key={k} onClick={() => setCard(i, { title: o.title, description: o.description })}><b>{o.title}</b><small>{o.description}</small></button>)}</div>}
+                                                    {picker === i && <CsMediaPicker ctx={ctx} want="any" productId={c.productId} onPick={pick} onClose={() => setPicker(null)} />}
+                                                </div>
+                                                <div className="ab-cardbtns">
+                                                    <button type="button" disabled={i === 0} onClick={() => moveCard(i, -1)}>▲</button>
+                                                    <button type="button" disabled={i === ad.cards.length - 1} onClick={() => moveCard(i, 1)}>▼</button>
+                                                    <button type="button" onClick={() => dropFrom('cards', i)}>✕</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {ad.cards.length < 10 && <button type="button" className="sv-link" onClick={() => setPicker(picker === 'new-card' ? null : 'new-card')}>+ Agregar tarjeta (foto o video)</button>}
+                                        {picker === 'new-card' && <CsMediaPicker ctx={ctx} want="any" productId="" onPick={pick} onClose={() => setPicker(null)} />}
+                                    </div>
+                                )}
+
+                                <div className="ab-block">
+                                    <div className="ab-row"><h4 className="grow">Texto principal {ad.format === 'carousel' ? '(el carrusel lleva el primero)' : '(Meta prueba hasta 5)'}</h4>
+                                        <button type="button" className="pb-btn sm" disabled={!!busy || !ctx.aiReady} onClick={rewrite}>{busy === 'texts' ? '✨ Escribiendo…' : '✨ Escribir textos con IA'}</button></div>
+                                    {ad.texts.map((t, i) => (
+                                        <div className={'ab-line' + (ad.format === 'carousel' && i > 0 ? ' ab-alt' : '')} key={i}>
+                                            <textarea rows={3} maxLength={600} value={t} onChange={e => setList('texts', i, e.target.value)} />
+                                            {ad.format === 'carousel' && i > 0 && <button type="button" className="sv-link" onClick={() => patch(a => ({ texts: [a.texts[i], ...a.texts.filter((_, k) => k !== i)] }))}>Usar este</button>}
+                                            {ad.texts.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('texts', i)}>✕</button>}
+                                        </div>
+                                    ))}
+                                    {ad.texts.length < 5 && <button type="button" className="sv-link" onClick={() => patch(a => ({ texts: [...a.texts, ''] }))}>+ Agregar texto</button>}
+                                </div>
+
+                                {ad.format !== 'carousel' && (
+                                    <div className="ab-block">
+                                        <h4>Títulos {plan.destination === 'anuncio' ? '(opcional)' : ''} <small className="pb-muted">debajo de la foto o video, máximo 40 letras</small></h4>
+                                        {ad.headlines.map((t, i) => (
+                                            <div className="ab-line" key={i}>
+                                                <input type="text" maxLength={80} value={t} onChange={e => setList('headlines', i, e.target.value)} /><small className={t.length > 40 ? 'ab-long' : ''}>{t.length}</small>
+                                                {ad.headlines.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('headlines', i)}>✕</button>}
+                                            </div>
+                                        ))}
+                                        {ad.headlines.length < 5 && <button type="button" className="sv-link" onClick={() => patch(a => ({ headlines: [...a.headlines, ''] }))}>+ Agregar título</button>}
+                                        <label className="ab-field">Descripción corta<input type="text" maxLength={80} value={ad.description} onChange={e => patch({ description: e.target.value })} /></label>
+                                    </div>
+                                )}
+
+                                <div className="cs-two">
+                                    {ctaList.length > 1 && <label className="ab-field">Botón<select value={ad.cta || ctaList[0].id} onChange={e => patch({ cta: e.target.value })}>{ctaList.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
+                                    {toWeb && (plan.destination === 'web' || ctx.s.webUrl) && <label className="ab-field">Lleva a<select value={ad.link} onChange={e => patch({ link: e.target.value })}>{Object.keys(CS_LINK).map(k => <option key={k} value={k}>{CS_LINK[k]}</option>)}</select></label>}
+                                </div>
+                                {err && <div className="pb-err">{err}</div>}
+                                {issues.length > 0 && <div className="ab-issues">{issues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
+                            </div>
+                            <div className="ab-side"><CsPreview plan={plan} ad={ad} s={ctx.s} ctaLabel={ctaLabel} /></div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Un conjunto de anuncios: público (edad, género, ciudades, intereses), ubicaciones, presupuesto y sus anuncios.
+        function CsAdsetEditor({ set, si, plan, ctx, issuesFor, onChange, onRemove, onDuplicate }) {
+            const patch = changes => onChange(x => ({ ...x, ...(typeof changes === 'function' ? changes(x) : changes) }));
+            const aud = changes => patch(x => ({ audience: { ...x.audience, ...changes } }));
+            const place = changes => patch(x => ({ placements: { ...x.placements, ...changes } }));
+            const setAd = (i, fn) => patch(x => ({ ads: x.ads.map((a, k) => (k === i ? fn(a) : a)) }));
+            const moveAd = (i, dir) => patch(x => { const ads = [...x.ads]; const j = i + dir; if (j < 0 || j >= ads.length) return {}; [ads[i], ads[j]] = [ads[j], ads[i]]; return { ads }; });
+            const ctaDefault = (ctx.ctas[plan.destination] || [])[0];
+            const addAd = format => patch(x => ({ ads: x.ads.length >= ctx.limits.maxAdsPerAdset ? x.ads : [...x.ads.map(a => ({ ...a, _open: false })), csEmptyAd(format, ctaDefault && ctaDefault.id)] }));
+            const a = set.audience;
+            const setIssues = issuesFor('Conjunto ' + (si + 1), true);
+            return (
+                <div className="cs-set">
+                    <div className="cs-two">
+                        <label className="ab-field">Nombre del conjunto<input type="text" maxLength={50} value={set.name} onChange={e => patch({ name: e.target.value })} /></label>
+                        <label className="ab-field">¿Qué prueba este conjunto? <small>(público o tema)</small><input type="text" maxLength={200} placeholder="Ej.: mamás interesadas en baby shower" value={set.focus} onChange={e => patch({ focus: e.target.value })} /></label>
+                    </div>
+                    <div className="ab-block">
+                        <h4>👥 Público</h4>
+                        <div className="ab-row">
+                            <span className="ab-label">Edad</span>
+                            <input className="ab-num" type="number" min={18} max={64} value={a.ageMin} onChange={e => aud({ ageMin: Number(e.target.value) })} /><span>a</span>
+                            <input className="ab-num" type="number" min={19} max={65} value={a.ageMax} disabled={a.advantage} onChange={e => aud({ ageMax: Number(e.target.value) })} />
+                            <div className="sv-days">{Object.keys(AB_GENDER).map(g => <button key={g} type="button" className={a.gender === g ? 'on' : ''} onClick={() => aud({ gender: g })}>{AB_GENDER[g]}</button>)}</div>
+                        </div>
+                        <div className="ab-row"><span className="ab-label">Dónde</span>
+                            {a.cities.length ? a.cities.map((c, i) => <span className="cs-chip" key={c.key}>{c.name} · <input className="cs-radius" type="number" min={1} max={80} value={c.radius} onChange={e => aud({ cities: a.cities.map((x, k) => (k === i ? { ...x, radius: Number(e.target.value) } : x)) })} /> km<button type="button" onClick={() => aud({ cities: a.cities.filter((_, k) => k !== i) })}>✕</button></span>) : <span className="pb-muted">Todo el país ({ctx.s.country})</span>}
+                        </div>
+                        {a.cities.length < 10 && <CsTargetSearch type="ciudad" placeholder="+ Agregar ciudad (por ejemplo Guayaquil)" onAdd={r => aud({ cities: a.cities.some(c => c.key === r.key) ? a.cities : [...a.cities, { key: r.key, name: r.name, radius: 25 }] })} />}
+                        <div className="ab-row"><span className="ab-label">Intereses</span>
+                            {a.interests.length ? a.interests.map((it, i) => <span className="cs-chip" key={it.id}>{it.name}<button type="button" onClick={() => aud({ interests: a.interests.filter((_, k) => k !== i) })}>✕</button></span>) : <span className="pb-muted">Sin intereses (llega a todo el público de esa edad y género)</span>}
+                        </div>
+                        {a.interests.length < 10 && <CsTargetSearch type="interes" placeholder="+ Agregar interés (por ejemplo baby shower, maternidad, Halloween)" onAdd={r => aud({ interests: a.interests.some(x => x.id === r.id) ? a.interests : [...a.interests, { id: r.id, name: r.name }] })} />}
+                        <label className="sv-check ab-check"><input type="checkbox" checked={!!a.advantage} onChange={e => aud({ advantage: e.target.checked, ...(e.target.checked ? { ageMax: 65 } : {}) })} /> Dejar que Meta busque más allá de este público (Advantage+). Apagado = solo este público.</label>
+                    </div>
+                    <div className="ab-block">
+                        <h4>📍 Dónde se muestra</h4>
+                        <div className="sv-days">
+                            <button type="button" className={set.placements.mode === 'auto' ? 'on' : ''} onClick={() => patch({ placements: csAuto() })}>Automático (recomendado)</button>
+                            <button type="button" className={set.placements.mode === 'manual' ? 'on' : ''} onClick={() => place({ mode: 'manual' })}>Elegir</button>
+                        </div>
+                        {set.placements.mode === 'manual' && (
+                            <div className="ab-row">
+                                {[['facebook', 'Facebook'], ['instagram', 'Instagram'], ['feed', 'Feed'], ['stories', 'Historias'], ['reels', 'Reels']].map(([k, t]) => <label key={k} className="sv-check ab-check"><input type="checkbox" checked={!!set.placements[k]} onChange={e => place({ [k]: e.target.checked })} /> {t}</label>)}
+                            </div>
+                        )}
+                    </div>
+                    <div className="cs-two">
+                        {plan.budgetMode === 'conjunto' && (
+                            <label className="ab-field">Presupuesto por día de este conjunto
+                                <span className="ab-row">$<input className="ab-num" type="number" min={1} step={0.5} value={set.dailyBudget} onChange={e => patch({ dailyBudget: Number(e.target.value) })} /><small className="pb-muted">≈ {csMonthly(set.dailyBudget)} al mes</small></span>
+                            </label>
+                        )}
+                        {plan.objective === 'interaccion' && plan.destination === 'anuncio' && (
+                            <label className="ab-field">Qué busca<select value={set.optimization} onChange={e => patch({ optimization: e.target.value })}><option value="interacciones">Reacciones y comentarios</option><option value="reproducciones">Reproducciones (solo videos)</option></select></label>
+                        )}
+                    </div>
+                    {setIssues.length > 0 && <div className="ab-issues">{setIssues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
+
+                    <h4 className="cs-sub">Anuncios de este conjunto ({set.ads.length} de {ctx.limits.maxAdsPerAdset})</h4>
+                    {set.ads.map((ad, i) => (
+                        <CsAdEditor key={ad._k} ad={ad} index={i} total={set.ads.length} plan={plan} ctx={ctx} set={set} issues={issuesFor('Conjunto ' + (si + 1) + ' · Anuncio ' + (i + 1))}
+                            onChange={fn => setAd(i, fn)} onMove={dir => moveAd(i, dir)}
+                            onRemove={() => patch(x => ({ ads: x.ads.filter((_, k) => k !== i) }))}
+                            onDuplicate={() => patch(x => ({ ads: x.ads.length >= ctx.limits.maxAdsPerAdset ? x.ads : [...x.ads.slice(0, i + 1), { ...JSON.parse(JSON.stringify(ad)), _k: csUid(), name: (ad.name ? ad.name + ' ' : '') + '(copia)' }, ...x.ads.slice(i + 1)] }))} />
+                    ))}
+                    {set.ads.length < ctx.limits.maxAdsPerAdset && <div className="ab-row"><span className="ab-label">+ Agregar anuncio</span><div className="sv-days">{Object.keys(CS_FORMAT).map(f => <button key={f} type="button" onClick={() => addAd(f)}>{CS_FORMAT[f]}</button>)}</div></div>}
+                    <div className="sv-actions">
+                        <button type="button" className="sv-link" onClick={onDuplicate}>⧉ Duplicar este conjunto (para probar otro público con los mismos anuncios)</button>
+                        <button type="button" className="sv-link" onClick={onRemove}>✕ Quitar este conjunto</button>
+                    </div>
+                </div>
+            );
+        }
+
+
+        // El creador: objetivo y destino → la IA (o tú) arma la campaña → revisas cada conjunto y anuncio → se crea en Meta en pausa.
+        function CsBuilder({ data, reload, canEdit, canConfigure, seed, onSeedUsed }) {
+            const s = data.settings || {};
+            const [step, setStep] = useState('idle');
+            const [form, setForm] = useState({ objective: 'ventas', destination: 'web', idea: '', products: [], assets: [], adsets: 1, adsPerAdset: 4, mixMode: 'auto', mix: { image: 3, video: 1, carousel: 0 }, budget: 3 });
+            const [query, setQuery] = useState('');
+            const [libQuery, setLibQuery] = useState('');
+            const [plan, setPlan] = useState(null);
+            const [explanation, setExplanation] = useState('');
+            const [review, setReview] = useState({ errors: [], issues: [], daily: 0, ads: 0 });
+            const [active, setActive] = useState(0);
+            const [busy, setBusy] = useState('');
             const [error, setError] = useState('');
             const [notice, setNotice] = useState('');
-            const [busy, setBusy] = useState('');
-            const [step, setStep] = useState('idle');
-            const [form, setForm] = useState({ destination: 'web', format: 'auto', idea: '', products: [] });
-            const [query, setQuery] = useState('');
-            const [draft, setDraft] = useState(null);
-            const [explanation, setExplanation] = useState('');
-            const [review, setReview] = useState({ errors: [], issues: [] });
-            const [addQuery, setAddQuery] = useState('');
-            const [budgetEdit, setBudgetEdit] = useState(null);
-            const [advice, setAdvice] = useState(null);
-            const [showSettings, setShowSettings] = useState(false);
-            const [setup, setSetup] = useState(null);
-            const [found, setFound] = useState(null);
-            const [openHistory, setOpenHistory] = useState('');
-            const load = () => api('/api/ads/builder').then(d => { setData(d); setError(''); }).catch(e => setError(e.message));
+            const [library, setLibrary] = useState(data.library || []);
+            useEffect(() => { setLibrary(data.library || []); }, [data.library]);
+            // Una estrategia de la memoria abre el creador con su idea.
             useEffect(() => {
-                load();
-                const t = setInterval(whenVisible(load), 60000);
-                return () => clearInterval(t);
-            }, []);
-            // Cada cambio del borrador se revisa con las reglas de Meta (sin crear nada).
+                if (!seed) return;
+                setForm(f => ({ ...f, idea: seed })); setStep('pick'); setNotice(''); onSeedUsed();
+            }, [seed]);
             useEffect(() => {
-                if (!draft) return;
+                if (!plan) return;
                 const t = setTimeout(() => {
-                    api('/api/ads/builder/review', { method: 'POST', body: JSON.stringify({ ...draft, idea: form.idea }) }).then(setReview).catch(() => {});
-                }, 700);
+                    api('/api/ads/campaigns/review', { method: 'POST', body: JSON.stringify({ ...plan, idea: form.idea }) }).then(setReview).catch(() => {});
+                }, 800);
                 return () => clearTimeout(t);
-            }, [draft]);
-
+            }, [plan]);
+            const objectives = data.objectives || [];
+            const destinationsFor = id => ((objectives.find(o => o.id === id) || {}).destinations || []);
+            const catalog = data.catalog || [];
+            const ctx = {
+                catalog, library, s, ctas: data.ctas || {}, idea: form.idea, aiReady: !!(data.ai && data.ai.configured), limits: data.limits || { maxAdsPerAdset: 8, maxAdsets: 5 },
+                reloadLibrary: () => api('/api/ads/campaigns').then(d => setLibrary(d.library || [])).catch(() => {})
+            };
+            const missing = abMissing(s, form.destination === 'anuncio' ? '' : form.destination);
+            const blocked = !data.connected || (data.account && !data.account.canWrite);
             async function run(name, fn, ok) {
                 setBusy(name); setError(''); setNotice('');
                 try {
                     const r = await fn();
                     if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok);
-                    await load();
                     return r;
                 } catch (e) {
                     setError(e.message);
@@ -14351,339 +14804,503 @@
                     setBusy('');
                 }
             }
-
-            if (!data) return error ? <div className="pb-err">{error}</div> : <div className="pb-card"><div className="pb-muted">Cargando creador de anuncios…</div></div>;
-            const s = data.settings || {};
-            const account = data.account;
-            const catalog = data.catalog || [];
-            const byName = new Map(catalog.map(p => [p.name, p]));
-            const byId = new Map(catalog.map(p => [p.id, p]));
-            const productOf = c => byId.get(c.productId) || byName.get(c.product) || {};
-            const blocked = !data.connected || (account && !account.canWrite);
-            const missing = abMissing(s, form.destination);
+            const chooseObjective = id => setForm(f => ({ ...f, objective: id, destination: destinationsFor(id).includes(f.destination) ? f.destination : destinationsFor(id)[0] }));
+            const toggle = (key, id, max) => setForm(f => ({ ...f, [key]: f[key].includes(id) ? f[key].filter(x => x !== id) : f[key].length >= max ? f[key] : [...f[key], id] }));
+            const mixList = () => {
+                if (form.mixMode === 'auto') return Array.from({ length: form.adsPerAdset }, (_, i) => (i === form.adsPerAdset - 1 && form.adsPerAdset > 1 ? 'video' : 'image'));
+                return [...Array(form.mix.image).fill('image'), ...Array(form.mix.video).fill('video'), ...Array(form.mix.carousel).fill('carousel')];
+            };
+            const propose = () => run('propose', async () => {
+                const body = { ...form, mix: form.mixMode === 'manual' ? form.mix : null, adsPerAdset: form.mixMode === 'manual' ? Math.max(1, form.mix.image + form.mix.video + form.mix.carousel) : form.adsPerAdset };
+                const r = await api('/api/ads/campaigns/propose', { method: 'POST', body: JSON.stringify(body) });
+                const p = csKeys(r.plan);
+                p.adsets.forEach(set => set.ads.forEach((ad, i) => { ad._open = i === 0; }));
+                setPlan(p); setExplanation(r.explanation || ''); setReview({ errors: [], issues: r.issues || [], daily: 0, ads: 0 }); setActive(0); setStep('edit');
+            });
+            const manual = () => {
+                const cta = ((data.ctas || {})[form.destination] || [])[0];
+                const kinds = mixList();
+                const sets = Array.from({ length: form.adsets }, (_, n) => csEmptySet(s, n + 1, kinds.map((k, i) => ({ ...csEmptyAd(k, cta && cta.id), _open: i === 0 })), form.budget));
+                // Los productos elegidos llenan los anuncios de foto (uno por anuncio).
+                const picked = form.products.map(id => catalog.find(p => p.id === id)).filter(Boolean);
+                sets.forEach(set => set.ads.forEach((ad, i) => {
+                    const p = picked[i % Math.max(1, picked.length)];
+                    if (p && ad.format === 'image') Object.assign(ad, { productId: p.id, product: p.name, media: { kind: 'image', url: p.images[0], source: 'catalogo', assetId: '', thumb: p.images[0] }, name: p.displayName || p.name });
+                    if (p && ad.format === 'carousel') ad.cards = picked.slice(0, 10).map(x => ({ _k: csUid(), media: { kind: 'image', url: x.images[0], source: 'catalogo', assetId: '', thumb: x.images[0] }, productId: x.id, product: x.name, title: x.displayName || x.name, description: '' }));
+                }));
+                setPlan({ objective: form.objective, destination: form.destination, webEvent: s.webEvent, attributionDays: s.attributionDays || 7, theme: form.idea.slice(0, 40), hypothesis: '', budgetMode: 'conjunto', campaignBudget: form.budget * form.adsets, startDate: '', endDate: '', adsets: sets });
+                setExplanation(''); setReview({ errors: [], issues: [], daily: 0, ads: 0 }); setActive(0); setStep('edit');
+            };
+            const setPlanField = changes => setPlan(p => ({ ...p, ...changes }));
+            const setSet = (i, fn) => setPlan(p => ({ ...p, adsets: p.adsets.map((x, k) => (k === i ? fn(x) : x)) }));
+            const create = () => run('create', async () => {
+                const r = await api('/api/ads/campaigns/create', { method: 'POST', body: JSON.stringify({ ...plan, idea: form.idea }) });
+                setStep('idle'); setPlan(null);
+                setForm(f => ({ ...f, idea: '', products: [], assets: [] }));
+                await reload();
+                return r;
+            }, r => '✅ Campaña creada en Meta EN PAUSA (' + r.created.adsets.length + ' conjunto(s), ' + r.created.adsets.reduce((n, a) => n + a.ads.length, 0) + ' anuncio(s)): no gasta nada todavía. Mírala abajo y toca Activar cuando quieras.' + (r.created.warnings && r.created.warnings.length ? ' Ojo: ' + r.created.warnings.join(' ') : ''));
+            // Errores de la revisión: "Conjunto 1 · Anuncio 2: …" se muestran en su anuncio.
+            const allIssues = [...(review.errors || []).map(t => { const m = String(t).match(/^(Conjunto \d+(?: · Anuncio \d+)?): (.*)$/); return m ? { level: 'error', where: m[1], text: m[2] } : { level: 'error', where: '', text: t }; }), ...(review.issues || [])];
+            const issuesFor = (prefix, exact) => allIssues.filter(i => (exact ? i.where === prefix : i.where === prefix || i.where.startsWith(prefix + ' · '))).map(i => ({ ...i, text: (!exact && i.where !== prefix ? i.where.slice(prefix.length + 3) + ': ' : '') + i.text }));
+            const general = allIssues.filter(i => !/^Conjunto \d+/.test(i.where));
+            const errorsCount = allIssues.filter(i => i.level === 'error').length;
             const q = query.trim().toLowerCase();
             const shown = (q ? catalog.filter(p => (p.name + ' ' + p.category).toLowerCase().includes(q)) : catalog).slice(0, 80);
-            const togglePick = id => setForm(f => ({ ...f, products: f.products.includes(id) ? f.products.filter(n => n !== id) : f.products.length >= 10 ? f.products : [...f.products, id] }));
-            const propose = () => run('propose', async () => {
-                const r = await api('/api/ads/builder/propose', { method: 'POST', body: JSON.stringify(form) });
-                setDraft(r.draft); setReview({ errors: [], issues: r.issues || [] }); setExplanation(r.explanation || ''); setStep('edit');
-                return r;
-            });
-            const patch = changes => setDraft(d => ({ ...d, ...changes }));
-            const setList = (key, i, value) => setDraft(d => ({ ...d, [key]: d[key].map((t, k) => (k === i ? value : t)) }));
-            const dropFrom = (key, i) => setDraft(d => ({ ...d, [key]: d[key].filter((_, k) => k !== i) }));
-            const setCard = (i, changes) => setDraft(d => ({ ...d, cards: d.cards.map((c, k) => (k === i ? { ...c, ...changes } : c)) }));
-            const moveCard = (i, dir) => setDraft(d => {
-                const cards = [...d.cards]; const j = i + dir;
-                if (j < 0 || j >= cards.length) return d;
-                [cards[i], cards[j]] = [cards[j], cards[i]];
-                return { ...d, cards };
-            });
-            const addCard = p => setDraft(d => (d.cards.length >= 10 || d.cards.some(c => c.productId === p.id) ? d : { ...d, cards: [...d.cards, { productId: p.id, product: p.name, image: p.images[0], title: p.name, description: '' }] }));
-            const changeFormat = format => setDraft(d => ({ ...d, format, cards: format === 'single' ? d.cards.slice(0, 1) : d.cards }));
-            const create = () => run('create', async () => {
-                const r = await api('/api/ads/builder/create', { method: 'POST', body: JSON.stringify({ ...draft, idea: form.idea }) });
-                setStep('idle'); setDraft(null); setForm({ destination: 'web', format: 'auto', idea: '', products: [] });
-                return r;
-            }, r => '✅ Creado en Meta EN PAUSA: no gasta nada todavía. Míralo abajo en "Tus anuncios creados desde el CRM" y toca Activar cuando quieras que empiece.' + (r && r.created && r.created.warnings && r.created.warnings.length ? ' Ojo: ' + r.created.warnings.join(' ') : ''));
-            const activate = item => {
-                const total = Number(data.activeDaily || 0) + Number(item.dailyBudget || 0);
-                if (!confirm('¿Activar "' + item.name + '"?\n\nEmpieza a gastar hasta ' + abMoney(item.dailyBudget) + ' por día (todo lo activo desde el CRM sumaría ' + abMoney(total) + ' de tu tope de ' + abMoney(s.maxDaily) + ').\n\nMeta lo revisa antes de mostrarlo (puede tardar hasta 24 horas).')) return;
-                run('st' + item.campaignId, () => api('/api/ads/builder/' + item.campaignId + '/status', { method: 'POST', body: JSON.stringify({ active: true }) }), '▶️ Activado. Meta lo revisa y empieza a mostrarlo (el estado se actualiza aquí solo).');
-            };
-            const pause = item => run('st' + item.campaignId, () => api('/api/ads/builder/' + item.campaignId + '/status', { method: 'POST', body: JSON.stringify({ active: false }) }), '⏸️ Pausado: ya no gasta.');
-            const saveBudget = item => run('b' + item.campaignId, () => api('/api/ads/builder/' + item.campaignId + '/budget', { method: 'PUT', body: JSON.stringify({ daily: budgetEdit.value }) }), () => { setBudgetEdit(null); return 'Presupuesto cambiado. Meta tarda unas horas en ajustarse: mejor no cambiarlo seguido.'; });
-            const askAdvice = () => run('advice', async () => { setAdvice(await api('/api/ads/builder/advice', { method: 'POST', body: '{}' })); });
-            const detect = () => run('detect', async () => {
-                const r = await api('/api/ads/builder/detect', { method: 'POST', body: '{}' });
-                setFound(r); setSetup(r.settings);
-                return r;
-            }, 'Listo: tomé la página, el Instagram, el píxel y el WhatsApp que ya usa tu cuenta. Revisa y guarda.');
-            const saveSetup = () => run('setup', async () => {
-                await api('/api/ads/builder/settings', { method: 'PUT', body: JSON.stringify(setup) });
-                setShowSettings(false);
-            }, 'Ajustes guardados.');
-            const issues = [...(review.errors || []).map(t => ({ level: 'error', where: '', text: t })), ...(review.issues || [])];
-            const hasErrors = issues.some(i => i.level === 'error');
-            const metaUrl = item => 'https://adsmanager.facebook.com/adsmanager/manage/ads?act=' + String(data.accountId || '').replace(/^act_/, '') + '&selected_campaign_ids=' + item.campaignId;
-            const resultName = item => (item.destination === 'whatsapp' ? 'Chats iniciados' : (AB_EVENTS[s.webEvent] || 'Resultados'));
-            const addMatches = addQuery.trim() ? catalog.filter(p => p.name.toLowerCase().includes(addQuery.trim().toLowerCase()) && !(draft && draft.cards.some(c => c.productId === p.id))).slice(0, 8) : [];
+            const lq = libQuery.trim().toLowerCase();
+            const libShown = library.filter(a => !lq || (a.title + ' ' + a.product).toLowerCase().includes(lq)).slice(0, 60);
+            const daily = plan ? (plan.budgetMode === 'campana' ? Number(plan.campaignBudget || 0) : plan.adsets.reduce((t, x) => t + Number(x.dailyBudget || 0), 0)) : 0;
+            const totalAds = plan ? plan.adsets.reduce((n, x) => n + x.ads.length, 0) : 0;
+            const objLabel = id => (objectives.find(o => o.id === id) || {}).label || id;
 
+            return (
+                <section className="pb-card ab">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="sparkle" size={22} color="#B5654A" /></div>
+                        <div className="grow">
+                            <h2>✨ Crear campaña</h2>
+                            <p>Elige el objetivo y a dónde lleva; la IA arma la campaña con tus productos, tus videos de la Biblioteca y lo aprendido de campañas anteriores. Puedes tener varios conjuntos (públicos) y varios anuncios por conjunto: foto, video o carrusel. Se crea en Meta <b>en pausa</b>: no gasta nada hasta que toques Activar.</p>
+                        </div>
+                        {step === 'idle' && canEdit && <button type="button" className="pb-btn main" disabled={!data.connected} onClick={() => { setStep('pick'); setNotice(''); }}>✨ Nueva campaña</button>}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {notice && <div className="pb-notice ok">{notice}</div>}
+                    {!data.connected && <div className="pb-muted">Primero conecta la cuenta publicitaria de Meta (más abajo, en "Cuenta publicitaria de Meta").</div>}
+                    {data.connected && !ctx.aiReady && <div className="pb-muted">La IA usa la clave del agente de redes: agrégala en Publicaciones → Cerebro IA. Sin ella puedes armar la campaña a mano.</div>}
+                    {step === 'idle' && data.connected && <div className="pb-muted">Hoy: {data.limits.campaignsToday} de {data.limits.campaignsPerDay} campañas nuevas y {data.limits.adsToday} de {data.limits.adsPerDay} anuncios (para cuidar tu cuenta con Meta).</div>}
+
+                    {step === 'pick' && (
+                        <div className="ab-pick">
+                            <span className="ab-label">1. ¿Qué buscas con esta campaña?</span>
+                            <div className="cs-objs">{objectives.map(o => (
+                                <button type="button" key={o.id} className={'cs-obj' + (form.objective === o.id ? ' on' : '')} onClick={() => chooseObjective(o.id)}>
+                                    <span>{(CS_OBJ[o.id] || {}).icon} <b>{o.label}</b></span><small>{(CS_OBJ[o.id] || {}).help}</small>
+                                </button>
+                            ))}</div>
+                            <span className="ab-label">2. ¿A dónde lleva?</span>
+                            <div className="cs-objs">{destinationsFor(form.objective).map(d => (
+                                <button type="button" key={d} className={'cs-obj' + (form.destination === d ? ' on' : '')} onClick={() => setForm(f => ({ ...f, destination: d }))}>
+                                    <span>{CS_DEST[d].icon} <b>{CS_DEST[d].label}</b></span><small>{CS_DEST[d].help}</small>
+                                </button>
+                            ))}</div>
+                            {missing.length > 0 && <div className="pb-notice">Para esta campaña falta en Ajustes (abajo): {missing.join(', ')}.</div>}
+                            <label className="ab-field">3. ¿Qué quieres anunciar? <small>(la IA lo usa para los textos y, si no eliges productos, para buscarlos)</small>
+                                <textarea rows={2} maxLength={800} placeholder="Ej.: Halloween para fiestas infantiles: calabazas y fantasmitas; probar video contra fotos" value={form.idea} onChange={e => setForm(f => ({ ...f, idea: e.target.value }))} />
+                            </label>
+                            <span className="ab-label">4. Estructura</span>
+                            <div className="ab-row">
+                                <span>Conjuntos (públicos distintos):</span><input className="ab-num" type="number" min={1} max={ctx.limits.maxAdsets} value={form.adsets} onChange={e => setForm(f => ({ ...f, adsets: Math.max(1, Math.min(ctx.limits.maxAdsets, Number(e.target.value) || 1)) }))} />
+                                <span>Presupuesto por conjunto: $</span><input className="ab-num" type="number" min={1} step={0.5} value={form.budget} onChange={e => setForm(f => ({ ...f, budget: Number(e.target.value) }))} /><small className="pb-muted">por día · total ≈ {abMoney(form.budget * form.adsets)} por día ({csMonthly(form.budget * form.adsets)} al mes) · tu tope: {abMoney(s.maxDaily)}</small>
+                            </div>
+                            <div className="ab-row">
+                                <span>Anuncios por conjunto:</span>
+                                <div className="sv-days"><button type="button" className={form.mixMode === 'auto' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, mixMode: 'auto' }))}>Que decida la IA</button><button type="button" className={form.mixMode === 'manual' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, mixMode: 'manual' }))}>Elegir cuántos de cada uno</button></div>
+                                {form.mixMode === 'auto'
+                                    ? <><input className="ab-num" type="number" min={1} max={ctx.limits.maxAdsPerAdset} value={form.adsPerAdset} onChange={e => setForm(f => ({ ...f, adsPerAdset: Math.max(1, Math.min(ctx.limits.maxAdsPerAdset, Number(e.target.value) || 1)) }))} /><small className="pb-muted">anuncios</small></>
+                                    : ['image', 'video', 'carousel'].map(k => <span key={k} className="ab-row">{CS_FORMAT[k]}<input className="ab-num" type="number" min={0} max={ctx.limits.maxAdsPerAdset} value={form.mix[k]} onChange={e => setForm(f => ({ ...f, mix: { ...f.mix, [k]: Math.max(0, Math.min(ctx.limits.maxAdsPerAdset, Number(e.target.value) || 0)) } }))} /></span>)}
+                            </div>
+                            <div className="ab-row"><span className="ab-label">5. Productos ({form.products.length} de 30)</span><input type="search" placeholder="Buscar en el catálogo…" value={query} onChange={e => setQuery(e.target.value)} /></div>
+                            <div className="ab-grid">{shown.map(p => (
+                                <button type="button" key={p.id} className={'ab-prod' + (form.products.includes(p.id) ? ' on' : '')} onClick={() => toggle('products', p.id, 30)}>
+                                    <img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                                    <span>{p.name}</span><small>{abMoney(p.price)} · {p.category}</small>
+                                </button>
+                            ))}</div>
+                            <div className="ab-row"><span className="ab-label">6. Videos y fotos de la Biblioteca ({form.assets.length}) <small className="pb-muted">opcional: los que quieres que use</small></span><input type="search" placeholder="Buscar en la Biblioteca…" value={libQuery} onChange={e => setLibQuery(e.target.value)} /></div>
+                            {libShown.length ? <div className="ab-grid">{libShown.map(a => (
+                                <button type="button" key={a.id} className={'ab-prod' + (form.assets.includes(a.id) ? ' on' : '')} onClick={() => toggle('assets', a.id, 20)}>
+                                    {a.thumb ? <img src={a.thumb} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid big">🎬</span>}
+                                    <span>{a.kind === 'video' ? '🎬 ' : '🖼️ '}{a.title || 'Sin nombre'}</span><small>{a.kind === 'video' && a.duration ? Math.round(a.duration) + ' s · ' : ''}{a.usedCount ? 'usado ' + a.usedCount + ' veces' : 'sin usar'}</small>
+                                </button>
+                            ))}</div> : <div className="pb-muted">La Biblioteca está vacía: puedes subir videos y fotos dentro de cada anuncio o en Publicaciones → Biblioteca.</div>}
+                            <div className="sv-actions">
+                                <button type="button" className="pb-btn main" disabled={!!busy || !ctx.aiReady || (!form.products.length && !form.idea.trim())} onClick={propose}>{busy === 'propose' ? '✨ Armando la campaña (puede tardar un minuto)…' : '✨ Que la IA arme la campaña'}</button>
+                                <button type="button" className="pb-btn sm" disabled={!!busy} onClick={manual}>✏️ Armarla yo</button>
+                                <button type="button" className="pb-btn sm" onClick={() => setStep('idle')}>Cancelar</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 'edit' && plan && (
+                        <div className="cs-edit">
+                            {explanation && <div className="ab-why">🤖 {explanation}</div>}
+                            <div className="ab-block">
+                                <h4>📋 Campaña</h4>
+                                <div className="ab-row">
+                                    <span className="ab-chip">{(CS_OBJ[plan.objective] || {}).icon} {objLabel(plan.objective)}</span>
+                                    <span className="ab-chip">{CS_DEST[plan.destination].icon} {CS_DEST[plan.destination].label}</span>
+                                    <span className="ab-chip">{plan.adsets.length} conjunto(s) · {totalAds} anuncio(s)</span>
+                                    <span className={'ab-chip' + (daily > s.maxDaily ? ' cs-over' : '')}>{abMoney(daily)} por día ≈ {csMonthly(daily)} al mes · tope {abMoney(s.maxDaily)}</span>
+                                </div>
+                                <div className="cs-two">
+                                    <label className="ab-field">Nombre (tema)<input type="text" maxLength={40} value={plan.theme} onChange={e => setPlanField({ theme: e.target.value })} /></label>
+                                    <label className="ab-field">¿Qué quieres aprender con esta campaña? <small>(queda en la memoria)</small><input type="text" maxLength={300} placeholder="Ej.: ¿el video vende más que las fotos?" value={plan.hypothesis} onChange={e => setPlanField({ hypothesis: e.target.value })} /></label>
+                                </div>
+                                <div className="cs-two">
+                                    {plan.objective === 'ventas' && plan.destination === 'web' && <label className="ab-field">Qué busca en la web<select value={plan.webEvent} onChange={e => setPlanField({ webEvent: e.target.value })}>{Object.keys(AB_EVENTS).map(k => <option key={k} value={k}>{AB_EVENTS[k]}</option>)}</select></label>}
+                                    {plan.destination === 'web' && plan.objective !== 'trafico' && <label className="ab-field">Cuenta la compra si pasa dentro de<select value={plan.attributionDays} onChange={e => setPlanField({ attributionDays: Number(e.target.value) })}><option value={1}>1 día después del clic</option><option value={7}>7 días después del clic</option></select></label>}
+                                    <label className="ab-field">Presupuesto
+                                        <div className="sv-days"><button type="button" className={plan.budgetMode === 'conjunto' ? 'on' : ''} onClick={() => setPlanField({ budgetMode: 'conjunto' })}>Por conjunto</button><button type="button" className={plan.budgetMode === 'campana' ? 'on' : ''} onClick={() => setPlanField({ budgetMode: 'campana', campaignBudget: plan.campaignBudget || daily || 3 })}>De campaña (Meta reparte)</button></div>
+                                    </label>
+                                    {plan.budgetMode === 'campana' && <label className="ab-field">Presupuesto de la campaña por día<span className="ab-row">$<input className="ab-num" type="number" min={1} step={0.5} value={plan.campaignBudget} onChange={e => setPlanField({ campaignBudget: Number(e.target.value) })} /></span></label>}
+                                    <label className="ab-field">Empieza <small>(vacío = al activar)</small><input type="date" value={plan.startDate} onChange={e => setPlanField({ startDate: e.target.value })} /></label>
+                                    <label className="ab-field">Termina <small>(opcional)</small><input type="date" value={plan.endDate} onChange={e => setPlanField({ endDate: e.target.value })} /></label>
+                                </div>
+                                {general.length > 0 && <div className="ab-issues">{general.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.text}</div>)}</div>}
+                            </div>
+
+                            <div className="cs-tabs">
+                                {plan.adsets.map((x, i) => {
+                                    const bad = issuesFor('Conjunto ' + (i + 1)).some(it => it.level === 'error') || issuesFor('Conjunto ' + (i + 1), true).some(it => it.level === 'error');
+                                    return <button type="button" key={x._k} className={(active === i ? 'on' : '') + (bad ? ' bad' : '')} onClick={() => setActive(i)}>{bad ? '⛔ ' : ''}{x.name || 'Conjunto ' + (i + 1)}<small>{x.ads.length} anuncio(s){plan.budgetMode === 'conjunto' ? ' · ' + abMoney(x.dailyBudget) : ''}</small></button>;
+                                })}
+                                {plan.adsets.length < ctx.limits.maxAdsets && <button type="button" onClick={() => { setPlan(p => ({ ...p, adsets: [...p.adsets, csEmptySet(s, p.adsets.length + 1, [csEmptyAd('image', (((data.ctas || {})[p.destination] || [])[0] || {}).id)], form.budget)] })); setActive(plan.adsets.length); }}>+ Conjunto</button>}
+                            </div>
+                            {plan.adsets[active] && (
+                                <CsAdsetEditor key={plan.adsets[active]._k} set={plan.adsets[active]} si={active} plan={plan} ctx={ctx} issuesFor={issuesFor}
+                                    onChange={fn => setSet(active, fn)}
+                                    onRemove={() => { if (plan.adsets.length > 1 && confirm('¿Quitar este conjunto y sus anuncios?')) { setPlan(p => ({ ...p, adsets: p.adsets.filter((_, k) => k !== active) })); setActive(0); } }}
+                                    onDuplicate={() => { if (plan.adsets.length < ctx.limits.maxAdsets) { setPlan(p => ({ ...p, adsets: [...p.adsets, csKeys({ adsets: [{ ...JSON.parse(JSON.stringify(p.adsets[active])), _k: '', name: p.adsets[active].name + ' (copia)', ads: p.adsets[active].ads.map(a => ({ ...JSON.parse(JSON.stringify(a)), _k: '', _open: false })) }] }).adsets[0]] })); setActive(plan.adsets.length); } }} />
+                            )}
+
+                            <div className="ab-block cs-final">
+                                {errorsCount ? <div className="ab-issue error">⛔ Hay {errorsCount} cosa(s) por corregir (marcadas en cada conjunto y anuncio).</div> : <div className="ab-issue ok">✅ Revisada con las reglas de publicidad de Meta: lista para crear.</div>}
+                                <div className="sv-actions">
+                                    {canConfigure && <button type="button" className="pb-btn main" disabled={!!busy || errorsCount > 0 || blocked} onClick={() => { if (confirm('¿Crear la campaña en Meta?\n\n' + plan.adsets.length + ' conjunto(s) y ' + totalAds + ' anuncio(s), en PAUSA (no gasta hasta que la actives). Meta sube las fotos y videos: puede tardar unos minutos.')) create(); }}>{busy === 'create' ? 'Creando en Meta (subiendo fotos y videos)…' : '🚀 Crear campaña en Meta (en pausa)'}</button>}
+                                    <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setStep('pick')}>← Volver</button>
+                                    <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => { if (confirm('¿Descartar esta campaña?')) { setPlan(null); setStep('idle'); } }}>Descartar</button>
+                                </div>
+                                {!canConfigure && <div className="pb-muted">Solo la dueña puede crearla en Meta.</div>}
+                                {blocked && data.account && data.account.problem && <div className="pb-muted">No se puede crear mientras la cuenta tenga ese problema (ver aviso arriba).</div>}
+                            </div>
+                        </div>
+                    )}
+                </section>
+            );
+        }
+
+
+        // Las campañas creadas desde el CRM: estado en Meta, gasto, resultados y ventas por conjunto y por anuncio.
+        function CsCampaigns({ data, reload, canConfigure }) {
+            const s = data.settings || {};
+            const [busy, setBusy] = useState('');
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            const [open, setOpen] = useState('');
+            const [history, setHistory] = useState('');
+            const [budget, setBudget] = useState(null);
+            const blocked = !data.connected || (data.account && !data.account.canWrite);
+            async function run(name, fn, ok) {
+                setBusy(name); setError(''); setNotice('');
+                try { const r = await fn(); if (ok) setNotice(typeof ok === 'function' ? ok(r) : ok); await reload(); return r; } catch (e) { setError(e.message); } finally { setBusy(''); }
+            }
+            const activate = c => {
+                const total = Number(data.activeDaily || 0) + Number(c.daily || 0);
+                if (!confirm('¿Activar "' + c.name + '"?\n\nEmpieza a gastar hasta ' + abMoney(c.daily) + ' por día (todo lo activo desde el CRM sumaría ' + abMoney(total) + ' de tu tope de ' + abMoney(s.maxDaily) + ').\n\nMeta revisa cada anuncio antes de mostrarlo (puede tardar hasta 24 horas).')) return;
+                run('st' + c.campaignId, () => api('/api/ads/campaigns/' + c.campaignId + '/status', { method: 'POST', body: JSON.stringify({ active: true }) }), '▶️ Activada. Meta revisa los anuncios y empieza a mostrarlos.');
+            };
+            const pause = c => run('st' + c.campaignId, () => api('/api/ads/campaigns/' + c.campaignId + '/status', { method: 'POST', body: JSON.stringify({ active: false }) }), '⏸️ Pausada: ya no gasta.');
+            const toggleAd = (c, ad) => run('ad' + ad.adId, () => api('/api/ads/campaigns/' + c.campaignId + '/ads/' + ad.adId + '/status', { method: 'POST', body: JSON.stringify({ active: ad.status !== 'ACTIVE' }) }), ad.status === 'ACTIVE' ? 'Anuncio pausado.' : 'Anuncio activado.');
+            const saveBudget = c => run('b' + c.campaignId, () => api('/api/ads/campaigns/' + c.campaignId + '/budget', { method: 'PUT', body: JSON.stringify({ adsetId: budget.adsetId, daily: budget.value }) }), () => { setBudget(null); return 'Presupuesto cambiado. Meta tarda unas horas en ajustarse: mejor no cambiarlo seguido.'; });
+            const metaUrl = c => 'https://adsmanager.facebook.com/adsmanager/manage/ads?act=' + String(data.accountId || '').replace(/^act_/, '') + '&selected_campaign_ids=' + c.campaignId;
+            const list = data.campaigns || [];
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="chart" size={22} color="#B5654A" /></div>
+                        <div className="grow">
+                            <h2>📈 Tus campañas creadas desde el CRM</h2>
+                            <p>Estado en Meta, gasto y lo que vendió cada conjunto y cada anuncio (compras en la web y chats y ventas del CRM). Se actualiza solo cada minuto. Activo ahora: <b>{abMoney(data.activeDaily)}</b> por día de tu tope de <b>{abMoney(s.maxDaily)}</b>.</p>
+                        </div>
+                        <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => run('reload', reload)}>🔄 Actualizar</button>
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {notice && <div className="pb-notice ok">{notice}</div>}
+                    {data.liveError && <div className="pb-muted">No se pudo leer el estado en Meta: {data.liveError}</div>}
+                    {list.length === 0 ? <div className="pb-muted">Todavía no has creado campañas desde aquí. Las que crees aparecen en esta lista con su estado y sus resultados.</div> : (
+                        <div className="ab-list">{list.map(c => {
+                            const t = c.totals || {};
+                            const first = (c.adsets[0] && c.adsets[0].ads[0]) || {};
+                            const tone = c.liveStatus ? (AB_LIVE_TONE[c.liveStatus] || 'off') : 'off';
+                            return (
+                                <div className="ab-item" key={c.campaignId}>
+                                    <div className="ab-item-h">
+                                        {first.image ? <img src={first.image} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>}
+                                        <div className="grow">
+                                            <b>{c.name}</b>
+                                            <small>{(CS_OBJ[c.objective] || {}).icon} {(data.objectives.find(o => o.id === c.objective) || {}).label || c.objective} → {(CS_DEST[c.destination] || {}).label || c.destination} · {c.adsets.length} conjunto(s) · {c.adsets.reduce((n, a) => n + a.ads.length, 0)} anuncio(s) · creada {formatDateTime(c.createdAt)}</small>
+                                            {c.hypothesis && <small>🔬 Prueba: {c.hypothesis}</small>}
+                                        </div>
+                                        <span className={'ab-status ' + tone}>{c.liveLabel || (c.status === 'ACTIVE' ? 'Activa' : 'Pausada')}</span>
+                                    </div>
+                                    {c.warnings && c.warnings.length > 0 && <div className="pb-muted">⚠️ {c.warnings.join(' ')}</div>}
+                                    <div className="ab-kpis">
+                                        <div><b>{abMoney(c.daily)}</b><small>Por día</small></div>
+                                        <div><b>{abMoney(t.spendToday)}</b><small>Gastado hoy</small></div>
+                                        <div><b>{abMoney(t.spendTotal)}</b><small>Gastado total</small></div>
+                                        <div><b>{t.results || 0}</b><small>{c.resultLabel}</small></div>
+                                        <div><b>{t.chats || 0}</b><small>Chats (CRM)</small></div>
+                                        <div><b>{t.sales || 0}</b><small>Ventas (CRM)</small></div>
+                                        <div><b>{abMoney((t.revenue || 0) + (t.webRevenue || 0))}</b><small>Ingresos{t.roas !== null && t.roas !== undefined ? ' · ' + t.roas + 'x' : ''}</small></div>
+                                    </div>
+                                    <div className="sv-actions">
+                                        {canConfigure && (c.status === 'ACTIVE'
+                                            ? <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => pause(c)}>{busy === 'st' + c.campaignId ? 'Pausando…' : '⏸️ Pausar campaña'}</button>
+                                            : <button type="button" className="pb-btn sm main" disabled={!!busy || blocked} onClick={() => activate(c)}>{busy === 'st' + c.campaignId ? 'Activando…' : '▶️ Activar campaña'}</button>)}
+                                        {canConfigure && c.budgetMode === 'campana' && (budget && budget.campaignId === c.campaignId ? (
+                                            <span className="ab-budget">$<input className="ab-num" type="number" min={1} step={0.5} value={budget.value} onChange={e => setBudget({ ...budget, value: e.target.value })} />
+                                                <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={() => saveBudget(c)}>Guardar</button><button type="button" className="pb-btn sm" onClick={() => setBudget(null)}>Cancelar</button></span>
+                                        ) : <button type="button" className="pb-btn sm" disabled={!!busy || blocked} onClick={() => setBudget({ campaignId: c.campaignId, adsetId: '', value: c.campaignBudget })}>💵 Presupuesto</button>)}
+                                        <button type="button" className="sv-link" onClick={() => setOpen(open === c.campaignId ? '' : c.campaignId)}>{open === c.campaignId ? 'Ocultar conjuntos y anuncios' : 'Ver conjuntos y anuncios'}</button>
+                                        {data.accountId && <a className="sv-link" href={metaUrl(c)} target="_blank" rel="noopener noreferrer">Ver en Meta</a>}
+                                        <button type="button" className="sv-link" onClick={() => setHistory(history === c.campaignId ? '' : c.campaignId)}>{history === c.campaignId ? 'Ocultar historial' : 'Historial'}</button>
+                                    </div>
+                                    {history === c.campaignId && <div className="ab-history">{c.history.map((h, k) => <div key={k}><small>{formatDateTime(h.at)}</small> {h.detail}</div>)}</div>}
+                                    {open === c.campaignId && c.adsets.map(set => (
+                                        <div className="cs-setrow" key={set.adsetId}>
+                                            <div className="ab-row">
+                                                <b className="grow">{set.name}{set.focus ? <small className="pb-muted"> · {set.focus}</small> : null}</b>
+                                                <small className="pb-muted">{csAudience(set.audience)}</small>
+                                                {c.budgetMode === 'conjunto' && (canConfigure && budget && budget.adsetId === set.adsetId ? (
+                                                    <span className="ab-budget">$<input className="ab-num" type="number" min={1} step={0.5} value={budget.value} onChange={e => setBudget({ ...budget, value: e.target.value })} />
+                                                        <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={() => saveBudget(c)}>Guardar</button><button type="button" className="pb-btn sm" onClick={() => setBudget(null)}>Cancelar</button></span>
+                                                ) : <button type="button" className="pb-btn sm" disabled={!canConfigure || !!busy || blocked} onClick={() => setBudget({ campaignId: c.campaignId, adsetId: set.adsetId, value: set.dailyBudget })}>💵 {abMoney(set.dailyBudget)} por día</button>)}
+                                            </div>
+                                            <div className="cs-table-wrap"><table className="cs-table">
+                                                <thead><tr><th>Anuncio</th><th>Estado</th><th>Gastado</th><th>{set.resultLabel}</th><th>Chats</th><th>Ventas</th><th>Ingresos</th><th></th></tr></thead>
+                                                <tbody>{set.ads.map(ad => {
+                                                    const l = ad.live;
+                                                    return (
+                                                        <tr key={ad.adId}>
+                                                            <td><span className="cs-adname">{ad.image ? <img src={ad.image} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="cs-novid">🎬</span>}<span>{ad.name.split(' | ')[1] || ad.name}<small>{CS_FORMAT[ad.format] || ad.format}{ad.angle ? ' · ' + ad.angle : ''}</small></span></span>
+                                                                {l && l.reasons.length > 0 && <div className="pb-err">Meta lo rechazó: {l.reasons.join(' ')}</div>}
+                                                                {l && l.issues.length > 0 && <div className="pb-err">{l.issues.join(' ')}</div>}</td>
+                                                            <td><span className={'ab-status ' + (l ? (AB_LIVE_TONE[l.status] || 'off') : 'off')}>{l ? l.statusLabel : (ad.status === 'ACTIVE' ? 'Activo' : 'Pausado')}</span></td>
+                                                            <td>{l ? abMoney(l.spendTotal) : '—'}</td>
+                                                            <td>{l ? l.results : '—'}</td>
+                                                            <td>{ad.crm.chats}</td>
+                                                            <td>{ad.crm.sales}{l && l.webRevenue ? ' + web' : ''}</td>
+                                                            <td>{abMoney(ad.crm.revenue + (l ? l.webRevenue : 0))}</td>
+                                                            <td>{canConfigure && c.status === 'ACTIVE' && <button type="button" className="sv-link" disabled={!!busy} onClick={() => toggleAd(c, ad)}>{ad.status === 'ACTIVE' ? 'Pausar' : 'Activar'}</button>}</td>
+                                                        </tr>
+                                                    );
+                                                })}</tbody>
+                                            </table></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })}</div>
+                    )}
+                </section>
+            );
+        }
+
+        // Memoria de estrategias: qué funcionó y qué no en TODAS tus campañas, y qué probar ahora.
+        function CsMemory({ canEdit, aiReady, onUseStrategy }) {
+            const [data, setData] = useState(null);
+            const [busy, setBusy] = useState('');
+            const [error, setError] = useState('');
+            const [dimension, setDimension] = useState('Formato');
+            const [older, setOlder] = useState(false);
+            const load = () => api('/api/ads/memory').then(d => { setData(d); setError(''); }).catch(e => setError(e.message));
+            useEffect(() => { load(); }, []);
+            async function run(name, path) {
+                setBusy(name); setError('');
+                try { setData(await api(path, { method: 'POST', body: '{}' })); } catch (e) { setError(e.message); } finally { setBusy(''); }
+            }
+            const entry = data && data.journal && data.journal[0];
+            const groups = data ? data.groups.filter(g => g.dimension === dimension) : [];
+            const dims = data ? CS_DIMENSIONS.filter(d => data.groups.some(g => g.dimension === d)) : [];
+            const LEARN = { funciona: ['✅', 'ok'], no_funciona: ['❌', 'bad'], duda: ['❔', 'warn'] };
+            const adLine = r => (
+                <div className="cs-memad" key={r.adId}>
+                    <b>{r.name}</b>
+                    <small>{r.campaign} · {r.objective}{r.destination ? ' → ' + r.destination : ''} · {r.format}{r.angle ? ' · ' + r.angle : ''}</small>
+                    <small>Gastó {abMoney(r.spend)} · {r.results} {r.resultLabel}{r.costPerResult ? ' (' + abMoney(r.costPerResult) + ' c/u)' : ''} · CTR {r.ctr}%{r.chats ? ' · ' + r.chats + ' chats' : ''}{r.sales ? ' · ' + r.sales + ' ventas CRM' : ''}{r.purchases ? ' · ' + r.purchases + ' compras web' : ''}{r.roas ? ' · retorno ' + r.roas + 'x' : ''}</small>
+                </div>
+            );
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="bulb" size={22} color="#B5654A" /></div>
+                        <div className="grow">
+                            <h2>🧠 Memoria de estrategias</h2>
+                            <p>Guarda los resultados de todos tus anuncios del último año (también los que no se crearon aquí) con su formato, público, objetivo y lo que vendieron. La IA saca qué funciona, qué no y qué probar ahora; lo aprendido se usa al armar las campañas nuevas. Se actualiza sola cada día y la IA la analiza cada semana.</p>
+                        </div>
+                        {canEdit && <div className="sv-actions">
+                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => run('refresh', '/api/ads/memory/refresh')}>{busy === 'refresh' ? 'Leyendo Meta…' : '🔄 Actualizar datos'}</button>
+                            <button type="button" className="pb-btn sm main" disabled={!!busy || !aiReady} onClick={() => run('analyze', '/api/ads/memory/analyze')}>{busy === 'analyze' ? 'Analizando…' : '🧠 Sacar aprendizajes'}</button>
+                        </div>}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {!data ? <div className="pb-muted">Cargando…</div> : !data.refreshedAt ? <div className="pb-muted">Todavía no hay datos: toca "Actualizar datos" para leer tus anuncios de Meta.</div> : (
+                        <>
+                            <div className="ab-kpis cs-kpis4">
+                                <div><b>{data.totals.ads}</b><small>Anuncios con gasto</small></div>
+                                <div><b>{abMoney(data.totals.spend)}</b><small>Gastado (desde {data.since})</small></div>
+                                <div><b>{abMoney(data.totals.income)}</b><small>Ingresos (web + CRM)</small></div>
+                                <div><b>{data.totals.chats}</b><small>Chats</small></div>
+                            </div>
+                            <small className="pb-muted">Datos de Meta del {formatDateTime(data.refreshedAt)}.</small>
+                            {entry ? (
+                                <div className="cs-journal">
+                                    <h3>Lo aprendido <small className="pb-muted">({formatDateTime(entry.at)} · {entry.basadoEn.anuncios} anuncios, {abMoney(entry.basadoEn.gasto)})</small></h3>
+                                    <p>{entry.resumen}</p>
+                                    <div className="cs-learns">{entry.aprendizajes.map((l, k) => (
+                                        <div key={k} className={'cs-learn ' + LEARN[l.tipo][1]}><span>{LEARN[l.tipo][0]}</span><div><b>{l.titulo}</b><small>{l.evidencia} · confianza {l.confianza}</small></div></div>
+                                    ))}</div>
+                                    {entry.que_hacer_ahora.length > 0 && <><h3>Qué hacer esta semana</h3><ul className="cs-todo">{entry.que_hacer_ahora.map((t, k) => <li key={k}>{t}</li>)}</ul></>}
+                                    <h3>🧪 Estrategias nuevas para probar</h3>
+                                    <div className="cs-learns">{entry.estrategias.map((st, k) => (
+                                        <div key={k} className="cs-strategy">
+                                            <div className="ab-row"><b className="grow">{st.titulo}</b><span className={'ab-chip cs-p-' + st.prioridad}>prioridad {st.prioridad}</span></div>
+                                            <small><b>Cómo:</b> {st.como_probarlo}</small><small><b>Por qué:</b> {st.por_que}</small>
+                                            {canEdit && <button type="button" className="sv-link" onClick={() => onUseStrategy(st.titulo + ': ' + st.como_probarlo)}>✨ Armar una campaña con esta idea</button>}
+                                        </div>
+                                    ))}</div>
+                                    {data.journal.length > 1 && <button type="button" className="sv-link" onClick={() => setOlder(!older)}>{older ? 'Ocultar análisis anteriores' : 'Ver análisis anteriores (' + (data.journal.length - 1) + ')'}</button>}
+                                    {older && data.journal.slice(1).map((e, k) => (
+                                        <div className="ab-history" key={k}><small>{formatDateTime(e.at)}</small> {e.resumen}{e.aprendizajes.slice(0, 4).map((l, j) => <div key={j}>{LEARN[l.tipo][0]} {l.titulo}</div>)}</div>
+                                    ))}
+                                </div>
+                            ) : <div className="pb-muted">Toca "Sacar aprendizajes" para que la IA diga qué funciona, qué no y qué probar.</div>}
+                            {dims.length > 0 && (
+                                <>
+                                    <h3 className="cs-sub">Comparar por</h3>
+                                    <div className="sv-days">{dims.map(d => <button type="button" key={d} className={dimension === d ? 'on' : ''} onClick={() => setDimension(d)}>{d}</button>)}</div>
+                                    <div className="cs-table-wrap"><table className="cs-table">
+                                        <thead><tr><th>{dimension}</th><th>Anuncios</th><th>Gastado</th><th>CTR</th><th>Chats</th><th>Compras / ventas</th><th>Ingresos</th><th>Retorno</th><th>Costo por chat</th></tr></thead>
+                                        <tbody>{groups.map(g => (
+                                            <tr key={g.value}><td><b>{g.value}</b></td><td>{g.ads}</td><td>{abMoney(g.spend)}</td><td>{g.ctr}%</td><td>{Math.max(g.chats, g.conversations)}</td><td>{g.purchases + g.sales}</td><td>{abMoney(g.income)}</td><td>{g.roas !== null ? g.roas + 'x' : '—'}</td><td>{g.costPerChat !== null ? abMoney(g.costPerChat) : '—'}</td></tr>
+                                        ))}</tbody>
+                                    </table></div>
+                                </>
+                            )}
+                            <div className="cs-two">
+                                <div><h3 className="cs-sub">🏆 Los que más vendieron</h3>{data.best.length ? data.best.map(adLine) : <div className="pb-muted">Todavía ninguno con ventas o chats.</div>}</div>
+                                <div><h3 className="cs-sub">💸 Gastaron sin resultados</h3>{data.worst.length ? data.worst.map(adLine) : <div className="pb-muted">Ninguno: bien.</div>}</div>
+                            </div>
+                        </>
+                    )}
+                </section>
+            );
+        }
+
+
+        // Ajustes para crear anuncios: página, Instagram, píxel, web, WhatsApp, tope de gasto y público de siempre.
+        function CsSettings({ data, reload }) {
+            const s = data.settings || {};
+            const [show, setShow] = useState(false);
+            const [setup, setSetup] = useState(null);
+            const [found, setFound] = useState(null);
+            const [busy, setBusy] = useState('');
+            const [error, setError] = useState('');
+            const [notice, setNotice] = useState('');
+            async function run(name, fn, ok) {
+                setBusy(name); setError(''); setNotice('');
+                try { const r = await fn(); if (ok) setNotice(ok); return r; } catch (e) { setError(e.message); } finally { setBusy(''); }
+            }
+            const detect = () => run('detect', async () => { const r = await api('/api/ads/builder/detect', { method: 'POST', body: '{}' }); setFound(r); setSetup(r.settings); return r; }, 'Listo: tomé la página, el Instagram, el píxel y el WhatsApp que ya usa tu cuenta. Revisa y guarda.');
+            const save = () => run('setup', async () => { await api('/api/ads/builder/settings', { method: 'PUT', body: JSON.stringify(setup) }); setShow(false); await reload(); }, 'Ajustes guardados.');
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="key" size={22} color="#B5654A" /></div>
+                        <div className="grow">
+                            <h2>⚙️ Ajustes para crear anuncios</h2>
+                            <p>{s.pageId ? 'Página ' + (s.pageName || s.pageId) + (s.instagramName ? ' · Instagram @' + s.instagramName : '') + (s.pixelId ? ' · píxel ' + (s.pixelName || s.pixelId) : '') + (s.whatsappNumber ? ' · WhatsApp ' + s.whatsappNumber : '') + (s.webUrl ? ' · ' + s.webUrl : '') + ' · tope ' + abMoney(s.maxDaily) + ' por día.' : 'Falta elegir la página de Facebook, el píxel y el número de WhatsApp de tus anuncios.'}</p>
+                        </div>
+                        {!show && <button type="button" className="pb-btn sm" onClick={() => { setSetup({ ...s }); setShow(true); }}>Cambiar ajustes</button>}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {notice && <div className="pb-notice ok">{notice}</div>}
+                    {show && setup && (
+                        <div className="sv-form">
+                            <div className="sv-actions"><button type="button" className="pb-btn sm" disabled={!!busy || !data.connected} onClick={detect}>{busy === 'detect' ? 'Buscando…' : '🔎 Detectar desde mi cuenta de Meta'}</button></div>
+                            <div className="ad-form">
+                                <label>Página de Facebook
+                                    {found && found.pages.length > 1
+                                        ? <select value={setup.pageId} onChange={e => { const p = found.pages.find(x => x.id === e.target.value) || {}; setSetup({ ...setup, pageId: p.id, pageName: p.name, instagramId: p.instagramId, instagramName: p.instagramName }); }}>{found.pages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        : <input type="text" value={setup.pageId} placeholder="Número de la página" onChange={e => setSetup({ ...setup, pageId: e.target.value })} />}
+                                </label>
+                                <label>Instagram (número de la cuenta)<input type="text" value={setup.instagramId} onChange={e => setSetup({ ...setup, instagramId: e.target.value })} /></label>
+                                <label>Píxel de la web
+                                    {found && found.pixels.length > 1
+                                        ? <select value={setup.pixelId} onChange={e => { const p = found.pixels.find(x => x.id === e.target.value) || {}; setSetup({ ...setup, pixelId: p.id, pixelName: p.name }); }}>{found.pixels.map(p => <option key={p.id} value={p.id}>{p.name}{p.lastFired ? ' (activo)' : ''}</option>)}</select>
+                                        : <input type="text" value={setup.pixelId} onChange={e => setSetup({ ...setup, pixelId: e.target.value })} />}
+                                </label>
+                                <label>Qué busca una campaña de ventas en la web<select value={setup.webEvent} onChange={e => setSetup({ ...setup, webEvent: e.target.value })}>{Object.keys(AB_EVENTS).map(k => <option key={k} value={k}>{AB_EVENTS[k]}</option>)}</select></label>
+                                <label>La compra cuenta si pasa dentro de<select value={setup.attributionDays} onChange={e => setSetup({ ...setup, attributionDays: Number(e.target.value) })}><option value={1}>1 día después del clic</option><option value={7}>7 días después del clic</option></select></label>
+                                <label>Tu página web<input type="text" value={setup.webUrl} placeholder="https://www.mitienda.com" onChange={e => setSetup({ ...setup, webUrl: e.target.value })} /></label>
+                                <label>WhatsApp de los anuncios<input type="text" value={setup.whatsappNumber} placeholder="593991234567" onChange={e => setSetup({ ...setup, whatsappNumber: e.target.value })} /></label>
+                                <label>País (2 letras)<input type="text" maxLength={2} value={setup.country} onChange={e => setSetup({ ...setup, country: e.target.value.toUpperCase() })} /></label>
+                                <label>Tope de gasto por día (todo lo activo desde el CRM)<input type="number" min={1} max={500} value={setup.maxDaily} onChange={e => setSetup({ ...setup, maxDaily: Number(e.target.value) })} /></label>
+                                <label>Público de siempre: edad<span className="ab-row"><input className="ab-num" type="number" min={18} max={64} value={setup.audience.ageMin} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, ageMin: Number(e.target.value) } })} /> a <input className="ab-num" type="number" min={19} max={65} value={setup.audience.ageMax} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, ageMax: Number(e.target.value) } })} /></span></label>
+                                <label>Público de siempre: quién<select value={setup.audience.gender} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, gender: e.target.value } })}>{Object.keys(AB_GENDER).map(g => <option key={g} value={g}>{AB_GENDER[g]}</option>)}</select></label>
+                            </div>
+                            <small className="pb-muted">El número de WhatsApp tiene que estar unido a tu página de Facebook (así lo pide Meta para los anuncios que abren WhatsApp).</small>
+                            <div className="sv-actions">
+                                <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={save}>{busy === 'setup' ? 'Guardando…' : 'Guardar'}</button>
+                                <button type="button" className="pb-btn sm" onClick={() => setShow(false)}>Cancelar</button>
+                            </div>
+                        </div>
+                    )}
+                </section>
+            );
+        }
+
+        // Consejos de la IA para los anuncios activos (lee gasto y ventas de los últimos 30 días; no cambia nada).
+        function CsAdvice({ canEdit, aiReady }) {
+            const [advice, setAdvice] = useState(null);
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+            const ask = async () => {
+                setBusy(true); setError('');
+                try { setAdvice(await api('/api/ads/builder/advice', { method: 'POST', body: '{}' })); } catch (e) { setError(e.message); } finally { setBusy(false); }
+            };
+            return (
+                <section className="pb-card">
+                    <div className="pb-card-h">
+                        <div className="pb-tile"><PlatIcon name="bulb" size={22} color="#B5654A" /></div>
+                        <div className="grow">
+                            <h2>💡 Qué hacer con tus anuncios activos</h2>
+                            <p>Lee el gasto en Meta y las ventas del CRM de los últimos 30 días y te dice qué hacer con cada anuncio (esperar, subir, bajar o pausar). No cambia nada sola: tú decides.</p>
+                        </div>
+                        {canEdit && <button type="button" className="pb-btn sm" disabled={busy || !aiReady} onClick={ask}>{busy ? 'Analizando…' : '💡 Pedir consejo'}</button>}
+                    </div>
+                    {error && <div className="pb-err">{error}</div>}
+                    {advice ? (
+                        <div className="ab-advice">
+                            <p>{advice.resumen}</p>
+                            {advice.consejos.map((c, k) => <div key={k} className="ab-tip"><b>{c.anuncio}</b><span className="ab-chip">{c.accion}</span><div>{c.por_que}</div></div>)}
+                        </div>
+                    ) : <div className="pb-muted">Toca "Pedir consejo" cuando tus anuncios lleven unos días activos.</div>}
+                </section>
+            );
+        }
+
+        function AdStudio({ canEdit, canConfigure }) {
+            const [data, setData] = useState(null);
+            const [error, setError] = useState('');
+            const [seed, setSeed] = useState('');
+            const load = () => api('/api/ads/campaigns').then(d => { setData(d); setError(''); }).catch(e => setError(e.message));
+            useEffect(() => {
+                load();
+                const t = setInterval(whenVisible(load), 60000);
+                return () => clearInterval(t);
+            }, []);
+            if (!data) return error ? <div className="pb-err">{error}</div> : <div className="pb-card"><div className="pb-muted">Cargando creador de campañas…</div></div>;
+            const account = data.account;
+            const aiReady = !!(data.ai && data.ai.configured);
             return (
                 <>
                     {account && account.problem && <div className="pb-err ab-alert"><b>⚠️ Cuenta publicitaria: {account.label}.</b> {account.problem}</div>}
-                    {data.liveError && <div className="pb-muted">No se pudo leer el estado en Meta: {data.liveError}</div>}
-
-                    <section className="pb-card ab">
-                        <div className="pb-card-h">
-                            <div className="pb-tile"><PlatIcon name="sparkle" size={22} color="#B5654A" /></div>
-                            <div className="grow">
-                                <h2>✨ Crear anuncio con IA</h2>
-                                <p>La IA arma el anuncio con tus productos, fotos y precios del Catálogo, revisado con las reglas de publicidad de Meta. Tú lo revisas y se crea en Meta <b>en pausa</b>: no gasta nada hasta que toques Activar.</p>
-                            </div>
-                            {step === 'idle' && canEdit && <button type="button" className="pb-btn main" disabled={!data.connected} onClick={() => { setStep('pick'); setNotice(''); }}>✨ Crear anuncio nuevo</button>}
-                        </div>
-                        {error && <div className="pb-err">{error}</div>}
-                        {notice && <div className="pb-notice ok">{notice}</div>}
-                        {!data.connected && <div className="pb-muted">Primero conecta la cuenta publicitaria de Meta (más abajo, en "Cuenta publicitaria de Meta").</div>}
-                        {data.connected && !data.ai.configured && <div className="pb-muted">La IA usa la clave del agente de redes: agrégala en Publicaciones → Cerebro IA.</div>}
-                        {step === 'idle' && data.connected && <div className="pb-muted">Hoy: {data.limits.createdToday} de {data.limits.perDay} anuncios nuevos (para cuidar tu cuenta, no más de {data.limits.perDay} por día).</div>}
-
-                        {step === 'pick' && (
-                            <div className="ab-pick">
-                                <div className="ab-row">
-                                    <span className="ab-label">¿A dónde lleva?</span>
-                                    <div className="sv-days">
-                                        <button type="button" className={form.destination === 'web' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, destination: 'web' }))}>🛒 A la página web</button>
-                                        <button type="button" className={form.destination === 'whatsapp' ? 'on' : ''} onClick={() => setForm(f => ({ ...f, destination: 'whatsapp' }))}>💬 A WhatsApp</button>
-                                    </div>
-                                </div>
-                                <div className="ab-row">
-                                    <span className="ab-label">Formato</span>
-                                    <div className="sv-days">{[['auto', 'Que decida la IA'], ['single', 'Una foto'], ['carousel', 'Carrusel']].map(([k, t]) => <button key={k} type="button" className={form.format === k ? 'on' : ''} onClick={() => setForm(f => ({ ...f, format: k }))}>{t}</button>)}</div>
-                                </div>
-                                {missing.length > 0 && <div className="pb-notice">Para anuncios {form.destination === 'web' ? 'a la web' : 'a WhatsApp'} falta en Ajustes (abajo): {missing.join(', ')}.</div>}
-                                <label className="ab-field">¿Qué quieres anunciar? <small>(opcional: la IA lo usa para el texto y, si no eliges productos, para buscarlos)</small>
-                                    <textarea rows={2} maxLength={600} placeholder="Ej.: Halloween para fiestas infantiles: calabazas y fantasmitas" value={form.idea} onChange={e => setForm(f => ({ ...f, idea: e.target.value }))} />
-                                </label>
-                                <div className="ab-row"><span className="ab-label">Productos ({form.products.length} de 10)</span><input type="search" placeholder="Buscar en el catálogo…" value={query} onChange={e => setQuery(e.target.value)} /></div>
-                                <div className="ab-grid">{shown.map(p => (
-                                    <button type="button" key={p.id} className={'ab-prod' + (form.products.includes(p.id) ? ' on' : '')} onClick={() => togglePick(p.id)}>
-                                        <img src={p.images[0]} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                                        <span>{p.name}</span><small>{abMoney(p.price)} · {p.category}</small>
-                                    </button>
-                                ))}</div>
-                                <div className="sv-actions">
-                                    <button type="button" className="pb-btn main" disabled={!!busy || (!form.products.length && !form.idea.trim())} onClick={propose}>{busy === 'propose' ? '✨ Preparando…' : '✨ Que la IA lo prepare'}</button>
-                                    <button type="button" className="pb-btn sm" onClick={() => setStep('idle')}>Cancelar</button>
-                                </div>
-                            </div>
-                        )}
-
-                        {step === 'edit' && draft && (
-                            <div className="ab-edit">
-                                <div className="ab-form">
-                                    {explanation && <div className="ab-why">🤖 {explanation}</div>}
-                                    {issues.length > 0 ? (
-                                        <div className="ab-issues">{issues.map((i, k) => <div key={k} className={'ab-issue ' + i.level}>{i.level === 'error' ? '⛔' : '⚠️'} {i.where && <b>{i.where}: </b>}{i.text}</div>)}</div>
-                                    ) : <div className="ab-issue ok">✅ Revisado con las reglas de publicidad de Meta: sin problemas.</div>}
-
-                                    <div className="ab-row">
-                                        <span className="ab-label">Formato</span>
-                                        <div className="sv-days">
-                                            <button type="button" className={draft.format === 'single' ? 'on' : ''} onClick={() => changeFormat('single')}>Una foto</button>
-                                            <button type="button" className={draft.format === 'carousel' ? 'on' : ''} onClick={() => changeFormat('carousel')}>Carrusel</button>
-                                        </div>
-                                        <span className="ab-chip">{draft.destination === 'web' ? '🛒 Lleva a la web' : '💬 Abre WhatsApp'}</span>
-                                    </div>
-
-                                    <div className="ab-block">
-                                        <h4>Texto principal {draft.format === 'carousel' ? '(el carrusel lleva uno: el primero)' : '(Meta prueba hasta 5)'}</h4>
-                                        {draft.texts.map((t, i) => (
-                                            <div className={'ab-line' + (draft.format === 'carousel' && i > 0 ? ' ab-alt' : '')} key={i}>
-                                                <textarea rows={3} maxLength={600} value={t} onChange={e => setList('texts', i, e.target.value)} />
-                                                {draft.format === 'carousel' && i > 0 && <button type="button" className="sv-link" onClick={() => setDraft(d => ({ ...d, texts: [d.texts[i], ...d.texts.filter((_, k) => k !== i)] }))}>Usar este</button>}
-                                                {draft.texts.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('texts', i)}>✕</button>}
-                                            </div>
-                                        ))}
-                                        {draft.texts.length < 5 && <button type="button" className="sv-link" onClick={() => patch({ texts: [...draft.texts, ''] })}>+ Agregar texto</button>}
-                                    </div>
-
-                                    {draft.format === 'single' ? (
-                                        <div className="ab-block">
-                                            <h4>Títulos (debajo de la foto, máximo 40 letras)</h4>
-                                            {draft.headlines.map((t, i) => (
-                                                <div className="ab-line" key={i}>
-                                                    <input type="text" maxLength={80} value={t} onChange={e => setList('headlines', i, e.target.value)} /><small className={t.length > 40 ? 'ab-long' : ''}>{t.length}</small>
-                                                    {draft.headlines.length > 1 && <button type="button" className="ab-x" title="Quitar" onClick={() => dropFrom('headlines', i)}>✕</button>}
-                                                </div>
-                                            ))}
-                                            {draft.headlines.length < 5 && <button type="button" className="sv-link" onClick={() => patch({ headlines: [...draft.headlines, ''] })}>+ Agregar título</button>}
-                                            <label className="ab-field">Descripción corta<input type="text" maxLength={80} value={draft.description} onChange={e => patch({ description: e.target.value })} /></label>
-                                            {draft.cards[0] && (
-                                                <div className="ab-photo">
-                                                    <span className="ab-label">Foto de {draft.cards[0].product}</span>
-                                                    <div className="ab-thumbs">{(productOf(draft.cards[0]).images || []).map(u => (
-                                                        <button type="button" key={u} className={u === draft.cards[0].image ? 'on' : ''} onClick={() => setCard(0, { image: u })}><img src={u} alt="" referrerPolicy="no-referrer" /></button>
-                                                    ))}</div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="ab-block">
-                                            <h4>Tarjetas del carrusel ({draft.cards.length})</h4>
-                                            {draft.cards.map((c, i) => (
-                                                <div className="ab-cardedit" key={c.productId || c.product}>
-                                                    <div className="ab-thumbs">{(productOf(c).images || []).map(u => (
-                                                        <button type="button" key={u} className={u === c.image ? 'on' : ''} onClick={() => setCard(i, { image: u })}><img src={u} alt="" referrerPolicy="no-referrer" /></button>
-                                                    ))}</div>
-                                                    <div className="ab-cardfields">
-                                                        <small className="pb-muted">{i + 1}. {c.product}</small>
-                                                        <input type="text" maxLength={80} placeholder="Título" value={c.title} onChange={e => setCard(i, { title: e.target.value })} />
-                                                        <input type="text" maxLength={80} placeholder="Descripción" value={c.description} onChange={e => setCard(i, { description: e.target.value })} />
-                                                    </div>
-                                                    <div className="ab-cardbtns">
-                                                        <button type="button" disabled={i === 0} onClick={() => moveCard(i, -1)}>▲</button>
-                                                        <button type="button" disabled={i === draft.cards.length - 1} onClick={() => moveCard(i, 1)}>▼</button>
-                                                        <button type="button" disabled={draft.cards.length <= 2} onClick={() => dropFrom('cards', i)}>✕</button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {draft.cards.length < 10 && (
-                                                <div className="ab-add">
-                                                    <input type="search" placeholder="+ Agregar otro producto…" value={addQuery} onChange={e => setAddQuery(e.target.value)} />
-                                                    {addMatches.map(p => <button type="button" key={p.id} className="ab-addrow" onClick={() => { addCard(p); setAddQuery(''); }}><img src={p.images[0]} alt="" referrerPolicy="no-referrer" />{p.name} <small>{abMoney(p.price)}</small></button>)}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    <div className="ab-block">
-                                        <h4>Público y presupuesto</h4>
-                                        <div className="ab-row">
-                                            <span className="ab-label">Edad</span>
-                                            <input className="ab-num" type="number" min={18} max={64} value={draft.audience.ageMin} onChange={e => patch({ audience: { ...draft.audience, ageMin: Number(e.target.value) } })} />
-                                            <span>a</span>
-                                            <input className="ab-num" type="number" min={19} max={65} value={draft.audience.ageMax} disabled={draft.audience.advantage} onChange={e => patch({ audience: { ...draft.audience, ageMax: Number(e.target.value) } })} />
-                                            <div className="sv-days">{Object.keys(AB_GENDER).map(g => <button key={g} type="button" className={draft.audience.gender === g ? 'on' : ''} onClick={() => patch({ audience: { ...draft.audience, gender: g } })}>{AB_GENDER[g]}</button>)}</div>
-                                        </div>
-                                        <label className="sv-check ab-check"><input type="checkbox" checked={!!draft.audience.advantage} onChange={e => patch({ audience: { ...draft.audience, advantage: e.target.checked } })} /> Dejar que Meta busque más allá de este público (Advantage+). Apagado = solo este público.</label>
-                                        <div className="ab-row">
-                                            <span className="ab-label">Presupuesto por día</span>
-                                            <span>$</span><input className="ab-num" type="number" min={1} max={s.maxDaily} step={0.5} value={draft.dailyBudget} onChange={e => patch({ dailyBudget: Number(e.target.value) })} />
-                                            <small className="pb-muted">≈ {abMoney(draft.dailyBudget * 30)} al mes · tu tope: {abMoney(s.maxDaily)} por día</small>
-                                        </div>
-                                        <label className="ab-field">Nombre (tema de la campaña)<input type="text" maxLength={40} value={draft.theme} onChange={e => patch({ theme: e.target.value })} /></label>
-                                    </div>
-
-                                    <div className="sv-actions">
-                                        {canConfigure && <button type="button" className="pb-btn main" disabled={!!busy || hasErrors || blocked || abMissing(s, draft.destination).length > 0} onClick={create}>{busy === 'create' ? 'Creando en Meta…' : '🚀 Crear en Meta (en pausa)'}</button>}
-                                        <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => setStep('pick')}>← Cambiar productos</button>
-                                        <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => { if (confirm('¿Descartar este borrador?')) { setDraft(null); setStep('idle'); } }}>Descartar</button>
-                                    </div>
-                                    {!canConfigure && <div className="pb-muted">Solo la dueña puede crearlo en Meta.</div>}
-                                    {blocked && account && account.problem && <div className="pb-muted">No se puede crear mientras la cuenta tenga ese problema (ver aviso arriba).</div>}
-                                    {abMissing(s, draft.destination).length > 0 && <div className="pb-muted">Falta en Ajustes: {abMissing(s, draft.destination).join(', ')}.</div>}
-                                </div>
-                                <div className="ab-side"><AdPreview draft={draft} pageName={s.pageName} webUrl={s.webUrl} /></div>
-                            </div>
-                        )}
-                    </section>
-
-                    <section className="pb-card">
-                        <div className="pb-card-h">
-                            <div className="pb-tile"><PlatIcon name="chart" size={22} color="#B5654A" /></div>
-                            <div className="grow">
-                                <h2>📈 Tus anuncios creados desde el CRM</h2>
-                                <p>Estado en Meta, gasto y lo que vendió cada uno (chats y ventas del CRM). Se actualiza solo cada minuto. Activo ahora: <b>{abMoney(data.activeDaily)}</b> por día de tu tope de <b>{abMoney(s.maxDaily)}</b>.</p>
-                            </div>
-                            <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => run('reload', load)}>🔄 Actualizar</button>
-                        </div>
-                        {data.created.length === 0 ? <div className="pb-muted">Todavía no has creado anuncios desde aquí. Los que crees aparecen en esta lista con su estado y sus resultados.</div> : (
-                            <div className="ab-list">{data.created.map(item => {
-                                const l = item.live;
-                                const tone = l ? (AB_LIVE_TONE[l.status] || 'off') : 'off';
-                                return (
-                                    <div className="ab-item" key={item.campaignId}>
-                                        <div className="ab-item-h">
-                                            <img src={item.image} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                                            <div className="grow">
-                                                <b>{item.name}</b>
-                                                <small>{item.destination === 'web' ? '🛒 Web' : '💬 WhatsApp'} · {item.format === 'carousel' ? 'Carrusel' : 'Una foto'} · creado {formatDateTime(item.createdAt)}</small>
-                                                <small>🕯️ {item.products.join(', ')}</small>
-                                            </div>
-                                            <span className={'ab-status ' + tone}>{l ? l.statusLabel : (item.status === 'ACTIVE' ? 'Activo' : 'Pausado')}</span>
-                                        </div>
-                                        {l && l.reasons.length > 0 && <div className="pb-err">Meta lo rechazó: {l.reasons.join(' ')}</div>}
-                                        {l && l.issues.length > 0 && <div className="pb-err">Problema en Meta: {l.issues.join(' ')}</div>}
-                                        {item.warnings && item.warnings.length > 0 && <div className="pb-muted">⚠️ {item.warnings.join(' ')}</div>}
-                                        <div className="ab-kpis">
-                                            <div><b>{abMoney(item.dailyBudget)}</b><small>Por día</small></div>
-                                            <div><b>{l ? abMoney(l.spendToday) : '—'}</b><small>Gastado hoy</small></div>
-                                            <div><b>{l ? abMoney(l.spendTotal) : '—'}</b><small>Gastado total</small></div>
-                                            <div><b>{l ? l.results : '—'}</b><small>{resultName(item)}</small></div>
-                                            <div><b>{item.crm.chats}</b><small>Chats</small></div>
-                                            <div><b>{item.crm.sales}</b><small>Ventas</small></div>
-                                            <div><b>{abMoney(item.crm.revenue)}</b><small>Ingresos{item.roas !== null ? ' · ' + item.roas + 'x' : ''}</small></div>
-                                        </div>
-                                        <div className="sv-actions">
-                                            {canConfigure && (item.status === 'ACTIVE'
-                                                ? <button type="button" className="pb-btn sm" disabled={!!busy} onClick={() => pause(item)}>{busy === 'st' + item.campaignId ? 'Pausando…' : '⏸️ Pausar'}</button>
-                                                : <button type="button" className="pb-btn sm main" disabled={!!busy || blocked} onClick={() => activate(item)}>{busy === 'st' + item.campaignId ? 'Activando…' : '▶️ Activar'}</button>)}
-                                            {canConfigure && (budgetEdit && budgetEdit.campaignId === item.campaignId ? (
-                                                <span className="ab-budget">$<input className="ab-num" type="number" min={1} max={s.maxDaily} step={0.5} value={budgetEdit.value} onChange={e => setBudgetEdit({ ...budgetEdit, value: e.target.value })} />
-                                                    <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={() => saveBudget(item)}>{busy === 'b' + item.campaignId ? 'Guardando…' : 'Guardar'}</button>
-                                                    <button type="button" className="pb-btn sm" onClick={() => setBudgetEdit(null)}>Cancelar</button></span>
-                                            ) : <button type="button" className="pb-btn sm" disabled={!!busy || blocked} onClick={() => setBudgetEdit({ campaignId: item.campaignId, value: item.dailyBudget })}>💵 Cambiar presupuesto</button>)}
-                                            {data.accountId && <a className="sv-link" href={metaUrl(item)} target="_blank" rel="noopener noreferrer">Ver en Meta</a>}
-                                            <button type="button" className="sv-link" onClick={() => setOpenHistory(openHistory === item.campaignId ? '' : item.campaignId)}>{openHistory === item.campaignId ? 'Ocultar historial' : 'Historial'}</button>
-                                        </div>
-                                        {openHistory === item.campaignId && <div className="ab-history">{item.history.map((h, k) => <div key={k}><small>{formatDateTime(h.at)}</small> {h.detail}</div>)}</div>}
-                                    </div>
-                                );
-                            })}</div>
-                        )}
-                    </section>
-
-                    <section className="pb-card">
-                        <div className="pb-card-h">
-                            <div className="pb-tile"><PlatIcon name="bulb" size={22} color="#B5654A" /></div>
-                            <div className="grow">
-                                <h2>🧠 Consejos de la IA</h2>
-                                <p>Lee el gasto en Meta y las ventas del CRM de los últimos 30 días y te dice qué hacer con cada anuncio. No cambia nada sola: tú decides.</p>
-                            </div>
-                            {canEdit && <button type="button" className="pb-btn sm" disabled={!!busy || !data.ai.configured} onClick={askAdvice}>{busy === 'advice' ? 'Analizando…' : '🧠 Pedir consejo'}</button>}
-                        </div>
-                        {advice ? (
-                            <div className="ab-advice">
-                                <p>{advice.resumen}</p>
-                                {advice.consejos.map((c, k) => <div key={k} className="ab-tip"><b>{c.anuncio}</b><span className="ab-chip">{c.accion}</span><div>{c.por_que}</div></div>)}
-                            </div>
-                        ) : <div className="pb-muted">Toca "Pedir consejo" cuando tus anuncios lleven unos días activos.</div>}
-                    </section>
-
-                    {canConfigure && (
-                        <section className="pb-card">
-                            <div className="pb-card-h">
-                                <div className="pb-tile"><PlatIcon name="key" size={22} color="#B5654A" /></div>
-                                <div className="grow">
-                                    <h2>⚙️ Ajustes para crear anuncios</h2>
-                                    <p>{s.pageId ? 'Página ' + (s.pageName || s.pageId) + (s.instagramName ? ' · Instagram @' + s.instagramName : '') + (s.pixelId ? ' · píxel ' + (s.pixelName || s.pixelId) : '') + (s.whatsappNumber ? ' · WhatsApp ' + s.whatsappNumber : '') + (s.webUrl ? ' · ' + s.webUrl : '') + ' · tope ' + abMoney(s.maxDaily) + ' por día.' : 'Falta elegir la página de Facebook, el píxel y el número de WhatsApp de tus anuncios.'}</p>
-                                </div>
-                                {!showSettings && <button type="button" className="pb-btn sm" onClick={() => { setSetup({ ...s }); setShowSettings(true); }}>Cambiar ajustes</button>}
-                            </div>
-                            {showSettings && setup && (
-                                <div className="sv-form">
-                                    <div className="sv-actions"><button type="button" className="pb-btn sm" disabled={!!busy || !data.connected} onClick={detect}>{busy === 'detect' ? 'Buscando…' : '🔎 Detectar desde mi cuenta de Meta'}</button></div>
-                                    <div className="ad-form">
-                                        <label>Página de Facebook
-                                            {found && found.pages.length > 1
-                                                ? <select value={setup.pageId} onChange={e => { const p = found.pages.find(x => x.id === e.target.value) || {}; setSetup({ ...setup, pageId: p.id, pageName: p.name, instagramId: p.instagramId, instagramName: p.instagramName }); }}>{found.pages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                                                : <input type="text" value={setup.pageId} placeholder="Número de la página" onChange={e => setSetup({ ...setup, pageId: e.target.value })} />}
-                                        </label>
-                                        <label>Instagram (número de la cuenta)<input type="text" value={setup.instagramId} onChange={e => setSetup({ ...setup, instagramId: e.target.value })} /></label>
-                                        <label>Píxel de la web
-                                            {found && found.pixels.length > 1
-                                                ? <select value={setup.pixelId} onChange={e => { const p = found.pixels.find(x => x.id === e.target.value) || {}; setSetup({ ...setup, pixelId: p.id, pixelName: p.name }); }}>{found.pixels.map(p => <option key={p.id} value={p.id}>{p.name}{p.lastFired ? ' (activo)' : ''}</option>)}</select>
-                                                : <input type="text" value={setup.pixelId} onChange={e => setSetup({ ...setup, pixelId: e.target.value })} />}
-                                        </label>
-                                        <label>Qué busca el anuncio en la web<select value={setup.webEvent} onChange={e => setSetup({ ...setup, webEvent: e.target.value })}>{Object.keys(AB_EVENTS).map(k => <option key={k} value={k}>{AB_EVENTS[k]}</option>)}</select></label>
-                                        <label>Tu página web<input type="text" value={setup.webUrl} placeholder="https://www.mitienda.com" onChange={e => setSetup({ ...setup, webUrl: e.target.value })} /></label>
-                                        <label>WhatsApp de los anuncios<input type="text" value={setup.whatsappNumber} placeholder="593991234567" onChange={e => setSetup({ ...setup, whatsappNumber: e.target.value })} /></label>
-                                        <label>País (2 letras)<input type="text" maxLength={2} value={setup.country} onChange={e => setSetup({ ...setup, country: e.target.value.toUpperCase() })} /></label>
-                                        <label>Tope de gasto por día (todo lo activo desde el CRM)<input type="number" min={1} max={500} value={setup.maxDaily} onChange={e => setSetup({ ...setup, maxDaily: Number(e.target.value) })} /></label>
-                                        <label>Público de siempre: edad<span className="ab-row"><input className="ab-num" type="number" min={18} max={64} value={setup.audience.ageMin} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, ageMin: Number(e.target.value) } })} /> a <input className="ab-num" type="number" min={19} max={65} value={setup.audience.ageMax} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, ageMax: Number(e.target.value) } })} /></span></label>
-                                        <label>Público de siempre: quién<select value={setup.audience.gender} onChange={e => setSetup({ ...setup, audience: { ...setup.audience, gender: e.target.value } })}>{Object.keys(AB_GENDER).map(g => <option key={g} value={g}>{AB_GENDER[g]}</option>)}</select></label>
-                                    </div>
-                                    <small className="pb-muted">El número de WhatsApp tiene que estar unido a tu página de Facebook (así lo pide Meta para los anuncios que abren WhatsApp).</small>
-                                    <div className="sv-actions">
-                                        <button type="button" className="pb-btn sm main" disabled={!!busy} onClick={saveSetup}>{busy === 'setup' ? 'Guardando…' : 'Guardar'}</button>
-                                        <button type="button" className="pb-btn sm" onClick={() => setShowSettings(false)}>Cancelar</button>
-                                    </div>
-                                </div>
-                            )}
-                        </section>
-                    )}
+                    <CsBuilder data={data} reload={load} canEdit={canEdit} canConfigure={canConfigure} seed={seed} onSeedUsed={() => setSeed('')} />
+                    <CsCampaigns data={data} reload={load} canConfigure={canConfigure} />
+                    <CsMemory canEdit={canEdit} aiReady={aiReady} onUseStrategy={idea => { setSeed(idea); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+                    <CsAdvice canEdit={canEdit} aiReady={aiReady} />
+                    {canConfigure && <CsSettings data={data} reload={load} />}
                 </>
             );
         }
@@ -14758,7 +15375,7 @@
                     {notice && <div className="pb-notice ok">{notice}</div>}
                     {!data.available && <div className="pb-err">Falta activar la medición de anuncios: hay que aplicar una actualización en la base de datos (migración 027). Mientras tanto todo funciona normal.</div>}
 
-                    <AdBuilder canEdit={canEdit} canConfigure={canConfigure} />
+                    <AdStudio canEdit={canEdit} canConfigure={canConfigure} />
 
                     <section className="pb-card">
                         <div className="pb-card-h">
