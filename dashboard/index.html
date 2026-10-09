@@ -4296,6 +4296,29 @@
             .of-label svg { width: 9px; height: 9px; }
             .of-log { max-height: 46vh; }
         }
+
+        /* ---------- Chat: cabecera en una fila (botones arriba a la derecha) y más espacio para los mensajes ---------- */
+        .nx-shell .nx-content { grid-template-columns: 360px minmax(0, 1fr) 320px; }
+        @media (max-width: 1500px) {
+            .nx-shell .nx-content { grid-template-columns: 360px minmax(0, 1fr); }
+            .nx-shell .nx-side { display: none; }
+            .nx-shell .nx-side-btn { display: inline-flex; }
+            .nx-shell .nx-side.open { display: flex; position: fixed; inset: 0; z-index: 80; background: var(--sh-bg); padding: 0 16px 24px; overflow-y: auto; }
+            .nx-shell .nx-side.open .nx-side-head { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 1; background: var(--sh-bg); padding: 14px 0 6px; }
+        }
+        @media (max-width: 1100px) { .nx-shell .nx-content { grid-template-columns: 310px minmax(0, 1fr); } }
+        .nx-shell .nx-chat { container-type: inline-size; }
+        .nx-shell .nx-chat-head { flex-wrap: nowrap; align-items: flex-start; padding: 12px 18px; gap: 12px; }
+        .nx-shell .nx-chat-head .who { min-width: 0; }
+        .nx-shell .nx-chat-head .ph { margin-top: 3px; }
+        .nx-shell .nx-chat-head .st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 6px; }
+        .nx-shell .nx-chat-head .st .nx-botline { margin-top: 0; }
+        .nx-shell .nx-head-actions { flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; gap: 6px; }
+        .nx-shell .nx-head-actions .nx-icon-btn { height: 38px; padding: 0 12px; font-size: 13.5px; }
+        @container (max-width: 680px) {
+            .nx-shell .nx-head-actions .lbl-hide, .nx-shell .nx-head-actions .nx-side-btn span { display: none; }
+            .nx-shell .nx-head-actions .nx-icon-btn { padding: 0 10px; }
+        }
     </style>
 </head>
 <body>
@@ -9989,7 +10012,6 @@
                                     { label: 'Ver cliente', onClick: () => setSideOpen(true) },
                                     canEdit && { label: botPausedInChat ? 'Reactivar bot' : 'Pausar bot', onClick: pauseOrResumeBot },
                                     canEdit && { label: isClosedConv(conv) ? 'Reabrir chat' : 'Cerrar chat', onClick: toggleClosed },
-                                    canEdit && summary && summary.phase2 && { label: noteMode ? 'Volver a escribir mensajes' : 'Escribir nota interna', onClick: () => setNoteMode(!noteMode) },
                                     canEdit && !showQuick && { label: 'Mostrar acciones rápidas', onClick: () => toggleQuick(true) },
                                     canConfigure && { label: 'Descargar datos del cliente', onClick: exportChat },
                                     canConfigure && { label: deletingChat ? 'Eliminando...' : 'Eliminar chat', danger: true, onClick: deleteChat }
@@ -10395,9 +10417,11 @@
                                                 {botPausedInChat && <span className="nx-badge pink">Te necesita</span>}
                                                 {isClosedConv(currentConv) && <span className="nx-badge gray">Cerrada</span>}
                                             </div>
-                                            <div className={'nx-botline' + (botPausedInChat ? ' paused' : '')}><i></i>{botPausedInChat ? 'Bot pausado: atiendes tú' : 'El bot atiende'}</div>
                                             <div className="ph"><ChannelMark phone={currentConv.phone_number} all size={17} />{contactLine(currentConv.phone_number)}</div>
-                                            {summary && summary.phase2 && <TagBar tags={summary.tags || []} onChange={saveTags} readOnly={!canEdit} />}
+                                            <div className="st">
+                                                <div className={'nx-botline' + (botPausedInChat ? ' paused' : '')}><i></i>{botPausedInChat ? 'Bot pausado: atiendes tú' : 'El bot atiende'}</div>
+                                                {summary && summary.phase2 && <TagBar tags={summary.tags || []} onChange={saveTags} readOnly={!canEdit} />}
+                                            </div>
                                         </div>
                                         <div className="nx-head-actions">
                                             <button type="button" className="nx-icon-btn nx-side-btn" onClick={() => setSideOpen(true)} title="Resumen del cliente, productos, tareas y alertas">
@@ -10405,10 +10429,10 @@
                                             </button>
                                             {canEdit && (
                                                 <>
-                                                    <button type="button" className="nx-icon-btn" onClick={toggleClosed}>
+                                                    <button type="button" className="nx-icon-btn" onClick={toggleClosed} title={isClosedConv(currentConv) ? 'Reabrir el chat' : 'Cerrar el chat'}>
                                                         {isClosedConv(currentConv) ? <PlatIcon name="refresh" size={18} color="#4E3E33" /> : <PlatIcon name="check" size={18} />} <span className="lbl-hide">{isClosedConv(currentConv) ? 'Reabrir' : 'Cerrar'}</span>
                                                     </button>
-                                                    <button type="button" className="nx-icon-btn" onClick={pauseOrResumeBot} disabled={pausingBot}>
+                                                    <button type="button" className="nx-icon-btn" onClick={pauseOrResumeBot} disabled={pausingBot} title={botPausedInChat ? 'Reactivar el bot en este chat' : 'Pausar el bot en este chat'}>
                                                         <PlatIcon name={botPausedInChat ? 'play' : 'pause'} size={18} color="#4E3E33" /> <span className="lbl-hide">{botPausedInChat ? 'Reactivar bot' : 'Pausar bot'}</span>
                                                     </button>
                                                 </>
@@ -10529,11 +10553,6 @@
                                                 </DeskPop>
                                             )}
                                         </div>}
-                                        {summary && summary.phase2 && (
-                                            <button type="button" className={'nx-note-btn' + (noteMode ? ' on' : '')} onClick={() => setNoteMode(!noteMode)} title="Nota interna (el cliente no la ve)">
-                                                <PlatIcon name="note" size={18} color={noteMode ? '#7A5F00' : '#B5654A'} /> <span className="lbl-hide">Nota</span>
-                                            </button>
-                                        )}
                                         {noteMode
                                             ? <button type="button" className="nx-send" onClick={saveNote}><PlatIcon name="note" size={19} color="#fff" /> Guardar nota</button>
                                             : recordingSeconds === null && <button type="button" className="nx-send" onClick={sendMessage} disabled={sending}><PlatIcon name="send" size={19} color="#fff" /> {sending ? 'Enviando...' : 'Enviar'}</button>}
