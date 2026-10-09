@@ -114,11 +114,17 @@ export function sendButtonsMessage(phoneNumber: string, body: string, buttons: {
 
 /** Archivo (por ejemplo un PDF) desde una dirección pública. */
 export function sendDocumentMessage(phoneNumber: string, url: string, filename: string, caption?: string) {
+  if (isSocialAddress(phoneNumber)) return Promise.reject(new Error('Los PDF y documentos por ahora solo se envían por WhatsApp'));
   return postMessage({
     to: normalizePhone(phoneNumber),
     type: 'document',
     document: { link: url, filename, ...(caption && { caption: caption.slice(0, 1024) }) }
   }, 'Documento');
+}
+
+/** Cómo queda un documento en el historial del chat: la dirección, el nombre y el texto (igual que los que llegan). */
+export function documentContent(url: string, filename: string, caption?: string) {
+  return `${url}\n📄 ${filename}${caption ? `\n${caption}` : ''}`;
 }
 
 /**

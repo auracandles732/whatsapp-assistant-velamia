@@ -3,7 +3,8 @@ import {
   supabase, getConfig, setConfig, getConversationById, getMessageByWaId, saveMessage, touchConversation, logNotification, parseDbTimestamp
 } from './supabase';
 import {
-  sendTextMessage, sendImageMessage, sendAudioMessage, sendTemplateMessage, getMessageTemplates, createMessageTemplate, getSentMessageId
+  sendTextMessage, sendImageMessage, sendAudioMessage, sendDocumentMessage, sendTemplateMessage, getMessageTemplates, createMessageTemplate,
+  getSentMessageId, documentContent
 } from './whatsapp';
 import { isSocialAddress } from './metaChannels';
 import { currentTenant } from './tenant';
@@ -34,13 +35,15 @@ export const UNDELIVERED_EVENT = 'wa_undelivered';
 export const REOPEN_TEMPLATE = 'retomar_conversacion';
 const REOPEN_BUTTON = 'Ver mensaje';
 
-export type PendingKind = 'text' | 'image' | 'audio';
+export type PendingKind = 'text' | 'image' | 'audio' | 'document';
 export interface PendingMessage {
   id: string;
   kind: PendingKind;
   text?: string;
   url?: string;
   caption?: string;
+  /** Nombre con el que le llega el archivo (solo documentos). */
+  filename?: string;
   at: string;
   /** Id de WhatsApp del mensaje que no se entregó y se volverá a enviar (ya se ve en el chat como "no entregado"). */
   retryOf?: string;
@@ -218,12 +221,14 @@ export function holdNotice(reopen: ReopenState | null, social: boolean): string 
 async function sendPending(phone: string, item: PendingMessage) {
   if (item.kind === 'image') return sendImageMessage(phone, item.url!, item.caption || undefined);
   if (item.kind === 'audio') return sendAudioMessage(phone, item.url!);
+  if (item.kind === 'document') return sendDocumentMessage(phone, item.url!, item.filename || 'documento.pdf', item.caption || undefined);
   return sendTextMessage(phone, item.text || '');
 }
 
 function storedContent(item: PendingMessage) {
   if (item.kind === 'image') return item.caption ? `${item.url}\n${item.caption}` : item.url!;
   if (item.kind === 'audio') return item.url!;
+  if (item.kind === 'document') return documentContent(item.url!, item.filename || 'documento.pdf', item.caption);
   return item.text || '';
 }
 

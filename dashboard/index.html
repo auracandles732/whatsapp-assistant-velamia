@@ -8780,6 +8780,7 @@
             const [noteMode, setNoteMode] = useState(false);
             const [photoPicker, setPhotoPicker] = useState(false);
             const [photoStatus, setPhotoStatus] = useState('');
+            const [fileDraft, setFileDraft] = useState(null);
             const [dragOver, setDragOver] = useState(false);
             const [recordingSeconds, setRecordingSeconds] = useState(null);
             const recorderRef = useRef(null);
@@ -9146,32 +9147,68 @@
                 if (state.recorder.state !== 'inactive') state.recorder.stop();
             }
 
-            // Envía al chat las fotos elegidas, pegadas (Ctrl+V) o arrastradas, de una en una y mostrando el avance.
-            async function sendPhotoFiles(conv, list) {
+            // Fotos y documentos (PDF, Word, Excel) elegidos, pegados o arrastrados: primero se ven con su texto opcional
+            // y salen al confirmar, así nada se envía por error.
+            const isDocFile = f => /\.(pdf|docx?|xlsx?)$/i.test(f.name || '') || f.type === 'application/pdf';
+            const isPhotoFile = f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|hei[cf])$/i.test(f.name || '');
+
+            function pickFiles(conv, list) {
                 const all = Array.from(list || []);
-                const heic = all.filter(f => /hei[cf]/i.test(f.type) || /\.hei[cf]$/i.test(f.name || ''));
-                const files = all.filter(f => f.type.startsWith('image/') && !heic.includes(f)).slice(0, 10);
-                if (heic.length && !files.length) return alert('Esa foto está en formato HEIC (iPhone) y el navegador no la puede abrir. Guárdala como JPG o PNG y vuelve a intentar.');
-                if (!files.length) return alert('Solo se pueden enviar fotos (JPG, PNG o WEBP).');
-                const caption = prompt('Texto para acompañar la foto (opcional):');
-                if (caption === null) return;
+                setPhotoPicker(false);
+                if (!conv) return;
+                const docs = all.filter(isDocFile).slice(0, 5);
+                const photos = all.filter(f => !isDocFile(f) && isPhotoFile(f)).slice(0, 10);
+                if (!photos.length && !docs.length) return alert('Solo se pueden enviar fotos (JPG, PNG o WEBP) o documentos (PDF, Word o Excel).');
+                const big = docs.find(f => f.size > 10 * 1024 * 1024);
+                if (big) return alert('"' + big.name + '" pesa más de 10 MB y no se puede enviar desde aquí.');
+                if (docs.length && socialChannel(conv.phone_number)) return alert('Los PDF y documentos por ahora solo se envían por WhatsApp.');
+                setFileDraft({ conv, photos: photos.map(file => ({ file, preview: URL.createObjectURL(file) })), docs, caption: '' });
+            }
+
+            function closeFileDraft() {
+                setFileDraft(draft => { (draft?.photos || []).forEach(p => URL.revokeObjectURL(p.preview)); return null; });
+            }
+
+            const readAsDataUrl = file => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('No se pudo leer "' + (file.name || 'el archivo') + '"'));
+                reader.readAsDataURL(file);
+            });
+
+            // De uno en uno y mostrando el avance; el texto acompaña solo al primero.
+            async function sendFileDraft() {
+                const draft = fileDraft;
+                if (!draft) return;
+                const { conv, photos, docs } = draft;
+                let caption = draft.caption.trim();
+                closeFileDraft();
+                const total = photos.length + docs.length;
+                const failed = [];
+                let step = 0;
+                const status = what => setPhotoStatus(total > 1 ? 'Enviando ' + (++step) + ' de ' + total + '...' : 'Enviando ' + what + '...');
                 try {
-                    for (let i = 0; i < files.length; i++) {
-                        setPhotoStatus(files.length > 1 ? 'Enviando foto ' + (i + 1) + ' de ' + files.length + '...' : 'Enviando foto...');
+                    for (const { file } of photos) {
+                        status('foto');
                         let imageBase64;
                         try {
-                            imageBase64 = await photoToJpeg(files[i]);
+                            imageBase64 = await photoToJpeg(file);
                         } catch {
-                            throw new Error('No se pudo abrir "' + (files[i].name || 'la foto') + '". Guárdala como JPG o PNG y vuelve a intentar.');
+                            failed.push(file.name || 'una foto');
+                            continue;
                         }
-                        await api('/api/send-image', {
-                            method: 'POST',
-                            body: JSON.stringify({ conversationId: conv.id, phoneNumber: conv.phone_number, imageBase64, caption: i === 0 ? caption : '' })
-                        });
+                        await api('/api/send-image', { method: 'POST', body: JSON.stringify({ conversationId: conv.id, phoneNumber: conv.phone_number, imageBase64, caption }) });
+                        caption = '';
                     }
-                    if (heic.length) alert(heic.length + ' foto(s) en formato HEIC no se enviaron: guárdalas como JPG o PNG.');
+                    for (const file of docs) {
+                        status('documento');
+                        const fileBase64 = await readAsDataUrl(file);
+                        await api('/api/send-document', { method: 'POST', body: JSON.stringify({ conversationId: conv.id, phoneNumber: conv.phone_number, fileBase64, filename: file.name || 'documento.pdf', caption }) });
+                        caption = '';
+                    }
+                    if (failed.length) alert('No se pudo abrir ' + failed.join(', ') + '. Guárdala como JPG o PNG y vuelve a intentar.');
                 } catch (err) {
-                    alert('Error enviando foto: ' + err.message);
+                    alert('Error enviando: ' + err.message);
                 } finally {
                     setPhotoStatus('');
                 }
@@ -9179,22 +9216,9 @@
                 loadConversations();
             }
 
-            // Abre la galería o los archivos para elegir una o varias fotos.
-            function sendPhoto() {
-                if (!selectedConv) return;
-                const conv = selectedConv;
-                setPhotoPicker(false);
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'image/*,.heic,.heif';
-                input.multiple = true;
-                input.onchange = () => sendPhotoFiles(conv, input.files);
-                input.click();
-            }
-
-            // Fotos pegadas con Ctrl+V o arrastradas al chat desde el computador.
+            // Fotos o documentos pegados con Ctrl+V o arrastrados al chat desde el computador.
             function photosFrom(transfer) {
-                return Array.from(transfer?.files || []).filter(f => f.type.startsWith('image/') || /\.hei[cf]$/i.test(f.name || ''));
+                return Array.from(transfer?.files || []).filter(f => isPhotoFile(f) || isDocFile(f));
             }
 
             // La lista se refresca cada 5 s, así la pausa que active el bot (reclamo, pago...)
@@ -9652,8 +9676,19 @@
             const photoPickerModal = photoPicker && (
                 <div className="cat-modal-bg" onMouseDown={e => { if (e.target === e.currentTarget) setPhotoPicker(false); }}>
                     <div className="cat-modal">
-                        <h2>Enviar foto</h2>
-                        <button type="button" onClick={sendPhoto} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #EADFD2', color: '#A3522F', fontWeight: 700, fontSize: '15px', marginBottom: '16px', background: '#FBF6F0', cursor: 'pointer' }}>📷 Subir desde este equipo (computador o celular)</button>
+                        <h2>Enviar foto o documento</h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                            {[
+                                { label: '📷 Fotos', hint: 'Galería o cámara', accept: 'image/*' },
+                                { label: '📄 PDF o documento', hint: 'PDF, Word o Excel', accept: '.pdf,.doc,.docx,.xls,.xlsx,application/pdf' }
+                            ].map(opt => (
+                                <label key={opt.label} style={{ display: 'block', textAlign: 'center', padding: '14px 8px', borderRadius: '12px', border: '1px solid #EADFD2', color: '#A3522F', fontWeight: 700, fontSize: '15px', background: '#FBF6F0', cursor: 'pointer' }}>
+                                    {opt.label}
+                                    <span style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#8A7868', marginTop: '2px' }}>{opt.hint}</span>
+                                    <input type="file" accept={opt.accept} multiple style={{ display: 'none' }} onChange={e => { pickFiles(selectedConv, e.target.files); e.target.value = ''; }} />
+                                </label>
+                            ))}
+                        </div>
                         <div style={{ fontWeight: 700, color: '#2B1C14', marginBottom: '10px' }}>O elige una del catálogo</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
                             {products.filter(p => p.image_url).map(p => (
@@ -9665,6 +9700,31 @@
                         </div>
                         {products.filter(p => p.image_url).length === 0 && <div className="cat-empty">Aún no hay productos con foto en el catálogo.</div>}
                         <div className="foot"><button type="button" className="cancel" onClick={() => setPhotoPicker(false)}>Cancelar</button></div>
+                    </div>
+                </div>
+            );
+
+            const fileDraftModal = fileDraft && (
+                <div className="cat-modal-bg" onMouseDown={e => { if (e.target === e.currentTarget) closeFileDraft(); }}>
+                    <div className="cat-modal">
+                        <h2>Enviar a {contactName(fileDraft.conv)}</h2>
+                        {fileDraft.photos.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px', marginBottom: '12px' }}>
+                                {fileDraft.photos.map(p => <img key={p.preview} src={p.preview} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: '10px', background: '#F3ECE3' }} />)}
+                            </div>
+                        )}
+                        {fileDraft.docs.map((f, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '10px', background: '#FBF6F0', border: '1px solid #EADFD2', marginBottom: '8px', fontSize: '14px', color: '#3A2A20' }}>
+                                <span style={{ fontSize: '22px' }}>📄</span>
+                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{f.name}</span>
+                                <span style={{ color: '#8A7868', fontSize: '12px', flexShrink: 0 }}>{f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB'}</span>
+                            </div>
+                        ))}
+                        <textarea rows={3} placeholder="Texto para acompañar (opcional)" value={fileDraft.caption} onChange={e => { const caption = e.target.value; setFileDraft(d => d && { ...d, caption }); }} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #EADFD2', fontSize: '15px', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}></textarea>
+                        <div className="foot">
+                            <button type="button" className="cancel" onClick={closeFileDraft}>Cancelar</button>
+                            <button type="button" onClick={sendFileDraft} style={{ padding: '13px 22px', borderRadius: '12px', background: '#A3522F', color: '#fff', fontSize: '14px', fontWeight: 700 }}>Enviar</button>
+                        </div>
                     </div>
                 </div>
             );
@@ -10009,6 +10069,7 @@
                                 })}
                             </div>
                             {photoPickerModal}
+                            {fileDraftModal}
                             {photoStatus && <div style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: '#B5654A', background: '#FBF6F0', borderTop: '1px solid #EADFD2' }}>📤 {photoStatus} No cierres el chat.</div>}
                             {canEdit && showQuick && !noteMode && recordingSeconds === null && (
                                 <div className="mx-suggest">
@@ -10026,7 +10087,7 @@
                                 <div className={'mx-input' + (noteMode ? ' note' : '')}>
                                     {recordingSeconds === null ? (
                                         <>
-                                            <button type="button" className="mx-round" aria-label="Enviar foto" onClick={() => setPhotoPicker(true)} disabled={!!photoStatus || noteMode}><MxIcon name="clip" size={22} color="#4E3E33" /></button>
+                                            <button type="button" className="mx-round" aria-label="Enviar foto o documento" onClick={() => setPhotoPicker(true)} disabled={!!photoStatus || noteMode}><MxIcon name="clip" size={22} color="#4E3E33" /></button>
                                             <div className="mx-field">
                                                 <textarea
                                                     rows={1}
@@ -10036,7 +10097,7 @@
                                                     onChange={e => { (noteMode ? setNoteText : setInputText)(e.target.value); growInput(e.target); }}
                                                     onPaste={e => {
                                                         const pasted = photosFrom(e.clipboardData);
-                                                        if (pasted.length && selectedConv && !noteMode) { e.preventDefault(); sendPhotoFiles(selectedConv, pasted); }
+                                                        if (pasted.length && selectedConv && !noteMode) { e.preventDefault(); pickFiles(selectedConv, pasted); }
                                                     }}
                                                 ></textarea>
                                                 <button type="button" className="mx-emoji" aria-label="Emojis" aria-expanded={emojiOpen} onClick={() => setEmojiOpen(!emojiOpen)}><MxIcon name="smile" size={24} color="#4E3E33" /></button>
@@ -10323,7 +10384,7 @@
                             </div>
 
                             {selectedConv ? (
-                                <div className="nx-panel nx-chat" style={dragOver ? { outline: '3px dashed #B5654A', outlineOffset: '-6px' } : undefined} onDragOver={e => { if (canEdit && Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={e => { setDragOver(false); if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return; e.preventDefault(); if (canEdit && selectedConv) sendPhotoFiles(selectedConv, e.dataTransfer.files); }}>
+                                <div className="nx-panel nx-chat" style={dragOver ? { outline: '3px dashed #B5654A', outlineOffset: '-6px' } : undefined} onDragOver={e => { if (canEdit && Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={e => { setDragOver(false); if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return; e.preventDefault(); if (canEdit && selectedConv) pickFiles(selectedConv, e.dataTransfer.files); }}>
                                     <div className="nx-chat-head">
                                         <button type="button" className="nx-icon-btn nx-back" onClick={() => setSelectedConv(null)}>← Chats</button>
                                         <Avatar name={contactName(currentConv)} size={52} />
@@ -10428,12 +10489,13 @@
                                     </div>
 
                                     {photoPickerModal}
+                                    {fileDraftModal}
 
                                     {photoStatus && <div style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 600, color: '#B5654A', background: '#FBF6F0', borderTop: '1px solid #EADFD2' }}>📤 {photoStatus} No cierres el chat.</div>}
                                     <DeliveryBanner delivery={delivery} canEdit={canEdit} onReopen={reopenChat} busy={reopening} />
                                     {!canEdit && <div className="nx-readonly"><PlatIcon name="user" size={18} color="#8A7868" /> Tu usuario es solo de consulta: puedes ver los chats, pero no responder.</div>}
                                     {canEdit && <div className={'nx-input' + (noteMode ? ' note' : '')}>
-                                        <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} disabled={!!photoStatus} title="Enviar foto (también puedes pegarla con Ctrl+V o arrastrarla al chat)"><MxIcon name="clip" size={22} color="#6B5849" /></button>
+                                        <button type="button" className="nx-round" onClick={() => setPhotoPicker(true)} disabled={!!photoStatus} title="Enviar foto o documento (también puedes pegarlo con Ctrl+V o arrastrarlo al chat)"><MxIcon name="clip" size={22} color="#6B5849" /></button>
                                         {socialChannel(currentConv.phone_number) ? null : recordingSeconds === null
                                             ? <React.Fragment>
                                                 <button type="button" className="nx-round" onClick={startVoice} title={brandVoice && useBrandVoice ? 'Grabar nota de voz (sale con la voz de ' + brandVoice.name + ')' : 'Grabar nota de voz'}><MxIcon name="mic" size={22} color="#6B5849" /></button>
@@ -10451,7 +10513,7 @@
                                                 onChange={e => (noteMode ? setNoteText(e.target.value) : setInputText(e.target.value))}
                                                 onPaste={e => {
                                                     const pasted = photosFrom(e.clipboardData);
-                                                    if (pasted.length && selectedConv && !noteMode) { e.preventDefault(); sendPhotoFiles(selectedConv, pasted); }
+                                                    if (pasted.length && selectedConv && !noteMode) { e.preventDefault(); pickFiles(selectedConv, pasted); }
                                                 }}
                                                 onKeyPress={e => {
                                                     if (e.key === 'Enter' && !e.shiftKey) {

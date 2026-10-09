@@ -93,7 +93,7 @@ import {
   verifyWebhookSignature
 } from './middleware/auth';
 import {
-  sendTextMessage, sendImageMessage, sendAudioMessage, getSentMessageId, describeWhatsAppError, isOutsideWindowError,
+  sendTextMessage, sendImageMessage, sendAudioMessage, sendDocumentMessage, documentContent, getSentMessageId, describeWhatsAppError, isOutsideWindowError,
   getMessageTemplates, summarizeTemplate, templateProblem, createMessageTemplate
 } from './services/whatsapp';
 import { officeState, talkToAgent, applyAction, isOfficeAgent, officeTenant } from './services/office';
@@ -191,7 +191,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 const keepRawBody = (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; };
 const bigJson = express.json({ limit: '15mb', verify: keepRawBody });
 const smallJson = express.json({ limit: '1mb', verify: keepRawBody });
-const BIG_BODY_PATHS = new Set(['/api/upload-image', '/api/send-image', '/api/send-audio', '/api/social/suppliers']);
+const BIG_BODY_PATHS = new Set(['/api/upload-image', '/api/send-image', '/api/send-audio', '/api/send-document', '/api/social/suppliers']);
 app.use((req: Request, res: Response, next: NextFunction) => (BIG_BODY_PATHS.has(req.path) ? bigJson : smallJson)(req, res, next));
 
 // La app instalable es de la plataforma (Nexly), igual para todas las empresas: la marca de cada empresa
@@ -1295,6 +1295,42 @@ app.post('/api/send-image', requireCrmSession, requireEditorRole, async (req: Re
     res.json({ success: true, bot_paused: true, ...result });
   } catch (error: any) {
     console.error('Error enviando imagen manual:', error.response?.data || error.message);
+    res.status(500).json({ error: describeWhatsAppError(error) });
+  }
+});
+
+// PDF, Word o Excel elegido desde el computador o el celular. Llega en base64, así que el tope real es ~10 MB.
+const DOCUMENT_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+};
+
+app.post('/api/send-document', requireCrmSession, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const matches = String(req.body?.fileBase64 || '').match(/^data:[^;,]*(?:;[^,]*)?;base64,(.+)$/);
+    if (!matches) return res.status(400).json({ error: 'No llegó el archivo' });
+    const filename = String(req.body?.filename || 'documento.pdf').replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim().slice(0, 120) || 'documento.pdf';
+    const mimeType = DOCUMENT_TYPES[(filename.split('.').pop() || '').toLowerCase()];
+    if (!mimeType) return res.status(400).json({ error: 'Solo se pueden enviar PDF, Word o Excel' });
+    const buffer = Buffer.from(matches[1], 'base64');
+    if (buffer.length === 0) return res.status(400).json({ error: 'El archivo está vacío' });
+    if (buffer.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'El archivo pesa más de 10 MB' });
+    const caption = String(req.body?.caption || '').trim();
+    const conv = await conversationForSending(req, res);
+    if (!conv) return;
+    if (isSocialAddress(conv.phone_number)) return res.status(400).json({ error: 'Los PDF y documentos por ahora solo se envían por WhatsApp' });
+    const url = await uploadBufferToStorage(buffer, mimeType);
+    await pauseBot(conv.id);
+    const result = await sendOrHold(conv, [{ kind: 'document', url, filename, caption }], async () => {
+      const sent = await sendDocumentMessage(conv.phone_number, url, filename, caption || undefined);
+      await saveMessage(conv.id, 'human', 'document', documentContent(url, filename, caption), getSentMessageId(sent));
+    });
+    res.json({ success: true, bot_paused: true, ...result });
+  } catch (error: any) {
+    console.error('Error enviando documento manual:', error.response?.data || error.message);
     res.status(500).json({ error: describeWhatsAppError(error) });
   }
 });
