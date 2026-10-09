@@ -9252,7 +9252,16 @@
             const clientSet = new Set(listOverview.clientIds || []);
             const interestedSet = new Set(listOverview.interestedIds || []);
             const dayAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-            const isRecent = c => { const t = parseTs(c.last_message_time); return !!t && t.getTime() > dayAgoMs; };
+            // La hora y el orden de la lista siguen al último mensaje del chat, enviado o recibido. last_message_time solo
+            // cambia con mensajes de la clienta (lo usan los seguimientos), así que se compara con el último de la vista previa.
+            const lastActivity = c => {
+                const own = c.last_message_time;
+                const seen = listOverview.previews[c.id]?.timestamp;
+                if (!seen || !own) return seen || own;
+                return parseTs(seen) > parseTs(own) ? seen : own;
+            };
+            const activityMs = c => parseTs(lastActivity(c))?.getTime() || 0;
+            const isRecent = c => activityMs(c) > dayAgoMs;
             const isClosedConv = c => c.status === 'closed';
             const unreadMap = listOverview.unread || {};
             const hasReadTracking = conversations.length > 0 && 'last_read_at' in conversations[0];
@@ -9281,7 +9290,7 @@
                 if (listFilter === 'clients') return clientSet.has(c.id);
                 if (listFilter === 'recent') return isRecent(c);
                 return true;
-            });
+            }).sort((a, b) => activityMs(b) - activityMs(a));
             const filterCount = (channelFilter !== 'all' ? 1 : 0) + (listFilter !== 'all' ? 1 : 0) + (tagFilter ? 1 : 0);
             const clearFilters = () => { chooseChannel('all'); setListFilter('all'); setTagFilter(''); };
             const TAG_FILTERS = [
@@ -9976,7 +9985,7 @@
                                                 <div className="body">
                                                     <div className="row">
                                                         <span className="name"><ChannelMark phone={conv.phone_number} size={17} all /><span className="nt">{label}</span></span>
-                                                        <span className="time">{listTime(conv.last_message_time)}</span>
+                                                        <span className="time">{listTime(lastActivity(conv))}</span>
                                                     </div>
                                                     <div className="prev-row">
                                                         <div className="prev">{preview && preview.text ? (preview.sender === 'customer' ? '' : 'Tú: ') + preview.text : contactLine(conv.phone_number)}</div>
@@ -10389,7 +10398,7 @@
                                                 <div className="body">
                                                     <div className="row">
                                                         <span className="name"><ChannelMark phone={conv.phone_number} all />{label}</span>
-                                                        <span className="time">{listTime(conv.last_message_time)}</span>
+                                                        <span className="time">{listTime(lastActivity(conv))}</span>
                                                     </div>
                                                     {preview && preview.text && <div className="prev">{preview.sender === 'customer' ? '' : 'Tú: '}{preview.text}</div>}
                                                     <div className="foot">
