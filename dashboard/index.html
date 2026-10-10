@@ -4319,6 +4319,42 @@
             .nx-shell .nx-head-actions .lbl-hide, .nx-shell .nx-head-actions .nx-side-btn span { display: none; }
             .nx-shell .nx-head-actions .nx-icon-btn { padding: 0 10px; }
         }
+
+        /* ---------- Tablero de producción (Trello) ---------- */
+        .tb-toggle { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: #F5EDE4; margin: 0 0 12px; }
+        .tb-toggle button { padding: 8px 14px; border-radius: 9px; font-weight: 700; font-size: 14px; color: #6B5849; background: transparent; cursor: pointer; }
+        .tb-toggle button.on { background: #fff; color: #2B1C14; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+        .tb-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; font-size: 16px; color: #2B1C14; }
+        .tb-head a { font-size: 13px; color: #0C66E4; font-weight: 600; text-decoration: none; white-space: nowrap; }
+        .tb-board { display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; padding: 14px; border-radius: 16px; background: linear-gradient(135deg, #8EC5FC 0%, #E0C3FC 100%); min-height: 420px; scroll-snap-type: x proximity; }
+        .tb-list { flex: 0 0 272px; max-height: 72vh; display: flex; flex-direction: column; background: #F1F2F4; border-radius: 12px; box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25); scroll-snap-align: start; }
+        .tb-list.over { outline: 2px dashed #0C66E4; outline-offset: -2px; }
+        .tb-list-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px 6px; font-weight: 700; font-size: 14px; color: #172B4D; }
+        .tb-list-h small { color: #626F86; font-weight: 600; }
+        .tb-cards { overflow-y: auto; padding: 4px 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+        .tb-card { flex-shrink: 0; background: #fff; border-radius: 8px; box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31); overflow: hidden; cursor: pointer; }
+        .tb-card[draggable="true"] { cursor: grab; }
+        .tb-card.moving { opacity: 0.55; }
+        .tb-cover { display: block; width: 100%; max-height: 170px; object-fit: cover; background: #DCDFE4; }
+        .tb-labels { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 0; }
+        .tb-label { min-width: 40px; height: 16px; padding: 0 8px; border-radius: 4px; font-size: 11px; font-weight: 700; line-height: 16px; color: #fff; }
+        .tb-label.green { background: #4BCE97; color: #164B35; } .tb-label.yellow { background: #F5CD47; color: #533F04; } .tb-label.orange { background: #FEA362; color: #702E00; }
+        .tb-label.red { background: #F87168; color: #5D1F1A; } .tb-label.purple { background: #9F8FEF; color: #352C63; } .tb-label.blue { background: #579DFF; color: #09326C; }
+        .tb-label.sky { background: #6CC3E0; } .tb-label.lime { background: #94C748; } .tb-label.pink { background: #E774BB; } .tb-label.black { background: #8590A2; } .tb-label.gray { background: #DCDFE4; color: #44546F; }
+        .tb-title { padding: 8px 10px 4px; font-size: 14px; color: #172B4D; line-height: 1.35; word-break: break-word; }
+        .tb-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 10px 6px; font-size: 12px; color: #44546F; }
+        .tb-due { padding: 2px 6px; border-radius: 4px; background: #F1F2F4; }
+        .tb-due.late { background: #FFD5D2; color: #AE2E24; }
+        .tb-due.done { background: #BAF3DB; color: #216E4E; }
+        .tb-crm { padding: 1px 6px; border-radius: 4px; background: #FBEEE6; color: #A3522F; font-weight: 700; }
+        .tb-desc { padding: 0 10px 8px; font-size: 12.5px; color: #44546F; white-space: pre-wrap; line-height: 1.4; }
+        .tb-actions { display: flex; gap: 6px; align-items: center; padding: 0 10px 10px; }
+        .tb-actions select { flex: 1; min-width: 0; height: 30px; border-radius: 6px; border: 1px solid #DCDFE4; background: #F7F8F9; font-size: 12.5px; color: #172B4D; }
+        .tb-actions a { color: #44546F; text-decoration: none; font-weight: 700; padding: 4px 6px; }
+        .tb-empty { padding: 8px; font-size: 12.5px; color: #626F86; text-align: center; }
+        .tb-msg { padding: 24px; text-align: center; color: #7A6858; }
+        .tb-msg.err { color: #B83A2E; }
+        @media (max-width: 760px) { .tb-list { flex-basis: 84vw; } .tb-board { padding: 10px; border-radius: 12px; } }
     </style>
 </head>
 <body>
@@ -8141,6 +8177,85 @@
             );
         }
 
+        // Tablero de producción: las mismas listas y tarjetas del tablero de Trello de la empresa, para moverlas desde el CRM
+        // (arrastrando en la computadora o con "Mover a" en el celular). Lo que se mueve en Trello también se ve aquí.
+        function TrelloBoard({ canEdit, onChanged }) {
+            const [data, setData] = useState(null);
+            const [error, setError] = useState('');
+            const [moving, setMoving] = useState('');
+            const [dragId, setDragId] = useState('');
+            const [over, setOver] = useState('');
+            const [openId, setOpenId] = useState('');
+            const load = () => api('/api/trello/board').then(d => { setData(d); setError(''); }).catch(e => setError(e.message));
+            useEffect(() => {
+                load();
+                const t = setInterval(whenVisible(load), 30000);
+                return () => clearInterval(t);
+            }, []);
+            async function move(card, listId) {
+                if (!listId || listId === card.listId) return;
+                setMoving(card.id);
+                setData(d => ({ ...d, cards: d.cards.map(c => (c.id === card.id ? { ...c, listId } : c)) }));
+                try {
+                    await api('/api/trello/cards/' + card.id, { method: 'PUT', body: JSON.stringify({ listId }) });
+                    if (onChanged) onChanged();
+                } catch (e) {
+                    alert('No se pudo mover: ' + e.message);
+                } finally {
+                    setMoving('');
+                    load();
+                }
+            }
+            if (error) return <div className="tb-msg err">No se pudo abrir el tablero de Trello: {error}</div>;
+            if (!data) return <div className="tb-msg">Cargando el tablero de Trello…</div>;
+            if (!data.connected) return <div className="tb-msg">Trello no está conectado.</div>;
+            const due = c => {
+                if (!c.due) return null;
+                const d = new Date(c.due);
+                const late = !c.dueComplete && d < new Date();
+                return <span className={'tb-due' + (c.dueComplete ? ' done' : late ? ' late' : '')}>🕒 {d.toLocaleDateString('es-EC', { day: 'numeric', month: 'short', timeZone: BUSINESS_TZ })}</span>;
+            };
+            return (
+                <div className="tb-wrap">
+                    <div className="tb-head"><b>🗂️ {data.board.name}</b><a href={data.board.url} target="_blank" rel="noopener noreferrer">Abrir en Trello ↗</a></div>
+                    <div className="tb-board">
+                        {data.lists.map(l => {
+                            const cards = data.cards.filter(c => c.listId === l.id);
+                            return (
+                                <div key={l.id} className={'tb-list' + (over === l.id ? ' over' : '')}
+                                    onDragOver={e => { if (dragId) { e.preventDefault(); setOver(l.id); } }}
+                                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(''); }}
+                                    onDrop={e => { e.preventDefault(); setOver(''); const card = data.cards.find(c => c.id === dragId); setDragId(''); if (card) move(card, l.id); }}>
+                                    <div className="tb-list-h"><span>{l.name}</span><small>{cards.length}</small></div>
+                                    <div className="tb-cards">
+                                        {cards.map(c => (
+                                            <div key={c.id} className={'tb-card' + (moving === c.id ? ' moving' : '')} draggable={canEdit} onDragStart={() => setDragId(c.id)} onDragEnd={() => { setDragId(''); setOver(''); }} onClick={() => setOpenId(openId === c.id ? '' : c.id)}>
+                                                {c.cover && <img className="tb-cover" src={c.cover} alt="" loading="lazy" />}
+                                                {c.labels.length > 0 && <div className="tb-labels">{c.labels.map((lb, i) => <span key={i} className={'tb-label ' + (lb.color || 'gray')} title={lb.name || lb.color}>{lb.name}</span>)}</div>}
+                                                <div className="tb-title">{c.name}</div>
+                                                <div className="tb-meta">
+                                                    {due(c)}
+                                                    {c.attachments > 0 && <span>📎 {c.attachments}</span>}
+                                                    {c.desc && <span title="Tiene descripción">≡</span>}
+                                                    {c.orderId && <span className="tb-crm">CRM</span>}
+                                                </div>
+                                                {openId === c.id && c.desc && <div className="tb-desc">{c.desc}</div>}
+                                                <div className="tb-actions" onClick={e => e.stopPropagation()}>
+                                                    {canEdit && <select value={c.listId} onChange={e => move(c, e.target.value)} aria-label="Mover a otra etapa">{data.lists.map(x => <option key={x.id} value={x.id}>{x.id === c.listId ? 'Etapa: ' : 'Mover a: '}{x.name}</option>)}</select>}
+                                                    <a href={c.url} target="_blank" rel="noopener noreferrer" title="Abrir en Trello">↗</a>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {cards.length === 0 && <div className="tb-empty">Sin tarjetas</div>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        }
+
         // Armar a mano una cotización o un pedido (o cambiar una cotización): mismos precios, envíos y empaques que usa el asistente.
         function SaleComposer({ mode, conv, quotation, order, conversations, products, biz, onClose, onDone }) {
             const source = quotation || order;
@@ -8799,6 +8914,11 @@
             const [quoteFilter, setQuoteFilter] = useState('all');
             const [orders, setOrders] = useState([]);
             const [orderFilter, setOrderFilter] = useState('all');
+            const [ordersView, setOrdersView] = useState('lista');
+            const [trello, setTrello] = useState({ connected: false, links: {} });
+            const [sendingCard, setSendingCard] = useState('');
+            const loadTrello = () => api('/api/trello/links').then(r => setTrello(r || { connected: false, links: {} })).catch(() => {});
+            useEffect(() => { if (activeTab === 'pedidos') loadTrello(); }, [activeTab]);
             // Chat abierto en este momento: una respuesta lenta de otro chat no debe reemplazar sus mensajes.
             const openChatId = useRef(null);
             const [deletingChat, setDeletingChat] = useState(false);
@@ -9457,6 +9577,19 @@
                 }
             }
 
+            async function sendToProduction(o, customer) {
+                if (!confirm('¿Enviar el pedido de ' + customer + ' a producción?\n\nSe crea su tarjeta en Trello (Pedidos confirmados) con fotos, instrucciones y fecha, y a producción le llega el correo como siempre.')) return;
+                setSendingCard(o.id);
+                try {
+                    await api('/api/trello/orders/' + o.id, { method: 'POST', body: '{}' });
+                    loadTrello();
+                } catch (err) {
+                    alert('No se pudo enviar a Trello: ' + err.message);
+                } finally {
+                    setSendingCard('');
+                }
+            }
+
             async function removeOrder(o, customer) {
                 if (!confirm('¿Eliminar el pedido de ' + customer + ' por $' + Number(o.total_amount || 0).toFixed(2) + '? Se borra para siempre y no se puede deshacer.')) return;
                 try {
@@ -9897,10 +10030,18 @@
 
             const ordersPage = compact => {
                 const orderLabels = { pending: 'Pendiente de pago', confirmed: 'Pagado · en preparación', shipped: 'Enviado', delivered: 'Entregado', cancelled: 'Cancelado' };
+                const viewToggle = trello.connected && (
+                    <div className="tb-toggle" role="tablist">
+                        <button type="button" className={ordersView === 'lista' ? 'on' : ''} onClick={() => setOrdersView('lista')}>📋 Lista</button>
+                        <button type="button" className={ordersView === 'tablero' ? 'on' : ''} onClick={() => setOrdersView('tablero')}>🗂️ Tablero de producción</button>
+                    </div>
+                );
+                if (trello.connected && ordersView === 'tablero') return <div className="quotes-container">{viewToggle}<TrelloBoard canEdit={canEdit} onChanged={() => { loadOrders(); loadTrello(); }} /></div>;
                 const visible = orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter);
                 const total = visible.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
                 return (
                 <div className="quotes-container">
+                    {viewToggle}
                     <div className="quotes-toolbar">
                         <select value={orderFilter} onChange={e => setOrderFilter(e.target.value)}>
                             <option value="all">Todos</option>
@@ -9948,6 +10089,9 @@
                                         {Object.entries(orderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                     </select>
                                     <button className="btn-photo" onClick={() => openChatFromQuotation(o.conversation_id)}>💬 Ver chat</button>
+                                    {trello.connected && (trello.links[o.id]
+                                        ? <a className="btn-photo" href={trello.links[o.id].url} target="_blank" rel="noopener noreferrer" title="Abrir su tarjeta en Trello">🗂️ {trello.links[o.id].stage || 'En Trello'}</a>
+                                        : canEdit && o.status !== 'cancelled' && <button className="btn-photo" disabled={sendingCard === o.id} onClick={() => sendToProduction(o, customer)}>{sendingCard === o.id ? 'Enviando…' : '📤 Enviar a producción'}</button>)}
                                     {canEdit && <button className="btn-photo" onClick={() => setComposer({ mode: 'edit-order', order: o })}>✏️ Editar</button>}
                                     {canEdit && <button className="btn-photo danger" onClick={() => removeOrder(o, customer)}>🗑️ Eliminar</button>}
                                 </div>

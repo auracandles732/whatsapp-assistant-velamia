@@ -109,6 +109,8 @@ import { adCampaignRouter } from './services/adCampaignRoutes';
 import { startAdMemory } from './services/adMemory';
 import { startAdsSync, originsOf } from './services/ads';
 import { webCatalogRouter } from './services/webCatalogRoutes';
+import { trelloRouter } from './services/trelloRoutes';
+import { startTrelloSync } from './services/trello';
 import { startWebCatalogSync, scheduleWebPush, crmNameOf, followCrmRename, webOriginsForCsp } from './services/webCatalog';
 import { getSellingCatalog, startWebOffers } from './services/webOffers';
 import { supervisorRouter } from './services/supervisorRoutes';
@@ -464,6 +466,7 @@ app.use(adsRouter());
 // ---------- Catálogo de la página web: el CRM manda y la web se actualiza sola ----------
 
 app.use(webCatalogRouter());
+app.use(trelloRouter());
 
 // ---------- Páginas legales (públicas): política de privacidad y condiciones de venta ----------
 // VELAMIA en /privacidad y /condiciones; cada empresa en /legal/<id>/privacidad y /legal/<id>/condiciones.
@@ -2386,6 +2389,7 @@ async function start() {
   startAdMemory();
   startWebCatalogSync();
   startWebOffers();
+  startTrelloSync();
   startRetention();
   startPhotoNudgeScheduler();
   startHealthCheck();

@@ -40,6 +40,7 @@ import { attributeByCode, attributeStoryReply } from '../social/tracking';
 import { referralFrom, attributeAdReferral, attributeWebRef } from '../services/ads';
 import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG, looksLikeBuyer } from '../services/followups';
 import { getSellingCatalog } from '../services/webOffers';
+import { trelloLinks } from '../services/trello';
 import {
   sendTextMessage,
   sendImageMessage,
@@ -860,7 +861,7 @@ async function respondToBatch(batch: PendingBatch) {
       plan = await planTurn({
         history: conversationHistory, userMessage: aiContent, catalog, customPrompt, sentProducts, bankDetailsSent, pendingProducts,
         recentEmojis: recentBotEmojis(history), pendingOwnerQuestions, cardChosen, pendingCustomDesigns,
-        lastOrder: describeOrder(orders[0]), learnedLessons
+        lastOrder: describeOrder(orders[0] && { ...orders[0], stage: (await trelloLinks().catch(() => ({} as Record<string, any>)))[orders[0].id]?.stage }), learnedLessons
       });
     } catch (error: any) {
       // Sin respuesta de la IA la clienta quedaría ignorada: se avisa a la dueña para que conteste.
@@ -1317,7 +1318,7 @@ export function describeOrder(order: any): string {
     .map((i: any) => `${Number(i.quantity) || ''} ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`.trim()).join('; ');
   const notes = lines.filter((i: any) => i?.type === 'note' && i.text).map((i: any) => String(i.text)).join(' ');
   return `código ${String(order.id).substring(0, 8).toUpperCase()} · estado: ${ORDER_STATUS_LABELS[order.status] || order.status}`
-    + ` · total $${Number(order.total_amount || 0).toFixed(2)}${delivery}${place}${bought ? ` · compró: ${bought}` : ''}${notes ? ` · notas: ${notes}` : ''}`;
+    + ` · total $${Number(order.total_amount || 0).toFixed(2)}${delivery}${place}${order.stage ? ` · etapa de producción: ${order.stage}` : ''}${bought ? ` · compró: ${bought}` : ''}${notes ? ` · notas: ${notes}` : ''}`;
 }
 
 /** "3 docenas", "36 velas", "2 doc.": la clienta ya dijo cuántas quiere. */
