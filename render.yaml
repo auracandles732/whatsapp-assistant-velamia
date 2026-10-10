@@ -3,6 +3,8 @@ services:
     name: whatsapp-assistant-velamia
     runtime: node
     plan: free
+    # Render publica solo cuando pasan las pruebas de GitHub (regla de arreglos sellados, ver CLAUDE.md).
+    autoDeployTrigger: checksPass
     buildCommand: npm run build
     startCommand: npm start
     envVars:

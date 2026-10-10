@@ -13,7 +13,7 @@ Esto se cumple en cada cambio, sin excepción:
    candado no se publica. Después de escribirla: `npm run sellar` (la suma a `tests/candados.json`).
 3. **Anotar el arreglo** en `docs/ARREGLOS.md`: fecha, qué pasaba, qué se hizo y el nombre de su prueba.
 4. **Antes de publicar** (`git push origin <rama>:main`): `npx tsc --noEmit` y `npm test` en verde. Nunca publicar con
-   pruebas fallando. GitHub Actions ("Pruebas") las vuelve a correr en cada publicación.
+   pruebas fallando. GitHub Actions ("Pruebas") las vuelve a correr y **Render publica solo si pasan** (Auto-Deploy "After CI Checks Pass", sellado en render.yaml). Después de publicar, confirmar que "Pruebas" quedó en verde.
 5. **Prohibido sin permiso explícito de Aura**: borrar, renombrar, debilitar, saltar (`skip`/`todo`) una prueba sellada o
    quitar un nombre de `tests/candados.json`. Si un cambio nuevo choca con un candado, se corrige el cambio, no el candado.
 6. **Comportamiento del asistente IA**: una regla que solo vive en el prompt se puede perder o la IA puede ignorarla.

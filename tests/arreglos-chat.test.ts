@@ -50,3 +50,8 @@ test('lista de chats: la hora y el orden son los del último mensaje enviado o r
 test('revisión del catálogo: apagada salvo que se encienda a mano (no gasta IA sola)', () => {
   assert.ok(readFileSync('src/services/catalogReview.ts', 'utf8').includes('enabled: s.enabled === true'));
 });
+
+test('Render publica solo cuando pasan las pruebas de GitHub (nada que rompa un candado llega a producción)', () => {
+  assert.match(readFileSync('render.yaml', 'utf8'), /^\s+autoDeployTrigger: checksPass$/m);
+  assert.match(readFileSync('.github/workflows/pruebas.yml', 'utf8'), /run: npm test/);
+});

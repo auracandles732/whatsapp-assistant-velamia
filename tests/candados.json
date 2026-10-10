@@ -315,6 +315,7 @@
     "reconoce variantes claras que contienen el nombre",
     "reintentar sin conexión no borra lo que ya salió (si no, se publicaría dos veces)",
     "reintentar una publicación en parte: solo va a la red que falló y conserva la que ya salió",
+    "Render publica solo cuando pasan las pruebas de GitHub (nada que rompa un candado llega a producción)",
     "respaldo: avisa el diseño aunque la IA no lo marque (casos reales del 21-sep)",
     "respaldo: no avisa por comprobantes, guías ni productos del catálogo",
     "respeta emojis, negritas y viñetas al inicio y la frase anterior",
