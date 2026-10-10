@@ -270,6 +270,7 @@
     "no cambia textos sin preguntas ni enlaces",
     "no confunde con el saludo del anuncio, con lo que ella envía ni con pedidos de pago o total",
     "no confunde un modelo con otro ni con una frase cualquiera",
+    "no es cliente: responde natural a lo que dijo, sin frases de espera de robot",
     "no manda fotos en resúmenes con total ni cuando no hay precio",
     "no ofrece \"solo la vela\" donde no aplica",
     "no repite la cantidad aunque en medio haya hecho otra pregunta",

@@ -85,7 +85,7 @@ const PAUSING_HANDOFFS = new Set(['complaint', 'not_customer']);
 
 // Empresa que viene a comprar y la IA la tomó por proveedor: en vez de "lo reviso y te respondo", se sigue la negociación.
 const BUYER_STALL = /\b(lo|la|te lo) (reviso|revisamos)\b|\bte (respondo|indico|confirmo) (pronto|en breve)\b/i;
-const BUYER_FIRST_QUESTION = '¡Qué gusto! Con gusto trabajamos con empresas 😊 ¿Qué producto les interesa y en qué cantidades lo necesitarían?';
+const BUYER_FIRST_QUESTION = '¡Qué gusto saludarte! Trabajamos con empresas y pedidos al por mayor 😊 ¿Qué producto les interesa y en qué cantidades o rangos lo manejarían?';
 
 // Inicio del mensaje con los datos bancarios: permite saber si ya se enviaron en el chat.
 const BANK_DETAILS_MARKER = '🏦 Datos para transferencia';

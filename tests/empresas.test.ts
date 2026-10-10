@@ -38,7 +38,14 @@ test('empresas: el asistente sigue la negociación con empresas y el precio por 
   const prompt = buildSystemPrompt([{ name: 'Vela', price: 30, category: 'EVENTOS' }], undefined, normalizeProfile(PROFILE_PRESETS.eventos.profile));
   assert.ok(prompt.includes('- EMPRESAS: si quien escribe es una empresa'), 'falta la regla de empresas');
   assert.ok(prompt.includes('nunca inventes descuentos ni precios por rango'));
-  assert.ok(prompt.includes('Nunca le contestes solo "lo reviso y te indico".'));
+  assert.ok(prompt.includes('es un cliente MAYORISTA que compra por volumen y no se atiende como a un cliente común'));
+  assert.ok(prompt.includes('Nunca uses frases de espera de robot como "lo reviso y te indico" o "te aviso".'));
   const source = readFileSync('src/services/openai.ts', 'utf8');
   assert.ok(source.includes('Una EMPRESA, tienda, distribuidor o revendedor que quiere COMPRAR'), 'not_customer debe excluir a las empresas que compran');
+});
+
+test('no es cliente: responde natural a lo que dijo, sin frases de espera de robot', () => {
+  const source = readFileSync('src/services/openai.ts', 'utf8');
+  assert.ok(source.includes('Prohibidas las frases de espera de robot: "lo reviso y te respondo pronto", "te aviso", "en breve te indico".'));
+  assert.ok(!source.includes('dile que lo revisas y le respondes pronto'), 'volvió la frase de robot para quien no es cliente');
 });
