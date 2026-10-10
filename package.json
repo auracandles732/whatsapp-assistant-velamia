@@ -12,7 +12,8 @@
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
     "perfil": "node scripts/perfil.js",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "sellar": "tsx scripts/sellar.ts"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
