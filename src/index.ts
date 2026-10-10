@@ -108,6 +108,7 @@ import { startAdMemory } from './services/adMemory';
 import { startAdsSync, originsOf } from './services/ads';
 import { webCatalogRouter } from './services/webCatalogRoutes';
 import { startWebCatalogSync, scheduleWebPush, crmNameOf, followCrmRename, webOriginsForCsp } from './services/webCatalog';
+import { getSellingCatalog, startWebOffers } from './services/webOffers';
 import { supervisorRouter } from './services/supervisorRoutes';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
@@ -697,7 +698,7 @@ app.post('/api/business-profile/preview', requireCrmSession, requireEditorRole, 
     const message = String(req.body?.message || 'Hola').trim().slice(0, 300) || 'Hola';
     // Con el perfil que la persona tiene en pantalla (aunque no lo haya guardado), para probar antes de aplicar cambios.
     const testProfile = req.body?.profile && typeof req.body.profile === 'object' ? normalizeProfile(req.body.profile, profile()) : profile();
-    const [catalog, customPrompt] = await Promise.all([getAllProducts(), getConfig('system_prompt')]);
+    const [catalog, customPrompt] = await Promise.all([getSellingCatalog(), getConfig('system_prompt')]);
 
     const plan = await planTurn({ history: [], userMessage: message, catalog, customPrompt, sentProducts: [], profile: testProfile });
     res.json({
@@ -1074,7 +1075,7 @@ app.post('/api/quotations', requireCrmSession, requireEditorRole, async (req: Re
   try {
     const conv = await conversationForSending(req, res);
     if (!conv) return;
-    const sale = buildSale(req.body || {}, await getAllProducts());
+    const sale = buildSale(req.body || {}, await getSellingCatalog());
     const quotation = await createQuotation(conv.id, conv.phone_number, sale.products, sale.total);
     res.status(201).json({ ...quotation, packagingPending: sale.packagingPending });
   } catch (error: any) {
@@ -1088,7 +1089,7 @@ app.put('/api/quotations/:id', requireCrmSession, requireUuidParam, requireEdito
     const current = await getQuotationById(req.params.id);
     if (!current) return res.status(404).json({ error: 'Cotización no encontrada' });
     if (req.body?.items !== undefined) {
-      const sale = buildSale(req.body, await getAllProducts());
+      const sale = buildSale(req.body, await getSellingCatalog());
       await updateQuotationItems(current.id, sale.products, sale.total);
       // Cambiarla le da 3 días más de validez: una vencida vuelve a quedar pendiente.
       if (current.status === 'expired') await updateQuotationStatus(current.id, 'pending');
@@ -1118,7 +1119,7 @@ app.post('/api/quotations/:id/send', requireCrmSession, requireUuidParam, requir
     } catch {
       products = [];
     }
-    const delivery = quotationDelivery(products, Number(quotation.total_amount || 0), await getAllProducts());
+    const delivery = quotationDelivery(products, Number(quotation.total_amount || 0), await getSellingCatalog());
     await pauseBot(conv.id);
     const heldText = delivery.text ?? (delivery.photos.length === 0 ? delivery.fullText : null);
     const pending: PendingInput[] = [
@@ -1161,7 +1162,7 @@ app.post('/api/orders', requireCrmSession, requireEditorRole, async (req: Reques
   try {
     const conv = await conversationForSending(req, res);
     if (!conv) return;
-    const sale = buildSale(req.body || {}, await getAllProducts());
+    const sale = buildSale(req.body || {}, await getSellingCatalog());
     const order = await createOrder(conv.id, conv.phone_number, conv.customer_name || '', sale.products, sale.total, sale.delivery || undefined, sale.place || undefined);
     res.status(201).json(order);
   } catch (error: any) {
@@ -1616,6 +1617,17 @@ app.post('/api/upload-image', requireCrmSession, requireEditorRole, async (req: 
 app.get('/api/products', requireCrmSession, async (_req: Request, res: Response) => {
   try {
     res.json(await getAllProducts());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Precios de venta de hoy (con las ofertas de la página web): para que pedidos y cotizaciones muestren lo mismo que cobra el asistente. */
+app.get('/api/products/selling-prices', requireCrmSession, async (_req: Request, res: Response) => {
+  try {
+    const prices: Record<string, { price: number; regular: number; text: string }> = {};
+    for (const p of await getSellingCatalog()) if (Number(p.regular_price) > Number(p.price)) prices[p.id] = { price: Number(p.price), regular: Number(p.regular_price), text: String(p.offer_text || '') };
+    res.json(prices);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -2350,6 +2362,7 @@ async function start() {
   startAdsSync();
   startAdMemory();
   startWebCatalogSync();
+  startWebOffers();
   startRetention();
   startPhotoNudgeScheduler();
   startHealthCheck();

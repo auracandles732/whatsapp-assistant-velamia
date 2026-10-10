@@ -27,6 +27,7 @@ import { noteSocialOutcome } from '../services/webhookTrace';
 import { planTurn, describeImage, buildPostImagePrompt, IMAGE_NOT_READ } from '../services/openai';
 import { notifyOwner } from '../services/notifications';
 import { profile } from '../config/businessProfile';
+import { getSellingCatalog } from '../services/webOffers';
 
 /**
  * Avisos de Meta para la página de Facebook ("page") y el Instagram conectado ("instagram"): mensajes privados, ecos de lo
@@ -358,7 +359,7 @@ async function privateOpening(channel: SocialChannel, comment: IncomingComment):
   const fallback = `¡Hola! Vi tu comentario en ${channelName(channel)} 🤍 ¿En qué te puedo ayudar?`;
   try {
     const nothing: PostContent = { text: '', imageUrl: '', video: false };
-    const [catalog, customPrompt, post] = await Promise.all([getAllProducts(), getConfig('system_prompt'), comment.postId ? postContent(channel, comment.postId) : Promise.resolve(nothing)]);
+    const [catalog, customPrompt, post] = await Promise.all([getSellingCatalog(), getConfig('system_prompt'), comment.postId ? postContent(channel, comment.postId) : Promise.resolve(nothing)]);
     const picture = post.imageUrl ? await postPicture(comment.postId, post.imageUrl) : '';
     const where = describePost(channel, post, picture);
     const plan = await planTurn({

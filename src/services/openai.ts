@@ -563,6 +563,10 @@ interface CatalogProduct {
   pieces_per_unit?: number | null;
   /** "niño", "niña" o vacío (neutro, sirve para ambos). Solo se usa si el negocio marca género (baby shower). */
   gender?: string | null;
+  /** Precio normal cuando el producto está en oferta en la página web (price ya es el de oferta). */
+  regular_price?: number | null;
+  /** Texto de la oferta de la web ("Promoción por tiempo limitado"). */
+  offer_text?: string | null;
   image_url?: string | null;
 }
 
@@ -1144,9 +1148,13 @@ export function buildSystemPrompt(
           ? ` = ${i.pieces_per_unit} unidades` : '';
         const measure = i.measure ? ` · mide ${i.measure}` : '';
         const gender = i.gender === 'niño' || i.gender === 'niña' ? ` · ${i.gender}` : '';
-        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${own}${pieces}${measure}${gender}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}${bareOffer(i, p)}`;
+        const offer = Number(i.regular_price) > Number(i.price) ? ` · OFERTA de la página web (${i.offer_text || 'por tiempo limitado'}), precio normal $${Number(i.regular_price).toFixed(2)}` : '';
+        return `  - ${i.name}: $${Number(i.price).toFixed(2)} por ${own}${offer}${pieces}${measure}${gender}${p.packaging.enabled && i.description ? ` · empaque: ${i.description}` : ''}${bareOffer(i, p)}`;
       }).join('\n'))
       .join('\n\n');
+    if (catalog.some(i => Number(i.regular_price) > Number(i.price))) {
+      catalogText += '\n\nOFERTAS: los productos marcados con OFERTA tienen ese precio para cualquier cliente, igual que en la página web. Cotiza y cobra siempre con el precio de oferta, dilo como oferta por tiempo limitado (puedes mencionar el precio normal) y nunca digas que la oferta es de otro producto.';
+    }
   }
 
   // Sin la fecha la IA no puede saber si "el 18" ya pasó ni qué año corresponde.

@@ -6,17 +6,23 @@ import { BusinessProfile, profile, quantityText, formatDate } from '../config/bu
  * que usa el asistente, guardados con el mismo formato (productos + línea de envío + fecha de entrega).
  */
 
-export interface SaleInput { items?: unknown; place?: unknown; deliveryDate?: unknown }
+export interface SaleInput { items?: unknown; place?: unknown; deliveryDate?: unknown; agreedTotal?: unknown }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const positive = (v: unknown) => (Number(v) > 0 ? round2(Number(v)) : 0);
 
+/**
+ * Precios especiales que da la dueña cuando lo considera: por producto (specialPrice, por unidad de venta) o un total
+ * acordado con la clienta (agreedTotal, por ejemplo "$110 con envío incluido"), que manda sobre lo calculado.
+ */
 export function buildSale(input: SaleInput, catalog: any[], p: BusinessProfile = profile()) {
   const raw = (Array.isArray(input.items) ? input.items : []).slice(0, 30).map((i: any) => ({
     name: String(i?.name ?? ''),
     quantity: Number(i?.quantity),
     quantity_in_pieces: false,
     personalization: String(i?.personalization ?? '').trim().slice(0, 300),
-    packaging: String(i?.packaging ?? '')
+    packaging: String(i?.packaging ?? ''),
+    specialPrice: positive(i?.specialPrice)
   }));
   const place = p.shipping.mode === 'none' ? '' : String(input.place ?? '').trim().slice(0, 120);
   const r = computeOrderTotal(raw, place, catalog, p);
@@ -26,11 +32,19 @@ export function buildSale(input: SaleInput, catalog: any[], p: BusinessProfile =
   const s: any = r.shipping;
   const shipping = s ? { place: [s.place, s.province].filter((v: string, i: number, all: string[]) => v && all.indexOf(v) === i).join(', '), cost: Number(s.cost) } : null;
   const delivery = /^\d{4}-\d{2}-\d{2}$/.test(String(input.deliveryDate ?? '')) ? String(input.deliveryDate) : '';
-  const total = round2(r.subtotal + (shipping?.cost || 0));
+  const special = new Map(raw.filter(i => i.specialPrice > 0).map(i => [i.name.trim().toLowerCase(), i.specialPrice]));
+  const items = r.items.map((i: any) => {
+    const price = special.get(String(i.name).trim().toLowerCase());
+    return price ? { ...i, price, list_price: i.price, special_price: true } : i;
+  });
+  const computed = round2(items.reduce((sum: number, i: any) => sum + i.price * i.quantity, 0) + (shipping?.cost || 0));
+  const agreed = positive(input.agreedTotal);
+  const total = agreed || computed;
   const products: any[] = [
-    ...r.items,
+    ...items,
     ...(shipping ? [{ type: 'shipping', name: `Envío a ${shipping.place}`, price: shipping.cost, quantity: 1 }] : []),
-    ...(delivery ? [{ type: 'delivery', name: 'Entrega', date: delivery }] : [])
+    ...(delivery ? [{ type: 'delivery', name: 'Entrega', date: delivery }] : []),
+    ...(agreed && agreed !== computed ? [{ type: 'agreed_total', name: 'Total acordado', price: agreed, computed }] : [])
   ];
   return { products, total, place: shipping?.place || '', delivery, packagingPending: r.packagingUndefined };
 }

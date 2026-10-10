@@ -39,6 +39,7 @@ import { flushOutbox, recordUndelivered } from '../services/delivery';
 import { attributeByCode, attributeStoryReply } from '../social/tracking';
 import { referralFrom, attributeAdReferral, attributeWebRef } from '../services/ads';
 import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG, looksLikeBuyer } from '../services/followups';
+import { getSellingCatalog } from '../services/webOffers';
 import {
   sendTextMessage,
   sendImageMessage,
@@ -825,7 +826,7 @@ async function respondToBatch(batch: PendingBatch) {
     }));
 
     const [catalog, customPrompt, sentProducts, bankDetails, pendingOwnerQuestions, cardChosen, pendingCustomDesigns, orders] = await Promise.all([
-      getAllProducts(),
+      getSellingCatalog(),
       getConfig('system_prompt'),
       getSentProductNames(conversationId),
       getConfig('payment_transfer_info'),
@@ -1135,7 +1136,9 @@ async function sendProductPhotos(conversationId: string, phoneNumber: string, na
       const ownUnits = usesProductUnits(profToUse);
       const priceUnit = ownUnits && product.sale_unit ? `por ${product.sale_unit}` : sales.priceSuffix;
       const measure = ownUnits && product.measure ? `\n📏 ${product.measure}` : '';
-      const caption = `${business.productEmoji} *${product.name}*${measure}\n💰 $${Number(product.price).toFixed(2)} ${priceUnit}${packaging}`;
+      // En oferta de la web: el precio de oferta y el normal tachado, como en la página.
+      const onSale = Number(product.regular_price) > Number(product.price) ? ` 🔥 *Oferta* (antes ~$${Number(product.regular_price).toFixed(2)}~)` : '';
+      const caption = `${business.productEmoji} *${product.name}*${measure}\n💰 $${Number(product.price).toFixed(2)} ${priceUnit}${onSale}${packaging}`;
       await waitGap(phoneNumber, product === batch[0] ? MESSAGE_GAP_MS : PHOTO_GAP_MS);
       await stepAsideIfHumanTookOver(conversationId);
       const sent = await sendImageMessage(phoneNumber, product.image_url, caption);

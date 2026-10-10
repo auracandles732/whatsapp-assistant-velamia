@@ -7330,7 +7330,8 @@
             const shipping = all.find(i => i.type === 'shipping');
             const delivery = all.find(i => i.type === 'delivery');
             return {
-                items: all.filter(i => !i.type).map(i => ({ name: i.name, quantity: Number(i.quantity) || 1, personalization: i.personalization || '', packaging: i.packagingChanged ? (i.packaging || '') : '' })),
+                items: all.filter(i => !i.type).map(i => ({ name: i.name, quantity: Number(i.quantity) || 1, personalization: i.personalization || '', packaging: i.packagingChanged ? (i.packaging || '') : '', specialPrice: i.special_price ? String(i.price) : '' })),
+                agreedTotal: String(all.find(i => i.type === 'agreed_total')?.price || ''),
                 place: shipping ? String(shipping.name || '').replace(/^Envío a\s*/i, '') : '',
                 deliveryDate: delivery?.date || ''
             };
@@ -8148,6 +8149,9 @@
             const [search, setSearch] = useState('');
             const [place, setPlace] = useState(initial?.place || '');
             const [date, setDate] = useState(initial?.deliveryDate || '');
+            const [agreedTotal, setAgreedTotal] = useState(initial?.agreedTotal || '');
+            const [offers, setOffers] = useState({});
+            useEffect(() => { api('/api/products/selling-prices').then(r => setOffers(r || {})).catch(() => {}); }, []);
             const [busy, setBusy] = useState(false);
             const [error, setError] = useState('');
             const unit = biz?.sales?.unitSingular || 'unidad';
@@ -8175,14 +8179,16 @@
             const list = products
                 .filter(p => !needle || (p.name + ' ' + p.category).toLowerCase().includes(needle))
                 .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
-            const estimate = items.reduce((sum, i) => sum + (Number(mxProductByName(products, i.name)?.price) || 0) * i.quantity, 0);
+            const listPrice = p => (p && offers[p.id] ? offers[p.id].price : Number(p?.price) || 0);
+            const itemPrice = i => Number(i.specialPrice) > 0 ? Number(i.specialPrice) : listPrice(mxProductByName(products, i.name));
+            const estimate = Number(agreedTotal) > 0 ? Number(agreedTotal) : items.reduce((sum, i) => sum + itemPrice(i) * i.quantity, 0);
 
             async function submit(sendNow) {
                 if (!pickedConv) return setError('Elige el chat de la clienta');
                 if (!items.length) return setError('Agrega al menos un producto con su cantidad');
                 setBusy(true);
                 setError('');
-                const body = { conversationId: pickedConv.id, items, place: shippingOn ? place : '', deliveryDate: date };
+                const body = { conversationId: pickedConv.id, items, place: shippingOn ? place : '', deliveryDate: date, agreedTotal: Number(agreedTotal) > 0 ? Number(agreedTotal) : undefined };
                 try {
                     if (mode === 'order') {
                         await api('/api/orders', { method: 'POST', body: JSON.stringify(body) });
@@ -8218,7 +8224,7 @@
                             {p?.image_url ? <img src={p.image_url} alt="" loading="lazy" /> : <div className="noimg"></div>}
                             <div className="mid">
                                 <b>{name}</b>
-                                <small>{p ? mxPrice(p.price) + ' por ' + ((biz?.sales?.perProductUnits && p.sale_unit) || unit) : 'Ya no está en el catálogo: quítalo'}</small>
+                                <small>{p ? mxPrice(listPrice(p)) + ' por ' + ((biz?.sales?.perProductUnits && p.sale_unit) || unit) + (offers[p.id] ? ' · 🔥 oferta web (antes ' + mxPrice(p.price) + ')' : '') : 'Ya no está en el catálogo: quítalo'}</small>
                             </div>
                             <div className="mx-qty">
                                 {qty > 0 && <button type="button" aria-label="Menos" onClick={() => setQty(name, qty - 1)}>−</button>}
@@ -8226,6 +8232,9 @@
                                 {p && <button type="button" aria-label="Más" onClick={() => setQty(name, qty + 1)}>+</button>}
                             </div>
                         </div>
+                        {qty > 0 && p && (
+                            <input type="number" inputMode="decimal" min="0" step="0.01" className="mx-small-in" placeholder={'Precio especial por ' + ((biz?.sales?.perProductUnits && p.sale_unit) || unit) + ' (opcional, si tú lo autorizas)'} value={item.specialPrice || ''} onChange={e => setItems(prev => prev.map(i => (i.name === name ? { ...i, specialPrice: e.target.value } : i)))} />
+                        )}
                         {qty > 0 && personalization && p && (
                             <input type="text" className="mx-small-in" maxLength={300} placeholder="Personalización (opcional): colores, nombres, frase..." value={item.personalization} onChange={e => setItems(prev => prev.map(i => (i.name === name ? { ...i, personalization: e.target.value } : i)))} />
                         )}
@@ -8266,6 +8275,9 @@
                         )}
                         <span className="l">Fecha de entrega</span>
                         <input type="date" className="mx-date" value={date} onChange={e => setDate(e.target.value)} />
+                        <span className="l">Total acordado (opcional)</span>
+                        <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Ej: 110 si quedaron en $110 con envío incluido" value={agreedTotal} onChange={e => setAgreedTotal(e.target.value)} />
+                        <span className="h2">Si lo llenas, este es el total del pedido (manda sobre los precios y el envío).</span>
                     </div>
                     <div style={{ height: mode === 'quote' ? 130 : 70 }}></div>
                     <div className="mx-bottom">
@@ -9895,7 +9907,9 @@
                                     <div className="quote-total">${Number(o.total_amount || 0).toFixed(2)}</div>
                                 </div>
                                 <ul className="quote-items">
-                                    {items.map((item, i) => item.type === 'delivery' ? null : item.type === 'shipping' ? (
+                                    {items.map((item, i) => item.type === 'delivery' ? null : item.type === 'agreed_total' ? (
+                                        <li key={i}>🤝 Total acordado: ${Number(item.price).toFixed(2)}</li>
+                                    ) : item.type === 'shipping' ? (
                                         <li key={i}>🚚 {item.name} — ${Number(item.price).toFixed(2)}</li>
                                     ) : (
                                         <li key={i}>
@@ -10651,6 +10665,8 @@
                                             <ul className="quote-items">
                                                 {items.map((item, i) => item.type === 'delivery' ? (
                                                     <li key={i}>📅 Entrega: {String(item.date || '').split('-').reverse().join('/')}</li>
+                                                ) : item.type === 'agreed_total' ? (
+                                                    <li key={i}>🤝 Total acordado: ${Number(item.price).toFixed(2)}</li>
                                                 ) : item.type === 'shipping' ? (
                                                     <li key={i}>🚚 {item.name} — ${Number(item.price).toFixed(2)}</li>
                                                 ) : (
