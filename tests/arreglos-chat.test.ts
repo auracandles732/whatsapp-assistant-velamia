@@ -51,6 +51,14 @@ test('revisión del catálogo: apagada salvo que se encienda a mano (no gasta IA
   assert.ok(readFileSync('src/services/catalogReview.ts', 'utf8').includes('enabled: s.enabled === true'));
 });
 
+test('revisión del catálogo pausada: el reporte no habla del catálogo y la pantalla dice "pausada"', () => {
+  const review = readFileSync('src/services/catalogReview.ts', 'utf8');
+  assert.ok(review.includes("return state.enabled ? state.findings.filter(f => f.status === 'pendiente').length : 0;"), 'pausada, el reporte diario no debe decir "cosas del catálogo por revisar"');
+  assert.ok(/async function catalogTick[\s\S]{0,300}if \(!\(await readState\(\)\)\.enabled\) return;/.test(review), 'la vuelta automática no revisa si está pausada');
+  assert.ok(html.includes("{data.enabled ? '(' + data.pending.length + ')' : '· pausada'}"));
+  assert.ok(html.includes('no revisa nada sola ni gasta IA'));
+});
+
 test('Render publica solo cuando pasan las pruebas de GitHub (nada que rompa un candado llega a producción)', () => {
   assert.match(readFileSync('render.yaml', 'utf8'), /^\s+autoDeployTrigger: checksPass$/m);
   assert.match(readFileSync('.github/workflows/pruebas.yml', 'utf8'), /run: npm test/);

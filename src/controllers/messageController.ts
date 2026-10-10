@@ -38,7 +38,7 @@ import { audit } from '../services/audit';
 import { flushOutbox, recordUndelivered } from '../services/delivery';
 import { attributeByCode, attributeStoryReply } from '../social/tracking';
 import { referralFrom, attributeAdReferral, attributeWebRef } from '../services/ads';
-import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG } from '../services/followups';
+import { isFollowUpMessage, followUpText, NOT_CUSTOMER_TAG, looksLikeBuyer } from '../services/followups';
 import {
   sendTextMessage,
   sendImageMessage,
@@ -82,6 +82,10 @@ const MEDIA_TYPES = new Set(['image', 'audio', 'document']);
 // Casos en que el bot se aparta hasta que la dueña lo reactive. El comprobante de pago solo avisa.
 // Con tarjeta el asistente sigue atendiendo (la dueña envía el link): pausarlo dejaba sin respuesta sus otras preguntas.
 const PAUSING_HANDOFFS = new Set(['complaint', 'not_customer']);
+
+// Empresa que viene a comprar y la IA la tomó por proveedor: en vez de "lo reviso y te respondo", se sigue la negociación.
+const BUYER_STALL = /\b(lo|la|te lo) (reviso|revisamos)\b|\bte (respondo|indico|confirmo) (pronto|en breve)\b/i;
+const BUYER_FIRST_QUESTION = '¡Qué gusto! Con gusto trabajamos con empresas 😊 ¿Qué producto les interesa y en qué cantidades lo necesitarían?';
 
 // Inicio del mensaje con los datos bancarios: permite saber si ya se enviaron en el chat.
 const BANK_DETAILS_MARKER = '🏦 Datos para transferencia';
@@ -877,8 +881,13 @@ async function respondToBatch(batch: PendingBatch) {
     }
 
     // "No es cliente" solo si nunca compró ni vio modelos, y una sola vez: si la dueña reactivó el asistente, ella decidió que responda.
+    // Una empresa que viene a comprar (llegó por un anuncio, es de compras, pide cotización o precios por volumen) sí es cliente.
     if (plan.handoff === 'not_customer') {
-      if (orders.length > 0 || sentProducts.length > 0 || await hasRecentNotification(conversationId, 'not_customer', 24 * 30)) {
+      const customerSaid = [...history.filter((m: any) => m.sender === 'customer').map((m: any) => String(m.content || '')), ...items.map(i => i.storedContent)].join('\n');
+      if (looksLikeBuyer(customerSaid)) {
+        console.log('🏢 La IA marcó "no es cliente", pero viene a comprar (empresa, anuncio o cotización): se atiende normal');
+        plan = { ...plan, handoff: 'none', reply: BUYER_STALL.test(plan.reply) || !plan.reply.includes('?') ? BUYER_FIRST_QUESTION : plan.reply };
+      } else if (orders.length > 0 || sentProducts.length > 0 || await hasRecentNotification(conversationId, 'not_customer', 24 * 30)) {
         console.log('📦 La IA marcó "no es cliente", pero el chat tiene compras, fotos o ya se avisó: se atiende normal');
         plan = { ...plan, handoff: 'none' };
       } else {

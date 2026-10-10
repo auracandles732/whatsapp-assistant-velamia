@@ -644,7 +644,9 @@ export async function catalogOverview() {
 
 /** Cuántas cosas del catálogo esperan a la dueña (para el aviso del supervisor). */
 export async function pendingCatalogCount(): Promise<number> {
-  return (await readState()).findings.filter(f => f.status === 'pendiente').length;
+  // Pausada, no se menciona en el reporte: los avisos viejos hacían creer que seguía revisando sola.
+  const state = await readState();
+  return state.enabled ? state.findings.filter(f => f.status === 'pendiente').length : 0;
 }
 
 const lastRun = new Map<string, number>();

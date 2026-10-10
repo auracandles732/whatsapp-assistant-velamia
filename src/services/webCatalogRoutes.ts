@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireCrmSession, requireOwnerRole, requireEditorRole } from '../middleware/auth';
-import { webOverview, connectWeb, disconnectWeb, setWebEnabled, pushToWeb, setProductWeb, resolveWebPrice } from './webCatalog';
+import { webOverview, connectWeb, disconnectWeb, setWebEnabled, pushToWeb, setProductWeb, resolveWebPrice, webPendingInfo } from './webCatalog';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -15,6 +15,15 @@ export function webCatalogRouter(): Router {
   router.get('/api/web-catalog', requireCrmSession, async (_req: Request, res: Response) => {
     try {
       res.json(await webOverview());
+    } catch (error: any) {
+      fail(res, error, 500);
+    }
+  });
+
+  // Si hay cambios sin llegar a la web: el CRM abierto en el navegador despierta el panel y pide el envío.
+  router.get('/api/web-catalog/pending', requireCrmSession, async (_req: Request, res: Response) => {
+    try {
+      res.json(await webPendingInfo());
     } catch (error: any) {
       fail(res, error, 500);
     }

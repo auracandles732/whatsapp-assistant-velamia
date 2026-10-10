@@ -48,7 +48,7 @@ export async function webCatalogAvailable(): Promise<boolean> {
 
 // ---------- Conexión ----------
 
-export interface WebSettings { url: string; key: string; enabled: boolean; lastSyncAt: string; lastError: string; lastCount: number }
+export interface WebSettings { url: string; key: string; enabled: boolean; lastSyncAt: string; lastError: string; lastCount: number; pendingSince: string }
 
 async function readSettings(): Promise<WebSettings> {
   let s: any = {};
@@ -58,7 +58,7 @@ async function readSettings(): Promise<WebSettings> {
   } catch {
     s = {};
   }
-  return { url: String(s.url || ''), key: String(s.key || ''), enabled: s.enabled === true, lastSyncAt: String(s.lastSyncAt || ''), lastError: String(s.lastError || ''), lastCount: Number(s.lastCount || 0) };
+  return { url: String(s.url || ''), key: String(s.key || ''), enabled: s.enabled === true, lastSyncAt: String(s.lastSyncAt || ''), lastError: String(s.lastError || ''), lastCount: Number(s.lastCount || 0), pendingSince: String(s.pendingSince || '') };
 }
 
 const writeSettings = (s: WebSettings) => setConfig(SETTINGS_KEY, JSON.stringify(s));
@@ -92,6 +92,7 @@ export async function connectWeb(input: { url?: unknown }): Promise<{ key: strin
   const key = `nxw_${randomBytes(24).toString('base64url')}`;
   const s = await readSettings();
   await writeSettings({ ...s, url, key: encryptSecret(key), enabled: false, lastError: '' });
+  void refreshWebOrigins();
   return { key };
 }
 
@@ -332,10 +333,11 @@ export async function pushToWeb(): Promise<{ count: number }> {
       const id = Number(ids[p.id]);
       if (Number.isFinite(id) && id > 0 && p.web.id !== id) await saveWeb(p.id, { ...p.web, id });
     }
-    await writeSettings({ ...(await readSettings()), lastSyncAt: new Date().toISOString(), lastError: '', lastCount: list.length });
+    await writeSettings({ ...(await readSettings()), lastSyncAt: new Date().toISOString(), lastError: '', lastCount: list.length, pendingSince: '' });
     return { count: list.length };
   } catch (error: any) {
-    await writeSettings({ ...(await readSettings()), lastError: String(error.message).slice(0, 400) }).catch(() => undefined);
+    const now = await readSettings();
+    await writeSettings({ ...now, lastError: String(error.message).slice(0, 400), pendingSince: now.pendingSince || new Date().toISOString() }).catch(() => undefined);
     throw error;
   }
 }
@@ -346,6 +348,8 @@ const pending = new Map<string, NodeJS.Timeout>();
 export function scheduleWebPush(delayMs = 45_000) {
   const tenant = currentTenant();
   const key = tenant?.businessId || 'velamia';
+  // Queda anotado que hay cambios sin llegar a la web, por si el panel está dormido y el envío falla.
+  void runWithTenant(tenant, () => markPending()).catch(() => undefined);
   clearTimeout(pending.get(key));
   pending.set(key, setTimeout(() => {
     pending.delete(key);
@@ -353,14 +357,48 @@ export function scheduleWebPush(delayMs = 45_000) {
   }, delayMs));
 }
 
-/** Cada hora, por si algo no salió (web dormida, sin conexión): VELAMIA y cada empresa con su web conectada. */
+async function markPending() {
+  const s = await readSettings();
+  if (s.enabled && s.url && !s.pendingSince) await writeSettings({ ...s, pendingSince: new Date().toISOString() });
+}
+
+/** Solo se manda cuando hay cambios sin llegar: cada envío despierta el panel y gasta horas gratis de Render. */
+export const needsPush = (s: WebSettings) => s.enabled && !!s.url && !!s.pendingSince;
+
+/**
+ * Para el CRM abierto en el navegador: si hay cambios sin llegar a la web. Render no despierta un panel gratis dormido
+ * cuando lo llama otro servicio de Render (responde 502 "no-deploy" al instante), pero sí cuando la llamada viene de
+ * internet: el navegador lo despierta y enseguida pide el envío.
+ */
+export async function webPendingInfo(): Promise<{ pending: boolean; url: string }> {
+  const s = await readSettings();
+  const pendingNow = needsPush(s) && !!keyOf(s) && (await webCatalogAvailable());
+  return { pending: pendingNow, url: pendingNow ? s.url : '' };
+}
+
+// Direcciones de los paneles conectados: el CRM (con su protección de scripts) solo puede llamar a esas para despertarlos.
+let webOrigins: string[] = [];
+export const webOriginsForCsp = () => webOrigins.join(' ');
+
+export async function refreshWebOrigins() {
+  const urls = [await runWithTenant(undefined, readSettings).then(s => s.url).catch(() => '')];
+  for (const tenant of await getActiveTenants().catch(() => [])) urls.push(await runWithTenant(tenant, readSettings).then(s => s.url).catch(() => ''));
+  webOrigins = [...new Set(urls.map(u => { try { return u ? new URL(u).origin : ''; } catch { return ''; } }).filter(Boolean))];
+}
+
+/** Cada hora, si quedó algo sin llegar (web dormida, sin conexión): VELAMIA y cada empresa con su web conectada. */
 export function startWebCatalogSync() {
+  const pushIfPending = async () => {
+    if (needsPush(await readSettings())) await pushToWeb();
+  };
   const tick = async () => {
-    await runWithTenant(undefined, () => pushToWeb()).catch(error => console.warn('⚠️ Catálogo de la web de VELAMIA:', error.message));
+    await runWithTenant(undefined, pushIfPending).catch(error => console.warn('⚠️ Catálogo de la web de VELAMIA:', error.message));
     for (const tenant of await getActiveTenants().catch(() => [])) {
-      await runWithTenant(tenant, () => pushToWeb()).catch(error => console.warn(`⚠️ Catálogo de la web de ${tenant.name}:`, error.message));
+      await runWithTenant(tenant, pushIfPending).catch(error => console.warn(`⚠️ Catálogo de la web de ${tenant.name}:`, error.message));
     }
   };
+  void refreshWebOrigins();
+  setInterval(() => { void refreshWebOrigins(); }, 30 * 60 * 1000);
   setTimeout(() => { void tick(); }, 6 * 60 * 1000);
   setInterval(() => { void tick(); }, 60 * 60 * 1000);
 }

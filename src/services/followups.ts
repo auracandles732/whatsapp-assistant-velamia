@@ -127,6 +127,22 @@ export function followUpFits(templateText: string, ctx: FollowUpContext): boolea
 export const NOT_CUSTOMER_TAG = 'No es cliente';
 export const isNotCustomer = (tags: unknown) => Array.isArray(tags) && tags.some(t => String(t).trim().toLowerCase() === NOT_CUSTOMER_TAG.toLowerCase());
 
+/**
+ * Lo que escribió alguien que viene a COMPRAR, aunque sea una empresa que cuenta a qué se dedica: llegó desde un anuncio
+ * o la web (Ref), es del área de compras, pide cotización o propuesta, o pide precios por volumen sin estar ofreciendo
+ * algo. Con esto nunca se marca "No es cliente" (una empresa que compra por volumen se perdía por eso).
+ */
+export function looksLikeBuyer(text: string): boolean {
+  const raw = String(text || '');
+  const t = raw.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  if (/\(ref:\s*[a-z0-9]{4,}\)/i.test(raw)) return true;
+  if (/\b(coordinador|coordinadora|jefe|jefa|departamento|area|asistente|analista|encargad[oa]) de compras\b/.test(t)) return true;
+  if (/\b(queremos|quisieramos|deseamos|deseo|necesitamos|nos interesa|me interesa|quiero|quisiera)\b[^.?!\n]{0,60}\b(comprar|adquirir|cotiza\w*|propuesta|precios?|costos?|agregar a nuestro catalogo|este producto|pedido)/.test(t)) return true;
+  if (/\b(cotizacion|propuesta comercial)\b/.test(t)) return true;
+  const offering = /\b(le|les) (ofrecemos|ofrezco|presentamos)\b|\bofrecemos\b|\bsomos proveedores\b|\bnuestros servicios\b|\bbrindamos\b/.test(t);
+  return !offering && /\b(por mayor|al por mayor|mayorista|por volumen|rangos de|por rangos|revender|reventa)\b/.test(t);
+}
+
 // Cada número de WhatsApp tiene sus propias plantillas aprobadas: se guardan aparte por negocio.
 const templateCaches = new Map<string, { loadedAt: number; templates: Map<string, { language: string; text: string }> }>();
 

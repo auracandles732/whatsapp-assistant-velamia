@@ -107,7 +107,7 @@ import { adCampaignRouter } from './services/adCampaignRoutes';
 import { startAdMemory } from './services/adMemory';
 import { startAdsSync, originsOf } from './services/ads';
 import { webCatalogRouter } from './services/webCatalogRoutes';
-import { startWebCatalogSync, scheduleWebPush, crmNameOf, followCrmRename } from './services/webCatalog';
+import { startWebCatalogSync, scheduleWebPush, crmNameOf, followCrmRename, webOriginsForCsp } from './services/webCatalog';
 import { supervisorRouter } from './services/supervisorRoutes';
 import { getTodaySummary, getListOverview, getConversationSummary } from './services/crmOverview';
 import { planTurn } from './services/openai';
@@ -159,14 +159,15 @@ const SCRIPT_SOURCES = builtCrm?.strictScripts
   ? "script-src 'self' https://unpkg.com"
   : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com";
 
-const CONTENT_SECURITY_POLICY = [
+// connect-src suma los paneles de las webs conectadas: el navegador los despierta (ver webPendingInfo).
+const contentSecurityPolicy = () => [
   "default-src 'self'",
   SCRIPT_SOURCES,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: ${STORAGE_ORIGIN}`,
   `media-src 'self' blob: ${STORAGE_ORIGIN}`,
   "font-src 'self' data:",
-  `connect-src 'self' https://unpkg.com ${STORAGE_ORIGIN}`,
+  `connect-src 'self' https://unpkg.com ${STORAGE_ORIGIN} ${webOriginsForCsp()}`.trim(),
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",
@@ -182,7 +183,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'microphone=(self), camera=(), geolocation=(), payment=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  res.setHeader('Content-Security-Policy', contentSecurityPolicy());
   next();
 });
 

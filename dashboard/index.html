@@ -8927,6 +8927,29 @@
                 return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
             }, []);
 
+            // El panel de la página web (Render gratis) se duerme y Render no lo despierta cuando lo llama el servidor del CRM.
+            // Si hay cambios del catálogo sin llegar a la web, este navegador lo despierta y enseguida pide el envío.
+            useEffect(() => {
+                let busy = false;
+                const wakeWeb = async () => {
+                    if (busy) return;
+                    busy = true;
+                    try {
+                        const web = await api('/api/web-catalog/pending');
+                        if (!web || !web.pending || !web.url) return;
+                        const awake = await fetch(web.url + '/api/sync/productos', { mode: 'no-cors', cache: 'no-store' }).then(() => true, () => false);
+                        if (awake) await api('/api/web-catalog/sync', { method: 'POST', body: '{}' });
+                    } catch (err) {
+                        console.warn('Catálogo de la web:', err.message);
+                    } finally {
+                        busy = false;
+                    }
+                };
+                const first = setTimeout(wakeWeb, 8000);
+                const interval = setInterval(whenVisible(wakeWeb), 2 * 60 * 1000);
+                return () => { clearTimeout(first); clearInterval(interval); };
+            }, []);
+
             useEffect(() => {
                 if (activeTab !== 'conversaciones' && activeTab !== 'estadisticas') return;
                 const load = () => {
@@ -15924,8 +15947,9 @@
                     <div className="pb-card-h">
                         <div className="pb-tile"><PlatIcon name="box" size={22} color="#B5654A" /></div>
                         <div className="grow">
-                            <h2>🕯️ Revisión del catálogo ({data.pending.length})</h2>
-                            <p>El supervisor revisa cada producto nuevo o que cambia: la escritura (nombre, textos de la web y categorías), que la foto muestre ese producto y que el precio escrito en la foto sea el del catálogo. {data.autoFix ? 'Las tildes, ñ y ü las corrige solo (puedes deshacerlo); ' : ''}lo demás te lo deja aquí.</p>
+                            <h2>🕯️ Revisión del catálogo {data.enabled ? '(' + data.pending.length + ')' : '· pausada'}</h2>
+                            {!data.enabled && <p><b>⏸️ Pausada:</b> no revisa nada sola ni gasta IA. Solo revisa cuando tocas «Revisar ahora». Los avisos de abajo son de la última revisión.</p>}
+                            <p>{data.enabled ? 'El supervisor revisa cada producto nuevo o que cambia:' : 'Cuando la usas, revisa:'} la escritura (nombre, textos de la web y categorías), que la foto muestre ese producto y que el precio escrito en la foto sea el del catálogo. {data.autoFix ? 'Las tildes, ñ y ü las corrige solo (puedes deshacerlo); ' : ''}lo demás te lo deja aquí.</p>
                         </div>
                         {canConfigure && <button type="button" className="pb-btn sm" disabled={!!busy} onClick={review}>{busy === 'review' ? '🔎 Revisando…' : '🔎 Revisar ahora'}</button>}
                     </div>
