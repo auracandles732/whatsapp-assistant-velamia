@@ -32,6 +32,8 @@ import {
   createOrder,
   getAllOrders,
   updateOrderStatus,
+  updateOrderItems,
+  deleteOrder,
   ORDER_STATUSES,
   OrderStatus,
   parseDbTimestamp,
@@ -1173,6 +1175,27 @@ app.post('/api/orders', requireCrmSession, requireEditorRole, async (req: Reques
 app.get('/api/orders', requireCrmSession, async (_req: Request, res: Response) => {
   try {
     res.json(await getAllOrders());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** La dueña corrige un pedido: productos, cantidades, precio especial, total acordado, notas, ciudad y entrega. */
+app.put('/api/orders/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    const sale = buildSale(req.body || {}, await getSellingCatalog());
+    const updated = await updateOrderItems(req.params.id, sale.products, sale.total, sale.delivery || undefined, sale.place || undefined);
+    if (!updated) return res.status(404).json({ error: 'Pedido no encontrado' });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/orders/:id', requireCrmSession, requireUuidParam, requireEditorRole, async (req: Request, res: Response) => {
+  try {
+    if (!(await deleteOrder(req.params.id))) return res.status(404).json({ error: 'Pedido no encontrado' });
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

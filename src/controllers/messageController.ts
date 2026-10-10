@@ -1310,8 +1310,14 @@ export function describeOrder(order: any): string {
   if (!order) return '';
   const delivery = order.delivery_date ? ` · entrega ${formatDate(String(order.delivery_date).slice(0, 10))}` : '';
   const place = order.customer_address ? ` · envío a ${order.customer_address}` : '';
+  // Qué compró y con qué cambios: la clienta que ya compró no tiene que volver a explicarlo.
+  let lines: any[] = [];
+  try { lines = typeof order.products === 'string' ? JSON.parse(order.products) : (order.products || []); } catch { lines = []; }
+  const bought = lines.filter((i: any) => i && !i.type && i.name)
+    .map((i: any) => `${Number(i.quantity) || ''} ${i.name}${i.personalization ? ` (${i.personalization})` : ''}`.trim()).join('; ');
+  const notes = lines.filter((i: any) => i?.type === 'note' && i.text).map((i: any) => String(i.text)).join(' ');
   return `código ${String(order.id).substring(0, 8).toUpperCase()} · estado: ${ORDER_STATUS_LABELS[order.status] || order.status}`
-    + ` · total $${Number(order.total_amount || 0).toFixed(2)}${delivery}${place}`;
+    + ` · total $${Number(order.total_amount || 0).toFixed(2)}${delivery}${place}${bought ? ` · compró: ${bought}` : ''}${notes ? ` · notas: ${notes}` : ''}`;
 }
 
 /** "3 docenas", "36 velas", "2 doc.": la clienta ya dijo cuántas quiere. */

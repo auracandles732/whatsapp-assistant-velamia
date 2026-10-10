@@ -6,7 +6,7 @@ import { BusinessProfile, profile, quantityText, formatDate } from '../config/bu
  * que usa el asistente, guardados con el mismo formato (productos + línea de envío + fecha de entrega).
  */
 
-export interface SaleInput { items?: unknown; place?: unknown; deliveryDate?: unknown; agreedTotal?: unknown }
+export interface SaleInput { items?: unknown; place?: unknown; deliveryDate?: unknown; agreedTotal?: unknown; note?: unknown }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const positive = (v: unknown) => (Number(v) > 0 ? round2(Number(v)) : 0);
@@ -40,11 +40,14 @@ export function buildSale(input: SaleInput, catalog: any[], p: BusinessProfile =
   const computed = round2(items.reduce((sum: number, i: any) => sum + i.price * i.quantity, 0) + (shipping?.cost || 0));
   const agreed = positive(input.agreedTotal);
   const total = agreed || computed;
+  // Lo que pidió la clienta que no es de un producto (diseño de la tarjeta, aroma, observaciones): solo lo ve el equipo.
+  const note = String(input.note ?? '').trim().slice(0, 1000);
   const products: any[] = [
     ...items,
     ...(shipping ? [{ type: 'shipping', name: `Envío a ${shipping.place}`, price: shipping.cost, quantity: 1 }] : []),
     ...(delivery ? [{ type: 'delivery', name: 'Entrega', date: delivery }] : []),
-    ...(agreed && agreed !== computed ? [{ type: 'agreed_total', name: 'Total acordado', price: agreed, computed }] : [])
+    ...(agreed && agreed !== computed ? [{ type: 'agreed_total', name: 'Total acordado', price: agreed, computed }] : []),
+    ...(note ? [{ type: 'note', name: 'Notas', text: note }] : [])
   ];
   return { products, total, place: shipping?.place || '', delivery, packagingPending: r.packagingUndefined };
 }

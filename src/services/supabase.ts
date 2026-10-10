@@ -462,6 +462,18 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   return data;
 }
 
+export async function deleteOrder(orderId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('orders')
+    .delete()
+    .eq('id', orderId)
+    .filter('business_id', tenantOp(), tenantValue())
+    .select('id');
+
+  if (error) throw new Error(`Error borrando pedido: ${error.message}`);
+  return (data || []).length > 0;
+}
+
 export async function getOrdersByConversation(conversationId: string) {
   const { data, error } = await supabase
     .from('orders')

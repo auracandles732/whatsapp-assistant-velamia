@@ -7332,6 +7332,7 @@
             return {
                 items: all.filter(i => !i.type).map(i => ({ name: i.name, quantity: Number(i.quantity) || 1, personalization: i.personalization || '', packaging: i.packagingChanged ? (i.packaging || '') : '', specialPrice: i.special_price ? String(i.price) : '' })),
                 agreedTotal: String(all.find(i => i.type === 'agreed_total')?.price || ''),
+                note: String(all.find(i => i.type === 'note')?.text || ''),
                 place: shipping ? String(shipping.name || '').replace(/^Envío a\s*/i, '') : '',
                 deliveryDate: delivery?.date || ''
             };
@@ -8141,15 +8142,17 @@
         }
 
         // Armar a mano una cotización o un pedido (o cambiar una cotización): mismos precios, envíos y empaques que usa el asistente.
-        function SaleComposer({ mode, conv, quotation, conversations, products, biz, onClose, onDone }) {
-            const initial = quotation ? mxSaleOf(quotation) : null;
-            const fixedConv = conv || (quotation ? { id: quotation.conversation_id, customer_name: mxQuoteName(quotation), phone_number: quotation.conversations?.phone_number || quotation.customer_phone } : null);
+        function SaleComposer({ mode, conv, quotation, order, conversations, products, biz, onClose, onDone }) {
+            const source = quotation || order;
+            const initial = source ? mxSaleOf(source) : null;
+            const fixedConv = conv || (source ? { id: source.conversation_id, customer_name: mxQuoteName(source), phone_number: source.conversations?.phone_number || source.customer_phone } : null);
             const [pickedConv, setPickedConv] = useState(fixedConv);
             const [items, setItems] = useState(() => (initial ? initial.items : []));
             const [search, setSearch] = useState('');
             const [place, setPlace] = useState(initial?.place || '');
             const [date, setDate] = useState(initial?.deliveryDate || '');
             const [agreedTotal, setAgreedTotal] = useState(initial?.agreedTotal || '');
+            const [note, setNote] = useState(initial?.note || '');
             const [offers, setOffers] = useState({});
             useEffect(() => { api('/api/products/selling-prices').then(r => setOffers(r || {})).catch(() => {}); }, []);
             const [busy, setBusy] = useState(false);
@@ -8158,7 +8161,7 @@
             const unitPlural = biz?.sales?.unitPlural || 'unidades';
             const shippingOn = biz?.shipping?.mode !== 'none';
             const personalization = !!biz?.sales?.personalization;
-            const title = mode === 'order' ? 'Crear pedido' : mode === 'edit' ? 'Editar cotización' : 'Nueva cotización';
+            const title = mode === 'order' ? 'Crear pedido' : mode === 'edit-order' ? 'Editar pedido' : mode === 'edit' ? 'Editar cotización' : 'Nueva cotización';
 
             useEffect(() => {
                 const before = document.body.style.overflow;
@@ -8188,8 +8191,13 @@
                 if (!items.length) return setError('Agrega al menos un producto con su cantidad');
                 setBusy(true);
                 setError('');
-                const body = { conversationId: pickedConv.id, items, place: shippingOn ? place : '', deliveryDate: date, agreedTotal: Number(agreedTotal) > 0 ? Number(agreedTotal) : undefined };
+                const body = { conversationId: pickedConv.id, items, place: shippingOn ? place : '', deliveryDate: date, agreedTotal: Number(agreedTotal) > 0 ? Number(agreedTotal) : undefined, note };
                 try {
+                    if (mode === 'edit-order') {
+                        await api('/api/orders/' + order.id, { method: 'PUT', body: JSON.stringify(body) });
+                        onDone({ kind: 'order', conv: pickedConv, edited: true });
+                        return;
+                    }
                     if (mode === 'order') {
                         await api('/api/orders', { method: 'POST', body: JSON.stringify(body) });
                         onDone({ kind: 'order', conv: pickedConv });
@@ -8278,13 +8286,16 @@
                         <span className="l">Total acordado (opcional)</span>
                         <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Ej: 110 si quedaron en $110 con envío incluido" value={agreedTotal} onChange={e => setAgreedTotal(e.target.value)} />
                         <span className="h2">Si lo llenas, este es el total del pedido (manda sobre los precios y el envío).</span>
+                        <span className="l">Notas y modificaciones (opcional)</span>
+                        <textarea rows={3} maxLength={1000} placeholder="Ej: diseño de la tarjetita, aroma, colores, observaciones de la clienta..." value={note} onChange={e => setNote(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #EADFD2', fontSize: '15px', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}></textarea>
+                        <span className="h2">Solo lo ve tu equipo (no sale en el mensaje a la clienta).</span>
                     </div>
                     <div style={{ height: mode === 'quote' ? 130 : 70 }}></div>
                     <div className="mx-bottom">
                         {items.length > 0 && <div className="mx-estimate"><span>{items.reduce((n, i) => n + i.quantity, 0)} {items.reduce((n, i) => n + i.quantity, 0) === 1 ? unit : unitPlural}</span><b>{mxMoney(estimate)}</b><small>{shippingOn && place.trim() ? '+ envío' : 'sin envío'}</small></div>}
                         {mode === 'quote' && <button type="button" className="mx-cta green" style={pickedConv ? { background: channelInfo(pickedConv.phone_number).color } : undefined} onClick={() => submit(true)} disabled={busy}><PlatIcon name={pickedConv ? channelInfo(pickedConv.phone_number).icon : 'send'} size={21} color="#fff" /> {busy ? 'Un momento...' : 'Guardar y enviar' + (pickedConv ? ' por ' + channelInfo(pickedConv.phone_number).label : '')}</button>}
                         <button type="button" className={'mx-cta' + (mode === 'quote' ? ' ghost' : '')} onClick={() => submit(false)} disabled={busy}>
-                            {mode === 'order' ? <><PlatIcon name="bag" size={20} color="#fff" /> {busy ? 'Creando...' : 'Crear pedido'}</> : mode === 'edit' ? <><PlatIcon name="save" size={20} color="#fff" /> {busy ? 'Guardando...' : 'Guardar cambios'}</> : <><PlatIcon name="save" size={20} color="#7A3F28" /> Solo guardar</>}
+                            {mode === 'order' ? <><PlatIcon name="bag" size={20} color="#fff" /> {busy ? 'Creando...' : 'Crear pedido'}</> : mode === 'edit' || mode === 'edit-order' ? <><PlatIcon name="save" size={20} color="#fff" /> {busy ? 'Guardando...' : 'Guardar cambios'}</> : <><PlatIcon name="save" size={20} color="#7A3F28" /> Solo guardar</>}
                         </button>
                     </div>
                 </div>
@@ -9446,6 +9457,16 @@
                 }
             }
 
+            async function removeOrder(o, customer) {
+                if (!confirm('¿Eliminar el pedido de ' + customer + ' por $' + Number(o.total_amount || 0).toFixed(2) + '? Se borra para siempre y no se puede deshacer.')) return;
+                try {
+                    await api('/api/orders/' + o.id, { method: 'DELETE' });
+                    loadOrders();
+                } catch (err) {
+                    alert('No se pudo eliminar: ' + err.message);
+                }
+            }
+
             // Computadora: al guardar el formulario de cotización o pedido se actualiza lo que muestra el CRM.
             const finishDeskSale = result => {
                 setComposer(null);
@@ -9907,7 +9928,9 @@
                                     <div className="quote-total">${Number(o.total_amount || 0).toFixed(2)}</div>
                                 </div>
                                 <ul className="quote-items">
-                                    {items.map((item, i) => item.type === 'delivery' ? null : item.type === 'agreed_total' ? (
+                                    {items.map((item, i) => item.type === 'delivery' ? null : item.type === 'note' ? (
+                                        <li key={i}>📝 {item.text}{item.image ? <><br /><a href={item.image} target="_blank" rel="noopener noreferrer"><img src={item.image} alt="Diseño" style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 10, marginTop: 6 }} /></a></> : null}</li>
+                                    ) : item.type === 'agreed_total' ? (
                                         <li key={i}>🤝 Total acordado: ${Number(item.price).toFixed(2)}</li>
                                     ) : item.type === 'shipping' ? (
                                         <li key={i}>🚚 {item.name} — ${Number(item.price).toFixed(2)}</li>
@@ -9925,6 +9948,8 @@
                                         {Object.entries(orderLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                     </select>
                                     <button className="btn-photo" onClick={() => openChatFromQuotation(o.conversation_id)}>💬 Ver chat</button>
+                                    {canEdit && <button className="btn-photo" onClick={() => setComposer({ mode: 'edit-order', order: o })}>✏️ Editar</button>}
+                                    {canEdit && <button className="btn-photo danger" onClick={() => removeOrder(o, customer)}>🗑️ Eliminar</button>}
                                 </div>
                             </div>
                         );
@@ -9979,7 +10004,7 @@
                     if (selectedConv) loadMessages(selectedConv.id);
                     if (result.kind === 'order') {
                         loadOrders();
-                        setMxToast('Pedido creado para ' + contactName(result.conv));
+                        setMxToast((result.edited ? 'Pedido actualizado de ' : 'Pedido creado para ') + contactName(result.conv));
                         if (!fromChat) goTab('pedidos');
                         return;
                     }
@@ -10665,6 +10690,8 @@
                                             <ul className="quote-items">
                                                 {items.map((item, i) => item.type === 'delivery' ? (
                                                     <li key={i}>📅 Entrega: {String(item.date || '').split('-').reverse().join('/')}</li>
+                                                ) : item.type === 'note' ? (
+                                                    <li key={i}>📝 {item.text}{item.image ? <><br /><a href={item.image} target="_blank" rel="noopener noreferrer"><img src={item.image} alt="Diseño" style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 10, marginTop: 6 }} /></a></> : null}</li>
                                                 ) : item.type === 'agreed_total' ? (
                                                     <li key={i}>🤝 Total acordado: ${Number(item.price).toFixed(2)}</li>
                                                 ) : item.type === 'shipping' ? (
